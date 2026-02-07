@@ -1,0 +1,66 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv
+venv/
+env/
+ENV/
+
+# IDE and Editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Data directories
+data/raw/
+data/processed/*.duckdb
+data/processed/*.db
+*.csv
+*.accdb
+*.mdb
+
+# Jupyter Notebooks
+.ipynb_checkpoints/
+*.ipynb
+
+# Logs and temporary files
+*.log
+logs/
+tmp/
+temp/
+
+# Environment and configuration
+.env
+.env.local
+*.ini
+secrets.toml
+
+# Package manager files
+uv.lock
+poetry.lock
+Pipfile.lock
+
+# OS-specific
+Thumbs.db
+.DS_Store
+
+# Streamlit
+.streamlit/secrets.toml
+
+# Test coverage
+.coverage
+htmlcov/
+.pytest_cache/
+
+# DuckDB specific
+*.wal
+*.tmp

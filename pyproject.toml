@@ -1,0 +1,23 @@
+[project]
+name = "coastal-bird-copilot"
+version = "0.1.0"
+description = "AI-powered natural language interface for Louisiana coastal bird survey data"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "anthropic>=0.18.0",
+    "duckdb>=0.10.0",
+    "pandas>=2.0.0",
+    "streamlit>=1.28.0",
+    "plotly>=5.18.0",
+    "python-dotenv>=1.0.0",
+    "folium>=0.15.0",
+    "streamlit-folium>=0.15.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.4.0",
+    "ruff>=0.1.0",
+    "jupyter>=1.0.0",
+]

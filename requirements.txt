@@ -1,0 +1,23 @@
+# Core Data Layer
+duckdb>=0.10.0              # Fast analytical database
+pandas>=2.0.0               # Data manipulation and CSV processing
+
+# AI/LLM Layer
+openai>=1.0.0               # OpenAI SDK for OpenRouter API access
+
+# Frontend Layer
+streamlit>=1.28.0           # Web application framework
+plotly>=5.18.0              # Interactive data visualizations
+folium>=0.15.0              # Map visualizations (optional)
+streamlit-folium>=0.15.0    # Streamlit integration for maps (optional)
+
+# Environment Management
+python-dotenv>=1.0.0        # Environment variable management
+
+# Optional: Caching (if time permits)
+# redis>=5.0.0              # Query result caching
+
+# Development Tools (Optional)
+pytest>=7.4.0               # Testing framework
+ruff>=0.1.0                 # Fast Python linter
+jupyter>=1.0.0              # Notebook environment for exploration
