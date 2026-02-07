@@ -1,28 +1,26 @@
-# Louisiana Coastal Bird Monitoring Copilot
+# Bird Colony Data Chatbot
 
-**AI-Powered Natural Language Interface for NOAA Bird Survey Data**
+**AI-Powered Natural Language Interface for Gulf Coast Bird Survey Data**
 
-Transform bird survey analysis from hours to seconds using AI via OpenRouter.
+An intelligent chatbot that analyzes bird colony observations, coastal erosion patterns, and environmental changes using natural language queries powered by Claude 3.5 Sonnet.
 
 ---
 
-## Project Overview
+## Overview
 
-**Goal**: Build an AI-powered natural language interface for Louisiana coastal bird survey data that reduces analysis time from hours to seconds.
+This project provides a conversational interface to explore NOAA's Deepwater Horizon Avian Monitoring Database (2010-2021), enabling researchers, conservationists, and policymakers to analyze:
 
-**Data Source**: NOAA DIVER Deepwater Horizon Avian Monitoring Database (2010-2021)
+- **Bird Population Dynamics**: 13,075+ observations across 73 species
+- **Coastal Erosion Patterns**: Track 67% colony loss (288 → 94 active colonies) from 2010-2021
+- **Environmental Impacts**: Oil spill effects, storm damage, habitat degradation
+- **Species Migration Trends**: Seasonal presence/absence patterns
 
-**Timeline**: 8 hours (9 AM - 5 PM)
-
-### The Innovation
-
-Instead of manually querying databases or writing complex SQL, users can ask natural language questions:
-- "Show brown pelican trends from 2015-2021 in Louisiana"
-- "What were the top 5 species in 2020?"
-- "Compare Terrebonne vs Plaquemines parishes"
-- "How did Hurricane Ida affect bird populations?"
-
-The system uses AI via OpenRouter to understand the question, generate appropriate database queries, visualize results, and provide AI-generated explanations.
+**Key Features:**
+- Natural language queries (no SQL knowledge required)
+- AI-generated SQL queries using Claude 3.5 Sonnet
+- Comprehensive erosion and habitat change analysis
+- Real-time answers with data visualizations
+- 11+ years of longitudinal data
 
 ---
 
@@ -31,286 +29,260 @@ The system uses AI via OpenRouter to understand the question, generate appropria
 ### 1. Installation
 
 ```bash
-# Clone repository
+# Clone the repository
 git clone <repository-url>
 cd nexus
 
-# Create virtual environment
-python3.11 -m venv .venv
-source .venv/bin/activate  # Windows: .venv\Scripts\activate
-
 # Install dependencies
-pip install -r requirements.txt
+pip install openai pandas python-dotenv
 ```
 
-### 2. Set Up Environment Variables
+### 2. Setup API Key
 
+Create a `.env` file in the project root:
 ```bash
-# Create .env file
-echo "OPENROUTER_API_KEY=your_api_key_here" > .env
+OPENROUTER_API_KEY=your_api_key_here
 ```
 
 Get your API key from [openrouter.ai/keys](https://openrouter.ai/keys)
 
-### 3. Load Data
+### 3. Run the Chatbot
 
 ```bash
-# Extract CSV files from Access database (manual step)
-# Then load into DuckDB
-python src/data/load_data.py
+python chatbot.py
 ```
 
-### 4. Launch Application
-
-```bash
-streamlit run src/app/app.py
-```
+That's it! The database is pre-built and ready to use.
 
 ---
 
-## Tech Stack
+## Example Queries
 
-### Data Layer
-- **DuckDB** - Fast analytical database for storing bird survey data
-- **Pandas** - Data manipulation and CSV processing
-- **Python** - Core programming language
+### Bird Population Analysis
+```
+- "What colonies had oil present in 2010?"
+- "Which species were observed most frequently?"
+- "Show me Brown Pelican observations from 2010-2021"
+```
 
-### AI/LLM Layer
-- **OpenRouter API** - Natural language understanding and query planning
-- **Function Calling** - Structured query generation
+### Coastal Erosion Analysis
+```
+- "Which colonies were active in 2010 but disappeared by 2021?"
+- "Show colonies with notes mentioning flooding or erosion"
+- "What percentage of colonies were lost over time?"
+- "List colonies affected by Hurricane Isaac"
+```
 
-### Frontend Layer
-- **Streamlit** - Web application framework
-- **Plotly** - Interactive data visualizations
-- **Streamlit-folium** (optional) - Map visualizations
-
-### Development Tools
-- **Git/GitHub** - Version control
-- **Python venv** - Virtual environment management
-- **dotenv** - Environment variable management
+### Environmental Change
+```
+- "How did habitats change at Cat Bay South Island?"
+- "Show observations with vegetation loss"
+- "Which barrier islands show the most degradation?"
+```
 
 ---
 
 ## Project Structure
 
 ```
-coastal-bird-copilot/
-├── data/
-│   ├── raw/                    # CSV files from Access export
-│   └── processed/              # DuckDB database
-├── src/
-│   ├── data/                   # Data functions
-│   │   ├── load_data.py        # Load CSVs into DuckDB
-│   │   └── queries.py          # Query functions (species trends, comparisons)
-│   ├── llm/                    # AI functions
-│   │   ├── functions.py        # Claude function schemas
-│   │   ├── planner.py          # Query planner (natural language → function calls)
-│   │   └── formatter.py        # AI response generation
-│   └── app/                    # Frontend
-│       ├── app.py              # Streamlit web interface
-│       └── charts.py           # Visualization components
-├── tests/                      # Test cases
+nexus/
+├── chatbot.py                  # Main application (run this!)
+├── sql_chatbot.py              # SQL chatbot implementation
+├── create_sql_database.py      # Database builder
+├── clean_and_prepare_data.py   # Data preparation script
+├── bird_data.db                # SQLite database (5.3 MB)
+├── CSV_Files/                  # Original raw data (59,957 rows)
+├── cleaned_data/               # Processed data files
+│   ├── observations.csv        # 13,075 observations
+│   ├── colony_profiles.csv     # 492 colony profiles
+│   ├── species_lookup.json     # 73 species codes
+│   └── metadata.json           # Dataset metadata
 ├── docs/                       # Documentation
-├── .env                        # API keys (gitignored)
-├── .gitignore
-├── requirements.txt
-└── README.md
+│   ├── SETUP.md                # Installation guide
+│   ├── USAGE.md                # User guide
+│   ├── DATA_SCHEMA.md          # Database schema
+│   ├── EROSION_ANALYSIS.md     # Erosion analysis guide
+│   ├── MIGRATION_ANALYSIS.md   # Migration patterns guide
+│   ├── EXAMPLES.md             # Example queries
+│   └── API_REFERENCE.md        # Technical reference
+├── .env                        # API keys (create this)
+├── requirements.txt            # Python dependencies
+└── README.md                   # This file
 ```
 
 ---
 
-## System Architecture
+## Dataset Overview
 
+**Source**: NOAA DIVER Deepwater Horizon Avian Monitoring Database
+
+**Coverage**:
+- **Time Period**: 2010-2021 (post-Deepwater Horizon oil spill)
+- **Geographic Area**: Gulf Coast (TX, LA, MS, AL, FL)
+- **Observations**: 13,075 field observations
+- **Colonies**: 492 tracked colonies
+- **Species**: 73 bird species
+
+**Most Observed Species**:
+1. Laughing Gull (LAGU): 2,700 observations
+2. Brown Pelican (BRPE): 2,017 observations
+3. Tricolored Heron (TRHE): 1,047 observations
+4. Royal Tern (ROYT): 608 observations
+5. Black Skimmer (BLSK): 595 observations
+
+**Observations by Year**:
+- 2010: 2,570 (Deepwater Horizon year)
+- 2011: 1,795
+- 2012: 1,067
+- 2013: 1,342
+- 2015: 3,396
+- 2018: 1,172
+- 2021: 1,733
+
+---
+
+## Key Findings
+
+### Coastal Erosion Impact
+- **67% Colony Loss**: 194 of 288 colonies lost between 2010-2021
+- **Active Colonies 2010**: 288 colonies
+- **Active Colonies 2021**: 94 colonies
+- **Major Causes**: Storms, flooding, habitat overwash, vegetation loss
+
+### Oil Spill Impact
+- **5 colonies** documented with oil presence in 2010
+- Includes: Chandeleur South C, Gaillard Island, Manilla Island, Martin Island, Queen Bess Island
+
+### Storm Damage
+- Hurricane Isaac (2012) impacts documented
+- Notes mention "land and vegetation likely reduced compared to prior years"
+- Multiple colonies show "overwash" and flooding events
+
+---
+
+## Documentation
+
+Comprehensive documentation is available in the `docs/` folder:
+
+- **[SETUP.md](docs/SETUP.md)** - Detailed installation and configuration
+- **[USAGE.md](docs/USAGE.md)** - How to use the chatbot
+- **[DATA_SCHEMA.md](docs/DATA_SCHEMA.md)** - Database structure and fields
+- **[EROSION_ANALYSIS.md](docs/EROSION_ANALYSIS.md)** - Guide for coastal erosion research
+- **[MIGRATION_ANALYSIS.md](docs/MIGRATION_ANALYSIS.md)** - Species migration patterns
+- **[EXAMPLES.md](docs/EXAMPLES.md)** - 50+ example queries
+- **[API_REFERENCE.md](docs/API_REFERENCE.md)** - Technical reference
+
+---
+
+## Technology Stack
+
+- **Database**: SQLite (5.3 MB, indexed for fast queries)
+- **AI Model**: Claude 3.5 Sonnet via OpenRouter
+- **Language**: Python 3
+- **Libraries**:
+  - `openai` - OpenRouter API client
+  - `pandas` - Data processing
+  - `sqlite3` - Database operations
+  - `python-dotenv` - Environment variables
+
+---
+
+## Use Cases
+
+### For Researchers
+- Analyze population trends across species and time
+- Study oil spill impacts on bird colonies
+- Track species diversity changes
+- Generate datasets for publications
+
+### For Conservationists
+- Identify colonies at risk from erosion
+- Monitor habitat degradation patterns
+- Assess storm impact on nesting sites
+- Prioritize restoration efforts
+
+### For Policymakers
+- Quantify coastal land loss
+- Evaluate environmental policy effectiveness
+- Support restoration funding decisions
+- Track recovery from Deepwater Horizon spill
+
+### For Educators
+- Teach ecological data analysis
+- Demonstrate LLM applications in science
+- Explore environmental change over time
+- Hands-on coastal conservation education
+
+---
+
+## Limitations
+
+**What This Dataset Can Do:**
+- ✅ Track bird populations at breeding colonies
+- ✅ Analyze coastal erosion and habitat loss
+- ✅ Document oil spill and storm impacts
+- ✅ Compare species presence/absence over time
+
+**What This Dataset Cannot Do:**
+- ❌ Track individual bird migration routes (no GPS tracking)
+- ❌ Provide winter/non-breeding season data
+- ❌ Show real-time current conditions (data ends 2021)
+- ❌ Cover non-Gulf Coast regions
+
+---
+
+## Advanced Usage
+
+### Rebuild Database
+
+If you modify the cleaned CSV files:
+```bash
+python create_sql_database.py
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                   USER INTERACTION                          │
-│  "Show brown pelican trends from 2015-2021 in Louisiana"   │
-└─────────────────────────────────────────────────────────────┘
-                           ↓
-┌─────────────────────────────────────────────────────────────┐
-│                  STREAMLIT FRONTEND                         │
-│  - Captures user question                                   │
-│  - Shows loading indicator                                  │
-└─────────────────────────────────────────────────────────────┘
-                           ↓
-┌─────────────────────────────────────────────────────────────┐
-│                  LLM PLANNER (OpenRouter)                   │
-│  - Understands natural language question                   │
-│  - Extracts parameters: species="Brown Pelican"             │
-│                        start_year=2015, end_year=2021       │
-│  - Selects function: species_trend()                        │
-└─────────────────────────────────────────────────────────────┘
-                           ↓
-┌─────────────────────────────────────────────────────────────┐
-│                  QUERY FUNCTIONS                            │
-│  - Execute DuckDB query                                     │
-│  - Return structured data (DataFrame)                       │
-└─────────────────────────────────────────────────────────────┘
-                           ↓
-┌─────────────────────────────────────────────────────────────┐
-│                  DUCKDB DATABASE                            │
-│  - Fast SQL queries on bird survey data                    │
-│  - Aggregations, filtering, grouping                       │
-└─────────────────────────────────────────────────────────────┘
-                           ↓
-┌─────────────────────────────────────────────────────────────┐
-│              VISUALIZATION & RESPONSE                       │
-│  - Generate Plotly chart from data                          │
-│  - LLM generates natural language explanation              │
-│  - Display results to user                                  │
-└─────────────────────────────────────────────────────────────┘
+
+### Prepare New Data
+
+To process new raw data:
+```bash
+python clean_and_prepare_data.py
+```
+
+### Custom Queries
+
+You can also query the database directly:
+```bash
+sqlite3 bird_data.db "SELECT * FROM observations LIMIT 10;"
 ```
 
 ---
 
-## Key Features
-
-- **Natural Language Queries**: Ask questions in plain English
-- **Fast Analytics**: DuckDB provides subsecond query performance
-- **AI Explanations**: LLM generates insights from the data
-- **Interactive Visualizations**: Plotly charts for exploring trends
-- **Geographic Analysis**: Compare different parishes and regions
-- **Time Series Analysis**: Track species populations over years
-- **Species Comparisons**: Analyze multiple species simultaneously
-
----
-
-## Demo Queries
-
-Here are 5 example queries to showcase the system:
-
-1. **Trend Analysis**
-   - "Show brown pelican trends from 2015-2021"
-   - Output: Line chart + AI explanation
-
-2. **Species Ranking**
-   - "What were the top 5 species in 2020?"
-   - Output: Bar chart + AI explanation
-
-3. **Geographic Comparison**
-   - "Compare Terrebonne vs Plaquemines parishes"
-   - Output: Comparison chart + AI explanation
-
-4. **Impact Assessment**
-   - "How did Hurricane Ida affect bird populations?"
-   - Output: Before/after comparison + AI explanation
-
-5. **Colony Detail**
-   - "Tell me about the Grand Isle colony"
-   - Output: Multi-year trend + map + AI explanation
-
----
-
-## Development Workflow
-
-### Team Roles
-
-**Person 1: Data Engineer**
-- Extract data from Access database to CSV
-- Load data into DuckDB
-- Write query functions (species trends, comparisons, aggregations)
-- Data validation and cleaning
-
-**Person 2: LLM/AI Developer**
-- Set up OpenRouter API integration
-- Build query planner (natural language → function calls)
-- Design function schemas for LLM
-- Generate AI explanations for results
-
-**Person 3: Frontend Developer**
-- Build Streamlit web interface
-- Create chart/visualization components
-- Implement user interaction flow
-- Error handling and loading states
-
-**Person 4: Project Manager/QA**
-- Extract data from Access database
-- Create test cases and sample queries
-- Documentation and README
-- Demo preparation and presentation
-
-### Hour-by-Hour Timeline
-
-**Hour 1 (9:00-10:00 AM)**: Setup & Data Extraction
-- Create project structure, set up Python environment
-- Get OpenRouter API key, test connection
-- Design UI wireframe
-- Export CSV files from Access database
-
-**Hour 2 (10:00-11:00 AM)**: Core Pipeline
-- Load CSVs into DuckDB, clean data
-- Design function schemas for LLM
-- Build basic Streamlit app skeleton
-- Validate data, create test queries
-
-**Hour 3 (11:00 AM-12:00 PM)**: Query Functions
-- Implement query functions (trends, comparisons, top species)
-- Build LLM query planner
-- Create chart rendering functions
-- Test query functions manually
-
-**Hour 4 (12:00-1:00 PM)**: Lunch + Integration
-- 30-min lunch, then connect components
-- Connect LLM planner to query functions
-- Integrate queries into UI
-- Write README documentation
-
-**Hour 5 (1:00-2:00 PM)**: Visualization & Responses
-- Add data export, optimize performance
-- Build AI response formatter
-- Complete full app integration with charts
-- Create demo script with sample queries
-
-**Hour 6 (2:00-3:00 PM)**: Advanced Features
-- Advanced queries (aggregations, geographic)
-- Multi-step reasoning, context memory
-- Interactive features (drill-down, filters, maps)
-- QA testing, bug tracking
-
-**Hour 7 (3:00-4:00 PM)**: Polish & Testing
-- Error handling, logging, validation
-- Handle edge cases, ambiguous queries
-- UI/UX polish, accessibility
-- Final testing, update documentation
-
-**Hour 8 (4:00-5:00 PM)**: Demo Prep
-- Full integration test, demo rehearsal
-- Create presentation slides, prepare backup plan
-
----
-
-## Data Source
+## Data Source & Acknowledgments
 
 **NOAA DIVER Database**: Deepwater Horizon Avian Monitoring
-- Years: 2010-2021
-- Coverage: Louisiana coastal parishes
-- Data types: Species counts, colony locations, survey dates, environmental conditions
-- Format: Microsoft Access database (export to CSV)
+
+This dataset documents bird colony observations following the 2010 Deepwater Horizon oil spill in the Gulf of Mexico. The data includes detailed observations of 73 bird species across 492 colonies from 2010-2021, providing critical information for understanding the spill's long-term impact on coastal bird populations and habitats.
+
+**Acknowledgments:**
+- **NOAA** - For providing the Deepwater Horizon Avian Monitoring Database
+- **OpenRouter** - For providing unified LLM API access
+- **Anthropic** - For Claude 3.5 Sonnet
 
 ---
 
 ## Contributing
 
-This project was developed during an 8-hour hackathon. Contributions are welcome for:
-- Additional query functions
-- New visualization types
+Contributions are welcome! Areas for improvement:
+- Additional analysis tools
+- Data visualization features
+- Export functionality
 - Performance optimizations
-- UI/UX improvements
-- Documentation
+- Additional documentation
 
 ---
 
 ## License
 
-[Add your license here]
-
----
-
-## Acknowledgments
-
-- **NOAA** - For providing the Deepwater Horizon Avian Monitoring Database
-- **OpenRouter** - For providing unified LLM API access
-- **DuckDB Team** - For the fast analytical database
+[Specify your license here]
 
 ---
 
@@ -320,4 +292,6 @@ This project was developed during an 8-hour hackathon. Contributions are welcome
 
 ---
 
-**Built for Louisiana's Coastal Bird Conservation**
+**Built for Gulf Coast Bird Conservation and Environmental Research**
+
+*Combining AI technology with environmental science to understand and protect coastal ecosystems.*

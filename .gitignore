@@ -15,6 +15,7 @@ ENV/
 # IDE and Editor files
 .vscode/
 .idea/
+.claude/
 *.swp
 *.swo
 *~
@@ -23,10 +24,12 @@ ENV/
 # Data directories
 data/raw/
 data/processed/*.duckdb
-data/processed/*.db
-*.csv
 *.accdb
 *.mdb
+
+# Keep cleaned_data and bird_data.db (essential for project)
+# *.csv (commented out - we need cleaned_data/*.csv)
+# *.db (commented out - we need bird_data.db)
 
 # Jupyter Notebooks
 .ipynb_checkpoints/
@@ -64,3 +67,5 @@ htmlcov/
 # DuckDB specific
 *.wal
 *.tmp
+
+.claude/
