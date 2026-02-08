@@ -31,12 +31,26 @@ def get_custom_css():
     }
 
     /* Hide Streamlit Elements */
-    #MainMenu, footer, header {visibility: hidden;}
+    #MainMenu, footer {visibility: hidden;}
+    header {visibility: visible !important;}
     .stDeployButton {display: none;}
 
     /* Body Background */
     .stApp {
         background-color: var(--claude-bg);
+    }
+
+    /* Ensure Streamlit toolbar and controls stay on top */
+    [data-testid="stToolbar"] {
+        z-index: 999999 !important;
+    }
+
+    [data-testid="stHeader"] {
+        z-index: 999999 !important;
+    }
+
+    header {
+        z-index: 999999 !important;
     }
 
     /* Main Container */
@@ -114,7 +128,7 @@ def get_custom_css():
         padding: 1rem 0 1.5rem;
         background: var(--claude-bg);
         border-top: none !important;
-        z-index: 1000;
+        z-index: 100;
     }
 
     /* Remove all borders and backgrounds from parent containers */
@@ -193,6 +207,7 @@ def get_custom_css():
         background: var(--claude-surface);
         border-right: 1px solid var(--claude-border);
         padding: 1.5rem 0;
+        z-index: 999998 !important;
     }
 
     [data-testid="stSidebar"] > div:first-child {
@@ -418,6 +433,31 @@ def get_custom_css():
 
     .stChatMessage {
         animation: fadeIn 0.3s ease-out;
+    }
+
+    /* Style Streamlit's default sidebar collapse button */
+    [data-testid="collapsedControl"] {
+        background: var(--claude-surface) !important;
+        border: 1px solid var(--claude-border) !important;
+        border-radius: 8px !important;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08) !important;
+        transition: all 0.2s ease !important;
+        z-index: 999999 !important;
+    }
+
+    [data-testid="collapsedControl"]:hover {
+        background: var(--claude-surface-hover) !important;
+        border-color: var(--claude-orange) !important;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12) !important;
+        transform: scale(1.05) !important;
+    }
+
+    [data-testid="collapsedControl"] svg {
+        stroke: var(--claude-text) !important;
+    }
+
+    [data-testid="collapsedControl"]:hover svg {
+        stroke: var(--claude-orange) !important;
     }
 </style>
 """
