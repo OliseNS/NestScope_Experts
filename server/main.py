@@ -5,6 +5,7 @@ Provides REST API endpoints for querying bird colony data
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from typing import Optional, List, Dict, Any
 import sqlite3
@@ -13,6 +14,7 @@ from openai import OpenAI
 import os
 from dotenv import load_dotenv
 import json
+import asyncio
 
 # Load environment variables
 load_dotenv()
@@ -65,11 +67,21 @@ class StatsResponse(BaseModel):
 DB_PATH = os.getenv("DB_PATH", "../bird_data_complete.db")
 
 class SQLChatbot:
-    def __init__(self, db_path=DB_PATH, model="anthropic/claude-opus-4.5"):
+    def __init__(self, db_path=DB_PATH, model="anthropic/claude-opus-4.5", prompt_path="server/prompt.txt"):
         """Initialize the SQL chatbot"""
         self.db_path = db_path
         self.model = model
         self.schema = None
+        self.prompt_path = prompt_path
+        self.system_prompt = self._load_system_prompt()
+
+    def _load_system_prompt(self):
+        """Load system prompt from prompt.txt file"""
+        try:
+            with open(self.prompt_path, 'r', encoding='utf-8') as f:
+                return f.read()
+        except FileNotFoundError:
+            raise FileNotFoundError(f"System prompt file not found at: {self.prompt_path}")
 
     def get_connection(self):
         """Get a database connection"""
@@ -119,67 +131,12 @@ class SQLChatbot:
 
     def generate_sql_query(self, user_question):
         """Generate SQL query from natural language using LLM"""
-        schema = self.get_database_schema()
-
-        # Create schema description
-        schema_desc = []
-        for table_name, table_info in schema['tables'].items():
-            cols = [f"{col['name']} ({col['type']})" for col in table_info['columns']]
-            schema_desc.append(f"\n{table_name}:\n  " + "\n  ".join(cols))
-
-        schema_text = "\n".join(schema_desc)
-
-        system_prompt = f"""You are a SQL query generator for a bird colony observation database tracking Gulf Coast birds from 2010-2021.
-
-DATABASE SCHEMA:
-{schema_text}
-
-IMPORTANT NOTES:
-- observations table: Individual observation records with notes, habitat, species, location data
-  - year: Year of observation (2010-2021)
-  - colony_name: Name of the bird colony
-  - species_code: 4-letter species code (e.g., LAGU, BRPE, TRHE)
-  - state: Two-letter state code (TX, LA, MS, AL, FL)
-  - oil_present: 'Y' or 'N' indicating oil presence from Deepwater Horizon spill
-  - habitat: Text description of habitat
-  - notes: Detailed observation notes (may mention erosion, flooding, hurricanes, habitat changes)
-  - combined_text: Full text combining habitat, notes, and additional notes
-
-- colony_profiles table: Aggregated data per colony
-  - colony_name, years_observed, states, species_observed, total_observations
-  - aggregated_notes: Combined notes from all years showing habitat changes over time
-
-- colony_inventory table: Master list of all colonies with geographic/habitat data
-  - ColonyName, State, Longitude, Latitude
-  - ActiveInventory: 'Yes' or 'No' (indicates if colony still active)
-  - PrimaryHabitat, LandForm: Habitat classification
-  - GeoRegion, TerrestEcoRegion, MarineEcoRegion: Geographic classifications
-  - Use this to identify lost/inactive colonies for erosion analysis
-
-- species table: Species code to name lookup
-  - species_code: 4-letter code, species_name: Full species name
-
-IMPORTANT: This database can answer questions about:
-1. Bird populations and species (primary purpose)
-2. COASTAL EROSION PATTERNS (colonies lost, habitat changes, island degradation)
-3. MIGRATION PATTERNS (species presence/absence over time, seasonal timing)
-4. Oil spill impacts (2010 Deepwater Horizon)
-5. Storm/hurricane impacts (notes mention flooding, overwash, vegetation loss)
-
-RULES:
-1. Generate ONLY valid SQLite queries
-2. Use JOINs when you need species names or to combine tables
-3. Always use LIMIT to prevent huge results (default 50)
-4. For "most" or "top" queries, use ORDER BY and LIMIT
-5. Use LIKE '%keyword%' for text searches in notes (case-insensitive)
-6. For erosion analysis: look for colonies present in early years but absent later, search notes for "flood", "erosion", "vegetation", "overwash"
-7. For migration: compare species presence across years/seasons
-8. Return ONLY the SQL query, no explanations
-9. If the question is completely unrelated to birds, coasts, or environmental data, return: ERROR: Not relevant to this dataset"""
-
+        # Use the system prompt loaded from prompt.txt
         messages = [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": f"Generate a SQL query for this question: {user_question}"}
+            {"role": "system", "content": self.system_prompt},
+            {"role": "user", "content": f"""Question: {user_question}
+
+IMPORTANT: Return ONLY the SQL query, nothing else. No explanations, no markdown formatting, no comments - just the raw SQL query that can be executed directly."""}
         ]
 
         try:
@@ -194,9 +151,19 @@ RULES:
 
             # Clean up the query (remove markdown formatting if present)
             if sql_query.startswith("```sql"):
-                sql_query = sql_query.replace("```sql", "").replace("```", "").strip()
+                # Extract content between ```sql and ```
+                sql_query = sql_query.split("```sql")[1].split("```")[0].strip()
             elif sql_query.startswith("```"):
-                sql_query = sql_query.replace("```", "").strip()
+                sql_query = sql_query.split("```")[1].split("```")[0].strip()
+
+            # Remove any remaining explanatory text before SELECT/WITH/INSERT/UPDATE/DELETE
+            # Find the first SQL keyword
+            sql_keywords = ['SELECT', 'WITH', 'INSERT', 'UPDATE', 'DELETE', 'CREATE', 'DROP', 'ALTER']
+            for keyword in sql_keywords:
+                if keyword in sql_query.upper():
+                    idx = sql_query.upper().find(keyword)
+                    sql_query = sql_query[idx:].strip()
+                    break
 
             return sql_query
 
@@ -216,11 +183,14 @@ RULES:
         except Exception as e:
             return None, f"Query error: {e}"
 
-    def generate_answer(self, user_question, sql_query, results_df):
-        """Generate natural language answer from query results"""
+    def generate_answer(self, user_question, sql_query, results_df, query_error=None):
+        """Generate natural language answer from query results or explain query errors"""
 
         # Format results for LLM
-        if results_df is not None and len(results_df) > 0:
+        if query_error:
+            results_text = f"QUERY ERROR: {query_error}"
+            row_count = 0
+        elif results_df is not None and len(results_df) > 0:
             results_text = results_df.to_string(index=False, max_rows=50)
             row_count = len(results_df)
         else:
@@ -234,7 +204,8 @@ Your task is to:
 2. Provide specific details from the data (names, numbers, etc.)
 3. Highlight interesting patterns or insights
 4. Use a conversational but informative tone
-5. If there are no results, explain why that might be"""
+5. If there are no results, explain why that might be
+6. If there's a query error, explain what went wrong in simple terms and suggest how to fix it"""
 
         user_content = f"""Question: {user_question}
 
@@ -264,6 +235,61 @@ Please provide a clear, informative answer to the question based on these result
 
         except Exception as e:
             return f"Error generating answer: {e}"
+
+    def generate_answer_stream(self, user_question, sql_query, results_df, query_error=None):
+        """Generate natural language answer from query results with streaming or explain query errors"""
+
+        # Format results for LLM
+        if query_error:
+            results_text = f"QUERY ERROR: {query_error}"
+            row_count = 0
+        elif results_df is not None and len(results_df) > 0:
+            results_text = results_df.to_string(index=False, max_rows=50)
+            row_count = len(results_df)
+        else:
+            results_text = "No results found."
+            row_count = 0
+
+        system_prompt = """You are a helpful assistant that explains bird colony data query results.
+
+Your task is to:
+1. Answer the user's question based on the SQL query results
+2. Provide specific details from the data (names, numbers, etc.)
+3. Highlight interesting patterns or insights
+4. Use a conversational but informative tone
+5. If there are no results, explain why that might be
+6. If there's a query error, explain what went wrong in simple terms and suggest how to fix it"""
+
+        user_content = f"""Question: {user_question}
+
+SQL Query Used:
+{sql_query}
+
+Query Results ({row_count} rows):
+{results_text}
+
+Please provide a clear, informative answer to the question based on these results."""
+
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_content}
+        ]
+
+        try:
+            stream = client.chat.completions.create(
+                model=self.model,
+                messages=messages,
+                temperature=0.7,
+                max_tokens=1000,
+                stream=True
+            )
+
+            for chunk in stream:
+                if chunk.choices[0].delta.content is not None:
+                    yield chunk.choices[0].delta.content
+
+        except Exception as e:
+            yield f"Error generating answer: {e}"
 
 # Initialize chatbot
 chatbot = SQLChatbot()
@@ -380,32 +406,78 @@ async def ask_question(request: QuestionRequest):
         # Step 2: Execute query
         results_df, error = chatbot.execute_query(sql_query)
 
-        if error:
-            return QueryResponse(
-                sql_query=sql_query,
-                results=None,
-                results_count=0,
-                answer="",
-                error=error
-            )
-
-        # Convert dataframe to list of dicts
+        # Convert dataframe to list of dicts (will be None if error occurred)
         results = results_df.to_dict(orient='records') if results_df is not None else None
         results_count = len(results_df) if results_df is not None else 0
 
-        # Step 3: Generate natural language answer
-        answer = chatbot.generate_answer(request.question, sql_query, results_df)
+        # Step 3: Generate natural language answer (handles both success and error cases)
+        answer = chatbot.generate_answer(request.question, sql_query, results_df, query_error=error)
 
         return QueryResponse(
             sql_query=sql_query,
             results=results,
             results_count=results_count,
             answer=answer,
-            error=None
+            error=error  # Still include error for debugging, but answer will explain it
         )
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/ask/stream")
+async def ask_question_stream(request: QuestionRequest):
+    """
+    Ask a question in natural language with streaming response.
+    Returns a stream of Server-Sent Events (SSE)
+    """
+    async def event_generator():
+        try:
+            # Update model if provided
+            chatbot.model = request.model
+
+            # Step 1: Generate SQL query
+            sql_query = chatbot.generate_sql_query(request.question)
+
+            if sql_query.startswith("ERROR"):
+                yield f"data: {json.dumps({'type': 'error', 'content': sql_query})}\n\n"
+                return
+
+            # Step 2: Execute query
+            results_df, error = chatbot.execute_query(sql_query)
+
+            # Convert dataframe to list of dicts (will be None if error occurred)
+            results = results_df.to_dict(orient='records') if results_df is not None else None
+            results_count = len(results_df) if results_df is not None else 0
+
+            # Send SQL query and results (or error info)
+            yield f"data: {json.dumps({'type': 'sql_query', 'content': sql_query})}\n\n"
+            yield f"data: {json.dumps({'type': 'results', 'content': results, 'count': results_count})}\n\n"
+
+            if error:
+                yield f"data: {json.dumps({'type': 'query_error', 'content': error})}\n\n"
+
+            # Step 3: Stream the answer (handles both success and error cases)
+            yield f"data: {json.dumps({'type': 'answer_start'})}\n\n"
+
+            for chunk in chatbot.generate_answer_stream(request.question, sql_query, results_df, query_error=error):
+                yield f"data: {json.dumps({'type': 'answer_chunk', 'content': chunk})}\n\n"
+                await asyncio.sleep(0)  # Allow other tasks to run
+
+            yield f"data: {json.dumps({'type': 'answer_end'})}\n\n"
+            yield f"data: {json.dumps({'type': 'done'})}\n\n"
+
+        except Exception as e:
+            yield f"data: {json.dumps({'type': 'error', 'content': str(e)})}\n\n"
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no"
+        }
+    )
 
 if __name__ == "__main__":
     import uvicorn
