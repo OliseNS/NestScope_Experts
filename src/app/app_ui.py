@@ -600,7 +600,7 @@ with st.sidebar:
 # MAIN INTERFACE
 # ============================================================================
 
-st.title("NestScope")
+st.title("NestScope: Coastal Avian Monitoring")
 
 # Welcome Card
 if not st.session_state.messages:
