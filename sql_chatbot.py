@@ -30,8 +30,7 @@ class SQLChatbot:
         # Load database schema
         self.schema = self.get_database_schema()
 
-        print(f"✓ Connected to database: {db_path}")
-        print(f"✓ Using model: {model}")
+        pass
 
     def get_database_schema(self):
         """Get the database schema for the LLM"""
@@ -68,6 +67,86 @@ class SQLChatbot:
             }
 
         return schema_info
+
+    def validate_sql(self, sql):
+        """Validate SQL query for safety before execution"""
+        sql_upper = sql.upper().strip()
+
+        # Only allow SELECT queries
+        if not sql_upper.startswith('SELECT'):
+            return False, "Only SELECT queries are allowed for safety", sql
+
+        # Block dangerous keywords
+        dangerous_keywords = [
+            'DROP', 'DELETE', 'INSERT', 'UPDATE', 'ALTER',
+            'TRUNCATE', 'ATTACH', 'DETACH', 'PRAGMA', 'CREATE'
+        ]
+
+        for keyword in dangerous_keywords:
+            if keyword in sql_upper:
+                return False, f"Keyword '{keyword}' is not allowed for safety", sql
+
+        # Auto-add LIMIT if missing (prevent huge result sets)
+        if 'LIMIT' not in sql_upper:
+            sql = sql.rstrip(';') + ' LIMIT 200'
+            print("Warning: Auto-added LIMIT 200 to prevent large result set")
+
+        return True, "Valid", sql
+
+    def repair_sql(self, sql_query, error_message):
+        """Ask Claude to fix broken SQL query"""
+
+        print("Attempting to repair SQL query...")
+
+        # Create schema description for repair
+        schema_desc = []
+        for table_name, table_info in self.schema['tables'].items():
+            cols = [f"{col['name']} ({col['type']})" for col in table_info['columns']]
+            schema_desc.append(f"\n{table_name}:\n  " + "\n  ".join(cols))
+        schema_text = "\n".join(schema_desc)
+
+        repair_prompt = f"""The following SQL query failed with an error. Please fix it.
+
+FAILED SQL:
+{sql_query}
+
+ERROR MESSAGE:
+{error_message}
+
+DATABASE SCHEMA:
+{schema_text}
+
+RULES FOR FIXED QUERY:
+1. Use ONLY columns that exist in the schema above
+2. Use proper SQLite syntax
+3. Always include LIMIT (max 200 rows)
+4. Use correct table names and JOIN syntax
+5. Return ONLY the corrected SQL query, no explanation
+
+Generate the fixed SQL query:"""
+
+        try:
+            response = client.chat.completions.create(
+                model=self.model,
+                messages=[{"role": "user", "content": repair_prompt}],
+                temperature=0.1,
+                max_tokens=500
+            )
+
+            fixed_sql = response.choices[0].message.content.strip()
+
+            # Clean up markdown if present
+            if fixed_sql.startswith("```sql"):
+                fixed_sql = fixed_sql.replace("```sql", "").replace("```", "").strip()
+            elif fixed_sql.startswith("```"):
+                fixed_sql = fixed_sql.replace("```", "").strip()
+
+            print(f"Repaired SQL: {fixed_sql}")
+            return fixed_sql
+
+        except Exception as e:
+            print(f"Could not repair SQL: {e}")
+            return None
 
     def generate_sql_query(self, user_question):
         """Generate SQL query from natural language using LLM"""
@@ -125,6 +204,20 @@ RULES:
 5. Use LIKE '%keyword%' for text searches in notes (case-insensitive)
 6. For erosion analysis: look for colonies present in early years but absent later, search notes for "flood", "erosion", "vegetation", "overwash"
 7. For migration: compare species presence across years/seasons
+
+EXAMPLE QUERIES:
+Question: "Top 5 most observed species"
+SQL: SELECT species_code, COUNT(*) as observation_count FROM observations GROUP BY species_code ORDER BY observation_count DESC LIMIT 5
+
+Question: "Colonies that disappeared by 2021"
+SQL: SELECT ColonyName, State FROM colony_inventory WHERE ActiveInventory = 'No' LIMIT 100
+
+Question: "Brown Pelican observations in Louisiana"
+SQL: SELECT year, colony_name, COUNT(*) as count FROM observations WHERE species_code = 'BRPE' AND state = 'LA' GROUP BY year, colony_name ORDER BY year LIMIT 200
+
+Question: "Colonies with oil present in 2010"
+SQL: SELECT DISTINCT colony_name, state FROM observations WHERE oil_present = 'Y' AND year = 2010 LIMIT 50
+
 8. Return ONLY the SQL query, no explanations
 9. If the question is completely unrelated to birds, coasts, or environmental data, return: ERROR: Not relevant to this dataset"""
 
@@ -226,35 +319,68 @@ Please provide a clear, informative answer to the question based on these result
             return f"Error generating answer: {e}"
 
     def ask(self, question):
-        """Main method to ask a question"""
+        """Main method to ask a question - now with validation and repair"""
 
-        print(f"\n{'='*80}")
+        print(f"\n{'=' * 80}")
         print(f"Q: {question}")
-        print(f"{'='*80}\n")
+        print(f"{'=' * 80}\n")
 
-        # Check if it's a valid question
+        # Check if it's a command
         if question.lower() in ['quit', 'exit', 'examples', 'stats']:
             return None
 
         # Step 1: Generate SQL query
-        print("🔍 Generating SQL query...")
+        print("Generating SQL query...")
         sql_query = self.generate_sql_query(question)
 
         if sql_query.startswith("ERROR"):
-            print(f"\n⚠ {sql_query}\n")
+            print(f"\nError: {sql_query}\n")
             return None
 
-        print(f"📝 SQL: {sql_query}\n")
+        print(f"Generated SQL: {sql_query}\n")
 
-        # Step 2: Execute query
-        print("⚡ Executing query...")
+        # Step 2: Validate the SQL query
+        print("Validating SQL for safety...")
+        is_valid, message, sql_query = self.validate_sql(sql_query)
+
+        if not is_valid:
+            print(f"Validation failed: {message}\n")
+            return f"Sorry, I couldn't generate a safe query: {message}"
+
+        # print(f"SQL is safe to execute\n")
+        #
+        # # Step 3: Execute query with retry
+        # print("Executing query...")
         results_df, error = self.execute_query(sql_query)
 
+        # If query failed, try to repair it
         if error:
-            print(f"\n❌ {error}\n")
-            return None
+            print(f"Query failed: {error}")
 
-        print(f"✓ Found {len(results_df)} results\n")
+            # Attempt one repair
+            fixed_sql = self.repair_sql(sql_query, error)
+
+            if fixed_sql:
+                # Validate the repaired SQL
+                is_valid, message, fixed_sql = self.validate_sql(fixed_sql)
+
+                if is_valid:
+                    print("Retrying with repaired SQL...")
+                    results_df, error = self.execute_query(fixed_sql)
+
+                    if error:
+                        print(f"\nRepaired query also failed: {error}\n")
+                        return f"Sorry, I couldn't execute that query even after repair. Error: {error}"
+                    else:
+                        sql_query = fixed_sql
+                else:
+                    print(f"Repaired SQL failed validation: {message}\n")
+                    return f"Sorry, the repaired query was not safe: {message}"
+            else:
+                print(f"\nCould not repair query\n")
+                return f"Sorry, I couldn't execute that query. Error: {error}"
+
+        print(f"Found {len(results_df)} results\n")
 
         # Show results preview
         if len(results_df) > 0:
@@ -264,19 +390,113 @@ Please provide a clear, informative answer to the question based on these result
                 print(f"... and {len(results_df) - 10} more rows")
             print()
 
-        # Step 3: Generate natural language answer
-        print("🤖 Generating answer...\n")
+        # Step 4: Generate natural language answer
+        print("Generating answer...\n")
         answer = self.generate_answer(question, sql_query, results_df)
 
         print(f"A: {answer}\n")
-        print(f"{'='*80}\n")
+        print(f"{'=' * 80}\n")
 
         return answer
+
+    def query(self, question):
+        """
+        Frontend-friendly API method
+        Returns structured response for Streamlit integration
+        """
+
+        # Check if it's a command
+        if question.lower() in ['quit', 'exit', 'examples', 'stats']:
+            return {
+                'success': False,
+                'error': 'Command not supported in API mode',
+                'sql': None,
+                'results': None,
+                'answer': None,
+                'row_count': 0
+            }
+
+        try:
+            # Step 1: Generate SQL
+            sql_query = self.generate_sql_query(question)
+
+            if sql_query.startswith("ERROR"):
+                return {
+                    'success': False,
+                    'error': sql_query,
+                    'sql': None,
+                    'results': None,
+                    'answer': None,
+                    'row_count': 0
+                }
+
+            # Step 2: Validate SQL
+            is_valid, message, sql_query = self.validate_sql(sql_query)
+
+            if not is_valid:
+                return {
+                    'success': False,
+                    'error': f"Validation failed: {message}",
+                    'sql': sql_query,
+                    'results': None,
+                    'answer': None,
+                    'row_count': 0
+                }
+
+            # Step 3: Execute query
+            results_df, error = self.execute_query(sql_query)
+
+            # If query failed, try to repair
+            if error:
+                fixed_sql = self.repair_sql(sql_query, error)
+
+                if fixed_sql:
+                    is_valid, message, fixed_sql = self.validate_sql(fixed_sql)
+
+                    if is_valid:
+                        results_df, error = self.execute_query(fixed_sql)
+
+                        if not error:
+                            sql_query = fixed_sql
+
+            # If still errored after repair
+            if error:
+                return {
+                    'success': False,
+                    'error': f"Query execution failed: {error}",
+                    'sql': sql_query,
+                    'results': None,
+                    'answer': None,
+                    'row_count': 0
+                }
+
+            # Step 4: Generate answer
+            answer = self.generate_answer(question, sql_query, results_df)
+
+            # Return structured response
+            return {
+                'success': True,
+                'error': None,
+                'sql': sql_query,
+                'results': results_df.to_dict('records') if results_df is not None else [],
+                'answer': answer,
+                'row_count': len(results_df) if results_df is not None else 0
+            }
+
+        except Exception as e:
+            return {
+                'success': False,
+                'error': str(e),
+                'sql': None,
+                'results': None,
+                'answer': None,
+                'row_count': 0
+            }
 
     def interactive_mode(self):
         """Run the chatbot in interactive mode"""
         print("\n" + "="*80)
-        print("🐦 BIRD COLONY SQL CHATBOT")
+        print("BIRD COLONY SQL CHATBOT")
         print("="*80)
         print("\nI can answer questions about bird colony observations from 2010-2021")
         print("I'll convert your questions to SQL queries and explain the results.\n")
@@ -295,7 +515,7 @@ Please provide a clear, informative answer to the question based on these result
                     continue
 
                 if question.lower() in ['quit', 'exit', 'q']:
-                    print("\n👋 Thanks for using the Bird Colony Chatbot!")
+                    print("\nThanks for using the Bird Colony Chatbot!")
                     break
 
                 if question.lower() == 'examples':
@@ -310,7 +530,7 @@ Please provide a clear, informative answer to the question based on these result
                 self.ask(question)
 
             except KeyboardInterrupt:
-                print("\n\n👋 Thanks for using the Bird Colony Chatbot!")
+                print("\n\nThanks for using the Bird Colony Chatbot!")
                 break
             except Exception as e:
                 print(f"\nError: {e}\n")
@@ -318,7 +538,7 @@ Please provide a clear, informative answer to the question based on these result
     def show_examples(self):
         """Show example questions"""
         print("\n" + "="*80)
-        print("📝 EXAMPLE QUESTIONS")
+        print("EXAMPLE QUESTIONS")
         print("="*80)
         examples = [
             "What colonies had oil present in 2010?",
@@ -343,7 +563,7 @@ Please provide a clear, informative answer to the question based on these result
     def show_stats(self):
         """Show database statistics"""
         print("\n" + "="*80)
-        print("📊 DATABASE STATISTICS")
+        print("DATABASE STATISTICS")
         print("="*80)
 
         cursor = self.conn.cursor()
