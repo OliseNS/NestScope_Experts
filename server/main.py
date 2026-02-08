@@ -3,9 +3,9 @@ FastAPI Server for Text-to-SQL Bird Colony Chatbot
 Provides REST API endpoints for querying bird colony data
 """
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
+from fastapi.responses import StreamingResponse, Response
 from pydantic import BaseModel
 from typing import Optional, List, Dict, Any
 import sqlite3
@@ -15,6 +15,9 @@ import os
 from dotenv import load_dotenv
 import json
 import asyncio
+import cv2
+import base64
+from cv_tools.inference import BirdDetector, get_example_images
 
 # Load environment variables
 load_dotenv()
@@ -62,6 +65,15 @@ class StatsResponse(BaseModel):
     total_species: int
     states: List[str]
     observations_by_year: Dict[str, int]
+
+class CVInferenceResponse(BaseModel):
+    bird_count: int
+    detections: List[Dict[str, Any]]
+    annotated_image_base64: str
+    message: str
+
+class ExampleImagesResponse(BaseModel):
+    examples: List[str]
 
 # Database configuration
 DB_PATH = os.getenv("DB_PATH", "../bird_data_complete.db")
@@ -291,8 +303,14 @@ Please provide a clear, informative answer to the question based on these result
         except Exception as e:
             yield f"Error generating answer: {e}"
 
-# Initialize chatbot
+# Initialize chatbot and bird detector
 chatbot = SQLChatbot()
+try:
+    bird_detector = BirdDetector()
+    print("Bird detector initialized successfully!")
+except Exception as e:
+    print(f"Warning: Bird detector initialization failed: {e}")
+    bird_detector = None
 
 # API Endpoints
 @app.get("/")
@@ -478,6 +496,100 @@ async def ask_question_stream(request: QuestionRequest):
             "X-Accel-Buffering": "no"
         }
     )
+
+@app.get("/cv/examples", response_model=ExampleImagesResponse)
+async def get_cv_examples():
+    """Get list of example images for computer vision"""
+    try:
+        examples = get_example_images()
+        return {"examples": examples}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/cv/inference", response_model=CVInferenceResponse)
+async def run_cv_inference(file: UploadFile = File(...), conf_threshold: float = 0.25):
+    """
+    Run bird detection inference on an uploaded image
+
+    Args:
+        file: Uploaded image file
+        conf_threshold: Confidence threshold for detections (default: 0.25)
+
+    Returns:
+        CVInferenceResponse: Detection results with annotated image
+    """
+    if bird_detector is None:
+        raise HTTPException(
+            status_code=503,
+            detail="Computer vision model is not available"
+        )
+
+    try:
+        # Read image bytes
+        image_bytes = await file.read()
+
+        # Run inference
+        results = bird_detector.predict_from_bytes(image_bytes, conf_threshold)
+
+        # Convert annotated image to base64
+        _, buffer = cv2.imencode('.jpg', results['annotated_image'])
+        image_base64 = base64.b64encode(buffer).decode('utf-8')
+
+        # Create response message
+        bird_count = results['bird_count']
+        if bird_count == 0:
+            message = "No birds detected in the image. Try adjusting the confidence threshold or using a different image."
+        elif bird_count == 1:
+            message = f"Detected 1 bird in the image!"
+        else:
+            message = f"Detected {bird_count} birds in the image!"
+
+        return {
+            "bird_count": bird_count,
+            "detections": results['detections'],
+            "annotated_image_base64": image_base64,
+            "message": message
+        }
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Inference failed: {str(e)}")
+
+@app.get("/cv/example/{filename}")
+async def get_example_image(filename: str):
+    """
+    Get an example image by filename
+
+    Args:
+        filename: Name of the example image file
+
+    Returns:
+        Image file
+    """
+    try:
+        from pathlib import Path
+        images_dir = Path(__file__).parent / "cv_tools" / "images"
+        image_path = images_dir / filename
+
+        if not image_path.exists():
+            raise HTTPException(status_code=404, detail="Image not found")
+
+        # Read and return image
+        with open(image_path, "rb") as f:
+            image_bytes = f.read()
+
+        # Determine content type
+        content_type = "image/jpeg"
+        if filename.lower().endswith('.png'):
+            content_type = "image/png"
+        elif filename.lower().endswith('.webp'):
+            content_type = "image/webp"
+
+        return Response(content=image_bytes, media_type=content_type)
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 if __name__ == "__main__":
     import uvicorn
