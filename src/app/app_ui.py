@@ -144,8 +144,20 @@ def render_map(df):
     """
     # Find coordinate columns (case-insensitive)
     # Be specific to avoid matching "ColonyName" (which contains "lon")
-    lat_col = next((col for col in df.columns if 'latit' in col.lower()), None)
-    lon_col = next((col for col in df.columns if 'longi' in col.lower() or 'lng' in col.lower()), None)
+    lat_col = None
+    lon_col = None
+
+    for col in df.columns:
+        if col == 'Latitude':
+            lat_col = col
+        elif col == 'Longitude':
+            lon_col = col
+
+    # Fallback to case-insensitive
+    if lat_col is None:
+        lat_col = next((col for col in df.columns if 'lat' in str(col).lower()), None)
+    if lon_col is None:
+        lon_col = next((col for col in df.columns if 'lon' in str(col).lower() or 'lng' in str(col).lower()), None)
 
     if not lat_col or not lon_col:
         st.info("💡 No geographic coordinates found in results.")
@@ -286,16 +298,17 @@ def render_map(df):
         st_folium(m, width=None, height=600, returned_objects=[])
 
         # Show summary statistics
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            st.metric("📍 Locations", len(map_df))
-        with col2:
-            if species_col:
-                st.metric("🦅 Species", len(unique_species))
-            else:
-                st.metric("🗺️ Zoom", zoom)
-        with col3:
-            st.metric("📐 Area (°)", f"{max_range:.2f}")
+        if len(map_df) > 1:
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                st.metric("📍 Locations", len(map_df))
+            with col2:
+                if species_col:
+                    st.metric("🦅 Species", len(unique_species))
+                else:
+                    st.metric("🗺️ Zoom", zoom)
+            with col3:
+                st.metric("📐 Area (°)", f"{max_range:.2f}")
 
     except Exception as e:
         st.error(f"❌ Error generating map: {str(e)}")
