@@ -512,6 +512,11 @@ def detect_chart_type(df):
     if not pd.api.types.is_numeric_dtype(y_dtype):
         return None
     
+    # Don't chart if the Y-axis column looks like a dimension (Year, ID, etc.) rather than a metric
+    dimension_keywords = ['year', 'month', 'day', 'date', 'id', 'latitude', 'longitude', 'lat', 'lon']
+    if any(keyword == y_col.lower() for keyword in dimension_keywords):
+        return None
+    
     temporal_keywords = ['year', 'date', 'time', 'month', 'day', 'season']
     if any(keyword in x_col.lower() for keyword in temporal_keywords):
         return 'line'
@@ -682,7 +687,7 @@ if prompt:
 
     with st.chat_message("assistant"):
         try:
-            with st.spinner("Analyzing bird data..."):
+            with st.spinner("Analyzing data..."):
                 # Use the new structured API
                 response = st.session_state.chatbot.query(prompt)
             
