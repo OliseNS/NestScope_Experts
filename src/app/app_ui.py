@@ -6,6 +6,10 @@ from streamlit_folium import st_folium
 import sys
 import os
 import random
+import time
+import threading
+import itertools
+from streamlit.runtime.scriptrunner import add_script_run_ctx
 
 # ============================================================================
 # INITIALIZATION & IMPORTS
@@ -629,6 +633,38 @@ def render_map(df):
 
 
 # ============================================================================
+# LOADING ANIMATION
+# ============================================================================
+
+class LoadingCarousel:
+    """
+    Context manager to display a carousel of loading messages.
+    """
+    def __init__(self, placeholder, messages):
+        self.placeholder = placeholder
+        self.messages = messages
+        self.stop_event = threading.Event()
+        self.thread = threading.Thread(target=self._animate)
+        add_script_run_ctx(self.thread)
+
+    def _animate(self):
+        for message in itertools.cycle(self.messages):
+            if self.stop_event.is_set():
+                break
+            # Display message with a spinner icon or similar
+            self.placeholder.markdown(f"🔄 **{message}**")
+            time.sleep(1.5)
+
+    def __enter__(self):
+        self.thread.start()
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.stop_event.set()
+        self.thread.join()
+        self.placeholder.empty()
+
+# ============================================================================
 # SESSION STATE INITIALIZATION
 # ============================================================================
 
@@ -750,7 +786,17 @@ if prompt:
 
     with st.chat_message("assistant"):
         try:
-            with st.spinner("Analyzing data..."):
+            loading_placeholder = st.empty()
+            loading_messages = [
+                "Hatching data...",
+                "Scanning observation records...",
+                "Migrating results to you...",
+                "Flocking together insights...",
+                "Pecking at the database...",
+                "Flying through 10 years of data..."
+            ]
+            
+            with LoadingCarousel(loading_placeholder, loading_messages):
                 # Use the new structured API
                 response = st.session_state.chatbot.query(prompt)
             
