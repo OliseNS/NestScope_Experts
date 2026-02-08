@@ -546,35 +546,6 @@ placeholder_examples = [
 if "chat_placeholder" not in st.session_state:
     st.session_state.chat_placeholder = f'Try "{random.choice(placeholder_examples)}"'
 
-# Determine if we should show suggestions (e.g. at start or after clear)
-show_suggestions = True
-
-if show_suggestions:
-    # Quick Suggestion Chips
-    suggestion_cols = st.columns(4)
-    suggestions = [
-        "📉 Trend Analysis", 
-        "🏆 Top Species", 
-        "📍 Colony Locations", 
-        "📊 Observation Counts"
-    ]
-    
-    # Map friendly labels to actual prompts
-    # Reusing the ones from sidebar for consistency but keeping them quick
-    suggestion_map = {
-        "📉 Trend Analysis": "Show brown pelican trends from 2015 to 2021",
-        "🏆 Top Species": "What were the top 5 species in 2020?",
-        "📍 Colony Locations": "List all bird colonies in Louisiana",
-        "📊 Observation Counts": "How many observations were recorded per year?"
-    }
-
-    for idx, col in enumerate(suggestion_cols):
-        with col:
-            label = suggestions[idx]
-            if st.button(label, key=f"chip_{idx}", use_container_width=True):
-                st.session_state.current_question = suggestion_map[label]
-                st.rerun()
-
 prompt = st.chat_input(st.session_state.chat_placeholder) or st.session_state.get("current_question")
 
 if prompt:
