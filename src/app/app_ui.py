@@ -14,10 +14,10 @@ import os
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
 
 try:
-    from chatbot import SQLChatbot
+    from sql_chatbot import SQLChatbot
 except ImportError as e:
     st.error(f"Cannot import SQLChatbot: {e}")
-    st.info("Make sure chatbot.py exists in the project root directory.")
+    st.info("Make sure sql_chatbot.py exists in the project root directory.")
     st.stop()
 
 # ============================================================================
@@ -682,35 +682,32 @@ if prompt:
 
     with st.chat_message("assistant"):
         try:
-            with st.spinner("Generating SQL query..."):
-                sql_query = st.session_state.chatbot.generate_sql_query(prompt)
+            with st.spinner("Analyzing bird data..."):
+                # Use the new structured API
+                response = st.session_state.chatbot.query(prompt)
             
-            if not sql_query or sql_query.startswith("ERROR"):
-                error_msg = sql_query if sql_query else "I couldn't understand that question. Try rephrasing?"
+            if not response['success']:
+                error_msg = response['error']
                 st.error(error_msg)
                 st.session_state.messages.append({"role": "assistant", "content": error_msg})
                 st.stop()
+            
+            # Extract response components
+            sql_query = response['sql']
+            answer = response['answer']
+            results = response['results']
+            
+            # Convert results back to DataFrame for visualization
+            df = pd.DataFrame(results) if results else pd.DataFrame()
             
             with st.expander("View Generated SQL Query"):
                 st.code(sql_query, language="sql")
             
-            with st.spinner("Running query..."):
-                df, error = st.session_state.chatbot.execute_query(sql_query)
-            
-            if error:
-                error_msg = f"Database error: {error}"
-                st.error(error_msg)
-                st.session_state.messages.append({"role": "assistant", "content": error_msg})
-                st.stop()
-            
-            if df is None or df.empty:
-                empty_msg = "Query executed successfully, but returned no results. Try adjusting your question."
+            if df.empty:
+                empty_msg = "Query executed successfully, but returned no results."
                 st.warning(empty_msg)
                 st.session_state.messages.append({"role": "assistant", "content": empty_msg})
                 st.stop()
-            
-            with st.spinner("Generating answer..."):
-                answer = st.session_state.chatbot.generate_answer(prompt, sql_query, df)
             
             st.markdown(answer)
             
