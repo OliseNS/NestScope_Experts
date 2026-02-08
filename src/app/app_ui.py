@@ -31,7 +31,7 @@ except ImportError as e:
 # ============================================================================
 
 st.set_page_config(
-    page_title="Louisiana Coastal Bird Copilot",
+    page_title="NestScope",
     page_icon="🦅",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -549,7 +549,7 @@ if "chatbot" not in st.session_state:
 # ============================================================================
 
 with st.sidebar:
-    st.markdown("### Bird Copilot")
+    st.markdown("### NestScope")
     st.caption("AI-Powered Analytics for Louisiana Coastal Bird Data")
     st.markdown("---")
 
@@ -600,7 +600,7 @@ with st.sidebar:
 # MAIN INTERFACE
 # ============================================================================
 
-st.title("Louisiana Coastal Bird Monitoring Copilot")
+st.title("NestScope")
 
 # Welcome Card
 if not st.session_state.messages:
