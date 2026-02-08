@@ -24,8 +24,6 @@ API_BASE_URL = "http://localhost:8000"  # Update this if the FastAPI server runs
 # ============================================================================
 
 st.markdown(get_custom_css(), unsafe_allow_html=True)
-
-st.session_state.chat_placeholder = ""
 # ============================================================================
 # SESSION STATE INITIALIZATION
 # ============================================================================
