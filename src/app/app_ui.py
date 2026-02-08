@@ -215,7 +215,6 @@ st.markdown("""
         color: #FFFFFF !important;
     }
 
-
     /* ===== SCROLLBAR ===== */
     ::-webkit-scrollbar {
         width: 8px;
@@ -286,13 +285,11 @@ def render_chart(df, chart_type):
             labels={x_col: x_col.replace('_', ' ').title(),
                     y_col: y_col.replace('_', ' ').title()}
         )
-        # Use simple black line or very dark gray
         fig.update_traces(line_color='#000000', line_width=2.5)
         fig.update_layout(template['layout'])
         st.plotly_chart(fig, use_container_width=True)
 
     elif chart_type == "bar":
-        # Limit to top 15 for readability
         if len(df) > 15:
             df = df.nlargest(15, y_col)
 
@@ -304,7 +301,6 @@ def render_chart(df, chart_type):
             labels={x_col: x_col.replace('_', ' ').title(),
                     y_col: y_col.replace('_', ' ').title()}
         )
-        # Use black bars
         fig.update_traces(marker_color='#000000')
         fig.update_layout(template['layout'])
         st.plotly_chart(fig, use_container_width=True)
@@ -326,7 +322,6 @@ def detect_chart_type(df):
 
     # Don't chart if the Y-axis column looks like a dimension
     dimension_keywords = ['year', 'month', 'day', 'date', 'id', 'latitude', 'longitude', 'lat', 'lon']
-    # Check if y_col CONTAINS any dimension keyword (not just equals)
     if any(keyword in y_col.lower() for keyword in dimension_keywords):
         return None
 
@@ -344,9 +339,21 @@ def render_map(df):
     """
     Render an enhanced Folium map with interactive features.
     """
-    # Find coordinate columns (case-insensitive)
-    lat_col = next((col for col in df.columns if 'lat' in col.lower()), None)
-    lon_col = next((col for col in df.columns if 'lon' in col.lower() or 'lng' in col.lower()), None)
+    # Find coordinate columns - explicit check for exact names first
+    lat_col = None
+    lon_col = None
+
+    for col in df.columns:
+        if col == 'Latitude':
+            lat_col = col
+        elif col == 'Longitude':
+            lon_col = col
+
+    # Fallback to case-insensitive if exact match not found
+    if lat_col is None:
+        lat_col = next((col for col in df.columns if 'lat' in str(col).lower()), None)
+    if lon_col is None:
+        lon_col = next((col for col in df.columns if 'lon' in str(col).lower() or 'lng' in str(col).lower()), None)
 
     if not lat_col or not lon_col:
         st.info("💡 No geographic coordinates found in results.")
@@ -367,15 +374,14 @@ def render_map(df):
         map_df[lon_col] = pd.to_numeric(map_df[lon_col], errors='coerce')
         map_df = map_df.dropna(subset=[lat_col, lon_col])
 
-        # Filter to valid coordinate ranges (Gulf of Mexico region)
+        # Basic validation - check for reasonable coordinates
         map_df = map_df[
-            (map_df[lat_col].between(24, 31)) &
-            (map_df[lon_col].between(-98, -80))
-            ]
+            (map_df[lat_col].between(-90, 90)) &
+            (map_df[lon_col].between(-180, 180))
+        ]
 
         if map_df.empty:
-            st.warning("⚠️ No valid coordinates found in the Gulf region.")
-            st.info("Valid coordinates: Latitude 24-31°N, Longitude -98 to -80°W")
+            st.warning("⚠️ No valid coordinates found.")
             return
 
         # Calculate center and smart zoom
@@ -500,7 +506,6 @@ class LoadingCarousel:
     """
     Context manager to display a carousel of loading messages.
     """
-
     def __init__(self, placeholder, messages):
         self.placeholder = placeholder
         self.messages = messages
@@ -512,7 +517,6 @@ class LoadingCarousel:
         for message in itertools.cycle(self.messages):
             if self.stop_event.is_set():
                 break
-            # Display message with a spinner icon or similar
             self.placeholder.markdown(f"🔄 **{message}**")
             time.sleep(1.5)
 
@@ -574,9 +578,7 @@ with st.sidebar:
     if st.session_state.query_history:
         st.markdown("#### HISTORY")
         st.markdown("**Session History**")
-        # Show last 10 queries, newest first
         for i, (q_label, q_prompt) in enumerate(reversed(st.session_state.query_history[-10:])):
-            # Create a label that is truncated if too long
             display_label = (q_label[:25] + '..') if len(q_label) > 27 else q_label
             if st.button(f"🕒 {display_label}", key=f"hist_{i}", use_container_width=True, help=q_prompt):
                 st.session_state.current_question = q_prompt
@@ -647,11 +649,9 @@ placeholder_examples = [
 if "chat_placeholder" not in st.session_state:
     st.session_state.chat_placeholder = f'Try "{random.choice(placeholder_examples)}"'
 
-# Show quick suggestions at start
 show_suggestions = len(st.session_state.messages) == 0
 
 if show_suggestions:
-    # Quick Suggestion Chips
     suggestion_cols = st.columns(4)
     suggestions = [
         "📉 Trend Analysis",
@@ -660,7 +660,6 @@ if show_suggestions:
         "📊 Yearly Counts"
     ]
 
-    # Map friendly labels to actual prompts
     suggestion_map = {
         "📉 Trend Analysis": "Show brown pelican trends from 2015 to 2021",
         "🏆 Top Species": "What were the top 5 species in 2020?",
@@ -698,7 +697,6 @@ if prompt:
             ]
 
             with LoadingCarousel(loading_placeholder, loading_messages):
-                # Use the new structured API
                 response = st.session_state.chatbot.query(prompt)
 
             if not response['success']:
@@ -707,25 +705,22 @@ if prompt:
                 st.session_state.messages.append({"role": "assistant", "content": error_msg})
                 st.stop()
 
-            # Extract response components
             sql_query = response['sql']
             answer = response['answer']
             results = response['results']
 
-            # SAVE TO HISTORY (Success only)
             if prompt and prompt not in [h[1] for h in st.session_state.query_history]:
                 st.session_state.query_history.append((prompt, prompt))
 
-            # Convert results back to DataFrame for visualization
             df = pd.DataFrame(results) if results else pd.DataFrame()
+            if not df.empty and results:
+                df = df[list(results[0].keys())]
 
             with st.expander("🔍 View Generated SQL Query"):
                 st.code(sql_query, language="sql")
 
-            # Always show the AI's answer (it will explain if no results were found)
             st.markdown(answer)
 
-            # If there are no results, stop here and don't try to show tables/charts
             if df.empty:
                 st.info("This query returned no matching records.")
                 st.session_state.messages.append({"role": "assistant", "content": answer})
@@ -738,42 +733,30 @@ if prompt:
             }
 
             # Smart Visualization Logic
-            # CRITICAL: Prevent charting coordinate data
             cols_lower = [str(col).lower() for col in df.columns]
             has_lat = any('lat' in col for col in cols_lower)
             has_lon = any('lon' in col or 'lng' in col for col in cols_lower)
 
             if has_lat and has_lon:
-                # This is geographic data - don't try to chart it
                 chart_type = None
             else:
                 chart_type = detect_chart_type(df)
 
-            # Check for map data with multiple fallbacks
+            # Check for map data
             lat_col = next((col for col in df.columns if 'lat' in str(col).lower()), None)
             lon_col = next((col for col in df.columns if 'lon' in str(col).lower() or 'lng' in str(col).lower()), None)
 
-            # Explicit check for exact column names
             if lat_col is None and 'Latitude' in df.columns:
                 lat_col = 'Latitude'
             if lon_col is None and 'Longitude' in df.columns:
                 lon_col = 'Longitude'
 
             has_map_data = lat_col is not None and lon_col is not None
+
             if 'Latitude' in df.columns and 'Longitude' in df.columns:
                 has_map_data = True
                 lat_col = 'Latitude'
                 lon_col = 'Longitude'
-
-            # 🔍 Debug output (you can remove this later)
-            print(f"🗺️ Map Detection Debug:")
-            # 🔍 Debug output (you can remove this later)
-            print(f"🗺️ Map Detection Debug:")
-            print(f"  - Columns: {df.columns.tolist()}")
-            print(f"  - lat_col: {lat_col}")
-            print(f"  - lon_col: {lon_col}")
-            print(f"  - has_map_data: {has_map_data}")
-            print(f"  - chart_type: {chart_type}")
 
             # Show inline map for single-location queries
             if not df.empty and len(df) == 1 and has_map_data:
@@ -783,23 +766,18 @@ if prompt:
                 st.markdown("---")
 
             if chart_type or has_map_data:
-                # If we have a chart OR map, show the Tabs UI
                 tab_labels = []
 
-                # ALWAYS show data table first
                 if chart_type:
                     tab_labels.append("📊 Data & Charts")
                 else:
                     tab_labels.append("📋 Data Table")
 
-                # Add map tab if coordinates exist (and not single location)
                 if has_map_data and len(df) > 1:
                     tab_labels.append("🗺️ Map View")
-                    print(f"✅ Adding Map View tab (found {lat_col} and {lon_col})")
 
                 tabs = st.tabs(tab_labels)
 
-                # Render First Tab (Data/Chart)
                 with tabs[0]:
                     st.dataframe(df, use_container_width=True)
 
@@ -815,25 +793,12 @@ if prompt:
                         response_data["chart_type"] = chart_type
                         render_chart(df, chart_type)
 
-                # Render Second Tab (Map) - only if it exists and multiple locations
                 if has_map_data and len(tabs) > 1 and len(df) > 1:
                     with tabs[1]:
-                        st.markdown("### 🗺️ Map Locations")
-                        st.caption(f"Click to view each location on Google Maps")
-
-                        for idx, row in df.iterrows():
-                            lat = row[lat_col]
-                            lon = row[lon_col]
-                            name = row.get('ColonyName', f'Location {idx + 1}')
-
-                            maps_link = f"https://www.google.com/maps?q={lat},{lon}"
-                            st.markdown(f"📍 **{name}** - [View on Map]({maps_link})")
-
+                        render_map(df)
 
             else:
-                # No charts, no map - just simple data
-                # Show in expander to keep UI clean for text-based answers
-                with st.expander("View Source Data"):
+                with st.expander("📋 View Source Data"):
                     st.dataframe(df, use_container_width=True)
 
                     csv = df.to_csv(index=False).encode('utf-8')
@@ -845,7 +810,6 @@ if prompt:
                     )
 
             st.session_state.messages.append(response_data)
-            # st.rerun()
 
         except Exception as e:
             st.error(f"An unexpected error occurred: {str(e)}")
