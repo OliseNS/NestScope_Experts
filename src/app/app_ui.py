@@ -30,14 +30,14 @@ except ImportError as e:
 # ============================================================================
 
 st.set_page_config(
-    page_title="Louisiana Coastal Data Copilot",
+    page_title="Louisiana Coastal Bird Copilot",
     page_icon="🦅",
     layout="wide",
     initial_sidebar_state="expanded"
 )
 
 # ============================================================================
-# PROFESSIONAL DARK THEME CSS
+# PROFESSIONAL LIGHT THEME CSS (Structured & Contrast)
 # ============================================================================
 
 st.markdown("""
@@ -45,453 +45,197 @@ st.markdown("""
     /* Import Modern Font */
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
 
-    /* ===== DARK THEME GLOBAL SETTINGS ===== */
+    /* ===== GLOBAL SETTINGS ===== */
     html, body, [class*="css"] {
         font-family: 'Inter', sans-serif;
+        color: #111827;
     }
     
-    /* Dark Background */
+    /* Global Background - Off-white/Light Gray for contrast */
     .stApp {
-        background: linear-gradient(135deg, #0f0f23 0%, #1a1a2e 100%);
+        background-color: #F3F4F6;
     }
     
-    /* Headers - Bright and Readable */
+    /* Headers */
     h1, h2, h3, h4 {
-        color: #ffffff !important;
-        font-weight: 600 !important;
-        letter-spacing: -0.3px;
+        color: #111827 !important;
+        font-weight: 700 !important;
     }
     
     h1 {
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
-        background-clip: text;
-        font-size: 2.5rem !important;
+        font-size: 2.2rem !important;
+        margin-bottom: 1rem !important;
     }
 
-
-    /* ===== SIDEBAR DARK STYLING ===== */
+    /* ===== SIDEBAR STYLING ===== */
     [data-testid="stSidebar"] {
-        background: linear-gradient(180deg, #0d0d1f 0%, #0a0a18 100%);
-        border-right: 1px solid rgba(102, 126, 234, 0.2);
-        box-shadow: 2px 0 20px rgba(0, 0, 0, 0.5);
+        background-color: #FFFFFF; /* White sidebar */
+        border-right: 1px solid #E5E7EB;
     }
     
-    [data-testid="stSidebar"] h1,
-    [data-testid="stSidebar"] h2,
-    [data-testid="stSidebar"] h3,
-    [data-testid="stSidebar"] h4,
-    [data-testid="stSidebar"] p,
-    [data-testid="stSidebar"] .stMarkdown,
-    [data-testid="stSidebar"] .stCaption,
-    [data-testid="stSidebar"] label {
-        color: #e0e0e0 !important;
+    [data-testid="stSidebar"] h1, [data-testid="stSidebar"] h2, [data-testid="stSidebar"] h3 {
+        color: #111827 !important;
     }
     
-    /* Sidebar section headers */
+    [data-testid="stSidebar"] p, [data-testid="stSidebar"] label, [data-testid="stSidebar"] .stMarkdown {
+        color: #4B5563 !important;
+    }
+    
+    /* Sidebar Headers */
     [data-testid="stSidebar"] h4 {
-        color: #8b9dc3 !important;
-        font-size: 0.75rem;
+        color: #6B7280 !important;
         text-transform: uppercase;
-        letter-spacing: 1.5px;
-        margin-top: 2rem;
-        margin-bottom: 0.5rem;
-        font-weight: 700;
-    }
-    
-    [data-testid="stSidebar"] h3 {
-        color: #ffffff !important;
-        font-size: 1.3rem;
-        font-weight: 700;
+        font-size: 0.75rem;
+        letter-spacing: 0.05em;
+        margin-top: 1.5rem;
     }
 
-    /* ===== PROFESSIONAL BUTTON STYLING ===== */
-    .stButton button {
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        color: white;
-        border-radius: 8px;
-        padding: 0.65rem 1rem;
-        font-weight: 600;
-        font-size: 0.9rem;
-        border: none;
-        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-        box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
-        width: 100%;
-        height: 44px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-    }
+    /* ===== BOXED CONTAINERS (Cards) ===== */
     
-    /* Hover effect */
-    .stButton button:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 6px 20px rgba(102, 126, 234, 0.5);
-        background: linear-gradient(135deg, #764ba2 0%, #667eea 100%);
-    }
-    
-    /* Active/Click effect */
-    .stButton button:active {
-        transform: translateY(0px);
-        box-shadow: 0 2px 8px rgba(102, 126, 234, 0.4);
-    }
-    
-    /* Focus state */
-    .stButton button:focus {
-        outline: 2px solid rgba(102, 126, 234, 0.5);
-        outline-offset: 2px;
+    /* Assistant Message - DISTINCT WHITE BOX */
+    [data-testid="stChatMessageContent"] {
+        background-color: #FFFFFF;
+        border: 1px solid #E5E7EB;
+        border-radius: 12px;
+        padding: 1.5rem;
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
+        color: #111827;
+        margin-bottom: 1rem;
     }
 
-    /* ===== CHAT INPUT - FIXED WHITE OVERLAY ===== */
+    /* User Message - DISTINCT GRAY BOX */
+    [data-testid="stChatMessage"]:has([data-testid="stChatMessageContent"]:first-child) [data-testid="stChatMessageContent"] {
+        background-color: #E5E7EB; /* Darker gray than background */
+        border: 1px solid #D1D5DB;
+        color: #111827;
+        box-shadow: none;
+    }
+    
+    /* Avatars */
+    .stChatMessage .stAvatar {
+        background-color: #FFFFFF !important;
+        border: 1px solid #E5E7EB;
+    }
+
+    /* ===== CHAT INPUT - FLOATING BOX ===== */
     [data-testid="stChatInput"] {
         background-color: transparent !important;
-        border: none !important;
+        padding-bottom: 2rem !important;
     }
     
     [data-testid="stChatInput"] > div {
-        background-color: rgba(22, 22, 42, 0.95) !important;
-        border: 1px solid rgba(102, 126, 234, 0.3) !important;
-        border-radius: 12px !important;
-        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4) !important;
+        background-color: #FFFFFF !important;
+        border: 1px solid #D1D5DB !important;
+        border-radius: 16px !important;
+        box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1) !important;
+        padding: 5px;
+    }
+    
+    [data-testid="stChatInput"]:focus-within > div {
+        border-color: #111827 !important;
+        box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1) !important;
     }
     
     [data-testid="stChatInput"] textarea {
-        background-color: transparent !important;
-        color: #ffffff !important;
-        border: none !important;
-        font-size: 0.95rem !important;
-        padding: 0.75rem !important;
+        color: #111827 !important;
     }
     
-    [data-testid="stChatInput"] textarea::placeholder {
-        color: #8b9dc3 !important;
-        opacity: 0.7;
-    }
-    
-    [data-testid="stChatInput"] textarea:focus {
-        outline: none !important;
-        box-shadow: none !important;
-    }
-    
-    /* Send button in chat input */
     [data-testid="stChatInput"] button {
-        background-color: #667eea !important;
+        background-color: #111827 !important;
         color: white !important;
         border-radius: 8px !important;
-        transition: all 0.2s ease !important;
-    }
-    
-    [data-testid="stChatInput"] button:hover {
-        background-color: #764ba2 !important;
     }
 
-    /* ===== CHAT MESSAGES DARK THEME ===== */
-    .stChatMessage {
-        background-color: transparent;
-        border: none;
-    }
-    
-    /* Assistant Messages */
-    [data-testid="stChatMessageContent"] {
-        background: linear-gradient(135deg, rgba(18, 18, 36, 0.95) 0%, rgba(22, 33, 62, 0.95) 100%);
-        border-radius: 12px;
-        padding: 1.5rem;
-        box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
-        border: 1px solid rgba(102, 126, 234, 0.15);
-        color: #e0e0e0;
-    }
-
-    /* User Messages */
-    [data-testid="stChatMessage"]:has([data-testid="stChatMessageContent"]:first-child) [data-testid="stChatMessageContent"] {
-        background: linear-gradient(135deg, rgba(102, 126, 234, 0.15) 0%, rgba(118, 75, 162, 0.15) 100%);
-        border: 1px solid rgba(102, 126, 234, 0.4);
-        color: #ffffff;
-    }
-
-    /* Text readability */
-    p, .stMarkdown, .stCaption, label {
-        color: #b0b0b0;
-    }
-    
-    /* Make all markdown text readable */
-    .stMarkdown p, .stMarkdown li {
-        color: #d0d0d0 !important;
-    }
-    
-    /* Strong/bold text */
-    strong, b {
-        color: #ffffff !important;
-    }
-
-    /* ===== TITLE CARD ===== */
+    /* ===== WELCOME CARD (The 'Box' User Wanted) ===== */
     .title-card {
-        background: linear-gradient(135deg, rgba(18, 18, 36, 0.9) 0%, rgba(22, 33, 62, 0.9) 100%);
-        padding: 2rem;
-        border-radius: 12px;
-        border: 1px solid rgba(102, 126, 234, 0.2);
+        background-color: #FFFFFF;
+        padding: 3rem 2rem;
+        border-radius: 16px;
+        border: 1px solid #E5E7EB;
+        text-align: center;
         margin-bottom: 2rem;
-        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
     }
     
     .title-card h3 {
-        color: #8b9dc3 !important;
-        margin-top: 0;
-        font-size: 1.1rem;
-        text-transform: uppercase;
-        letter-spacing: 1px;
-        font-weight: 700;
+        color: #111827 !important;
+        font-size: 2rem;
+        margin-bottom: 1rem;
     }
     
     .title-card p {
-        color: #c0c0c0 !important;
-        font-size: 1rem;
-        line-height: 1.6;
+        color: #4B5563 !important;
+        font-size: 1.1rem;
+        line-height: 1.7;
+        max-width: 700px;
+        margin: 0 auto;
     }
 
-    /* ===== INPUT FIELDS DARK ===== */
-    .stTextInput input, 
-    .stTextArea textarea {
-        background-color: rgba(22, 22, 42, 0.8) !important;
-        color: #ffffff !important;
-        border: 1px solid rgba(102, 126, 234, 0.3) !important;
-        border-radius: 8px !important;
-    }
-    
-    .stTextInput input:focus,
-    .stTextArea textarea:focus {
-        border-color: #667eea !important;
-        box-shadow: 0 0 0 2px rgba(102, 126, 234, 0.2) !important;
-    }
-
-    /* ===== DATAFRAME DARK STYLING ===== */
-    [data-testid="stDataFrame"] {
-        background-color: rgba(18, 18, 36, 0.8);
+    /* ===== BUTTONS ===== */
+    .stButton button {
+        background-color: #FFFFFF;
+        color: #111827;
+        border: 1px solid #D1D5DB;
         border-radius: 8px;
-        border: 1px solid rgba(102, 126, 234, 0.2);
-    }
-    
-    [data-testid="stDataFrame"] thead tr th {
-        background-color: rgba(102, 126, 234, 0.2) !important;
-        color: #ffffff !important;
         font-weight: 600;
+        box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+    }
+    
+    .stButton button:hover {
+        background-color: #F9FAFB;
+        border-color: #9CA3AF;
+        color: #000000;
     }
 
-    /* ===== EXPANDER DARK STYLING ===== */
-    .streamlit-expanderHeader {
-        background: rgba(102, 126, 234, 0.1);
+    /* ===== DATAFRAME & TABS ===== */
+    [data-testid="stDataFrame"] {
+        background-color: #FFFFFF;
+        border: 1px solid #E5E7EB;
         border-radius: 8px;
-        border: 1px solid rgba(102, 126, 234, 0.3);
-        color: #e0e0e0 !important;
-        font-weight: 500;
+        padding: 1px;
     }
     
-    .streamlit-expanderHeader:hover {
-        background: rgba(102, 126, 234, 0.2);
-        border-color: #667eea;
-    }
-    
-    .streamlit-expanderContent {
-        background-color: rgba(18, 18, 36, 0.5);
-        border: 1px solid rgba(102, 126, 234, 0.2);
-        border-top: none;
-        border-radius: 0 0 8px 8px;
-    }
-
-    /* ===== TAB STYLING ===== */
     .stTabs [data-baseweb="tab-list"] {
-        gap: 4px;
-        background-color: rgba(18, 18, 36, 0.5);
-        padding: 6px;
+        background-color: #FFFFFF;
+        padding: 0.5rem;
         border-radius: 8px;
+        border: 1px solid #E5E7EB;
+        margin-bottom: 1rem;
     }
     
     .stTabs [data-baseweb="tab"] {
-        background-color: transparent;
         border-radius: 6px;
-        color: #8b9dc3;
-        font-weight: 600;
-        padding: 10px 20px;
-        transition: all 0.3s ease;
-        font-size: 0.9rem;
-    }
-    
-    .stTabs [data-baseweb="tab"]:hover {
-        background-color: rgba(102, 126, 234, 0.15);
-        color: #ffffff;
+        padding: 0.5rem 1rem;
+        border: none;
     }
     
     .stTabs [aria-selected="true"] {
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
-        color: white !important;
+        background-color: #111827 !important;
+        color: #FFFFFF !important;
     }
 
-    /* ===== DOWNLOAD BUTTON ===== */
-    .stDownloadButton button {
-        background: linear-gradient(135deg, #43a047 0%, #66bb6a 100%);
-        color: white;
-        border-radius: 8px;
-        padding: 0.65rem 1rem;
-        font-weight: 600;
-        font-size: 0.9rem;
-        border: none;
-        transition: all 0.3s ease;
-        box-shadow: 0 4px 12px rgba(67, 160, 71, 0.3);
-        height: 44px;
-    }
     
-    .stDownloadButton button:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 6px 20px rgba(67, 160, 71, 0.5);
-    }
-
-    /* ===== ALERTS ===== */
-    .stAlert {
-        border-radius: 8px;
-        border-left: 4px solid;
-        background-color: rgba(18, 18, 36, 0.9) !important;
-    }
-    
-    [data-baseweb="notification"] {
-        background-color: rgba(18, 18, 36, 0.95) !important;
-        border: 1px solid rgba(102, 126, 234, 0.3);
-    }
-
-    /* ===== SPINNER ===== */
-    .stSpinner > div {
-        border-top-color: #667eea !important;
-    }
-
-    /* ===== HIDE STREAMLIT BRANDING - MODIFIED ===== */
-    /* Hide specific elements instead of global hiding */
-    #MainMenu {
-        display: none !important;
-    }
-    
-    footer {
-        display: none !important;
-    }
-    
-    .viewerBadge_container__1QSob {
-        display: none !important;
-    }
-    
-    /* Ensure Toolbar/Header IS visible for sidebar toggle */
-    [data-testid="stToolbar"] {
-        display: block !important;
-        visibility: visible !important;
-        background-color: transparent !important;
-        height: 0px; /* Don't take up space */
-    }
-    
-    /* Ensure the sidebar toggle is visible and large - CENTERED LEFT */
-    [data-testid="stSidebarCollapsedControl"] {
-        display: block !important;
-        visibility: visible !important;
-        color: #ffffff !important;
-        background-color: #667eea !important;
-        border-radius: 0 50% 50% 0; /* Half circle on edge */
-        width: 60px !important;
-        height: 80px !important;
-        display: flex !important;
-        align-items: center !important;
-        justify-content: center !important;
-        box-shadow: 2px 0 12px rgba(102, 126, 234, 0.5);
-        z-index: 1000005 !important;
-        position: fixed !important;
-        top: 50vh;
-        left: 0;
-        transform: translateY(-50%);
-        transition: all 0.3s ease;
-    }
-    
-    [data-testid="stSidebarCollapsedControl"]:hover {
-        background-color: #764ba2 !important;
-        width: 70px !important;
-        padding-left: 10px;
-        box-shadow: 4px 0 16px rgba(102, 126, 234, 0.7);
-    }
-    
-    /* Ensure the icon inside is visible and scalled */
-    [data-testid="stSidebarCollapsedControl"] svg {
-        fill: white !important;
-        stroke: white !important;
-        width: 30px !important;
-        height: 30px !important;
-    }
-
-    /* ===== CUSTOM SCROLLBAR ===== */
+    /* ===== SCROLLBAR ===== */
     ::-webkit-scrollbar {
-        width: 10px;
-        height: 10px;
+        width: 8px;
+        height: 8px;
     }
-    
     ::-webkit-scrollbar-track {
-        background: rgba(18, 18, 36, 0.5);
-        border-radius: 10px;
+        background: transparent;
     }
-    
     ::-webkit-scrollbar-thumb {
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        border-radius: 10px;
+        background: #D1D5DB;
+        border-radius: 4px;
     }
-    
     ::-webkit-scrollbar-thumb:hover {
-        background: linear-gradient(135deg, #764ba2 0%, #667eea 100%);
+        background: #9CA3AF;
     }
     
-    /* ===== LINK BUTTON ===== */
-    .stLinkButton a {
-        background: linear-gradient(135deg, rgba(102, 126, 234, 0.2) 0%, rgba(118, 75, 162, 0.2) 100%);
-        color: #ffffff !important;
-        border: 1px solid rgba(102, 126, 234, 0.4);
-        border-radius: 8px;
-        padding: 0.65rem 1rem;
-        font-weight: 600;
-        font-size: 0.9rem;
-        text-decoration: none;
-        transition: all 0.3s ease;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        height: 44px;
-        box-shadow: 0 2px 8px rgba(102, 126, 234, 0.2);
-    }
-    
-    .stLinkButton a:hover {
-        background: linear-gradient(135deg, rgba(102, 126, 234, 0.3) 0%, rgba(118, 75, 162, 0.3) 100%);
-        border-color: #667eea;
-        transform: translateY(-2px);
-        box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
-    }
-    
-    /* Code blocks */
-    code {
-        background-color: rgba(18, 18, 36, 0.8) !important;
-        color: #e0e0e0 !important;
-        border: 1px solid rgba(102, 126, 234, 0.2);
-    }
-    
-    pre {
-        background-color: rgba(18, 18, 36, 0.8) !important;
-        border: 1px solid rgba(102, 126, 234, 0.2);
-    }
-[data-testid="stChatInput"] textarea {
-    background-color: #0f0f23 !important;
-    color: #ffffff !important;
-    caret-color: #ffffff !important;
-}
+    /* Hide Default Elements */
+    #MainMenu { display: none !important; }
+    footer { display: none !important; }
+    .viewerBadge_container__1QSob { display: none !important; }
 
-[data-testid="stChatInput"] textarea::placeholder {
-    color: #9aa4c7 !important;
-}
-            [data-testid="stBottom"] {
-    background: transparent !important;
-}
-
-[data-testid="stBottom"] > div {
-    background: transparent !important;
-}
 </style>
 """, unsafe_allow_html=True)
 
@@ -501,22 +245,33 @@ st.markdown("""
 
 def render_chart(df, chart_type):
     """
-    Render a chart with dark theme colors.
+    Render a chart with CLEAN LIGHT THEME (White/Black).
     """
     if len(df.columns) < 2:
         return
     
     x_col, y_col = df.columns[0], df.columns[1]
     
-    # Dark theme template for plotly
+    # Minimalist Light Template
     template = {
         'layout': {
-            'paper_bgcolor': 'rgba(18, 18, 36, 0.8)',
-            'plot_bgcolor': 'rgba(22, 33, 62, 0.8)',
-            'font': {'color': '#e0e0e0', 'family': 'Inter'},
-            'xaxis': {'gridcolor': 'rgba(102, 126, 234, 0.1)', 'linecolor': 'rgba(102, 126, 234, 0.3)'},
-            'yaxis': {'gridcolor': 'rgba(102, 126, 234, 0.1)', 'linecolor': 'rgba(102, 126, 234, 0.3)'},
-            'title': {'font': {'size': 18, 'color': '#ffffff'}}
+            'paper_bgcolor': 'white',
+            'plot_bgcolor': 'white',
+            'font': {'color': '#111827', 'family': 'Inter'},
+            'xaxis': {
+                'gridcolor': '#F3F4F6', 
+                'linecolor': '#E5E7EB',
+                'zerolinecolor': '#E5E7EB',
+                'showline': True
+            },
+            'yaxis': {
+                'gridcolor': '#F3F4F6', 
+                'linecolor': '#E5E7EB',
+                'zerolinecolor': '#E5E7EB',
+                'showline': True
+            },
+            'title': {'font': {'size': 20, 'color': '#000000', 'family': 'Inter', 'weight': 700}},
+            'margin': {'l': 40, 'r': 40, 't': 60, 'b': 40}
         }
     }
     
@@ -529,7 +284,8 @@ def render_chart(df, chart_type):
             labels={x_col: x_col.replace('_', ' ').title(), 
                    y_col: y_col.replace('_', ' ').title()}
         )
-        fig.update_traces(line_color='#667eea', line_width=3)
+        # Use simple black line or very dark gray
+        fig.update_traces(line_color='#000000', line_width=2.5)
         fig.update_layout(template['layout'])
         st.plotly_chart(fig, use_container_width=True)
         
@@ -546,7 +302,8 @@ def render_chart(df, chart_type):
             labels={x_col: x_col.replace('_', ' ').title(), 
                    y_col: y_col.replace('_', ' ').title()}
         )
-        fig.update_traces(marker_color='#667eea')
+        # Use black bars
+        fig.update_traces(marker_color='#000000')
         fig.update_layout(template['layout'])
         st.plotly_chart(fig, use_container_width=True)
 
@@ -565,7 +322,7 @@ def detect_chart_type(df):
     if not pd.api.types.is_numeric_dtype(y_dtype):
         return None
     
-    # Don't chart if the Y-axis column looks like a dimension (Year, ID, etc.) rather than a metric
+    # Don't chart if the Y-axis column looks like a dimension
     dimension_keywords = ['year', 'month', 'day', 'date', 'id', 'latitude', 'longitude', 'lat', 'lon']
     if any(keyword == y_col.lower() for keyword in dimension_keywords):
         return None
@@ -582,7 +339,7 @@ def detect_chart_type(df):
 
 def render_map(df):
     """
-    Render a Folium map with dark tiles.
+    Render a Folium map with LIGHT TILES.
     """
     lat_col = next((col for col in df.columns if 'lat' in col.lower()), None)
     lon_col = next((col for col in df.columns if 'lon' in col.lower() or 'lng' in col.lower()), None)
@@ -605,10 +362,11 @@ def render_map(df):
         avg_lat = map_df[lat_col].mean()
         avg_lon = map_df[lon_col].mean()
         
+        # Use light theme tiles (CartoDB positron or OpenStreetMap)
         m = folium.Map(
             location=[avg_lat, avg_lon], 
             zoom_start=7,
-            tiles='CartoDB dark_matter'
+            tiles='CartoDB positron' 
         )
         
         for idx, row in map_df.iterrows():
@@ -619,10 +377,11 @@ def render_map(df):
             ]
             tooltip_text = "<br>".join(tooltip_lines)
             
+            # Simple black markers
             folium.Marker(
                 location=[row[lat_col], row[lon_col]],
                 tooltip=tooltip_text,
-                icon=folium.Icon(color='purple', icon='info-sign')
+                icon=folium.Icon(color='black', icon='info-sign')
             ).add_to(m)
         
         st_folium(m, width=800, height=500)
@@ -671,6 +430,9 @@ class LoadingCarousel:
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
+if "query_history" not in st.session_state:
+    st.session_state.query_history = []
+
 if "chatbot" not in st.session_state:
     try:
         st.session_state.chatbot = SQLChatbot()
@@ -684,7 +446,7 @@ if "chatbot" not in st.session_state:
 # ============================================================================
 
 with st.sidebar:
-    st.markdown("### Data Copilot")
+    st.markdown("### Bird Copilot")
     st.caption("AI-Powered Analytics for Louisiana Coastal Bird Data")
     st.markdown("---")
     
@@ -706,17 +468,25 @@ with st.sidebar:
 
     st.markdown("---")
     
-    col1, col2 = st.columns(2)
-    with col1:
-        if st.button("Reset", use_container_width=True):
-            st.session_state.messages = []
-            st.session_state.pop('current_question', None)
-            st.rerun()
-    with col2:
-        st.link_button("Help", "https://nexusla.org", use_container_width=True)
-
-    st.markdown("---")
     
+    if st.session_state.query_history:
+        st.markdown("#### HISTORY")
+        st.markdown("**Session History**")
+        # Show last 10 queries, newest first
+        for i, (q_label, q_prompt) in enumerate(reversed(st.session_state.query_history[-10:])):
+            # Create a label that is truncated if too long
+            display_label = (q_label[:25] + '..') if len(q_label) > 27 else q_label
+            if st.button(f"🕒 {display_label}", key=f"hist_{i}", use_container_width=True, help=q_prompt):
+                st.session_state.current_question = q_prompt
+                st.rerun()
+    
+    if st.session_state.query_history:
+        if st.button("Clear History", use_container_width=True):
+             st.session_state.query_history = []
+             st.rerun()
+    
+    st.markdown("---")
+
     st.markdown("#### DATA SOURCE")
     st.info(
         "**NOAA DIVER Database**\n\n"
@@ -731,16 +501,18 @@ with st.sidebar:
 st.title("Louisiana Coastal Bird Monitoring Copilot")
 
 # Welcome Card
-st.markdown("""
-    <div class="title-card">
-        <h3>Welcome</h3>
-        <p>
-            This intelligent assistant allows you to query <b>10+ years of bird survey data</b> 
-            using natural language. Simply ask a question below to analyze population trends, 
-            species distribution, and colony health across Louisiana's coastal habitats.
-        </p>
-    </div>
-""", unsafe_allow_html=True)
+# Welcome Card
+if not st.session_state.messages:
+    st.markdown("""
+        <div class="title-card">
+            <h3>Welcome</h3>
+            <p>
+                This intelligent assistant allows you to query <b>10+ years of bird survey data</b> 
+                using natural language. Simply ask a question below to analyze population trends, 
+                species distribution, and colony health across Louisiana's coastal habitats.
+            </p>
+        </div>
+    """, unsafe_allow_html=True)
 
 # ============================================================================
 # CHAT HISTORY DISPLAY
@@ -773,6 +545,35 @@ placeholder_examples = [
 
 if "chat_placeholder" not in st.session_state:
     st.session_state.chat_placeholder = f'Try "{random.choice(placeholder_examples)}"'
+
+# Determine if we should show suggestions (e.g. at start or after clear)
+show_suggestions = True
+
+if show_suggestions:
+    # Quick Suggestion Chips
+    suggestion_cols = st.columns(4)
+    suggestions = [
+        "📉 Trend Analysis", 
+        "🏆 Top Species", 
+        "📍 Colony Locations", 
+        "📊 Observation Counts"
+    ]
+    
+    # Map friendly labels to actual prompts
+    # Reusing the ones from sidebar for consistency but keeping them quick
+    suggestion_map = {
+        "📉 Trend Analysis": "Show brown pelican trends from 2015 to 2021",
+        "🏆 Top Species": "What were the top 5 species in 2020?",
+        "📍 Colony Locations": "List all bird colonies in Louisiana",
+        "📊 Observation Counts": "How many observations were recorded per year?"
+    }
+
+    for idx, col in enumerate(suggestion_cols):
+        with col:
+            label = suggestions[idx]
+            if st.button(label, key=f"chip_{idx}", use_container_width=True):
+                st.session_state.current_question = suggestion_map[label]
+                st.rerun()
 
 prompt = st.chat_input(st.session_state.chat_placeholder) or st.session_state.get("current_question")
 
@@ -810,6 +611,10 @@ if prompt:
             sql_query = response['sql']
             answer = response['answer']
             results = response['results']
+            
+            # SAVE TO HISTORY (Success only)
+            if prompt and prompt not in [h[1] for h in st.session_state.query_history]:
+                st.session_state.query_history.append((prompt, prompt))
             
             # Convert results back to DataFrame for visualization
             df = pd.DataFrame(results) if results else pd.DataFrame()
@@ -889,6 +694,7 @@ if prompt:
                     )
             
             st.session_state.messages.append(response_data)
+            st.rerun()
             
         except Exception as e:
             st.error(f"An unexpected error occurred: {str(e)}")
