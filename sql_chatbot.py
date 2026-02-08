@@ -20,11 +20,15 @@ client = OpenAI(
 )
 
 class SQLChatbot:
-    def __init__(self, db_path="bird_data.db", model="anthropic/claude-3.5-sonnet"):
+    def __init__(self, db_path=None, model="anthropic/claude-opus-4.5"):
         """Initialize the SQL chatbot"""
+        # Use environment variable or provided path, fallback to bird_data_complete.db
+        if db_path is None:
+            db_path = os.getenv("DB_PATH", "bird_data_complete.db")
+
         self.db_path = db_path
         self.model = model
-        self.conn = sqlite3.connect(db_path)
+        self.conn = sqlite3.connect(db_path, check_same_thread=False)
         self.conversation_history = []
 
         # Load database schema
@@ -253,9 +257,7 @@ SQL: SELECT DISTINCT colony_name, state FROM observations WHERE oil_present = 'Y
             # Execute query
             df = pd.read_sql_query(sql_query, self.conn)
 
-            if len(df) == 0:
-                return None, "No results found."
-
+            # Return empty dataframe, not an error - let AI explain the empty result
             return df, None
 
         except Exception as e:
@@ -380,17 +382,20 @@ Please provide a clear, informative answer to the question based on these result
                 print(f"\nCould not repair query\n")
                 return f"Sorry, I couldn't execute that query. Error: {error}"
 
-        print(f"Found {len(results_df)} results\n")
+        result_count = len(results_df) if results_df is not None else 0
+        print(f"Found {result_count} results\n")
 
         # Show results preview
-        if len(results_df) > 0:
+        if result_count > 0:
             print("Results preview:")
             print(results_df.head(10).to_string(index=False))
-            if len(results_df) > 10:
-                print(f"... and {len(results_df) - 10} more rows")
+            if result_count > 10:
+                print(f"... and {result_count - 10} more rows")
             print()
+        else:
+            print("Query returned no results. Generating explanation...\n")
 
-        # Step 4: Generate natural language answer
+        # Step 4: Generate natural language answer (AI will explain empty results)
         print("Generating answer...\n")
         answer = self.generate_answer(question, sql_query, results_df)
 
@@ -470,17 +475,18 @@ Please provide a clear, informative answer to the question based on these result
                     'row_count': 0
                 }
 
-            # Step 4: Generate answer
+            # Step 4: Generate answer (AI will explain if results are empty)
             answer = self.generate_answer(question, sql_query, results_df)
 
-            # Return structured response
+            # Return structured response (empty results are valid, not errors)
+            row_count = len(results_df) if results_df is not None else 0
             return {
                 'success': True,
                 'error': None,
                 'sql': sql_query,
-                'results': results_df.to_dict('records') if results_df is not None else [],
+                'results': results_df.to_dict('records') if results_df is not None and row_count > 0 else [],
                 'answer': answer,
-                'row_count': len(results_df) if results_df is not None else 0
+                'row_count': row_count
             }
 
         except Exception as e:
