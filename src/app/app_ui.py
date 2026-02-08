@@ -549,7 +549,7 @@ if "chatbot" not in st.session_state:
 # ============================================================================
 
 with st.sidebar:
-    st.markdown("### 🦅 Bird Copilot")
+    st.markdown("### Bird Copilot")
     st.caption("AI-Powered Analytics for Louisiana Coastal Bird Data")
     st.markdown("---")
 
@@ -557,11 +557,11 @@ with st.sidebar:
     st.caption("Try these conversation starters:")
 
     examples = [
-        ("📈 Trends", "Show brown pelican trends from 2015 to 2021"),
-        ("🏆 Top Species", "What were the top 5 species in 2020?"),
-        ("🗺️ Locations", "Show all bird colonies in Louisiana with their locations"),
-        ("📊 Counts", "How many observations were recorded per year?"),
-        ("🌿 Habitats", "Compare species diversity across different colonies")
+        ("Trends", "Show brown pelican trends from 2015 to 2021"),
+        ("Top Species", "What were the top 5 species in 2020?"),
+        ("Locations", "Show all bird colonies in Louisiana with their locations"),
+        ("Counts", "How many observations were recorded per year?"),
+        ("Habitats", "Compare species diversity across different colonies")
     ]
 
     for label, full_prompt in examples:
