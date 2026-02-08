@@ -1,245 +1,32 @@
 import streamlit as st
 import pandas as pd
-import plotly.express as px
-import folium
-from streamlit_folium import st_folium
-from folium.plugins import Fullscreen
-import sys
-import os
+import requests
 import random
 import time
 import threading
 import itertools
+import plotly.express as px
+from folium.plugins import Fullscreen
 from streamlit.runtime.scriptrunner import add_script_run_ctx
+import folium
+from streamlit_folium import st_folium
 
 # ============================================================================
-# INITIALIZATION & IMPORTS
+# CONFIGURATION
 # ============================================================================
 
-# Add project root to path for chatbot import
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
+API_BASE_URL = "http://localhost:8000"  # Update this if the FastAPI server runs on a different host/port
 
-try:
-    from sql_chatbot import SQLChatbot
-except ImportError as e:
-    st.error(f"Cannot import SQLChatbot: {e}")
-    st.info("Make sure sql_chatbot.py exists in the project root directory.")
-    st.stop()
-
+st.session_state.chat_placeholder = ""
 # ============================================================================
-# PAGE CONFIGURATION
+# SESSION STATE INITIALIZATION
 # ============================================================================
 
-st.set_page_config(
-    page_title="Louisiana Coastal Bird Copilot",
-    page_icon="🦅",
-    layout="wide",
-    initial_sidebar_state="expanded"
-)
+if "messages" not in st.session_state:
+    st.session_state.messages = []
 
-# ============================================================================
-# PROFESSIONAL LIGHT THEME CSS (Structured & Contrast)
-# ============================================================================
-
-st.markdown("""
-<style>
-    /* Import Modern Font */
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
-
-    /* ===== GLOBAL SETTINGS ===== */
-    html, body, [class*="css"] {
-        font-family: 'Inter', sans-serif;
-        color: #111827;
-    }
-
-    /* Global Background - Off-white/Light Gray for contrast */
-    .stApp {
-        background-color: #F3F4F6;
-    }
-
-    /* Headers */
-    h1, h2, h3, h4 {
-        color: #111827 !important;
-        font-weight: 700 !important;
-    }
-
-    h1 {
-        font-size: 2.2rem !important;
-        margin-bottom: 1rem !important;
-    }
-
-    /* ===== SIDEBAR STYLING ===== */
-    [data-testid="stSidebar"] {
-        background-color: #FFFFFF; /* White sidebar */
-        border-right: 1px solid #E5E7EB;
-    }
-
-    [data-testid="stSidebar"] h1, [data-testid="stSidebar"] h2, [data-testid="stSidebar"] h3 {
-        color: #111827 !important;
-    }
-
-    [data-testid="stSidebar"] p, [data-testid="stSidebar"] label, [data-testid="stSidebar"] .stMarkdown {
-        color: #4B5563 !important;
-    }
-
-    /* Sidebar Headers */
-    [data-testid="stSidebar"] h4 {
-        color: #6B7280 !important;
-        text-transform: uppercase;
-        font-size: 0.75rem;
-        letter-spacing: 0.05em;
-        margin-top: 1.5rem;
-    }
-
-    /* ===== BOXED CONTAINERS (Cards) ===== */
-
-    /* Assistant Message - DISTINCT WHITE BOX */
-    [data-testid="stChatMessageContent"] {
-        background-color: #FFFFFF;
-        border: 1px solid #E5E7EB;
-        border-radius: 12px;
-        padding: 1.5rem;
-        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
-        color: #111827;
-        margin-bottom: 1rem;
-    }
-
-    /* User Message - DISTINCT GRAY BOX */
-    [data-testid="stChatMessage"]:has([data-testid="stChatMessageContent"]:first-child) [data-testid="stChatMessageContent"] {
-        background-color: #E5E7EB; /* Darker gray than background */
-        border: 1px solid #D1D5DB;
-        color: #111827;
-        box-shadow: none;
-    }
-
-    /* Avatars */
-    .stChatMessage .stAvatar {
-        background-color: #FFFFFF !important;
-        border: 1px solid #E5E7EB;
-    }
-
-    /* ===== CHAT INPUT - FLOATING BOX ===== */
-    [data-testid="stChatInput"] {
-        background-color: transparent !important;
-        padding-bottom: 2rem !important;
-    }
-
-    [data-testid="stChatInput"] > div {
-        background-color: #FFFFFF !important;
-        border: 1px solid #D1D5DB !important;
-        border-radius: 16px !important;
-        box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1) !important;
-        padding: 5px;
-    }
-
-    [data-testid="stChatInput"]:focus-within > div {
-        border-color: #111827 !important;
-        box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1) !important;
-    }
-
-    [data-testid="stChatInput"] textarea {
-        color: #111827 !important;
-    }
-
-    [data-testid="stChatInput"] button {
-        background-color: #111827 !important;
-        color: white !important;
-        border-radius: 8px !important;
-    }
-
-    /* ===== WELCOME CARD (The 'Box' User Wanted) ===== */
-    .title-card {
-        background-color: #FFFFFF;
-        padding: 3rem 2rem;
-        border-radius: 16px;
-        border: 1px solid #E5E7EB;
-        text-align: center;
-        margin-bottom: 2rem;
-        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
-    }
-
-    .title-card h3 {
-        color: #111827 !important;
-        font-size: 2rem;
-        margin-bottom: 1rem;
-    }
-
-    .title-card p {
-        color: #4B5563 !important;
-        font-size: 1.1rem;
-        line-height: 1.7;
-        max-width: 700px;
-        margin: 0 auto;
-    }
-
-    /* ===== BUTTONS ===== */
-    .stButton button {
-        background-color: #FFFFFF;
-        color: #111827;
-        border: 1px solid #D1D5DB;
-        border-radius: 8px;
-        font-weight: 600;
-        box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
-    }
-
-    .stButton button:hover {
-        background-color: #F9FAFB;
-        border-color: #9CA3AF;
-        color: #000000;
-    }
-
-    /* ===== DATAFRAME & TABS ===== */
-    [data-testid="stDataFrame"] {
-        background-color: #FFFFFF;
-        border: 1px solid #E5E7EB;
-        border-radius: 8px;
-        padding: 1px;
-    }
-
-    .stTabs [data-baseweb="tab-list"] {
-        background-color: #FFFFFF;
-        padding: 0.5rem;
-        border-radius: 8px;
-        border: 1px solid #E5E7EB;
-        margin-bottom: 1rem;
-    }
-
-    .stTabs [data-baseweb="tab"] {
-        border-radius: 6px;
-        padding: 0.5rem 1rem;
-        border: none;
-    }
-
-    .stTabs [aria-selected="true"] {
-        background-color: #111827 !important;
-        color: #FFFFFF !important;
-    }
-
-
-    /* ===== SCROLLBAR ===== */
-    ::-webkit-scrollbar {
-        width: 8px;
-        height: 8px;
-    }
-    ::-webkit-scrollbar-track {
-        background: transparent;
-    }
-    ::-webkit-scrollbar-thumb {
-        background: #D1D5DB;
-        border-radius: 4px;
-    }
-    ::-webkit-scrollbar-thumb:hover {
-        background: #9CA3AF;
-    }
-
-    /* Hide Default Elements */
-    #MainMenu { display: none !important; }
-    footer { display: none !important; }
-    .viewerBadge_container__1QSob { display: none !important; }
-
-</style>
-""", unsafe_allow_html=True)
-
+if "query_history" not in st.session_state:
+    st.session_state.query_history = []
 
 # ============================================================================
 # HELPER FUNCTIONS
@@ -338,6 +125,7 @@ def detect_chart_type(df):
         return 'bar'
 
     return None
+
 
 
 def render_map(df):
@@ -492,6 +280,34 @@ def render_map(df):
             st.write(f"**Error:** {str(e)}")
 
 
+def ask_question_to_backend(question, model="anthropic/claude-opus-4.5"):
+    """
+    Send a question to the FastAPI backend and return the response.
+    """
+    try:
+        response = requests.post(
+            f"{API_BASE_URL}/ask",
+            json={"question": question, "model": model},
+            timeout=30
+        )
+        response.raise_for_status()
+        return response.json()
+    except requests.exceptions.RequestException as e:
+        return {"success": False, "error": str(e)}
+
+
+def get_stats_from_backend():
+    """
+    Fetch database statistics from the FastAPI backend.
+    """
+    try:
+        response = requests.get(f"{API_BASE_URL}/stats", timeout=10)
+        response.raise_for_status()
+        return response.json()
+    except requests.exceptions.RequestException as e:
+        return {"success": False, "error": str(e)}
+
+
 # ============================================================================
 # LOADING ANIMATION
 # ============================================================================
@@ -512,7 +328,6 @@ class LoadingCarousel:
         for message in itertools.cycle(self.messages):
             if self.stop_event.is_set():
                 break
-            # Display message with a spinner icon or similar
             self.placeholder.markdown(f"🔄 **{message}**")
             time.sleep(1.5)
 
@@ -525,76 +340,53 @@ class LoadingCarousel:
         self.thread.join()
         self.placeholder.empty()
 
-
-# ============================================================================
-# SESSION STATE INITIALIZATION
-# ============================================================================
-
-if "messages" not in st.session_state:
-    st.session_state.messages = []
-
-if "query_history" not in st.session_state:
-    st.session_state.query_history = []
-
-if "chatbot" not in st.session_state:
-    try:
-        st.session_state.chatbot = SQLChatbot()
-    except Exception as e:
-        st.error(f"Failed to initialize chatbot: {e}")
-        st.info("Make sure the database file exists and SQLChatbot is properly configured.")
-        st.stop()
-
-# ============================================================================
-# SIDEBAR
-# ============================================================================
-
-with st.sidebar:
-    st.markdown("### 🦅 Bird Copilot")
-    st.caption("AI-Powered Analytics for Louisiana Coastal Bird Data")
-    st.markdown("---")
-
-    st.markdown("#### QUICK PROMPTS")
-    st.caption("Try these conversation starters:")
-
-    examples = [
-        ("📈 Trends", "Show brown pelican trends from 2015 to 2021"),
-        ("🏆 Top Species", "What were the top 5 species in 2020?"),
-        ("🗺️ Locations", "Show all bird colonies in Louisiana with their locations"),
-        ("📊 Counts", "How many observations were recorded per year?"),
-        ("🌿 Habitats", "Compare species diversity across different colonies")
-    ]
-
-    for label, full_prompt in examples:
-        if st.button(label, key=label, use_container_width=True):
-            st.session_state.current_question = full_prompt
-            st.rerun()
-
-    st.markdown("---")
-
-    if st.session_state.query_history:
-        st.markdown("#### HISTORY")
-        st.markdown("**Session History**")
-        # Show last 10 queries, newest first
-        for i, (q_label, q_prompt) in enumerate(reversed(st.session_state.query_history[-10:])):
-            # Create a label that is truncated if too long
-            display_label = (q_label[:25] + '..') if len(q_label) > 27 else q_label
-            if st.button(f"🕒 {display_label}", key=f"hist_{i}", use_container_width=True, help=q_prompt):
-                st.session_state.current_question = q_prompt
-                st.rerun()
-
-    if st.session_state.query_history:
-        if st.button("🗑️ Clear History", use_container_width=True):
-            st.session_state.query_history = []
-            st.rerun()
-
-    st.markdown("---")
-
-    st.markdown("#### DATA SOURCE")
-    st.info(
-        "**NOAA DIVER Database**\n\n"
-        "Deepwater Horizon Avian Monitoring\n\n"
-        "📅 2010-2021 | 📍 Louisiana Coast"
-    )
+# with st.sidebar:
+#     st.markdown("### 🦅 Bird Copilot")
+#     st.caption("AI-Powered Analytics for Louisiana Coastal Bird Data")
+#     st.markdown("---")
+#
+#     # Quick Prompts Section
+#     st.markdown("#### QUICK PROMPTS")
+#     st.caption("Try these conversation starters:")
+#
+#     examples = [
+#         ("📈 Trends", "Show brown pelican trends from 2015 to 2021"),
+#         ("🏆 Top Species", "What were the top 5 species in 2020?"),
+#         ("🗺️ Locations", "Show all bird colonies in Louisiana with their locations"),
+#         ("📊 Counts", "How many observations were recorded per year?"),
+#         ("🌿 Habitats", "Compare species diversity across different colonies")
+#     ]
+#
+#     for label, full_prompt in examples:
+#         if st.button(label, key=f"quick_prompt_{label}", use_container_width=True):
+#             st.session_state.current_question = full_prompt
+#             st.rerun()
+#
+#     st.markdown("---")
+#
+#     # Session History Section
+#     if st.session_state.query_history:
+#         st.markdown("#### HISTORY")
+#         st.markdown("**Session History**")
+#         for i, (q_label, q_prompt) in enumerate(reversed(st.session_state.query_history[-10:])):
+#             display_label = (q_label[:25] + '..') if len(q_label) > 27 else q_label
+#             if st.button(f"🕒 {display_label}", key=f"hist_{i}", use_container_width=True, help=q_prompt):
+#                 st.session_state.current_question = q_prompt
+#                 st.rerun()
+#
+#         if st.button("🗑️ Clear History", use_container_width=True):
+#             st.session_state.query_history = []
+#             st.rerun()
+#
+#     st.markdown("---")
+#
+#     # Data Source Section
+#     st.markdown("#### DATA SOURCE")
+#     st.info(
+#         "**NOAA DIVER Database**\n\n"
+#         "Deepwater Horizon Avian Monitoring\n\n"
+#         "📅 2010-2021 | 📍 Louisiana Coast"
+#     )
 
 # ============================================================================
 # MAIN INTERFACE
@@ -603,6 +395,9 @@ with st.sidebar:
 st.title("Louisiana Coastal Bird Monitoring Copilot")
 
 # Welcome Card
+if "messages" not in st.session_state:
+    st.session_state.messages = []
+
 if not st.session_state.messages:
     st.markdown("""
         <div class="title-card">
@@ -626,56 +421,34 @@ for message in st.session_state.messages:
         if "dataframe" in message and message["dataframe"] is not None:
             st.dataframe(message["dataframe"], use_container_width=True)
 
-        if "chart_type" in message and "dataframe" in message:
-            render_chart(message["dataframe"], message["chart_type"])
-
 # ============================================================================
 # USER INPUT HANDLING
 # ============================================================================
 
+# Placeholder examples for the input box
 placeholder_examples = [
     "Show brown pelican trends from 2015 to 2021",
     "What were the top 5 species in 2020?",
-    "List all bird colonies in Louisiana with locations",
+    "List all bird colonies in Louisiana",
     "How many observations were recorded per year?",
     "Compare species diversity across different colonies",
     "Which habitat had the most bird sightings?",
-    "Where are the Chandeleur Islands colonies?",
-    "Map brown pelican nests in Louisiana"
+    "Analyze the population growth of Seagulls",
+    "Identify colonies with declining populations"
 ]
 
+# Initialize the placeholder if not already set
 if "chat_placeholder" not in st.session_state:
     st.session_state.chat_placeholder = f'Try "{random.choice(placeholder_examples)}"'
 
-# Show quick suggestions at start
-show_suggestions = len(st.session_state.messages) == 0
-
-if show_suggestions:
-    # Quick Suggestion Chips
-    suggestion_cols = st.columns(4)
-    suggestions = [
-        "📉 Trend Analysis",
-        "🏆 Top Species",
-        "🗺️ Colony Map",
-        "📊 Yearly Counts"
-    ]
-
-    # Map friendly labels to actual prompts
-    suggestion_map = {
-        "📉 Trend Analysis": "Show brown pelican trends from 2015 to 2021",
-        "🏆 Top Species": "What were the top 5 species in 2020?",
-        "🗺️ Colony Map": "Show all bird colonies in Louisiana with their locations",
-        "📊 Yearly Counts": "How many observations were recorded per year?"
-    }
-
-    for idx, col in enumerate(suggestion_cols):
-        with col:
-            label = suggestions[idx]
-            if st.button(label, key=f"chip_{idx}", use_container_width=True):
-                st.session_state.current_question = suggestion_map[label]
-                st.rerun()
-
-prompt = st.chat_input(st.session_state.chat_placeholder) or st.session_state.get("current_question")
+# Determine the prompt to use
+if "current_question" in st.session_state:
+    # Use the quick prompt or history item
+    prompt = st.session_state.current_question
+    st.session_state.pop("current_question")  # Clear after use
+else:
+    # Use the user input from the text box
+    prompt = st.text_input("Ask a question:", st.session_state.chat_placeholder)
 
 if prompt:
     if "current_question" in st.session_state:
@@ -698,34 +471,36 @@ if prompt:
             ]
 
             with LoadingCarousel(loading_placeholder, loading_messages):
-                # Use the new structured API
-                response = st.session_state.chatbot.query(prompt)
+                # Use the chatbot API to query the backend
+                response = ask_question_to_backend(prompt)
 
-            if not response['success']:
+                print(response)
+
+            if response['error']:
                 error_msg = response['error']
                 st.error(error_msg)
                 st.session_state.messages.append({"role": "assistant", "content": error_msg})
                 st.stop()
 
             # Extract response components
-            sql_query = response['sql']
+            sql_query = response['sql_query']
             answer = response['answer']
             results = response['results']
 
-            # SAVE TO HISTORY (Success only)
+            # Save to history (on success only)
             if prompt and prompt not in [h[1] for h in st.session_state.query_history]:
                 st.session_state.query_history.append((prompt, prompt))
 
-            # Convert results back to DataFrame for visualization
+            # Convert results to DataFrame for visualization
             df = pd.DataFrame(results) if results else pd.DataFrame()
 
             with st.expander("🔍 View Generated SQL Query"):
                 st.code(sql_query, language="sql")
 
-            # Always show the AI's answer (it will explain if no results were found)
+            # Display the assistant's answer
             st.markdown(answer)
 
-            # If there are no results, stop here and don't try to show tables/charts
+            # Stop if no results are found
             if df.empty:
                 st.info("This query returned no matching records.")
                 st.session_state.messages.append({"role": "assistant", "content": answer})
@@ -737,37 +512,27 @@ if prompt:
                 "dataframe": df
             }
 
-            # Smart Visualization Logic
-            # CRITICAL: Prevent charting coordinate data
+            # Detect chart type and map data
             cols_lower = [str(col).lower() for col in df.columns]
             has_lat = any('lat' in col for col in cols_lower)
             has_lon = any('lon' in col or 'lng' in col for col in cols_lower)
 
             if has_lat and has_lon:
-                # This is geographic data - don't try to chart it
                 chart_type = None
             else:
                 chart_type = detect_chart_type(df)
 
-            # Check for map data with multiple fallbacks
             lat_col = next((col for col in df.columns if 'lat' in str(col).lower()), None)
             lon_col = next((col for col in df.columns if 'lon' in str(col).lower() or 'lng' in str(col).lower()), None)
 
-            # Explicit check for exact column names
             if lat_col is None and 'Latitude' in df.columns:
                 lat_col = 'Latitude'
             if lon_col is None and 'Longitude' in df.columns:
                 lon_col = 'Longitude'
 
             has_map_data = lat_col is not None and lon_col is not None
-            if 'Latitude' in df.columns and 'Longitude' in df.columns:
-                has_map_data = True
-                lat_col = 'Latitude'
-                lon_col = 'Longitude'
 
-            # 🔍 Debug output (you can remove this later)
-            print(f"🗺️ Map Detection Debug:")
-            # 🔍 Debug output (you can remove this later)
+            # Debugging output
             print(f"🗺️ Map Detection Debug:")
             print(f"  - Columns: {df.columns.tolist()}")
             print(f"  - lat_col: {lat_col}")
@@ -775,7 +540,7 @@ if prompt:
             print(f"  - has_map_data: {has_map_data}")
             print(f"  - chart_type: {chart_type}")
 
-            # Show inline map for single-location queries
+            # Render map for single-location queries
             if not df.empty and len(df) == 1 and has_map_data:
                 st.markdown("---")
                 st.markdown("### 📍 Location Map")
@@ -783,23 +548,20 @@ if prompt:
                 st.markdown("---")
 
             if chart_type or has_map_data:
-                # If we have a chart OR map, show the Tabs UI
+                # Tabs for data, charts, and maps
                 tab_labels = []
 
-                # ALWAYS show data table first
                 if chart_type:
                     tab_labels.append("📊 Data & Charts")
                 else:
                     tab_labels.append("📋 Data Table")
 
-                # Add map tab if coordinates exist (and not single location)
                 if has_map_data and len(df) > 1:
                     tab_labels.append("🗺️ Map View")
-                    print(f"✅ Adding Map View tab (found {lat_col} and {lon_col})")
 
                 tabs = st.tabs(tab_labels)
 
-                # Render First Tab (Data/Chart)
+                # Data/Chart Tab
                 with tabs[0]:
                     st.dataframe(df, use_container_width=True)
 
@@ -815,7 +577,7 @@ if prompt:
                         response_data["chart_type"] = chart_type
                         render_chart(df, chart_type)
 
-                # Render Second Tab (Map) - only if it exists and multiple locations
+                # Map Tab
                 if has_map_data and len(tabs) > 1 and len(df) > 1:
                     with tabs[1]:
                         st.markdown("### 🗺️ Map Locations")
@@ -829,10 +591,8 @@ if prompt:
                             maps_link = f"https://www.google.com/maps?q={lat},{lon}"
                             st.markdown(f"📍 **{name}** - [View on Map]({maps_link})")
 
-
             else:
-                # No charts, no map - just simple data
-                # Show in expander to keep UI clean for text-based answers
+                # Simple data table
                 with st.expander("View Source Data"):
                     st.dataframe(df, use_container_width=True)
 
@@ -845,8 +605,8 @@ if prompt:
                     )
 
             st.session_state.messages.append(response_data)
-            # st.rerun()
 
         except Exception as e:
+            st.error(str(e))
             st.error(f"An unexpected error occurred: {str(e)}")
             st.info("Try rephrasing your question or contact support if the issue persists.")
