@@ -26,6 +26,7 @@ data/raw/
 data/processed/*.duckdb
 *.accdb
 *.mdb
+CV/
 
 # Keep cleaned_data and bird_data.db (essential for project)
 # *.csv (commented out - we need cleaned_data/*.csv)
