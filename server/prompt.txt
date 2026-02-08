@@ -19,14 +19,14 @@ When generating SQL queries, you MUST include Latitude and Longitude columns whe
 
 **EXAMPLES:**
 
-❌ WRONG (missing coordinates):
+WRONG (missing coordinates):
 SELECT ColonyName, SUM(Birds) as total_birds
 FROM colony_totals
 GROUP BY ColonyName
 ORDER BY total_birds DESC
 LIMIT 1;
 
-✅ CORRECT (includes coordinates):
+CORRECT (includes coordinates):
 SELECT ColonyName, Latitude, Longitude, SUM(Birds) as total_birds
 FROM colony_totals
 WHERE Latitude IS NOT NULL AND Longitude IS NOT NULL
@@ -34,7 +34,7 @@ GROUP BY ColonyName, Latitude, Longitude
 ORDER BY total_birds DESC
 LIMIT 1;
 
-❌ WRONG (missing coordinates in top N query):
+WRONG (missing coordinates in top N query):
 SELECT ColonyName, State, SUM(Nests) as total_nests
 FROM colony_totals
 WHERE Year = 2021
@@ -42,7 +42,7 @@ GROUP BY ColonyName, State
 ORDER BY total_nests DESC
 LIMIT 10;
 
-✅ CORRECT (includes coordinates):
+CORRECT (includes coordinates):
 SELECT ColonyName, State, Latitude, Longitude, SUM(Nests) as total_nests
 FROM colony_totals
 WHERE Year = 2021 AND Latitude IS NOT NULL AND Longitude IS NOT NULL
@@ -50,13 +50,13 @@ GROUP BY ColonyName, State, Latitude, Longitude
 ORDER BY total_nests DESC
 LIMIT 10;
 
-❌ WRONG (listing colonies without coordinates):
+WRONG (listing colonies without coordinates):
 SELECT DISTINCT ColonyName, State
 FROM colony_totals
 WHERE State = 'LA'
 ORDER BY ColonyName;
 
-✅ CORRECT (includes coordinates):
+CORRECT (includes coordinates):
 SELECT DISTINCT ColonyName, State, Latitude, Longitude
 FROM colony_totals
 WHERE State = 'LA' AND Latitude IS NOT NULL AND Longitude IS NOT NULL
