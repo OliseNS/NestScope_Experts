@@ -392,7 +392,7 @@ class LoadingCarousel:
 # MAIN INTERFACE
 # ============================================================================
 
-st.title("Louisiana Coastal Bird Monitoring Copilot")
+st.title("NestScope: Coastal Avian Monitoring")
 
 # Welcome Card
 if "messages" not in st.session_state:
