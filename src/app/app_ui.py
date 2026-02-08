@@ -5,6 +5,7 @@ import folium
 from streamlit_folium import st_folium
 import sys
 import os
+import random
 
 # ============================================================================
 # INITIALIZATION & IMPORTS
@@ -64,6 +65,7 @@ st.markdown("""
         background-clip: text;
         font-size: 2.5rem !important;
     }
+
 
     /* ===== SIDEBAR DARK STYLING ===== */
     [data-testid="stSidebar"] {
@@ -356,15 +358,62 @@ st.markdown("""
         border-top-color: #667eea !important;
     }
 
-    /* ===== HIDE STREAMLIT BRANDING ===== */
-    [data-testid="stToolbar"],
-    .reportview-container .main footer,
-    #MainMenu,
-    footer,
-    header,
+    /* ===== HIDE STREAMLIT BRANDING - MODIFIED ===== */
+    /* Hide specific elements instead of global hiding */
+    #MainMenu {
+        display: none !important;
+    }
+    
+    footer {
+        display: none !important;
+    }
+    
     .viewerBadge_container__1QSob {
         display: none !important;
-        visibility: hidden !important;
+    }
+    
+    /* Ensure Toolbar/Header IS visible for sidebar toggle */
+    [data-testid="stToolbar"] {
+        display: block !important;
+        visibility: visible !important;
+        background-color: transparent !important;
+        height: 0px; /* Don't take up space */
+    }
+    
+    /* Ensure the sidebar toggle is visible and large - CENTERED LEFT */
+    [data-testid="stSidebarCollapsedControl"] {
+        display: block !important;
+        visibility: visible !important;
+        color: #ffffff !important;
+        background-color: #667eea !important;
+        border-radius: 0 50% 50% 0; /* Half circle on edge */
+        width: 60px !important;
+        height: 80px !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        box-shadow: 2px 0 12px rgba(102, 126, 234, 0.5);
+        z-index: 1000005 !important;
+        position: fixed !important;
+        top: 50vh;
+        left: 0;
+        transform: translateY(-50%);
+        transition: all 0.3s ease;
+    }
+    
+    [data-testid="stSidebarCollapsedControl"]:hover {
+        background-color: #764ba2 !important;
+        width: 70px !important;
+        padding-left: 10px;
+        box-shadow: 4px 0 16px rgba(102, 126, 234, 0.7);
+    }
+    
+    /* Ensure the icon inside is visible and scalled */
+    [data-testid="stSidebarCollapsedControl"] svg {
+        fill: white !important;
+        stroke: white !important;
+        width: 30px !important;
+        height: 30px !important;
     }
 
     /* ===== CUSTOM SCROLLBAR ===== */
@@ -675,7 +724,21 @@ for message in st.session_state.messages:
 # USER INPUT HANDLING
 # ============================================================================
 
-prompt = st.chat_input("Ask a question about bird data...") or st.session_state.get("current_question")
+placeholder_examples = [
+    "Show brown pelican trends from 2015 to 2021",
+    "What were the top 5 species in 2020?",
+    "List all bird colonies in Louisiana",
+    "How many observations were recorded per year?",
+    "Compare species diversity across different colonies",
+    "Which habitat had the most bird sightings?",
+    "Analyze the population growth of Seagulls",
+    "Identify colonies with declining populations"
+]
+
+if "chat_placeholder" not in st.session_state:
+    st.session_state.chat_placeholder = f'Try "{random.choice(placeholder_examples)}"'
+
+prompt = st.chat_input(st.session_state.chat_placeholder) or st.session_state.get("current_question")
 
 if prompt:
     if "current_question" in st.session_state:
@@ -722,28 +785,61 @@ if prompt:
                 "dataframe": df
             }
             
-            tab1, tab2 = st.tabs(["Data & Charts", "Map View"])
+            # Smart Visualization Logic
+            chart_type = detect_chart_type(df)
             
-            with tab1:
-                st.dataframe(df, use_container_width=True)
-                
-                csv = df.to_csv(index=False).encode('utf-8')
-                st.download_button(
-                    label="Download CSV",
-                    data=csv,
-                    file_name="bird_data_export.csv",
-                    mime="text/csv",
-                )
-                
-                chart_type = detect_chart_type(df)
+            # Check for map data
+            lat_col = next((col for col in df.columns if 'lat' in col.lower()), None)
+            lon_col = next((col for col in df.columns if 'lon' in col.lower() or 'lng' in col.lower()), None)
+            has_map_data = lat_col is not None and lon_col is not None
+            
+            if chart_type or has_map_data:
+                # If we have a chart OR map, show the Tabs UI
+                tab_labels = []
                 if chart_type:
-                    response_data["chart_type"] = chart_type
-                    render_chart(df, chart_type)
+                    tab_labels.append("Data & Charts")
                 else:
-                    st.info("Chart visualization not available for this data structure.")
-            
-            with tab2:
-                render_map(df)
+                    tab_labels.append("Data Table")
+                    
+                if has_map_data:
+                    tab_labels.append("Map View")
+                
+                tabs = st.tabs(tab_labels)
+                
+                # Render First Tab (Data/Chart)
+                with tabs[0]:
+                    st.dataframe(df, use_container_width=True)
+                    
+                    csv = df.to_csv(index=False).encode('utf-8')
+                    st.download_button(
+                        label="Download CSV",
+                        data=csv,
+                        file_name="bird_data_export.csv",
+                        mime="text/csv",
+                    )
+                    
+                    if chart_type:
+                        response_data["chart_type"] = chart_type
+                        render_chart(df, chart_type)
+                
+                # Render Second Tab (Map) - only if it exists
+                if has_map_data and len(tabs) > 1:
+                    with tabs[1]:
+                        render_map(df)
+                        
+            else:
+                # No charts, no map - just simple data
+                # Show in expander to keep UI clean for text-vased answers
+                with st.expander("View Source Data"):
+                    st.dataframe(df, use_container_width=True)
+                    
+                    csv = df.to_csv(index=False).encode('utf-8')
+                    st.download_button(
+                        label="Download CSV",
+                        data=csv,
+                        file_name="bird_data_export.csv",
+                        mime="text/csv",
+                    )
             
             st.session_state.messages.append(response_data)
             
