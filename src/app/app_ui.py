@@ -707,14 +707,15 @@ if prompt:
             
             with st.expander("View Generated SQL Query"):
                 st.code(sql_query, language="sql")
-            
-            if df.empty:
-                empty_msg = "Query executed successfully, but returned no results."
-                st.warning(empty_msg)
-                st.session_state.messages.append({"role": "assistant", "content": empty_msg})
-                st.stop()
-            
+
+            # Always show the AI's answer (it will explain if no results were found)
             st.markdown(answer)
+
+            # If there are no results, stop here and don't try to show tables/charts
+            if df.empty:
+                st.info("This query returned no matching records.")
+                st.session_state.messages.append({"role": "assistant", "content": answer})
+                st.stop()
             
             response_data = {
                 "role": "assistant", 

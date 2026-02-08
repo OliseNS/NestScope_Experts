@@ -41,7 +41,7 @@ app.add_middleware(
 # Request/Response Models
 class QuestionRequest(BaseModel):
     question: str
-    model: Optional[str] = "anthropic/claude-3.5-sonnet"
+    model: Optional[str] = "anthropic/claude-opus-4.5"
 
 class QueryResponse(BaseModel):
     sql_query: str
@@ -62,10 +62,10 @@ class StatsResponse(BaseModel):
     observations_by_year: Dict[str, int]
 
 # Database configuration
-DB_PATH = os.getenv("DB_PATH", "../bird_data.db")
+DB_PATH = os.getenv("DB_PATH", "../bird_data_complete.db")
 
 class SQLChatbot:
-    def __init__(self, db_path=DB_PATH, model="anthropic/claude-3.5-sonnet"):
+    def __init__(self, db_path=DB_PATH, model="anthropic/claude-opus-4.5"):
         """Initialize the SQL chatbot"""
         self.db_path = db_path
         self.model = model
@@ -73,7 +73,7 @@ class SQLChatbot:
 
     def get_connection(self):
         """Get a database connection"""
-        return sqlite3.connect(self.db_path)
+        return sqlite3.connect(self.db_path, check_same_thread=False)
 
     def get_database_schema(self):
         """Get the database schema for the LLM"""
@@ -210,9 +210,7 @@ RULES:
             df = pd.read_sql_query(sql_query, conn)
             conn.close()
 
-            if len(df) == 0:
-                return None, "No results found."
-
+            # Return empty dataframe, not an error - let AI explain the empty result
             return df, None
 
         except Exception as e:
