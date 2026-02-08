@@ -10,6 +10,7 @@ streamlit>=1.28.0           # Web application framework
 plotly>=5.18.0              # Interactive data visualizations
 folium>=0.15.0              # Map visualizations (optional)
 streamlit-folium>=0.15.0    # Streamlit integration for maps (optional)
+Pillow>=10.0.0              # Image processing for computer vision tab
 
 # Environment Management
 python-dotenv>=1.0.0        # Environment variable management
@@ -21,6 +22,4 @@ python-dotenv>=1.0.0        # Environment variable management
 pytest>=7.4.0               # Testing framework
 ruff>=0.1.0                 # Fast Python linter
 jupyter>=1.0.0              # Notebook environment for exploration
-
-
-https://twi-aviandata.s3.amazonaws.com/avian_monitoring/high_resolution_photos/2015/Biloxi%20North/Biloxi%20North%2010%20D/17May15Camera2-Card5-00077.jpg
+python-multipart
