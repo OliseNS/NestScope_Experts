@@ -726,10 +726,6 @@ with main_tab:
                     # Tabs for data, charts, and maps
                     tab_labels = []
 
-                if chart_type:
-                    tab_labels.append("📊 Data & Charts")
-                else:
-                    tab_labels.append("📋 Data Table")
                     if chart_type:
                         tab_labels.append("📊 Data & Charts")
                     else:
