@@ -21,3 +21,6 @@ python-dotenv>=1.0.0        # Environment variable management
 pytest>=7.4.0               # Testing framework
 ruff>=0.1.0                 # Fast Python linter
 jupyter>=1.0.0              # Notebook environment for exploration
+
+
+https://twi-aviandata.s3.amazonaws.com/avian_monitoring/high_resolution_photos/2015/Biloxi%20North/Biloxi%20North%2010%20D/17May15Camera2-Card5-00077.jpg
