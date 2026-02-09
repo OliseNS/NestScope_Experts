@@ -9,19 +9,19 @@ def get_custom_css():
     """
     return """
 <style>
-    /* Claude Clean Light Theme */
+    /* Claude Dark Theme */
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap');
 
     :root {
         --claude-orange: #D97757;
         --claude-orange-hover: #E5865F;
-        --claude-bg: #F5F5F3;
-        --claude-surface: #FFFFFF;
-        --claude-surface-hover: #FAFAF8;
-        --claude-text: #2D2D2D;
-        --claude-text-light: #6B6B6B;
-        --claude-border: #E5E5E3;
-        --claude-border-light: #D4D4D2;
+        --claude-bg: #1A1A1A;
+        --claude-surface: #2D2D2D;
+        --claude-surface-hover: #3A3A3A;
+        --claude-text: #E5E5E5;
+        --claude-text-light: #A0A0A0;
+        --claude-border: #404040;
+        --claude-border-light: #4A4A4A;
         --claude-accent: #D97757;
     }
 
@@ -338,7 +338,7 @@ def get_custom_css():
     /* Download Button */
     .stDownloadButton > button {
         background: var(--claude-orange) !important;
-        color: var(--claude-bg) !important;
+        color: #FFFFFF !important;
         border: none !important;
         border-radius: 10px;
         font-weight: 600;
@@ -381,7 +381,7 @@ def get_custom_css():
 
     /* Code blocks */
     code {
-        background: #F5F5F3 !important;
+        background: var(--claude-surface-hover) !important;
         color: var(--claude-orange) !important;
         padding: 0.2em 0.4em !important;
         border-radius: 4px !important;
@@ -389,7 +389,7 @@ def get_custom_css():
     }
 
     pre {
-        background: #FAFAF8 !important;
+        background: var(--claude-surface) !important;
         border: 1px solid var(--claude-border) !important;
         border-radius: 8px !important;
         padding: 1rem !important;
@@ -411,13 +411,13 @@ def get_custom_css():
     }
 
     ::-webkit-scrollbar-thumb {
-        background: #D4D4D2;
+        background: #4A4A4A;
         border-radius: 5px;
         border: 2px solid var(--claude-bg);
     }
 
     ::-webkit-scrollbar-thumb:hover {
-        background: #B8B8B6;
+        background: #5A5A5A;
     }
 
     /* Loading messages */

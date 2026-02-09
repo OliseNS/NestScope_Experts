@@ -43,34 +43,34 @@ if "query_history" not in st.session_state:
 
 def render_chart(df, chart_type):
     """
-    Render a chart with clean light Claude theme.
+    Render a chart with clean dark Claude theme.
     """
     if len(df.columns) < 2:
         return
 
     x_col, y_col = df.columns[0], df.columns[1]
 
-    # Clean Light Template matching Claude theme
+    # Clean Dark Template matching Claude theme
     template = {
         'layout': {
-            'paper_bgcolor': '#FFFFFF',
-            'plot_bgcolor': '#FAFAF8',
-            'font': {'color': '#2D2D2D', 'family': 'Inter'},
+            'paper_bgcolor': '#2D2D2D',
+            'plot_bgcolor': '#1A1A1A',
+            'font': {'color': '#E5E5E5', 'family': 'Inter'},
             'xaxis': {
-                'gridcolor': '#E5E5E3',
-                'linecolor': '#D4D4D2',
-                'zerolinecolor': '#D4D4D2',
+                'gridcolor': '#404040',
+                'linecolor': '#4A4A4A',
+                'zerolinecolor': '#4A4A4A',
                 'showline': True,
-                'color': '#6B6B6B'
+                'color': '#A0A0A0'
             },
             'yaxis': {
-                'gridcolor': '#E5E5E3',
-                'linecolor': '#D4D4D2',
-                'zerolinecolor': '#D4D4D2',
+                'gridcolor': '#404040',
+                'linecolor': '#4A4A4A',
+                'zerolinecolor': '#4A4A4A',
                 'showline': True,
-                'color': '#6B6B6B'
+                'color': '#A0A0A0'
             },
-            'title': {'font': {'size': 20, 'color': '#2D2D2D', 'family': 'Inter'}},
+            'title': {'font': {'size': 20, 'color': '#E5E5E5', 'family': 'Inter'}},
             'margin': {'l': 60, 'r': 40, 't': 60, 'b': 60}
         }
     }
@@ -222,11 +222,11 @@ def render_map(df):
         else:
             zoom = 7
 
-        # Create map with light clean theme
+        # Create map with dark clean theme
         m = folium.Map(
             location=[avg_lat, avg_lon],
             zoom_start=zoom,
-            tiles='CartoDB positron',
+            tiles='CartoDB dark_matter',
             control_scale=True
         )
 
@@ -275,22 +275,22 @@ def render_map(df):
         if species_col and len(unique_species) > 1:
             legend_html = '''
             <div style="position: fixed; bottom: 50px; right: 50px;
-                        width: 220px; background-color: #FFFFFF;
-                        border: 2px solid #E5E5E3; z-index: 9999;
+                        width: 220px; background-color: #2D2D2D;
+                        border: 2px solid #404040; z-index: 9999;
                         padding: 12px; border-radius: 10px;
-                        box-shadow: 0 4px 12px rgba(0,0,0,0.1);">
+                        box-shadow: 0 4px 12px rgba(0,0,0,0.5);">
                 <p style="font-weight: 600; margin-bottom: 10px;
-                          border-bottom: 1px solid #E5E5E3; padding-bottom: 8px;
-                          color: #2D2D2D; font-family: Inter;">
+                          border-bottom: 1px solid #404040; padding-bottom: 8px;
+                          color: #E5E5E5; font-family: Inter;">
                     Species Legend
                 </p>
             '''
             for species in list(unique_species)[:10]:
                 color = species_colors[species]
-                legend_html += f'<p style="margin: 5px 0; color: #2D2D2D; font-family: Inter; font-size: 14px;"><span style="color: {color}; font-size: 18px;">●</span> {species}</p>'
+                legend_html += f'<p style="margin: 5px 0; color: #E5E5E5; font-family: Inter; font-size: 14px;"><span style="color: {color}; font-size: 18px;">●</span> {species}</p>'
 
             if len(unique_species) > 10:
-                legend_html += f'<p style="margin: 5px 0; font-style: italic; color: #6B6B6B; font-family: Inter; font-size: 13px;">+ {len(unique_species) - 10} more...</p>'
+                legend_html += f'<p style="margin: 5px 0; font-style: italic; color: #A0A0A0; font-family: Inter; font-size: 13px;">+ {len(unique_species) - 10} more...</p>'
 
             legend_html += '</div>'
             m.get_root().html.add_child(folium.Element(legend_html))
@@ -395,6 +395,7 @@ def run_cv_inference(image_file, conf_threshold=0.25):
         return {"error": str(e)}
 
 
+@st.cache_data(ttl=3600)  # Cache for 1 hour
 def get_example_images():
     """
     Fetch list of example images from the backend.
@@ -405,6 +406,24 @@ def get_example_images():
         return response.json().get("examples", [])
     except requests.exceptions.RequestException as e:
         return []
+
+
+@st.cache_data(ttl=3600)  # Cache for 1 hour
+def fetch_example_image(example_name: str):
+    """
+    Fetch a single example image from the backend and cache it.
+    Returns the image bytes or None if fetch fails.
+    """
+    try:
+        response = requests.get(
+            f"{API_BASE_URL}/cv/example/{example_name}",
+            timeout=10
+        )
+        if response.status_code == 200:
+            return response.content
+        return None
+    except Exception:
+        return None
 
 
 # ============================================================================
@@ -479,16 +498,6 @@ with st.sidebar:
             st.session_state.query_history = []
             st.rerun()
 
-        st.markdown("---")
-
-    # Data Source Section
-    st.markdown("#### About")
-    st.info(
-        "**Data Source:** NOAA DIVER Database\n\n"
-        "Gulf Coast avian monitoring (2010-2021) covering TX, LA, MS, AL, and FL.\n\n"
-        "Part of the Deepwater Horizon response program."
-    )
-
 # ============================================================================
 # MAIN INTERFACE
 # ============================================================================
@@ -527,7 +536,66 @@ with main_tab:
             st.markdown(message["content"])
 
             if "dataframe" in message and message["dataframe"] is not None:
-                st.dataframe(message["dataframe"], use_container_width=True)
+                df = message["dataframe"]
+                chart_type = message.get("chart_type")
+                has_map_data = message.get("has_map_data", False)
+                is_single_location = message.get("is_single_location", False)
+
+                # Render single-location map
+                if is_single_location:
+                    st.markdown("---")
+                    st.markdown("### 📍 Location Map")
+                    render_map(df)
+                    st.markdown("---")
+
+                # Render tabs for multi-result visualizations
+                if chart_type or (has_map_data and len(df) > 1):
+                    tab_labels = []
+
+                    if chart_type:
+                        tab_labels.append("📊 Data & Charts")
+                    else:
+                        tab_labels.append("📋 Data Table")
+
+                    if has_map_data and len(df) > 1:
+                        tab_labels.append("🗺️ Map View")
+
+                    tabs = st.tabs(tab_labels)
+
+                    # Data/Chart Tab
+                    with tabs[0]:
+                        st.dataframe(df, use_container_width=True)
+
+                        csv = df.to_csv(index=False).encode('utf-8')
+                        st.download_button(
+                            label="📥 Download CSV",
+                            data=csv,
+                            file_name="bird_data_export.csv",
+                            mime="text/csv",
+                            key=f"download_{message.get('content', '')[:20]}_{id(message)}"
+                        )
+
+                        if chart_type:
+                            render_chart(df, chart_type)
+
+                    # Map Tab
+                    if has_map_data and len(tabs) > 1 and len(df) > 1:
+                        with tabs[1]:
+                            render_map(df)
+
+                else:
+                    # Simple data table in expander
+                    with st.expander("View Source Data"):
+                        st.dataframe(df, use_container_width=True)
+
+                        csv = df.to_csv(index=False).encode('utf-8')
+                        st.download_button(
+                            label="📥 Download CSV",
+                            data=csv,
+                            file_name="bird_data_export.csv",
+                            mime="text/csv",
+                            key=f"download_simple_{message.get('content', '')[:20]}_{id(message)}"
+                        )
 
     # ============================================================================
     # USER INPUT HANDLING
@@ -714,6 +782,14 @@ with main_tab:
                     lon_col = 'Longitude'
 
                 has_map_data = lat_col is not None and lon_col is not None
+                is_single_location = not df.empty and len(df) == 1 and has_map_data
+
+                # Store visualization metadata in response_data
+                response_data["chart_type"] = chart_type
+                response_data["has_map_data"] = has_map_data
+                response_data["lat_col"] = lat_col
+                response_data["lon_col"] = lon_col
+                response_data["is_single_location"] = is_single_location
 
                 # Render map for single-location queries
                 if not df.empty and len(df) == 1 and has_map_data:
@@ -749,7 +825,6 @@ with main_tab:
                         )
 
                         if chart_type:
-                            response_data["chart_type"] = chart_type
                             render_chart(df, chart_type)
 
                     # Map Tab
@@ -863,13 +938,10 @@ with cv_tab:
                     with cols[col_idx]:
                         example_name = example_images[img_idx]
                         try:
-                            # Fetch and display thumbnail
-                            response = requests.get(
-                                f"{API_BASE_URL}/cv/example/{example_name}",
-                                timeout=5
-                            )
-                            if response.status_code == 200:
-                                img = Image.open(BytesIO(response.content))
+                            # Fetch and display thumbnail (cached)
+                            image_bytes = fetch_example_image(example_name)
+                            if image_bytes:
+                                img = Image.open(BytesIO(image_bytes))
                                 st.image(img, use_container_width=True)
 
                                 # Button to select this image
@@ -878,7 +950,7 @@ with cv_tab:
                                     key=f"use_example_{img_idx}",
                                     use_container_width=True
                                 ):
-                                    st.session_state.selected_example_image = response.content
+                                    st.session_state.selected_example_image = image_bytes
                                     st.session_state.selected_example_name = example_name
                                     st.rerun()
 

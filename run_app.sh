@@ -4,5 +4,5 @@
 # pip install -r requirements.txt
 
 # Run Streamlit app
-python3.9 -m streamlit run src/app/app_ui.py
+python -m streamlit run src/app/app_ui.py
 
