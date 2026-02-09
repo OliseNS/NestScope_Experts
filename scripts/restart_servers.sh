@@ -24,7 +24,7 @@ sleep 3
 # Start Streamlit frontend
 echo "🚀 Starting Streamlit frontend on port 8501..."
 cd /home/olise/Projects/nexus
-nohup streamlit run src/app/app_ui.py > logs/frontend.log 2>&1 &
+nohup streamlit run frontend/app/app_ui.py > logs/frontend.log 2>&1 &
 FRONTEND_PID=$!
 echo "   Frontend PID: $FRONTEND_PID"
 

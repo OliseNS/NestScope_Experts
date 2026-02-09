@@ -41,9 +41,14 @@ if "query_history" not in st.session_state:
 # HELPER FUNCTIONS
 # ============================================================================
 
-def render_chart(df, chart_type):
+def render_chart(df, chart_type, key_suffix=""):
     """
     Render a chart with clean dark Claude theme.
+
+    Args:
+        df: DataFrame to visualize
+        chart_type: Type of chart ("line" or "bar")
+        key_suffix: Unique suffix to prevent duplicate IDs
     """
     if len(df.columns) < 2:
         return
@@ -87,7 +92,7 @@ def render_chart(df, chart_type):
         # Use Claude orange line
         fig.update_traces(line_color='#D97757', line_width=3)
         fig.update_layout(template['layout'])
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, use_container_width=True, key=f"line_chart_{key_suffix}")
 
     elif chart_type == "bar":
         # Limit to top 15 for readability
@@ -105,7 +110,7 @@ def render_chart(df, chart_type):
         # Use Claude orange bars
         fig.update_traces(marker_color='#D97757')
         fig.update_layout(template['layout'])
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, use_container_width=True, key=f"bar_chart_{key_suffix}")
 
 
 def detect_chart_type(df):
@@ -222,11 +227,11 @@ def render_map(df):
         else:
             zoom = 7
 
-        # Create map with dark clean theme
+        # Create map with light clean theme
         m = folium.Map(
             location=[avg_lat, avg_lon],
             zoom_start=zoom,
-            tiles='CartoDB dark_matter',
+            tiles='CartoDB positron',
             control_scale=True
         )
 
@@ -275,22 +280,22 @@ def render_map(df):
         if species_col and len(unique_species) > 1:
             legend_html = '''
             <div style="position: fixed; bottom: 50px; right: 50px;
-                        width: 220px; background-color: #2D2D2D;
-                        border: 2px solid #404040; z-index: 9999;
+                        width: 220px; background-color: #FFFFFF;
+                        border: 2px solid #CCCCCC; z-index: 9999;
                         padding: 12px; border-radius: 10px;
-                        box-shadow: 0 4px 12px rgba(0,0,0,0.5);">
+                        box-shadow: 0 4px 12px rgba(0,0,0,0.2);">
                 <p style="font-weight: 600; margin-bottom: 10px;
-                          border-bottom: 1px solid #404040; padding-bottom: 8px;
-                          color: #E5E5E5; font-family: Inter;">
+                          border-bottom: 1px solid #CCCCCC; padding-bottom: 8px;
+                          color: #333333; font-family: Inter;">
                     Species Legend
                 </p>
             '''
             for species in list(unique_species)[:10]:
                 color = species_colors[species]
-                legend_html += f'<p style="margin: 5px 0; color: #E5E5E5; font-family: Inter; font-size: 14px;"><span style="color: {color}; font-size: 18px;">●</span> {species}</p>'
+                legend_html += f'<p style="margin: 5px 0; color: #333333; font-family: Inter; font-size: 14px;"><span style="color: {color}; font-size: 18px;">●</span> {species}</p>'
 
             if len(unique_species) > 10:
-                legend_html += f'<p style="margin: 5px 0; font-style: italic; color: #A0A0A0; font-family: Inter; font-size: 13px;">+ {len(unique_species) - 10} more...</p>'
+                legend_html += f'<p style="margin: 5px 0; font-style: italic; color: #666666; font-family: Inter; font-size: 13px;">+ {len(unique_species) - 10} more...</p>'
 
             legend_html += '</div>'
             m.get_root().html.add_child(folium.Element(legend_html))
@@ -576,7 +581,7 @@ with main_tab:
                         )
 
                         if chart_type:
-                            render_chart(df, chart_type)
+                            render_chart(df, chart_type, key_suffix=f"history_{id(message)}")
 
                     # Map Tab
                     if has_map_data and len(tabs) > 1 and len(df) > 1:
@@ -825,7 +830,7 @@ with main_tab:
                         )
 
                         if chart_type:
-                            render_chart(df, chart_type)
+                            render_chart(df, chart_type, key_suffix=f"current_{id(response_data)}")
 
                     # Map Tab
                     if has_map_data and len(tabs) > 1 and len(df) > 1:
@@ -920,7 +925,14 @@ with cv_tab:
     st.markdown("---")
 
     # Example Images Gallery
-    st.markdown("### 🖼️ Example Images Gallery")
+    col1, col2 = st.columns([4, 1])
+    with col1:
+        st.markdown("### 🖼️ Example Images Gallery")
+    with col2:
+        if st.button("🔄 Refresh", help="Reload example images from server"):
+            get_example_images.clear()
+            st.rerun()
+
     st.caption("Click on an image below to use it for detection")
 
     example_images = get_example_images()

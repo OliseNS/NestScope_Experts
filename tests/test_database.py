@@ -14,7 +14,7 @@ def test_database_connection():
     print("=" * 80)
 
     try:
-        conn = sqlite3.connect('bird_data_complete.db')
+        conn = sqlite3.connect('../data/bird_data_complete.db')
         cursor = conn.cursor()
 
         # Get list of tables
@@ -42,7 +42,7 @@ def test_species_codes():
     print("=" * 80)
 
     try:
-        conn = sqlite3.connect('bird_data_complete.db')
+        conn = sqlite3.connect('../data/bird_data_complete.db')
         cursor = conn.cursor()
 
         # Get common species
@@ -72,7 +72,7 @@ def test_colony_totals():
     print("=" * 80)
 
     try:
-        conn = sqlite3.connect('bird_data_complete.db')
+        conn = sqlite3.connect('../data/bird_data_complete.db')
         cursor = conn.cursor()
 
         # Top species by nest count in 2021
@@ -110,7 +110,7 @@ def test_detailed_observations():
     print("=" * 80)
 
     try:
-        conn = sqlite3.connect('bird_data_complete.db')
+        conn = sqlite3.connect('../data/bird_data_complete.db')
         cursor = conn.cursor()
 
         # Brown Pelican breeding data from 2021
@@ -149,7 +149,7 @@ def test_oil_observations():
     print("=" * 80)
 
     try:
-        conn = sqlite3.connect('bird_data_complete.db')
+        conn = sqlite3.connect('../data/bird_data_complete.db')
         cursor = conn.cursor()
 
         # Colonies with oil observations by year
@@ -185,7 +185,7 @@ def test_empty_result_handling():
     print("=" * 80)
 
     try:
-        conn = sqlite3.connect('bird_data_complete.db')
+        conn = sqlite3.connect('../data/bird_data_complete.db')
         cursor = conn.cursor()
 
         # Query for non-existent data
@@ -222,7 +222,7 @@ def test_multi_year_union():
     print("=" * 80)
 
     try:
-        conn = sqlite3.connect('bird_data_complete.db')
+        conn = sqlite3.connect('../data/bird_data_complete.db')
         cursor = conn.cursor()
 
         # Get Laughing Gull trends across all years

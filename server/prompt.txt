@@ -318,8 +318,12 @@ Note: Schema evolved - Territory and Subcolony columns added in later years.
    When querying across years, use UNION to combine results from multiple tables.
 
 2. **Different Detail Levels**:
-   - colony_totals = Aggregated summary data (faster for counts)
-   - species_data_* = Detailed observation data (more granular)
+   - colony_totals = Pre-aggregated nest/bird COUNTS per colony-species-date (5,931 rows)
+   - species_data_* = Individual observation RECORDS from photos (49,224 rows total)
+
+   **KEY DISTINCTION:**
+   - "How many observations/records?" → Query species_data_* tables
+   - "How many nests/birds?" → Query colony_totals table
 
 3. **Coordinate Precision**:
    - Stored as REAL numbers
@@ -339,9 +343,25 @@ Note: Schema evolved - Territory and Subcolony columns added in later years.
 
 ## Common Query Patterns
 
-### Pattern 1: Species Counts by Year (WITH COORDINATES)
+### Pattern 1: Counting Observation Records by Year
 ```sql
--- Use colony_totals for aggregated data - ALWAYS include coordinates
+-- IMPORTANT: Use species_data_* tables to count OBSERVATION RECORDS (not birds/nests)
+-- Requires UNION ALL across all three year-specific tables
+SELECT Year, COUNT(*) as observation_count
+FROM (
+    SELECT Year FROM species_data_2010
+    UNION ALL
+    SELECT Year FROM species_data_2011_2013
+    UNION ALL
+    SELECT Year FROM species_data_2015_2021
+)
+GROUP BY Year
+ORDER BY Year;
+```
+
+### Pattern 2: Bird/Nest Counts by Year (WITH COORDINATES)
+```sql
+-- Use colony_totals for BIRD/NEST COUNTS - ALWAYS include coordinates
 SELECT Year, ColonyName, Latitude, Longitude, SpeciesCode, SUM(Nests) as total_nests, SUM(Birds) as total_birds
 FROM colony_totals
 WHERE SpeciesCode = 'BRPE' AND Latitude IS NOT NULL AND Longitude IS NOT NULL
@@ -349,7 +369,7 @@ GROUP BY Year, ColonyName, Latitude, Longitude, SpeciesCode
 ORDER BY Year;
 ```
 
-### Pattern 2: Colony-Specific Information (WITH COORDINATES)
+### Pattern 3: Colony-Specific Information (WITH COORDINATES)
 ```sql
 -- Get all observations for a specific colony - include coordinates
 SELECT ColonyName, Latitude, Longitude, Year, SpeciesCode, Nests, Birds, Notes
@@ -358,7 +378,7 @@ WHERE ColonyName = 'Breton Island' AND Latitude IS NOT NULL AND Longitude IS NOT
 ORDER BY Year;
 ```
 
-### Pattern 3: Geographic Queries (WITH COORDINATES)
+### Pattern 4: Geographic Queries (WITH COORDINATES)
 ```sql
 -- Find colonies in a geographic region - ALWAYS include coordinates
 SELECT DISTINCT ColonyName, State, Latitude, Longitude, GeoRegion
@@ -367,7 +387,7 @@ WHERE State = 'LA' AND GeoRegion LIKE '%Chandeleur%' AND Latitude IS NOT NULL AN
 ORDER BY ColonyName;
 ```
 
-### Pattern 4: Species Lookup with Join (WITH COORDINATES)
+### Pattern 5: Species Lookup with Join (WITH COORDINATES)
 ```sql
 -- Join with species codes for full names - include coordinates
 SELECT ct.ColonyName, ct.Latitude, ct.Longitude, ct.Year, sc.SpeciesName, SUM(ct.Nests) as total_nests
@@ -378,7 +398,7 @@ GROUP BY ct.ColonyName, ct.Latitude, ct.Longitude, ct.Year, sc.SpeciesName
 ORDER BY total_nests DESC;
 ```
 
-### Pattern 5: Top N Colonies (WITH COORDINATES)
+### Pattern 6: Top N Colonies (WITH COORDINATES)
 ```sql
 -- CRITICAL: When finding top/highest/most, ALWAYS include coordinates
 SELECT ColonyName, State, Latitude, Longitude, SUM(Birds + Nests) as total_count
@@ -429,12 +449,41 @@ Before querying:
 
 ### 4. Use Appropriate Table for Query Type
 
+**CRITICAL: Understanding the Difference Between Tables:**
+
+**colony_totals (5,931 records):**
+- Pre-aggregated SUMMARY data
+- Each row = final nest/bird COUNTS for a colony-species-date combination
+- Use when asking about: "how many nests", "how many birds", "total populations"
+- Has Latitude/Longitude for map visualization
+
+**species_data_* tables (49,224 records total):**
+- Individual OBSERVATION RECORDS from photo dotting surveys
+- Each row = ONE observation from ONE photo
+- Use when asking about: "how many observations", "how many records", "how many survey entries"
+- Split across three tables by year:
+  - species_data_2010: 9,557 records (year 2010)
+  - species_data_2011_2013: 15,920 records (years 2011-2013)
+  - species_data_2015_2021: 23,747 records (years 2015, 2018, 2021)
+
 **Use colony_totals when:**
-- User wants aggregated counts (total nests, total birds)
-- Querying across years for trends
-- Simple species/colony lookups
-- Fast summary statistics needed
-- **IMPORTANT: colony_totals has Latitude/Longitude - use it for coordinates**
+- User wants nest or bird COUNTS (e.g., "How many nests?", "How many birds?")
+- Querying for population trends or totals
+- Simple colony/species summaries
+- Questions about "breeding pairs", "population size", "colony size"
+
+**Use species_data_* tables when:**
+- User asks about OBSERVATION or RECORD counts (e.g., "How many observations?", "How many records?", "How many photos?")
+- Detailed photo-level analysis needed
+- Questions about survey methodology or data collection
+- Analyzing observer patterns (Dotter field)
+- Photo quality analysis (PQ field)
+
+**Example - Different Questions Require Different Tables:**
+- "How many observations were recorded per year?" → Use species_data_* (counts records)
+- "How many birds were observed per year?" → Use colony_totals (counts birds)
+- "How many nests in 2021?" → Use colony_totals (aggregated nest counts)
+- "How many survey records from 2021?" → Use species_data_2015_2021 (individual records)
 
 ### 5. Handle Numeric vs Text Carefully
 - Year: Stored as REAL, cast to INTEGER for display

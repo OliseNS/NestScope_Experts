@@ -411,7 +411,7 @@ def main():
     print("=" * 80)
 
     csv_folder = Path("CSV_Files")
-    db_path = "bird_data_complete.db"
+    db_path = "data/bird_data_complete.db"
 
     # Remove existing database
     if Path(db_path).exists():

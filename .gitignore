@@ -26,7 +26,31 @@ data/raw/
 data/processed/*.duckdb
 *.accdb
 *.mdb
-CV/
+CSV_Files/
+
+
+# VisionTrain directory (large training data ~31 GB)
+VisionTrain/
+
+# Keep VisionTrain scripts tracked, but ignore data
+!VisionTrain/*.py
+!VisionTrain/*.md
+!VisionTrain/*.txt
+# Exclude training data and models
+VisionTrain/dataset/
+VisionTrain/training_data/
+VisionTrain/inference_results/
+VisionTrain/*.pt
+VisionTrain/*.zip
+
+# Documentation folder is tracked
+# But exclude any large PDFs or videos
+documentation/*.pdf
+documentation/*.mp4
+documentation/*.mov
+
+# Keep production model in server/
+# server/best.pt should be tracked (40.5 MB - needed for production)
 
 # Keep cleaned_data and bird_data.db (essential for project)
 # *.csv (commented out - we need cleaned_data/*.csv)

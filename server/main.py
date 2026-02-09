@@ -12,12 +12,13 @@ import sqlite3
 import pandas as pd
 from openai import OpenAI
 import os
+from pathlib import Path
 from dotenv import load_dotenv
 import json
 import asyncio
 import cv2
 import base64
-from cv_tools.inference import BirdDetector, get_example_images
+from server.cv_tools.inference import BirdDetector, get_example_images
 
 # Load environment variables
 load_dotenv()
@@ -76,15 +77,19 @@ class ExampleImagesResponse(BaseModel):
     examples: List[str]
 
 # Database configuration
-DB_PATH = os.getenv("DB_PATH", "../bird_data_complete.db")
+DB_PATH = os.getenv("DB_PATH", "../data/bird_data_complete.db")
+
+# Get the directory where this file is located
+SERVER_DIR = Path(__file__).parent
+DEFAULT_PROMPT_PATH = SERVER_DIR / "prompt.txt"
 
 class SQLChatbot:
-    def __init__(self, db_path=DB_PATH, model="anthropic/claude-opus-4.5", prompt_path="server/prompt.txt"):
+    def __init__(self, db_path=DB_PATH, model="anthropic/claude-opus-4.5", prompt_path=None):
         """Initialize the SQL chatbot"""
         self.db_path = db_path
         self.model = model
         self.schema = None
-        self.prompt_path = prompt_path
+        self.prompt_path = prompt_path or str(DEFAULT_PROMPT_PATH)
         self.system_prompt = self._load_system_prompt()
 
     def _load_system_prompt(self):
