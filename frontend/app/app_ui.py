@@ -882,6 +882,10 @@ with cv_tab:
         - 📊 The team is actively **annotating more training data** to improve performance
         - 🚀 A more **robust model** is being developed with improved accuracy
 
+        ### Processing Modes
+        - **⚡ Fast Mode**: Quick inference using downsampling for large images. Best for real-time previews.
+        - **🎯 SAHI Mode**: Uses [SAHI](https://github.com/obss/sahi) (Slicing Aided Hyper Inference) for intelligent image slicing with optimal overlap. More accurate for detecting small or distant birds, but slower.
+
         ### Future Enhancements
         - 🐦 **Bird species classification** using ImageNet-based models
         - 🎯 Identification of **specific bird species**, not just detection and counting
@@ -890,8 +894,9 @@ with cv_tab:
         ### Technical Details
         - **Input image size**: 1024x1024 pixels
         - **Confidence threshold**: Adjustable (default 0.25)
-        - **Model architecture**: YOLO-based object detection
-        - **Model file**: `server/best.pt`
+        - **Model architecture**: YOLO-based object detection (ONNX format)
+        - **Smart slicing**: SAHI with 20% overlap for accurate mode
+        - **Model file**: `server/seconditer.onnx`
         """)
 
     st.markdown("---")
@@ -917,29 +922,24 @@ with cv_tab:
 
     # Confidence threshold slider
     st.markdown("### ⚙️ Detection Settings")
-    col1, col2 = st.columns([3, 1])
-    with col1:
-        conf_threshold = st.slider(
-            "Confidence Threshold",
-            min_value=0.1,
-            max_value=0.9,
-            value=0.25,
-            step=0.05,
-            help="Lower values detect more birds but may include false positives. Higher values are more selective."
-        )
-    with col2:
-        st.markdown("&nbsp;")
-        if st.button("🔄 Re-run Detection", use_container_width=True, help="Re-run detection with new settings"):
-            # Clear cached results to force re-run
-            st.session_state.cv_detection_result = None
-            st.session_state.cv_last_processed_image = None
-            st.rerun()
+    conf_threshold = st.slider(
+        "Confidence Threshold",
+        min_value=0.1,
+        max_value=0.9,
+        value=0.25,
+        step=0.05,
+        help="Lower values detect more birds but may include false positives. Higher values are more selective."
+    )
 
-    # Fast mode checkbox
-    fast_mode = st.checkbox(
-        "⚡ Fast Mode (Recommended)",
-        value=True,
-        help="Fast mode significantly speeds up processing. For very large images (>2048px), uses downsampling. For medium images, uses minimal window overlap. Uncheck for standard mode with ~10 overlapping 1024x1024 tiles for improved accuracy."
+    # Processing mode selection
+    st.markdown("**Processing Mode**")
+    fast_mode = st.radio(
+        "Choose detection mode:",
+        options=[True, False],
+        format_func=lambda x: "⚡ Fast Mode (Recommended)" if x else "🎯 SAHI Mode (Accurate)",
+        index=0,
+        help="Fast Mode: Quick inference with downsampling, best for previews.\nSAHI Mode: Smart slicing with optimal overlap, more accurate for detecting small objects but slower.",
+        label_visibility="collapsed"
     )
 
     st.markdown("---")

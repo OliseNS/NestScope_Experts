@@ -1,6 +1,6 @@
 """
 Computer Vision Inference Module for Bird Detection
-Uses ONNX Runtime for fast bird detection inference
+Uses ONNX Runtime with SAHI for smart sliced inference
 """
 
 import onnxruntime as ort
@@ -10,6 +10,9 @@ from pathlib import Path
 import numpy as np
 from typing import List, Tuple
 import time
+from sahi import AutoDetectionModel
+from sahi.predict import get_sliced_prediction
+from sahi.utils.cv import read_image_as_pil
 
 # Model path - relative to project root directory (using ONNX model)
 MODEL_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "seconditer.onnx")
@@ -332,6 +335,103 @@ class BirdDetector:
 
         return detections
 
+    def _predict_with_sahi(self, image_path: str, conf_threshold: float = 0.25) -> List[dict]:
+        """
+        Use SAHI (Slicing Aided Hyper Inference) for smart sliced prediction
+
+        Args:
+            image_path: Path to the input image
+            conf_threshold: Confidence threshold for detections
+
+        Returns:
+            List of detection dictionaries
+        """
+        try:
+            # SAHI uses YOLOv5/v8 format, but we need to use ONNX
+            # We'll use SAHI's slicing logic but run our own ONNX inference
+            from sahi.slicing import slice_image
+            import tempfile
+
+            print(f"[SAHI Mode] Using intelligent slicing for accurate detection...")
+
+            # Read image
+            image = cv2.imread(image_path)
+            height, width = image.shape[:2]
+
+            # SAHI parameters
+            slice_height = self.imgsz
+            slice_width = self.imgsz
+            overlap_height_ratio = 0.2  # 20% overlap for good coverage
+            overlap_width_ratio = 0.2
+
+            # Calculate overlap in pixels
+            overlap_height = int(slice_height * overlap_height_ratio)
+            overlap_width = int(slice_width * overlap_width_ratio)
+
+            print(f"  Slice size: {slice_width}x{slice_height}")
+            print(f"  Overlap: {overlap_width}x{overlap_height} pixels ({overlap_width_ratio*100:.0f}%)")
+
+            # Generate slices
+            slice_image_result = slice_image(
+                image=image_path,
+                output_file_name=None,
+                output_dir=None,
+                slice_height=slice_height,
+                slice_width=slice_width,
+                overlap_height_ratio=overlap_height_ratio,
+                overlap_width_ratio=overlap_width_ratio,
+                min_area_ratio=0.1,
+                verbose=False
+            )
+
+            all_detections = []
+            num_slices = len(slice_image_result.images)
+            print(f"  Processing {num_slices} slices...")
+
+            # Process each slice
+            for idx, (slice_img, slice_coords) in enumerate(zip(slice_image_result.images, slice_image_result.starting_pixels), 1):
+                # Show progress
+                if idx % 10 == 0 or idx == num_slices:
+                    print(f"  Processing slice {idx}/{num_slices}...")
+
+                # Convert PIL to numpy array for ONNX
+                slice_np = np.array(slice_img)
+                slice_np = cv2.cvtColor(slice_np, cv2.COLOR_RGB2BGR)
+
+                # Preprocess
+                preprocessed, scale, pad = self._preprocess_image(slice_np)
+
+                # Run ONNX inference
+                output = self.model.run(self.output_names, {self.input_name: preprocessed})
+
+                # Postprocess
+                slice_detections = self._postprocess_onnx_output(output[0], scale, pad, conf_threshold)
+
+                # Adjust coordinates to original image space
+                x_offset, y_offset = slice_coords
+                for det in slice_detections:
+                    det['bbox'][0] += x_offset  # x1
+                    det['bbox'][1] += y_offset  # y1
+                    det['bbox'][2] += x_offset  # x2
+                    det['bbox'][3] += y_offset  # y2
+                    all_detections.append(det)
+
+            print(f"  Found {len(all_detections)} raw detections, applying NMS...")
+
+            # Apply NMS to merge overlapping detections
+            filtered_detections = self._non_max_suppression_custom(all_detections, iou_threshold=0.5)
+
+            print(f"  Final count after NMS: {len(filtered_detections)} birds")
+
+            return filtered_detections
+
+        except Exception as e:
+            print(f"SAHI prediction failed: {str(e)}, falling back to standard inference")
+            # Fallback to standard inference
+            preprocessed, scale, pad = self._preprocess_image(cv2.imread(image_path))
+            output = self.model.run(self.output_names, {self.input_name: preprocessed})
+            return self._postprocess_onnx_output(output[0], scale, pad, conf_threshold)
+
     def _draw_custom_annotations_from_detections(self, image, detections: List[dict]):
         """
         Draw custom annotations on image from detection dictionaries
@@ -361,17 +461,18 @@ class BirdDetector:
 
     def predict(self, image_path, conf_threshold=0.25, use_sliding_window=True, fast_mode=True):
         """
-        Run inference on an image using sliding window approach for large images
+        Run inference on an image with two modes: Fast or SAHI
 
         Args:
             image_path: Path to the input image
             conf_threshold: Confidence threshold for detections (default: 0.25)
-            use_sliding_window: Whether to use sliding window for large images (default: True)
+            use_sliding_window: Whether to use smart slicing for large images (default: True)
             fast_mode: Processing mode (default: True)
-                - True (Fast Mode): For very large images (>2048px), uses downsampling for 5-10x speed boost.
-                                     For medium images, uses 64px overlap for 2x speed improvement.
-                - False (Standard Mode): Splits image into ~10 overlapping 1024x1024 tiles with sliding window approach
-                                          for improved accuracy. Uses adaptive overlap based on image size.
+                - True (Fast Mode): Quick inference using downsampling for large images.
+                                    Best for fast previews and real-time processing.
+                - False (SAHI Mode): Uses SAHI (Slicing Aided Hyper Inference) for intelligent
+                                     image slicing with optimal overlap and merging. More accurate
+                                     but slower, especially for detecting small objects.
 
         Returns:
             dict: Results containing:
@@ -390,40 +491,27 @@ class BirdDetector:
         original_img = cv2.imread(image_path)
         height, width = original_img.shape[:2]
 
-        # Check if we need sliding window (image larger than model input size)
-        if use_sliding_window and (height > self.imgsz or width > self.imgsz):
-            # For very large images, use downsampling to avoid excessive windows
-            # Fast mode: >2048px uses downsampling (2x model size)
-            # Standard mode: always uses sliding window with overlap for better accuracy
-            downsample_threshold = self.imgsz * 2 if fast_mode else float('inf')
-
-            if height > downsample_threshold or width > downsample_threshold:
+        # Choose processing mode
+        if fast_mode:
+            # FAST MODE: Quick inference with downsampling for large images
+            if height > self.imgsz or width > self.imgsz:
+                print(f"[Fast Mode] Processing {width}x{height} image with downsampling...")
                 detections = self._downsample_and_predict(original_img, conf_threshold)
             else:
-                # Fast mode: minimal overlap (64px) for speed
-                # Standard mode: adaptive overlap to achieve ~10 tiles for improved accuracy
-                if fast_mode:
-                    overlap = 64
-                else:
-                    # Calculate overlap to achieve approximately 10 windows
-                    # For a square-ish image, we want ~3x3 or ~3x4 grid = ~10 windows
-                    max_dim = max(height, width)
-                    # Calculate stride needed for ~10 windows
-                    target_windows_per_side = 3.2  # sqrt(10) ≈ 3.16
-                    stride = int(max_dim / target_windows_per_side)
-                    overlap = max(128, self.imgsz - stride)  # At least 128px overlap
-                    overlap = min(overlap, 512)  # Cap at 512px to avoid too many windows
-
-                detections = self._predict_with_sliding_window(original_img, conf_threshold, overlap=overlap)
+                # Small image: use standard inference
+                preprocessed, scale, pad = self._preprocess_image(original_img)
+                output = self.model.run(self.output_names, {self.input_name: preprocessed})
+                detections = self._postprocess_onnx_output(output[0], scale, pad, conf_threshold)
         else:
-            # Use standard ONNX inference for small images
-            preprocessed, scale, pad = self._preprocess_image(original_img)
-
-            # Run ONNX inference
-            output = self.model.run(self.output_names, {self.input_name: preprocessed})
-
-            # Postprocess output
-            detections = self._postprocess_onnx_output(output[0], scale, pad, conf_threshold)
+            # SAHI MODE: Smart slicing with SAHI for accurate detection
+            if use_sliding_window and (height > self.imgsz or width > self.imgsz):
+                print(f"[SAHI Mode] Processing {width}x{height} image with smart slicing...")
+                detections = self._predict_with_sahi(image_path, conf_threshold)
+            else:
+                # Small image: use standard inference
+                preprocessed, scale, pad = self._preprocess_image(original_img)
+                output = self.model.run(self.output_names, {self.input_name: preprocessed})
+                detections = self._postprocess_onnx_output(output[0], scale, pad, conf_threshold)
 
         # Calculate inference time (before drawing annotations)
         inference_time = time.perf_counter() - start_time
@@ -497,17 +585,18 @@ class BirdDetector:
 
     def predict_from_bytes(self, image_bytes, conf_threshold=0.25, use_sliding_window=True, fast_mode=True):
         """
-        Run inference on image bytes (from uploaded file) using sliding window for large images
+        Run inference on image bytes (from uploaded file) with two modes: Fast or SAHI
 
         Args:
             image_bytes: Image data as bytes
             conf_threshold: Confidence threshold for detections
-            use_sliding_window: Whether to use sliding window for large images (default: True)
+            use_sliding_window: Whether to use smart slicing for large images (default: True)
             fast_mode: Processing mode (default: True)
-                - True (Fast Mode): For very large images (>2048px), uses downsampling for 5-10x speed boost.
-                                     For medium images, uses 64px overlap for 2x speed improvement.
-                - False (Standard Mode): Splits image into ~10 overlapping 1024x1024 tiles with sliding window approach
-                                          for improved accuracy. Uses adaptive overlap based on image size.
+                - True (Fast Mode): Quick inference using downsampling for large images.
+                                    Best for fast previews and real-time processing.
+                - False (SAHI Mode): Uses SAHI (Slicing Aided Hyper Inference) for intelligent
+                                     image slicing with optimal overlap and merging. More accurate
+                                     but slower, especially for detecting small objects.
 
         Returns:
             dict: Same as predict()
@@ -520,40 +609,38 @@ class BirdDetector:
         img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
         height, width = img.shape[:2]
 
-        # Check if we need sliding window (image larger than model input size)
-        if use_sliding_window and (height > self.imgsz or width > self.imgsz):
-            # For very large images, use downsampling to avoid excessive windows
-            # Fast mode: >2048px uses downsampling (2x model size)
-            # Standard mode: always uses sliding window with overlap for better accuracy
-            downsample_threshold = self.imgsz * 2 if fast_mode else float('inf')
-
-            if height > downsample_threshold or width > downsample_threshold:
+        # Choose processing mode
+        if fast_mode:
+            # FAST MODE: Quick inference with downsampling for large images
+            if height > self.imgsz or width > self.imgsz:
+                print(f"[Fast Mode] Processing {width}x{height} image with downsampling...")
                 detections = self._downsample_and_predict(img, conf_threshold)
             else:
-                # Fast mode: minimal overlap (64px) for speed
-                # Standard mode: adaptive overlap to achieve ~10 tiles for improved accuracy
-                if fast_mode:
-                    overlap = 64
-                else:
-                    # Calculate overlap to achieve approximately 10 windows
-                    # For a square-ish image, we want ~3x3 or ~3x4 grid = ~10 windows
-                    max_dim = max(height, width)
-                    # Calculate stride needed for ~10 windows
-                    target_windows_per_side = 3.2  # sqrt(10) ≈ 3.16
-                    stride = int(max_dim / target_windows_per_side)
-                    overlap = max(128, self.imgsz - stride)  # At least 128px overlap
-                    overlap = min(overlap, 512)  # Cap at 512px to avoid too many windows
-
-                detections = self._predict_with_sliding_window(img, conf_threshold, overlap=overlap)
+                # Small image: use standard inference
+                preprocessed, scale, pad = self._preprocess_image(img)
+                output = self.model.run(self.output_names, {self.input_name: preprocessed})
+                detections = self._postprocess_onnx_output(output[0], scale, pad, conf_threshold)
         else:
-            # Use standard ONNX inference for small images
-            preprocessed, scale, pad = self._preprocess_image(img)
+            # SAHI MODE: Smart slicing with SAHI for accurate detection
+            if use_sliding_window and (height > self.imgsz or width > self.imgsz):
+                print(f"[SAHI Mode] Processing {width}x{height} image with smart slicing...")
+                # Save image temporarily for SAHI
+                import tempfile
+                with tempfile.NamedTemporaryFile(suffix='.jpg', delete=False) as tmp_file:
+                    tmp_path = tmp_file.name
+                    cv2.imwrite(tmp_path, img)
 
-            # Run ONNX inference
-            output = self.model.run(self.output_names, {self.input_name: preprocessed})
-
-            # Postprocess output
-            detections = self._postprocess_onnx_output(output[0], scale, pad, conf_threshold)
+                try:
+                    detections = self._predict_with_sahi(tmp_path, conf_threshold)
+                finally:
+                    # Clean up temp file
+                    if os.path.exists(tmp_path):
+                        os.remove(tmp_path)
+            else:
+                # Small image: use standard inference
+                preprocessed, scale, pad = self._preprocess_image(img)
+                output = self.model.run(self.output_names, {self.input_name: preprocessed})
+                detections = self._postprocess_onnx_output(output[0], scale, pad, conf_threshold)
 
         # Calculate inference time (before drawing annotations)
         inference_time = time.perf_counter() - start_time
