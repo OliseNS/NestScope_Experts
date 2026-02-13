@@ -72,6 +72,7 @@ class CVInferenceResponse(BaseModel):
     detections: List[Dict[str, Any]]
     annotated_image_base64: str
     message: str
+    inference_time: float
 
 class ExampleImagesResponse(BaseModel):
     examples: List[str]
@@ -512,13 +513,19 @@ async def get_cv_examples():
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/cv/inference", response_model=CVInferenceResponse)
-async def run_cv_inference(file: UploadFile = File(...), conf_threshold: float = 0.25):
+async def run_cv_inference(
+    file: UploadFile = File(...),
+    conf_threshold: float = 0.25,
+    fast_mode: bool = True
+):
     """
     Run bird detection inference on an uploaded image
 
     Args:
         file: Uploaded image file
         conf_threshold: Confidence threshold for detections (default: 0.25)
+        fast_mode: Enable fast mode for quicker processing of large images (default: True)
+                   Fast mode uses downsampling for very large images or minimal overlap for sliding windows
 
     Returns:
         CVInferenceResponse: Detection results with annotated image
@@ -534,7 +541,7 @@ async def run_cv_inference(file: UploadFile = File(...), conf_threshold: float =
         image_bytes = await file.read()
 
         # Run inference
-        results = bird_detector.predict_from_bytes(image_bytes, conf_threshold)
+        results = bird_detector.predict_from_bytes(image_bytes, conf_threshold, fast_mode=fast_mode)
 
         # Convert annotated image to base64
         _, buffer = cv2.imencode('.jpg', results['annotated_image'])
@@ -542,6 +549,8 @@ async def run_cv_inference(file: UploadFile = File(...), conf_threshold: float =
 
         # Create response message
         bird_count = results['bird_count']
+        inference_time = results.get('inference_time', 0.0)
+
         if bird_count == 0:
             message = "No birds detected in the image. Try adjusting the confidence threshold or using a different image."
         elif bird_count == 1:
@@ -553,7 +562,8 @@ async def run_cv_inference(file: UploadFile = File(...), conf_threshold: float =
             "bird_count": bird_count,
             "detections": results['detections'],
             "annotated_image_base64": image_base64,
-            "message": message
+            "message": message,
+            "inference_time": inference_time
         }
 
     except Exception as e:

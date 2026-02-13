@@ -382,7 +382,7 @@ def get_stats_from_backend():
         return {"success": False, "error": str(e)}
 
 
-def run_cv_inference(image_file, conf_threshold=0.25):
+def run_cv_inference(image_file, conf_threshold=0.25, fast_mode=True):
     """
     Send an image to the backend for bird detection inference.
     """
@@ -391,8 +391,8 @@ def run_cv_inference(image_file, conf_threshold=0.25):
         response = requests.post(
             f"{API_BASE_URL}/cv/inference",
             files=files,
-            params={"conf_threshold": conf_threshold},
-            timeout=60
+            params={"conf_threshold": conf_threshold, "fast_mode": fast_mode},
+            timeout=120  # Increased timeout for large images
         )
         response.raise_for_status()
         return response.json()
@@ -901,6 +901,10 @@ with cv_tab:
         st.session_state.selected_example_image = None
     if "selected_example_name" not in st.session_state:
         st.session_state.selected_example_name = None
+    if "cv_detection_result" not in st.session_state:
+        st.session_state.cv_detection_result = None
+    if "cv_last_processed_image" not in st.session_state:
+        st.session_state.cv_last_processed_image = None
 
     # Upload Section
     st.markdown("### 📤 Upload Your Image")
@@ -913,13 +917,29 @@ with cv_tab:
 
     # Confidence threshold slider
     st.markdown("### ⚙️ Detection Settings")
-    conf_threshold = st.slider(
-        "Confidence Threshold",
-        min_value=0.1,
-        max_value=0.9,
-        value=0.25,
-        step=0.05,
-        help="Lower values detect more birds but may include false positives. Higher values are more selective."
+    col1, col2 = st.columns([3, 1])
+    with col1:
+        conf_threshold = st.slider(
+            "Confidence Threshold",
+            min_value=0.1,
+            max_value=0.9,
+            value=0.25,
+            step=0.05,
+            help="Lower values detect more birds but may include false positives. Higher values are more selective."
+        )
+    with col2:
+        st.markdown("&nbsp;")
+        if st.button("🔄 Re-run Detection", use_container_width=True, help="Re-run detection with new settings"):
+            # Clear cached results to force re-run
+            st.session_state.cv_detection_result = None
+            st.session_state.cv_last_processed_image = None
+            st.rerun()
+
+    # Fast mode checkbox
+    fast_mode = st.checkbox(
+        "⚡ Fast Mode (Recommended)",
+        value=True,
+        help="Fast mode significantly speeds up processing. For very large images (>2048px), uses downsampling. For medium images, uses minimal window overlap. Uncheck for standard mode with ~10 overlapping 1024x1024 tiles for improved accuracy."
     )
 
     st.markdown("---")
@@ -958,12 +978,15 @@ with cv_tab:
 
                                 # Button to select this image
                                 if st.button(
-                                    f"Use this image",
+                                    f"Detect Birds",
                                     key=f"use_example_{img_idx}",
-                                    use_container_width=True
+                                    use_container_width=True,
+                                    type="primary"
                                 ):
                                     st.session_state.selected_example_image = image_bytes
                                     st.session_state.selected_example_name = example_name
+                                    st.session_state.cv_detection_result = None
+                                    st.session_state.cv_last_processed_image = None
                                     st.rerun()
 
                                 st.caption(example_name)
@@ -986,120 +1009,132 @@ with cv_tab:
     # Determine which image to process
     image_to_process = None
     image_name = None
+    auto_run_detection = False
 
     if uploaded_file is not None:
         image_to_process = uploaded_file.getvalue()
         image_name = uploaded_file.name
-        st.info(f"📁 Using uploaded image: **{image_name}**")
+        # Check if this is a new upload
+        if st.session_state.cv_last_processed_image != image_name:
+            auto_run_detection = True
+            st.session_state.cv_last_processed_image = image_name
+            st.session_state.cv_detection_result = None
     elif st.session_state.selected_example_image is not None:
         image_to_process = st.session_state.selected_example_image
         image_name = st.session_state.selected_example_name
-        st.info(f"🖼️ Using example image: **{image_name}**")
+        # Check if this is a new selection
+        if st.session_state.cv_last_processed_image != image_name:
+            auto_run_detection = True
+            st.session_state.cv_last_processed_image = image_name
+            st.session_state.cv_detection_result = None
 
     # Process and display results
     if image_to_process:
         st.markdown("### 🔍 Detection Analysis")
 
-        # Display original image
-        st.markdown("#### Original Image")
-        original_img = Image.open(BytesIO(image_to_process))
-        st.image(original_img, use_container_width=True)
-
-        # Run detection button
-        col1, col2, col3 = st.columns([1, 2, 1])
-        with col2:
-            run_detection = st.button(
-                "🚀 Run Bird Detection",
-                type="primary",
-                use_container_width=True,
-                key="run_detection_btn"
-            )
-
-        if run_detection:
-            with st.spinner("🔄 Running AI detection... This may take a moment."):
+        # Auto-run detection on new image selection or upload
+        if auto_run_detection:
+            with st.spinner("🔄 Running AI detection..."):
                 # Create a file-like object
                 image_file = BytesIO(image_to_process)
                 image_file.name = image_name
 
                 # Run inference
-                result = run_cv_inference(image_file, conf_threshold)
+                result = run_cv_inference(image_file, conf_threshold, fast_mode)
 
-                if "error" in result:
-                    st.error(f"❌ Inference failed: {result['error']}")
-                else:
-                    # Display results
-                    bird_count = result.get("bird_count", 0)
-                    message = result.get("message", "")
+                # Store result in session state
+                st.session_state.cv_detection_result = result
 
-                    st.markdown("---")
-                    st.markdown("#### 📊 Results")
+        # Get result from session state (whether just computed or previously cached)
+        result = st.session_state.cv_detection_result
 
-                    # Show count with appropriate styling
-                    if bird_count == 0:
-                        st.warning(message)
-                        st.info("💡 **Tip**: Try lowering the confidence threshold or use a different image with more visible birds.")
-                    else:
-                        st.success(message)
+        if result and "error" not in result:
+            # Display original and annotated images side by side
+            col1, col2 = st.columns(2)
 
-                        # Display metrics in columns
-                        metric_cols = st.columns(3)
-                        with metric_cols[0]:
-                            st.metric("🐦 Birds Detected", bird_count)
-                        with metric_cols[1]:
-                            st.metric("📐 Image Size", f"{original_img.width}×{original_img.height}")
-                        with metric_cols[2]:
-                            st.metric("🎯 Confidence", f"{conf_threshold:.0%}")
+            with col1:
+                st.markdown("#### Original Image")
+                original_img = Image.open(BytesIO(image_to_process))
+                st.image(original_img, use_container_width=True)
 
-                    # Display annotated image
-                    annotated_base64 = result.get("annotated_image_base64", "")
-                    if annotated_base64:
-                        annotated_bytes = base64.b64decode(annotated_base64)
-                        annotated_img = Image.open(BytesIO(annotated_bytes))
+            with col2:
+                st.markdown("#### Detected Birds")
+                annotated_base64 = result.get("annotated_image_base64", "")
+                if annotated_base64:
+                    annotated_bytes = base64.b64decode(annotated_base64)
+                    annotated_img = Image.open(BytesIO(annotated_bytes))
+                    st.image(annotated_img, use_container_width=True)
 
-                        st.markdown("---")
-                        st.markdown("#### 🎨 Annotated Image")
-                        st.caption("Birds detected are highlighted with bounding boxes")
-                        st.image(annotated_img, use_container_width=True)
+            # Display results
+            bird_count = result.get("bird_count", 0)
+            message = result.get("message", "")
+            inference_time = result.get("inference_time", 0.0)
 
-                        # Download button
-                        col1, col2, col3 = st.columns([1, 2, 1])
-                        with col2:
-                            st.download_button(
-                                label="📥 Download Annotated Image",
-                                data=annotated_bytes,
-                                file_name=f"nestvision_detected_{image_name}",
-                                mime="image/jpeg",
-                                use_container_width=True,
-                                type="secondary"
-                            )
+            st.markdown("---")
+            st.markdown("#### 📊 Results")
 
-                    # Show detection details in expandable section
-                    if bird_count > 0:
-                        with st.expander("🔍 View Detailed Detection Data", expanded=False):
-                            detections = result.get("detections", [])
-                            if detections:
-                                st.markdown(f"**Total Detections:** {len(detections)}")
-                                st.markdown("**Detection Details:**")
+            # Show count with appropriate styling
+            if bird_count == 0:
+                st.warning(message)
+                st.info("💡 **Tip**: Try lowering the confidence threshold or use a different image with more visible birds.")
+            else:
+                st.success(message)
 
-                                # Create a formatted table
-                                detection_data = []
-                                for i, det in enumerate(detections, 1):
-                                    bbox = det.get('bbox', [])
-                                    detection_data.append({
-                                        "Detection #": i,
-                                        "Confidence": f"{det.get('confidence', 0):.2%}",
-                                        "Bounding Box": f"[{bbox[0]:.0f}, {bbox[1]:.0f}, {bbox[2]:.0f}, {bbox[3]:.0f}]",
-                                        "Class ID": det.get('class_id', 0)
-                                    })
+            # Display metrics in columns
+            metric_cols = st.columns(4)
+            with metric_cols[0]:
+                st.metric("🐦 Birds Detected", bird_count)
+            with metric_cols[1]:
+                original_img = Image.open(BytesIO(image_to_process))
+                st.metric("📐 Image Size", f"{original_img.width}×{original_img.height}")
+            with metric_cols[2]:
+                st.metric("🎯 Confidence", f"{conf_threshold:.0%}")
+            with metric_cols[3]:
+                st.metric("⚡ Inference Time", f"{inference_time:.2f}s")
 
-                                st.dataframe(pd.DataFrame(detection_data), use_container_width=True)
+            # Download button
+            if annotated_base64:
+                col1, col2, col3 = st.columns([1, 2, 1])
+                with col2:
+                    st.download_button(
+                        label="📥 Download Annotated Image",
+                        data=annotated_bytes,
+                        file_name=f"nestvision_detected_{image_name}",
+                        mime="image/jpeg",
+                        use_container_width=True,
+                        type="secondary"
+                    )
 
-                                # Raw JSON data
-                                with st.expander("📄 Raw JSON Data"):
-                                    st.json({
-                                        "total_detections": len(detections),
-                                        "detections": detections
-                                    })
+            # Show detection details in expandable section
+            if bird_count > 0:
+                with st.expander("🔍 View Detailed Detection Data", expanded=False):
+                    detections = result.get("detections", [])
+                    if detections:
+                        st.markdown(f"**Total Detections:** {len(detections)}")
+                        st.markdown("**Detection Details:**")
+
+                        # Create a formatted table
+                        detection_data = []
+                        for i, det in enumerate(detections, 1):
+                            bbox = det.get('bbox', [])
+                            detection_data.append({
+                                "Detection #": i,
+                                "Confidence": f"{det.get('confidence', 0):.2%}",
+                                "Bounding Box": f"[{bbox[0]:.0f}, {bbox[1]:.0f}, {bbox[2]:.0f}, {bbox[3]:.0f}]",
+                                "Class ID": det.get('class_id', 0)
+                            })
+
+                        st.dataframe(pd.DataFrame(detection_data), use_container_width=True)
+
+                        # Raw JSON data
+                        with st.expander("📄 Raw JSON Data"):
+                            st.json({
+                                "total_detections": len(detections),
+                                "detections": detections
+                            })
+
+        elif result and "error" in result:
+            st.error(f"❌ Inference failed: {result['error']}")
     else:
         # Show instructions when no image is selected
         st.info("""

@@ -4,6 +4,7 @@ pandas>=2.0.0               # Data manipulation and CSV processing
 
 # AI/LLM Layer
 openai>=1.0.0               # OpenAI SDK for OpenRouter API access
+onnxruntime>=1.16.0         # ONNX Runtime for fast model inference
 
 # Frontend Layer
 streamlit>=1.28.0           # Web application framework
