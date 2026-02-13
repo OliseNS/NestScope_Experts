@@ -94,3 +94,9 @@ htmlcov/
 *.tmp
 
 .claude/
+labeller/nestvision/images
+labeller/nestvision/labels
+labeller/nestvision/crops/
+labeller/nestvision/*.csv
+labeller/project_state.json
+USGS_finetune.pt

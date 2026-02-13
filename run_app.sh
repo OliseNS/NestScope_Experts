@@ -114,6 +114,9 @@ cleanup() {
     if [ ! -z "$CLIENT_PID" ]; then
         kill $CLIENT_PID 2>/dev/null || true
     fi
+    if [ ! -z "$LABELLER_PID" ]; then
+        kill $LABELLER_PID 2>/dev/null || true
+    fi
     echo -e "${GREEN}Servers stopped${NC}"
     exit 0
 }
@@ -157,16 +160,26 @@ CLIENT_PID=$!
 # Wait a bit for Streamlit to start
 sleep 3
 
+# Start Labeller Flask app in background
+echo -e "${GREEN}Starting Labeller app on http://localhost:5000${NC}"
+$PYTHON_CMD labeller/app.py --data labeller/nestvision > logs/labeller.log 2>&1 &
+LABELLER_PID=$!
+
+# Wait a bit for Labeller to start
+sleep 2
+
 echo -e "\n${BLUE}================================${NC}"
 echo -e "${GREEN}✓ NestScope is running!${NC}"
 echo -e "${BLUE}================================${NC}"
 echo -e "\n${GREEN}FastAPI Server:${NC}  http://localhost:8000"
 echo -e "${GREEN}Streamlit App:${NC}   http://localhost:8501"
+echo -e "${GREEN}Labeller App:${NC}    http://localhost:5000"
 echo -e "${GREEN}API Docs:${NC}        http://localhost:8000/docs"
 echo -e "\n${YELLOW}Logs:${NC}"
 echo -e "  Server:    tail -f logs/server.log"
 echo -e "  Streamlit: tail -f logs/streamlit.log"
-echo -e "\n${YELLOW}Press Ctrl+C to stop both servers${NC}\n"
+echo -e "  Labeller:  tail -f logs/labeller.log"
+echo -e "\n${YELLOW}Press Ctrl+C to stop all servers${NC}\n"
 
 # Wait for both processes
 wait
