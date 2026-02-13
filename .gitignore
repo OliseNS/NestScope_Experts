@@ -40,8 +40,15 @@ VisionTrain/
 VisionTrain/dataset/
 VisionTrain/training_data/
 VisionTrain/inference_results/
-VisionTrain/*.pt
-VisionTrain/*.zip
+VisionTrain/**/*.pt
+VisionTrain/**/*.zip
+VisionTrain/**/*.onnx
+VisionTrain/**/*.h5
+VisionTrain/**/*.hdf5
+VisionTrain/**/*.pkl
+VisionTrain/**/*.pth
+VisionTrain/**/*.ckpt
+VisionTrain/**/*.safetensors
 
 # Documentation folder is tracked
 # But exclude any large PDFs or videos
@@ -100,3 +107,32 @@ labeller/nestvision/crops/
 labeller/nestvision/*.csv
 labeller/project_state.json
 USGS_finetune.pt
+
+mobile_sam.pt
+seconditer.onnx
+
+# Model files (all formats)
+*.pt
+*.pth
+*.ckpt
+*.h5
+*.hdf5
+*.pkl
+*.pickle
+*.onnx
+*.pb
+*.tflite
+*.safetensors
+*.msgpack
+*.bin
+
+# Large archive files
+*.zip
+*.tar
+*.tar.gz
+*.tgz
+*.7z
+*.rar
+
+# Exclude from model ignore rules for specific production files
+!server/best.pt
