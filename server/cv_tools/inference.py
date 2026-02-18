@@ -14,8 +14,8 @@ from sahi import AutoDetectionModel
 from sahi.predict import get_sliced_prediction
 from sahi.utils.cv import read_image_as_pil
 
-# Model path - relative to project root directory (using ONNX model)
-MODEL_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "seconditer.onnx")
+# Model path - relative to project root directory (using ONNX model from models/ folder)
+MODEL_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "models", "seconditer.onnx")
 
 class BirdDetector:
     """YOLO-based bird detection and counting"""

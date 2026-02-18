@@ -55,6 +55,9 @@ class QueryResponse(BaseModel):
     results_count: int
     answer: str
     error: Optional[str] = None
+    show_chart: bool = False
+    chart_type: Optional[str] = None  # 'line' or 'bar'
+    show_map: bool = False
 
 class SchemaResponse(BaseModel):
     tables: Dict[str, Any]
@@ -77,12 +80,110 @@ class CVInferenceResponse(BaseModel):
 class ExampleImagesResponse(BaseModel):
     examples: List[str]
 
+class CustomSQLRequest(BaseModel):
+    sql_query: str
+
+class CustomSQLResponse(BaseModel):
+    success: bool
+    results: Optional[List[Dict[str, Any]]]
+    results_count: int
+    error: Optional[str] = None
+
+class InsightsRequest(BaseModel):
+    results: List[Dict[str, Any]]
+    sample_size: int = 50
+
+class InsightsResponse(BaseModel):
+    success: bool
+    insights: Optional[str]
+    error: Optional[str] = None
+
 # Database configuration
 DB_PATH = os.getenv("DB_PATH", "../data/bird_data_complete.db")
 
 # Get the directory where this file is located
 SERVER_DIR = Path(__file__).parent
 DEFAULT_PROMPT_PATH = SERVER_DIR / "prompt.txt"
+
+def parse_visualization_directives(answer_text: str, results_df=None) -> Dict[str, Any]:
+    """
+    Parse visualization directives from LLM response with automatic fallback detection.
+
+    Args:
+        answer_text: The LLM's answer text
+        results_df: DataFrame with query results for automatic detection
+
+    Returns:
+        Dictionary with 'clean_answer', 'show_chart', 'chart_type', 'show_map'
+    """
+    import re
+
+    directives = {
+        'clean_answer': answer_text,
+        'show_chart': False,
+        'chart_type': None,
+        'show_map': False
+    }
+
+    # Look for visualization directives from LLM
+    chart_match = re.search(r'\[SHOW_CHART:\s*(line|bar)\]', answer_text, re.IGNORECASE)
+    map_match = re.search(r'\[SHOW_MAP:\s*true\]', answer_text, re.IGNORECASE)
+    no_viz_match = re.search(r'\[NO_VIZ\]', answer_text, re.IGNORECASE)
+
+    if chart_match:
+        directives['show_chart'] = True
+        directives['chart_type'] = chart_match.group(1).lower()
+
+    if map_match:
+        directives['show_map'] = True
+
+    # AUTOMATIC FALLBACK: If LLM didn't provide directives, detect them from data
+    if not no_viz_match and results_df is not None and not results_df.empty:
+        # Check if we should show a map (has coordinates)
+        if not directives['show_map']:
+            cols_lower = [str(col).lower() for col in results_df.columns]
+            has_lat = 'latitude' in cols_lower
+            has_lon = 'longitude' in cols_lower
+
+            if has_lat and has_lon:
+                # Check if we have valid non-null coordinates
+                lat_col = results_df.columns[cols_lower.index('latitude')]
+                lon_col = results_df.columns[cols_lower.index('longitude')]
+                has_valid_coords = (
+                    results_df[lat_col].notna().any() and
+                    results_df[lon_col].notna().any()
+                )
+                if has_valid_coords:
+                    directives['show_map'] = True
+
+        # Check if we should show a chart (has numeric data suitable for visualization)
+        if not directives['show_chart'] and len(results_df.columns) >= 2:
+            # Look for time-based columns (Year, Date)
+            has_year = any('year' in str(col).lower() for col in results_df.columns)
+            has_date = any('date' in str(col).lower() for col in results_df.columns)
+
+            # Look for count/numeric columns
+            numeric_cols = results_df.select_dtypes(include=['number']).columns
+            has_counts = len(numeric_cols) > 0
+
+            if has_counts:
+                if has_year or has_date:
+                    # Time series data -> line chart
+                    directives['show_chart'] = True
+                    directives['chart_type'] = 'line'
+                elif len(results_df) <= 50:
+                    # Comparison data (not too many rows) -> bar chart
+                    directives['show_chart'] = True
+                    directives['chart_type'] = 'bar'
+
+    # Remove directives from answer text
+    clean_answer = re.sub(r'\[SHOW_CHART:\s*(line|bar)\]', '', answer_text, flags=re.IGNORECASE)
+    clean_answer = re.sub(r'\[SHOW_MAP:\s*true\]', '', clean_answer, flags=re.IGNORECASE)
+    clean_answer = re.sub(r'\[NO_VIZ\]', '', clean_answer, flags=re.IGNORECASE)
+    directives['clean_answer'] = clean_answer.strip()
+
+    return directives
+
 
 class SQLChatbot:
     def __init__(self, db_path=DB_PATH, model="anthropic/claude-opus-4.5", prompt_path=None):
@@ -154,7 +255,13 @@ class SQLChatbot:
             {"role": "system", "content": self.system_prompt},
             {"role": "user", "content": f"""Question: {user_question}
 
-IMPORTANT: Return ONLY the SQL query, nothing else. No explanations, no markdown formatting, no comments - just the raw SQL query that can be executed directly."""}
+CRITICAL REQUIREMENTS:
+1. Return ONLY the SQL query - no explanations, no markdown, no comments
+2. If the query returns colony data, you MUST include "Latitude, Longitude" in SELECT and GROUP BY clauses
+3. Add "WHERE Latitude IS NOT NULL AND Longitude IS NOT NULL" for colony queries
+4. Use exact column names: "ColonyName", "Latitude", "Longitude" (case-sensitive)
+
+Generate the SQL query now:"""}
         ]
 
         try:
@@ -223,7 +330,31 @@ Your task is to:
 3. Highlight interesting patterns or insights
 4. Use a conversational but informative tone
 5. If there are no results, explain why that might be
-6. If there's a query error, explain what went wrong in simple terms and suggest how to fix it"""
+6. If there's a query error, explain what went wrong in simple terms and suggest how to fix it
+
+CRITICAL - VISUALIZATION DIRECTIVES (MANDATORY):
+You MUST include visualization directives at the END of your response on separate lines.
+
+IMPORTANT: Check the query results to determine what visualizations to show:
+- If results have Latitude AND Longitude columns → ALWAYS add [SHOW_MAP: true]
+- If results have Year or Date columns with numeric data → add [SHOW_CHART: line]
+- If results show comparisons, rankings, or top N lists → add [SHOW_CHART: bar]
+- You can include BOTH chart and map directives if appropriate
+- Only use [NO_VIZ] for errors, empty results, or purely informational queries
+
+DIRECTIVE FORMAT (include these exact tags):
+- [SHOW_CHART: line] - for time-series or temporal trends (Year, Date columns)
+- [SHOW_CHART: bar] - for comparisons, rankings, or categorical data
+- [SHOW_MAP: true] - when results have Latitude and Longitude columns
+- [NO_VIZ] - only when truly no visualization is possible or useful
+
+EXAMPLES:
+- Query returns colonies with lat/lon → Include "[SHOW_MAP: true]"
+- Query returns yearly counts → Include "[SHOW_CHART: line]"
+- Query returns top 10 species → Include "[SHOW_CHART: bar]"
+- Query returns colonies with lat/lon AND yearly counts → Include BOTH "[SHOW_MAP: true]" and "[SHOW_CHART: line]"
+
+The visualization directives should be on the last line(s) of your response, after your explanation."""
 
         user_content = f"""Question: {user_question}
 
@@ -276,7 +407,31 @@ Your task is to:
 3. Highlight interesting patterns or insights
 4. Use a conversational but informative tone
 5. If there are no results, explain why that might be
-6. If there's a query error, explain what went wrong in simple terms and suggest how to fix it"""
+6. If there's a query error, explain what went wrong in simple terms and suggest how to fix it
+
+CRITICAL - VISUALIZATION DIRECTIVES (MANDATORY):
+You MUST include visualization directives at the END of your response on separate lines.
+
+IMPORTANT: Check the query results to determine what visualizations to show:
+- If results have Latitude AND Longitude columns → ALWAYS add [SHOW_MAP: true]
+- If results have Year or Date columns with numeric data → add [SHOW_CHART: line]
+- If results show comparisons, rankings, or top N lists → add [SHOW_CHART: bar]
+- You can include BOTH chart and map directives if appropriate
+- Only use [NO_VIZ] for errors, empty results, or purely informational queries
+
+DIRECTIVE FORMAT (include these exact tags):
+- [SHOW_CHART: line] - for time-series or temporal trends (Year, Date columns)
+- [SHOW_CHART: bar] - for comparisons, rankings, or categorical data
+- [SHOW_MAP: true] - when results have Latitude and Longitude columns
+- [NO_VIZ] - only when truly no visualization is possible or useful
+
+EXAMPLES:
+- Query returns colonies with lat/lon → Include "[SHOW_MAP: true]"
+- Query returns yearly counts → Include "[SHOW_CHART: line]"
+- Query returns top 10 species → Include "[SHOW_CHART: bar]"
+- Query returns colonies with lat/lon AND yearly counts → Include BOTH "[SHOW_MAP: true]" and "[SHOW_CHART: line]"
+
+The visualization directives should be on the last line(s) of your response, after your explanation."""
 
         user_content = f"""Question: {user_question}
 
@@ -437,12 +592,18 @@ async def ask_question(request: QuestionRequest):
         # Step 3: Generate natural language answer (handles both success and error cases)
         answer = chatbot.generate_answer(request.question, sql_query, results_df, query_error=error)
 
+        # Parse visualization directives (with automatic fallback detection)
+        viz_directives = parse_visualization_directives(answer, results_df)
+
         return QueryResponse(
             sql_query=sql_query,
             results=results,
             results_count=results_count,
-            answer=answer,
-            error=error  # Still include error for debugging, but answer will explain it
+            answer=viz_directives['clean_answer'],
+            error=error,  # Still include error for debugging, but answer will explain it
+            show_chart=viz_directives['show_chart'],
+            chart_type=viz_directives['chart_type'],
+            show_map=viz_directives['show_map']
         )
 
     except Exception as e:
@@ -483,11 +644,18 @@ async def ask_question_stream(request: QuestionRequest):
             # Step 3: Stream the answer (handles both success and error cases)
             yield f"data: {json.dumps({'type': 'answer_start'})}\n\n"
 
+            full_answer = ""
             for chunk in chatbot.generate_answer_stream(request.question, sql_query, results_df, query_error=error):
+                full_answer += chunk
                 yield f"data: {json.dumps({'type': 'answer_chunk', 'content': chunk})}\n\n"
                 await asyncio.sleep(0)  # Allow other tasks to run
 
             yield f"data: {json.dumps({'type': 'answer_end'})}\n\n"
+
+            # Parse visualization directives (with automatic fallback detection)
+            viz_directives = parse_visualization_directives(full_answer, results_df)
+            yield f"data: {json.dumps({'type': 'visualization', 'show_chart': viz_directives['show_chart'], 'chart_type': viz_directives['chart_type'], 'show_map': viz_directives['show_map']})}\n\n"
+
             yield f"data: {json.dumps({'type': 'done'})}\n\n"
 
         except Exception as e:
@@ -605,6 +773,125 @@ async def get_example_image(filename: str):
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/query/execute", response_model=CustomSQLResponse)
+async def execute_custom_query(request: CustomSQLRequest):
+    """
+    Execute a custom SQL query provided by the user.
+
+    Args:
+        request: CustomSQLRequest with sql_query
+
+    Returns:
+        CustomSQLResponse with results or error
+    """
+    try:
+        # Execute the query
+        results_df, error = chatbot.execute_query(request.sql_query)
+
+        if error:
+            return CustomSQLResponse(
+                success=False,
+                results=None,
+                results_count=0,
+                error=error
+            )
+
+        # Convert results to list of dicts
+        results = results_df.to_dict(orient='records') if results_df is not None else []
+        results_count = len(results_df) if results_df is not None else 0
+
+        return CustomSQLResponse(
+            success=True,
+            results=results,
+            results_count=results_count,
+            error=None
+        )
+
+    except Exception as e:
+        return CustomSQLResponse(
+            success=False,
+            results=None,
+            results_count=0,
+            error=str(e)
+        )
+
+@app.post("/query/insights", response_model=InsightsResponse)
+async def get_query_insights(request: InsightsRequest):
+    """
+    Get AI-powered insights on query results.
+
+    Args:
+        request: InsightsRequest with results data
+
+    Returns:
+        InsightsResponse with AI-generated insights
+    """
+    try:
+        # Limit results to sample size
+        results = request.results[:request.sample_size]
+
+        if not results or len(results) == 0:
+            return InsightsResponse(
+                success=False,
+                insights=None,
+                error="No results to analyze"
+            )
+
+        # Convert to DataFrame for easier analysis
+        df = pd.DataFrame(results)
+
+        # Generate insights using LLM
+        system_prompt = """You are a data analyst assistant specializing in bird colony survey data.
+Your task is to analyze query results and provide valuable insights.
+
+Provide:
+1. **Summary**: Brief overview of what the data shows
+2. **Key Findings**: 3-5 specific insights or interesting patterns
+3. **Data Quality**: Any notable trends, outliers, or data characteristics
+4. **Recommendations**: Suggestions for further analysis or questions to explore
+
+Be concise, specific, and focus on actionable insights. Use bullet points for clarity."""
+
+        # Format results for LLM
+        results_summary = f"""
+Dataset Overview:
+- Rows: {len(df)}
+- Columns: {', '.join(df.columns.tolist())}
+
+Sample Data (first 10 rows):
+{df.head(10).to_string(index=False)}
+
+Column Statistics:
+{df.describe(include='all').to_string()}
+"""
+
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": f"Analyze these query results and provide insights:\n\n{results_summary}"}
+        ]
+
+        response = client.chat.completions.create(
+            model=chatbot.model,
+            messages=messages,
+            temperature=0.7,
+            max_tokens=800
+        )
+
+        insights = response.choices[0].message.content
+
+        return InsightsResponse(
+            success=True,
+            insights=insights,
+            error=None
+        )
+
+    except Exception as e:
+        return InsightsResponse(
+            success=False,
+            insights=None,
+            error=str(e)
+        )
 
 if __name__ == "__main__":
     import uvicorn

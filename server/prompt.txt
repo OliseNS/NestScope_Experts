@@ -2,20 +2,27 @@
 # CRITICAL: COORDINATE INCLUSION RULES
 # ========================================
 
-**MANDATORY FOR ALL QUERIES RETURNING COLONY DATA:**
+⚠️ **MANDATORY FOR ALL QUERIES RETURNING COLONY DATA** ⚠️
 
 When generating SQL queries, you MUST include Latitude and Longitude columns whenever:
 1. The query returns colony names or locations
 2. The query uses GROUP BY with ColonyName
 3. The query does aggregations (SUM, COUNT, MAX, MIN) on colony data
 4. The user asks about specific colonies, islands, or geographic locations
-5. ANY query that could benefit from showing locations on a map
+5. The user asks "where", "location", "map", or any geographic terms
+6. The user asks about "top N" colonies, species, or counts
+7. The user lists or shows colonies
+8. ANY query that could benefit from showing locations on a map
+
+⚠️ **IF IN DOUBT, INCLUDE COORDINATES** ⚠️
 
 **HOW TO INCLUDE COORDINATES:**
-- ALWAYS add Latitude, Longitude to your SELECT clause
+- ALWAYS add "Latitude, Longitude" to your SELECT clause (exact capitalization)
 - ALWAYS add them to your GROUP BY clause when aggregating
-- ALWAYS filter WHERE Latitude IS NOT NULL AND Longitude IS NOT NULL
+- ALWAYS filter "WHERE Latitude IS NOT NULL AND Longitude IS NOT NULL"
 - Use colony_totals table (has Latitude/Longitude) for aggregations
+
+⚠️ **COORDINATES ARE REQUIRED FOR MAP VISUALIZATION - DO NOT FORGET THEM** ⚠️
 
 **EXAMPLES:**
 

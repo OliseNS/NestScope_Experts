@@ -28,7 +28,6 @@ data/processed/*.duckdb
 *.mdb
 CSV_Files/
 
-
 # VisionTrain directory (large training data ~31 GB)
 VisionTrain/
 
@@ -50,18 +49,17 @@ VisionTrain/**/*.pth
 VisionTrain/**/*.ckpt
 VisionTrain/**/*.safetensors
 
-# Documentation folder is tracked
-# But exclude any large PDFs or videos
-documentation/*.pdf
-documentation/*.mp4
-documentation/*.mov
+# Documentation folders (merged docs/ and documentation/)
+docs/*.pdf
+docs/*.mp4
+docs/*.mov
+docs/**/*.pdf
+docs/**/*.mp4
+docs/**/*.mov
 
-# Keep production model in server/
-# server/best.pt should be tracked (40.5 MB - needed for production)
-
-# Keep cleaned_data and bird_data.db (essential for project)
-# *.csv (commented out - we need cleaned_data/*.csv)
-# *.db (commented out - we need bird_data.db)
+# Root-level models directory - DO NOT COMMIT MODELS
+models/
+models/**/*
 
 # Jupyter Notebooks
 .ipynb_checkpoints/
@@ -106,12 +104,8 @@ labeller/nestvision/labels
 labeller/nestvision/crops/
 labeller/nestvision/*.csv
 labeller/project_state.json
-USGS_finetune.pt
 
-mobile_sam.pt
-seconditer.onnx
-
-# Model files (all formats)
+# Model files (all formats) - Global exclusion
 *.pt
 *.pth
 *.ckpt
@@ -133,6 +127,3 @@ seconditer.onnx
 *.tgz
 *.7z
 *.rar
-
-# Exclude from model ignore rules for specific production files
-!server/best.pt

@@ -154,7 +154,7 @@ fi
 
 # Start Streamlit client in background
 echo -e "${GREEN}Starting Streamlit client on http://localhost:8501${NC}"
-$PYTHON_CMD -m streamlit run frontend/app/app_ui.py --server.port 8501 > logs/streamlit.log 2>&1 &
+$PYTHON_CMD -m streamlit run frontend/app.py --server.port 8501 > logs/streamlit.log 2>&1 &
 CLIENT_PID=$!
 
 # Wait a bit for Streamlit to start

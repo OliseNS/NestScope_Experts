@@ -15,7 +15,7 @@ app = Flask(__name__)
 
 # MobileSAM Model (lazy loaded) - from ultralytics
 MOBILESAM_MODEL = None
-MOBILESAM_MODEL_NAME = "mobile_sam.pt"  # ultralytics will download if not present
+MOBILESAM_MODEL_NAME = os.path.join("..", "models", "mobile_sam.pt")  # Load from root models/ directory
 
 # Segmentation configuration
 SEGMENT_CONF_THRESHOLD = 0.5  # Confidence threshold for segmentation
