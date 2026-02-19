@@ -9,13 +9,14 @@ from typing import Dict, Any, List, Optional, Generator
 from .config import DEFAULT_MODEL
 
 
-def ask_question_to_backend(question: str, model: str = None) -> Dict[str, Any]:
+def ask_question_to_backend(question: str, model: str = None, conversation_history: List[Dict[str, str]] = None) -> Dict[str, Any]:
     """
     Send a question to the FastAPI backend and return the response.
 
     Args:
         question: Natural language question
         model: LLM model to use (defaults to MODEL_NAME from .env)
+        conversation_history: Previous conversation messages for context
 
     Returns:
         Dictionary containing SQL query, results, and answer
@@ -29,7 +30,7 @@ def ask_question_to_backend(question: str, model: str = None) -> Dict[str, Any]:
     try:
         response = requests.post(
             f"{API_BASE_URL}/ask",
-            json={"question": question, "model": model},
+            json={"question": question, "model": model, "conversation_history": conversation_history},
             timeout=30
         )
         response.raise_for_status()
@@ -38,13 +39,14 @@ def ask_question_to_backend(question: str, model: str = None) -> Dict[str, Any]:
         return {"success": False, "error": str(e)}
 
 
-def ask_question_streaming(question: str, model: str = None) -> Generator[Dict[str, Any], None, None]:
+def ask_question_streaming(question: str, model: str = None, conversation_history: List[Dict[str, str]] = None) -> Generator[Dict[str, Any], None, None]:
     """
     Send a question to the FastAPI backend and stream the response.
 
     Args:
         question: Natural language question
         model: LLM model to use (defaults to MODEL_NAME from .env)
+        conversation_history: Previous conversation messages for context
 
     Yields:
         Events: {'type': 'sql_query'|'results'|'answer_chunk'|'error'|'done', 'content': ...}
@@ -58,7 +60,7 @@ def ask_question_streaming(question: str, model: str = None) -> Generator[Dict[s
     try:
         response = requests.post(
             f"{API_BASE_URL}/ask/stream",
-            json={"question": question, "model": model},
+            json={"question": question, "model": model, "conversation_history": conversation_history},
             stream=True,
             timeout=60
         )
