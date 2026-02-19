@@ -98,7 +98,8 @@ This enables map visualizations. The prompt includes extensive examples of corre
 - `SQLChatbot` class in `server/main.py`
 - Two answer generation modes: streaming (`/ask/stream`) and non-streaming (`/ask`)
 - System prompt loaded from `server/prompt.txt`
-- Uses OpenRouter API with Claude models (default: `anthropic/claude-opus-4.5`)
+- Uses OpenRouter API (default model: `anthropic/claude-sonnet-4.5`, configurable via `MODEL_NAME` in `.env`)
+- **Centralized configuration**: Model is set in ONE place only (`.env` file) and used by both backend and frontend
 
 ### 2. Computer Vision Pipeline (NestVision)
 

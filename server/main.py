@@ -47,7 +47,8 @@ app.add_middleware(
 # Request/Response Models
 class QuestionRequest(BaseModel):
     question: str
-    model: Optional[str] = "anthropic/claude-opus-4.5"
+    model: Optional[str] = None  # Use MODEL_NAME from env if not specified
+    conversation_history: Optional[List[Dict[str, str]]] = None  # Previous messages for context
 
 class QueryResponse(BaseModel):
     sql_query: str
@@ -100,6 +101,10 @@ class InsightsResponse(BaseModel):
 
 # Database configuration
 DB_PATH = os.getenv("DB_PATH", "../data/bird_data_complete.db")
+
+# Model configuration - SINGLE SOURCE OF TRUTH
+# Change this in .env file only
+MODEL_NAME = os.getenv("MODEL_NAME", "anthropic/claude-sonnet-4.5")
 
 # Get the directory where this file is located
 SERVER_DIR = Path(__file__).parent
@@ -201,10 +206,10 @@ def parse_visualization_directives(answer_text: str, results_df=None) -> Dict[st
 
 
 class SQLChatbot:
-    def __init__(self, db_path=DB_PATH, model="anthropic/claude-opus-4.5", prompt_path=None):
+    def __init__(self, db_path=DB_PATH, model=None, prompt_path=None):
         """Initialize the SQL chatbot"""
         self.db_path = db_path
-        self.model = model
+        self.model = model or MODEL_NAME  # Use MODEL_NAME from env if not specified
         self.schema = None
         self.prompt_path = prompt_path or str(DEFAULT_PROMPT_PATH)
         self.system_prompt = self._load_system_prompt()
@@ -263,12 +268,22 @@ class SQLChatbot:
         self.schema = schema_info
         return schema_info
 
-    def generate_sql_query(self, user_question):
-        """Generate SQL query from natural language using LLM"""
+    def generate_sql_query(self, user_question, conversation_history=None):
+        """Generate SQL query from natural language using LLM with conversation context"""
         # Use the system prompt loaded from prompt.txt
         messages = [
-            {"role": "system", "content": self.system_prompt},
-            {"role": "user", "content": f"""Question: {user_question}
+            {"role": "system", "content": self.system_prompt}
+        ]
+
+        # Add conversation history for context (last 3 exchanges to keep token usage reasonable)
+        if conversation_history:
+            for msg in conversation_history[-6:]:  # Last 3 Q&A pairs (6 messages)
+                messages.append(msg)
+
+        # Add the current question
+        messages.append({
+            "role": "user",
+            "content": f"""Question: {user_question}
 
 CRITICAL REQUIREMENTS:
 1. Return ONLY the SQL query - no explanations, no markdown, no comments
@@ -276,8 +291,8 @@ CRITICAL REQUIREMENTS:
 3. Add "WHERE Latitude IS NOT NULL AND Longitude IS NOT NULL" for colony queries
 4. Use exact column names: "ColonyName", "Latitude", "Longitude" (case-sensitive)
 
-Generate the SQL query now:"""}
-        ]
+Generate the SQL query now:"""
+        })
 
         try:
             response = client.chat.completions.create(
@@ -323,7 +338,7 @@ Generate the SQL query now:"""}
         except Exception as e:
             return None, f"Query error: {e}"
 
-    def generate_answer(self, user_question, sql_query, results_df, query_error=None):
+    def generate_answer(self, user_question, sql_query, results_df, query_error=None, conversation_history=None):
         """Generate natural language answer from query results or explain query errors"""
 
         # Format results for LLM
@@ -339,6 +354,8 @@ Generate the SQL query now:"""}
 
         system_prompt = """You are a helpful assistant that explains bird colony data query results.
 
+IMPORTANT: You can see the conversation history, so use it to provide contextual answers. If the user asks follow-up questions like "List them" or "Show me more details", refer to the previous context to understand what they're asking about.
+
 Your task is to:
 1. Answer the user's question based on the SQL query results
 2. Provide specific details from the data (names, numbers, etc.)
@@ -398,9 +415,16 @@ Query Results ({row_count} rows):
 Please provide a clear, informative answer to the question based on these results."""
 
         messages = [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_content}
+            {"role": "system", "content": system_prompt}
         ]
+
+        # Add conversation history for context (last 3 exchanges)
+        if conversation_history:
+            for msg in conversation_history[-6:]:  # Last 3 Q&A pairs
+                messages.append(msg)
+
+        # Add current query info
+        messages.append({"role": "user", "content": user_content})
 
         try:
             response = client.chat.completions.create(
@@ -416,7 +440,7 @@ Please provide a clear, informative answer to the question based on these result
         except Exception as e:
             return f"Error generating answer: {e}"
 
-    def generate_answer_stream(self, user_question, sql_query, results_df, query_error=None):
+    def generate_answer_stream(self, user_question, sql_query, results_df, query_error=None, conversation_history=None):
         """Generate natural language answer from query results with streaming or explain query errors"""
 
         # Format results for LLM
@@ -431,6 +455,8 @@ Please provide a clear, informative answer to the question based on these result
             row_count = 0
 
         system_prompt = """You are a helpful assistant that explains bird colony data query results.
+
+IMPORTANT: You can see the conversation history, so use it to provide contextual answers. If the user asks follow-up questions like "List them" or "Show me more details", refer to the previous context to understand what they're asking about.
 
 Your task is to:
 1. Answer the user's question based on the SQL query results
@@ -491,9 +517,16 @@ Query Results ({row_count} rows):
 Please provide a clear, informative answer to the question based on these results."""
 
         messages = [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_content}
+            {"role": "system", "content": system_prompt}
         ]
+
+        # Add conversation history for context (last 3 exchanges)
+        if conversation_history:
+            for msg in conversation_history[-6:]:  # Last 3 Q&A pairs
+                messages.append(msg)
+
+        # Add current query info
+        messages.append({"role": "user", "content": user_content})
 
         try:
             stream = client.chat.completions.create(
@@ -614,11 +647,12 @@ async def ask_question(request: QuestionRequest):
     3. Return results and a natural language answer
     """
     try:
-        # Update model if provided
-        chatbot.model = request.model
+        # Update model if provided, otherwise use default from env
+        if request.model:
+            chatbot.model = request.model
 
-        # Step 1: Generate SQL query
-        sql_query = chatbot.generate_sql_query(request.question)
+        # Step 1: Generate SQL query with conversation context
+        sql_query = chatbot.generate_sql_query(request.question, conversation_history=request.conversation_history)
 
         if sql_query.startswith("ERROR"):
             return QueryResponse(
@@ -636,8 +670,8 @@ async def ask_question(request: QuestionRequest):
         results = results_df.to_dict(orient='records') if results_df is not None else None
         results_count = len(results_df) if results_df is not None else 0
 
-        # Step 3: Generate natural language answer (handles both success and error cases)
-        answer = chatbot.generate_answer(request.question, sql_query, results_df, query_error=error)
+        # Step 3: Generate natural language answer with conversation context (handles both success and error cases)
+        answer = chatbot.generate_answer(request.question, sql_query, results_df, query_error=error, conversation_history=request.conversation_history)
 
         # Parse visualization directives (with automatic fallback detection)
         viz_directives = parse_visualization_directives(answer, results_df)
@@ -664,11 +698,12 @@ async def ask_question_stream(request: QuestionRequest):
     """
     async def event_generator():
         try:
-            # Update model if provided
-            chatbot.model = request.model
+            # Update model if provided, otherwise use default from env
+            if request.model:
+                chatbot.model = request.model
 
-            # Step 1: Generate SQL query
-            sql_query = chatbot.generate_sql_query(request.question)
+            # Step 1: Generate SQL query with conversation context
+            sql_query = chatbot.generate_sql_query(request.question, conversation_history=request.conversation_history)
 
             if sql_query.startswith("ERROR"):
                 yield f"data: {json.dumps({'type': 'error', 'content': sql_query})}\n\n"
@@ -688,11 +723,11 @@ async def ask_question_stream(request: QuestionRequest):
             if error:
                 yield f"data: {json.dumps({'type': 'query_error', 'content': error})}\n\n"
 
-            # Step 3: Stream the answer (handles both success and error cases)
+            # Step 3: Stream the answer with conversation context (handles both success and error cases)
             yield f"data: {json.dumps({'type': 'answer_start'})}\n\n"
 
             full_answer = ""
-            for chunk in chatbot.generate_answer_stream(request.question, sql_query, results_df, query_error=error):
+            for chunk in chatbot.generate_answer_stream(request.question, sql_query, results_df, query_error=error, conversation_history=request.conversation_history):
                 full_answer += chunk
                 yield f"data: {json.dumps({'type': 'answer_chunk', 'content': chunk})}\n\n"
                 await asyncio.sleep(0)  # Allow other tasks to run

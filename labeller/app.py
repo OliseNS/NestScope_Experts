@@ -193,29 +193,81 @@ def editor(username):
 
 # --- API ENDPOINTS ---
 
-@app.route('/api/next_image/<username>')
-def next_image(username):
+@app.route('/api/get_image/<username>')
+def get_image(username):
     state = load_state()
-    user_data = state['assignments'][username]
+    user_data = state['assignments'].get(username)
+    if not user_data:
+        return jsonify({"error": "User not found"}), 404
+
     all_imgs = user_data['images']
     completed = set(user_data['completed'])
     
-    target_img = None
-    for img in all_imgs:
-        if img not in completed:
-            target_img = img
-            break
+    index = request.args.get('index', type=int)
     
-    if not target_img and all_imgs:
-        target_img = all_imgs[-1]
-    elif not target_img:
+    if index is None:
+        # Find first uncompleted
+        for i, img in enumerate(all_imgs):
+            if img not in completed:
+                index = i
+                break
+        if index is None:
+            index = len(all_imgs) - 1 if all_imgs else 0
+
+    if not all_imgs:
         return jsonify({"done": True})
+        
+    index = max(0, min(index, len(all_imgs) - 1))
+    target_img = all_imgs[index]
 
     return jsonify({
         "image": target_img,
+        "index": index,
+        "total": len(all_imgs),
         "progress": f"{len(completed)} / {len(all_imgs)}",
         "is_completed": target_img in completed
     })
+
+@app.route('/api/delete_image', methods=['POST'])
+def delete_image():
+    data = request.json
+    username = data.get('username')
+    filename = data.get('filename')
+
+    if not username or not filename:
+        return jsonify({"status": "error", "message": "Missing username or filename"}), 400
+
+    # 1. Delete image file
+    img_path = os.path.join(get_image_dir(), filename)
+    if os.path.exists(img_path):
+        try:
+            os.remove(img_path)
+            print(f"Deleted image: {img_path}")
+        except Exception as e:
+            print(f"Error deleting image: {e}")
+
+    # 2. Delete label file
+    txt_name = os.path.splitext(filename)[0] + ".txt"
+    lbl_path = os.path.join(get_label_dir(), txt_name)
+    if os.path.exists(lbl_path):
+        try:
+            os.remove(lbl_path)
+            print(f"Deleted label: {lbl_path}")
+        except Exception as e:
+            print(f"Error deleting label: {e}")
+
+    # 3. Update state
+    state = load_state()
+    if username in state['assignments']:
+        user_data = state['assignments'][username]
+        if filename in user_data['images']:
+            user_data['images'].remove(filename)
+        if filename in user_data['completed']:
+            user_data['completed'].remove(filename)
+        save_state(state)
+
+    return jsonify({"status": "success"})
+
 
 @app.route('/api/image_data/<filename>')
 def get_image_data(filename):

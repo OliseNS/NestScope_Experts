@@ -30,6 +30,28 @@ st.set_page_config(
 st.markdown(get_custom_css(), unsafe_allow_html=True)
 
 # ============================================================================
+# HELPER FUNCTIONS
+# ============================================================================
+
+def build_conversation_history():
+    """
+    Build conversation history from session messages for API context.
+    Converts messages to the format expected by the backend LLM.
+
+    Returns:
+        List of message dicts with 'role' and 'content' keys
+    """
+    history = []
+    for msg in st.session_state.messages:
+        # Only include user and assistant messages, not data
+        if msg["role"] in ["user", "assistant"]:
+            history.append({
+                "role": msg["role"],
+                "content": msg["content"]
+            })
+    return history
+
+# ============================================================================
 # SESSION STATE INITIALIZATION
 # ============================================================================
 
@@ -270,9 +292,12 @@ with tab1:
 
                 status_placeholder.markdown("🔄 **Processing your question...**")
 
+                # Build conversation history for context
+                conversation_history = build_conversation_history()
+
                 # Try streaming first, fallback to regular API if it fails
                 try:
-                    for event in ask_question_streaming(prompt):
+                    for event in ask_question_streaming(prompt, conversation_history=conversation_history):
                         event_type = event.get('type')
 
                         if event_type == 'error':
@@ -335,7 +360,7 @@ with tab1:
                 # Fallback to non-streaming API if streaming is not available
                 if not use_streaming:
                     status_placeholder.markdown("🔄 **Processing your question...**")
-                    response = ask_question_to_backend(prompt)
+                    response = ask_question_to_backend(prompt, conversation_history=conversation_history)
 
                     if response.get('error'):
                         error_msg = response['error']
