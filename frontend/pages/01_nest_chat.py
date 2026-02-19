@@ -13,7 +13,7 @@ from services import (
     execute_custom_sql,
     get_ai_insights
 )
-from components import render_chart, render_map
+from components import render_chart, render_map, render_sidebar_header
 from styles import get_custom_css
 
 # ============================================================================
@@ -70,12 +70,22 @@ if "show_insights_button" not in st.session_state:
 # ============================================================================
 
 with st.sidebar:
-    # Header
-    st.markdown("### NestScope")
-    st.caption("Avian Monitoring Analytics")
+    # Render brand header
+    render_sidebar_header()
 
     # Quick Prompts Section
-    st.markdown("#### Quick Examples")
+    st.markdown("""
+        <div style="
+            font-size: 0.6875rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: #A0A0A0;
+            margin: 1.5rem 0 0.75rem;
+            padding: 0 0.5rem;
+            opacity: 0.7;
+        ">Quick Examples</div>
+    """, unsafe_allow_html=True)
 
     examples = [
         ("📈 Trends", "Show brown pelican trends from 2015 to 2021"),
@@ -93,7 +103,18 @@ with st.sidebar:
     # Session History Section
     if st.session_state.query_history:
         st.markdown("---")
-        st.markdown("#### Recent Queries")
+        st.markdown("""
+            <div style="
+                font-size: 0.6875rem;
+                font-weight: 600;
+                text-transform: uppercase;
+                letter-spacing: 0.08em;
+                color: #A0A0A0;
+                margin: 1.5rem 0 0.75rem;
+                padding: 0 0.5rem;
+                opacity: 0.7;
+            ">Recent Queries</div>
+        """, unsafe_allow_html=True)
 
         for i, (q_label, q_prompt) in enumerate(reversed(st.session_state.query_history[-5:])):
             display_label = (q_label[:35] + '...') if len(q_label) > 37 else q_label

@@ -5,6 +5,7 @@ Avian Monitoring Analytics Platform
 
 import streamlit as st
 from styles import get_custom_css
+from components import render_sidebar_header
 
 # Page configuration
 st.set_page_config(
@@ -16,6 +17,29 @@ st.set_page_config(
 
 # Apply custom styling
 st.markdown(get_custom_css(), unsafe_allow_html=True)
+
+# Render sidebar
+with st.sidebar:
+    render_sidebar_header()
+
+    st.markdown("""
+        <div style="
+            font-size: 0.6875rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: #A0A0A0;
+            margin: 1.5rem 0 0.75rem;
+            padding: 0 0.5rem;
+            opacity: 0.7;
+        ">Features</div>
+    """, unsafe_allow_html=True)
+
+    if st.button("💬 NestChat", use_container_width=True, help="Natural language queries"):
+        st.switch_page("pages/01_nest_chat.py")
+
+    if st.button("🦅 NestVision", use_container_width=True, help="Bird detection & counting"):
+        st.switch_page("pages/02_nest_vision.py")
 
 # Main landing page
 st.title("NestScope")

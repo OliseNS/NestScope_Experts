@@ -13,6 +13,7 @@ from PIL import Image
 from services import run_cv_inference, get_example_images, fetch_example_image, API_BASE_URL
 from utils import extract_crops_from_detections, load_species_list
 from styles import get_custom_css
+from components import render_sidebar_header
 
 # ============================================================================
 # PAGE CONFIGURATION
@@ -42,6 +43,30 @@ if "cv_last_processed_image" not in st.session_state:
     st.session_state.cv_last_processed_image = None
 if "crop_identifications" not in st.session_state:
     st.session_state.crop_identifications = {}
+
+# ============================================================================
+# SIDEBAR
+# ============================================================================
+
+with st.sidebar:
+    # Render brand header
+    render_sidebar_header()
+
+    # Settings Section
+    st.markdown("""
+        <div style="
+            font-size: 0.6875rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: #A0A0A0;
+            margin: 1.5rem 0 0.75rem;
+            padding: 0 0.5rem;
+            opacity: 0.7;
+        ">Settings</div>
+    """, unsafe_allow_html=True)
+
+    st.info("💡 **Tip**: Start with Fast Mode for quick previews. Use SAHI Mode for better accuracy with small or distant birds.")
 
 # ============================================================================
 # PAGE HEADER

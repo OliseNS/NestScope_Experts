@@ -253,12 +253,12 @@ def get_custom_css():
     [data-testid="stSidebar"] {
         background: var(--claude-bg);
         border-right: 1px solid var(--claude-border);
-        padding: 1.5rem 0;
+        padding: 0;
         z-index: 999998 !important;
     }
 
     [data-testid="stSidebar"] > div:first-child {
-        padding: 0 1rem;
+        padding: 0 0.75rem;
     }
 
     /* Sidebar Header/Title */
@@ -293,7 +293,7 @@ def get_custom_css():
     [data-testid="stSidebar"] hr {
         border: none;
         border-top: 1px solid rgba(255, 255, 255, 0.08);
-        margin: 1.5rem 0.5rem;
+        margin: 1.5rem 0;
         opacity: 0.5;
     }
 
@@ -311,6 +311,7 @@ def get_custom_css():
         text-align: left;
         margin: 2px 0;
         position: relative;
+        line-height: 1.5;
     }
 
     [data-testid="stSidebar"] .stButton > button:hover {
@@ -322,6 +323,33 @@ def get_custom_css():
 
     [data-testid="stSidebar"] .stButton > button:active {
         background: rgba(217, 119, 87, 0.2);
+    }
+
+    /* Sidebar spacing improvements */
+    [data-testid="stSidebar"] .element-container {
+        margin-bottom: 0.125rem;
+    }
+
+    [data-testid="stSidebar"] .stMarkdown {
+        margin-bottom: 0;
+    }
+
+    /* Sidebar scrollbar styling */
+    [data-testid="stSidebar"] ::-webkit-scrollbar {
+        width: 8px;
+    }
+
+    [data-testid="stSidebar"] ::-webkit-scrollbar-track {
+        background: transparent;
+    }
+
+    [data-testid="stSidebar"] ::-webkit-scrollbar-thumb {
+        background: rgba(255, 255, 255, 0.1);
+        border-radius: 4px;
+    }
+
+    [data-testid="stSidebar"] ::-webkit-scrollbar-thumb:hover {
+        background: rgba(255, 255, 255, 0.15);
     }
 
     /* Main content area buttons - Keep styled */
