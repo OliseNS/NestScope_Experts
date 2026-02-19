@@ -158,21 +158,36 @@ def parse_visualization_directives(answer_text: str, results_df=None) -> Dict[st
 
         # Check if we should show a chart (has numeric data suitable for visualization)
         if not directives['show_chart'] and len(results_df.columns) >= 2:
-            # Look for time-based columns (Year, Date)
-            has_year = any('year' in str(col).lower() for col in results_df.columns)
-            has_date = any('date' in str(col).lower() for col in results_df.columns)
+            # Look for time-based columns (Year, Date, Month, Season)
+            time_keywords = ['year', 'date', 'time', 'month', 'season']
+            time_cols = [col for col in results_df.columns
+                        if any(keyword in str(col).lower() for keyword in time_keywords)]
+            has_time_col = len(time_cols) > 0
 
             # Look for count/numeric columns
-            numeric_cols = results_df.select_dtypes(include=['number']).columns
+            numeric_cols = results_df.select_dtypes(include=['number']).columns.tolist()
+            # Filter out coordinate columns
+            numeric_cols = [col for col in numeric_cols
+                          if not any(coord in str(col).lower() for coord in ['latitude', 'longitude', 'lat', 'lon'])]
+
+            # Look for categorical columns (species, colony, state, etc.)
+            categorical_cols = results_df.select_dtypes(include=['object', 'string']).columns.tolist()
+            has_categorical = len(categorical_cols) > 0
+
             has_counts = len(numeric_cols) > 0
 
             if has_counts:
-                if has_year or has_date:
-                    # Time series data -> line chart
+                # Decide between line and bar chart
+                if has_time_col and len(results_df) >= 3:
+                    # Time series data with multiple points -> line chart
                     directives['show_chart'] = True
                     directives['chart_type'] = 'line'
-                elif len(results_df) <= 50:
-                    # Comparison data (not too many rows) -> bar chart
+                elif has_categorical and len(results_df) <= 50:
+                    # Categorical comparison data (not too many rows) -> bar chart
+                    directives['show_chart'] = True
+                    directives['chart_type'] = 'bar'
+                elif len(results_df) <= 20:
+                    # Small dataset, default to bar chart for clarity
                     directives['show_chart'] = True
                     directives['chart_type'] = 'bar'
 
@@ -336,23 +351,39 @@ CRITICAL - VISUALIZATION DIRECTIVES (MANDATORY):
 You MUST include visualization directives at the END of your response on separate lines.
 
 IMPORTANT: Check the query results to determine what visualizations to show:
-- If results have Latitude AND Longitude columns → ALWAYS add [SHOW_MAP: true]
-- If results have Year or Date columns with numeric data → add [SHOW_CHART: line]
-- If results show comparisons, rankings, or top N lists → add [SHOW_CHART: bar]
+
+**Use LINE CHARTS for:**
+- Time-series data with Year/Date columns showing TRENDS OVER TIME
+- Data where the x-axis represents a continuous temporal progression
+- Examples: yearly counts, monthly trends, population changes over years
+- Requirements: Must have 3+ data points, x-axis must be chronological
+
+**Use BAR CHARTS for:**
+- Comparisons between categories (species, colonies, states, regions)
+- Rankings or "top N" lists
+- Categorical data where order doesn't represent time progression
+- Examples: top 10 species, comparison by colony name, counts by state
+
+**Use MAPS for:**
+- ANY results with Latitude AND Longitude columns → ALWAYS add [SHOW_MAP: true]
+
+**General Rules:**
 - You can include BOTH chart and map directives if appropriate
 - Only use [NO_VIZ] for errors, empty results, or purely informational queries
+- When in doubt: time-based = line, categorical = bar
 
 DIRECTIVE FORMAT (include these exact tags):
-- [SHOW_CHART: line] - for time-series or temporal trends (Year, Date columns)
-- [SHOW_CHART: bar] - for comparisons, rankings, or categorical data
+- [SHOW_CHART: line] - for time-series trends (Year/Date on x-axis)
+- [SHOW_CHART: bar] - for categorical comparisons and rankings
 - [SHOW_MAP: true] - when results have Latitude and Longitude columns
 - [NO_VIZ] - only when truly no visualization is possible or useful
 
 EXAMPLES:
-- Query returns colonies with lat/lon → Include "[SHOW_MAP: true]"
-- Query returns yearly counts → Include "[SHOW_CHART: line]"
-- Query returns top 10 species → Include "[SHOW_CHART: bar]"
-- Query returns colonies with lat/lon AND yearly counts → Include BOTH "[SHOW_MAP: true]" and "[SHOW_CHART: line]"
+- Query: "Brown pelican trends 2015-2021" → [SHOW_CHART: line]
+- Query: "Top 10 species in 2021" → [SHOW_CHART: bar]
+- Query: "Colonies in Louisiana" with lat/lon → [SHOW_MAP: true]
+- Query: "Yearly counts by colony" with lat/lon → BOTH [SHOW_MAP: true] and [SHOW_CHART: line]
+- Query: "Compare species diversity across colonies" → [SHOW_CHART: bar]
 
 The visualization directives should be on the last line(s) of your response, after your explanation."""
 
@@ -413,23 +444,39 @@ CRITICAL - VISUALIZATION DIRECTIVES (MANDATORY):
 You MUST include visualization directives at the END of your response on separate lines.
 
 IMPORTANT: Check the query results to determine what visualizations to show:
-- If results have Latitude AND Longitude columns → ALWAYS add [SHOW_MAP: true]
-- If results have Year or Date columns with numeric data → add [SHOW_CHART: line]
-- If results show comparisons, rankings, or top N lists → add [SHOW_CHART: bar]
+
+**Use LINE CHARTS for:**
+- Time-series data with Year/Date columns showing TRENDS OVER TIME
+- Data where the x-axis represents a continuous temporal progression
+- Examples: yearly counts, monthly trends, population changes over years
+- Requirements: Must have 3+ data points, x-axis must be chronological
+
+**Use BAR CHARTS for:**
+- Comparisons between categories (species, colonies, states, regions)
+- Rankings or "top N" lists
+- Categorical data where order doesn't represent time progression
+- Examples: top 10 species, comparison by colony name, counts by state
+
+**Use MAPS for:**
+- ANY results with Latitude AND Longitude columns → ALWAYS add [SHOW_MAP: true]
+
+**General Rules:**
 - You can include BOTH chart and map directives if appropriate
 - Only use [NO_VIZ] for errors, empty results, or purely informational queries
+- When in doubt: time-based = line, categorical = bar
 
 DIRECTIVE FORMAT (include these exact tags):
-- [SHOW_CHART: line] - for time-series or temporal trends (Year, Date columns)
-- [SHOW_CHART: bar] - for comparisons, rankings, or categorical data
+- [SHOW_CHART: line] - for time-series trends (Year/Date on x-axis)
+- [SHOW_CHART: bar] - for categorical comparisons and rankings
 - [SHOW_MAP: true] - when results have Latitude and Longitude columns
 - [NO_VIZ] - only when truly no visualization is possible or useful
 
 EXAMPLES:
-- Query returns colonies with lat/lon → Include "[SHOW_MAP: true]"
-- Query returns yearly counts → Include "[SHOW_CHART: line]"
-- Query returns top 10 species → Include "[SHOW_CHART: bar]"
-- Query returns colonies with lat/lon AND yearly counts → Include BOTH "[SHOW_MAP: true]" and "[SHOW_CHART: line]"
+- Query: "Brown pelican trends 2015-2021" → [SHOW_CHART: line]
+- Query: "Top 10 species in 2021" → [SHOW_CHART: bar]
+- Query: "Colonies in Louisiana" with lat/lon → [SHOW_MAP: true]
+- Query: "Yearly counts by colony" with lat/lon → BOTH [SHOW_MAP: true] and [SHOW_CHART: line]
+- Query: "Compare species diversity across colonies" → [SHOW_CHART: bar]
 
 The visualization directives should be on the last line(s) of your response, after your explanation."""
 
