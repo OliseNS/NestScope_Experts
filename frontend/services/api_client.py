@@ -6,20 +6,25 @@ import requests
 import streamlit as st
 import json
 from typing import Dict, Any, List, Optional, Generator
+from .config import DEFAULT_MODEL
 
 
-def ask_question_to_backend(question: str, model: str = "anthropic/claude-opus-4.5") -> Dict[str, Any]:
+def ask_question_to_backend(question: str, model: str = None) -> Dict[str, Any]:
     """
     Send a question to the FastAPI backend and return the response.
 
     Args:
         question: Natural language question
-        model: LLM model to use
+        model: LLM model to use (defaults to MODEL_NAME from .env)
 
     Returns:
         Dictionary containing SQL query, results, and answer
     """
     from .config import API_BASE_URL
+
+    # Use DEFAULT_MODEL from config if not specified
+    if model is None:
+        model = DEFAULT_MODEL
 
     try:
         response = requests.post(
@@ -33,18 +38,22 @@ def ask_question_to_backend(question: str, model: str = "anthropic/claude-opus-4
         return {"success": False, "error": str(e)}
 
 
-def ask_question_streaming(question: str, model: str = "anthropic/claude-opus-4.5") -> Generator[Dict[str, Any], None, None]:
+def ask_question_streaming(question: str, model: str = None) -> Generator[Dict[str, Any], None, None]:
     """
     Send a question to the FastAPI backend and stream the response.
 
     Args:
         question: Natural language question
-        model: LLM model to use
+        model: LLM model to use (defaults to MODEL_NAME from .env)
 
     Yields:
         Events: {'type': 'sql_query'|'results'|'answer_chunk'|'error'|'done', 'content': ...}
     """
     from .config import API_BASE_URL
+
+    # Use DEFAULT_MODEL from config if not specified
+    if model is None:
+        model = DEFAULT_MODEL
 
     try:
         response = requests.post(

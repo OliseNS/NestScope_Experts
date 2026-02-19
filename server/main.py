@@ -47,7 +47,7 @@ app.add_middleware(
 # Request/Response Models
 class QuestionRequest(BaseModel):
     question: str
-    model: Optional[str] = "anthropic/claude-opus-4.5"
+    model: Optional[str] = None  # Use MODEL_NAME from env if not specified
 
 class QueryResponse(BaseModel):
     sql_query: str
@@ -100,6 +100,10 @@ class InsightsResponse(BaseModel):
 
 # Database configuration
 DB_PATH = os.getenv("DB_PATH", "../data/bird_data_complete.db")
+
+# Model configuration - SINGLE SOURCE OF TRUTH
+# Change this in .env file only
+MODEL_NAME = os.getenv("MODEL_NAME", "anthropic/claude-sonnet-4.5")
 
 # Get the directory where this file is located
 SERVER_DIR = Path(__file__).parent
@@ -201,10 +205,10 @@ def parse_visualization_directives(answer_text: str, results_df=None) -> Dict[st
 
 
 class SQLChatbot:
-    def __init__(self, db_path=DB_PATH, model="anthropic/claude-opus-4.5", prompt_path=None):
+    def __init__(self, db_path=DB_PATH, model=None, prompt_path=None):
         """Initialize the SQL chatbot"""
         self.db_path = db_path
-        self.model = model
+        self.model = model or MODEL_NAME  # Use MODEL_NAME from env if not specified
         self.schema = None
         self.prompt_path = prompt_path or str(DEFAULT_PROMPT_PATH)
         self.system_prompt = self._load_system_prompt()
@@ -614,8 +618,9 @@ async def ask_question(request: QuestionRequest):
     3. Return results and a natural language answer
     """
     try:
-        # Update model if provided
-        chatbot.model = request.model
+        # Update model if provided, otherwise use default from env
+        if request.model:
+            chatbot.model = request.model
 
         # Step 1: Generate SQL query
         sql_query = chatbot.generate_sql_query(request.question)
@@ -664,8 +669,9 @@ async def ask_question_stream(request: QuestionRequest):
     """
     async def event_generator():
         try:
-            # Update model if provided
-            chatbot.model = request.model
+            # Update model if provided, otherwise use default from env
+            if request.model:
+                chatbot.model = request.model
 
             # Step 1: Generate SQL query
             sql_query = chatbot.generate_sql_query(request.question)
