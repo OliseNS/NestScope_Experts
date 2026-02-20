@@ -613,11 +613,11 @@ def sam_status():
 @app.route('/api/sam_segment', methods=['POST'])
 def sam_segment():
     """
-    Accepts a single point click {x, y} in normalized 0-1, point_index, mode ('fast' or 'sahi'), and image filename.
+    Accepts a single point click {x, y} in normalized 0-1, point_index, mode ('fast' or 'zoom'), and image filename.
     Returns a bounding box from MobileSAM segmentation of the clicked object.
     NOW USING: MobileSAM from ultralytics for fast, accurate segmentation.
     OPTIMIZED: Lower resolution, caching, and FP16 for sub-second inference.
-    Supports SAHI (Slicing Aided Hyper Inference) for better small object detection.
+    Supports Zoom mode for better small object detection with higher resolution.
     """
     try:
         import time
@@ -626,7 +626,7 @@ def sam_segment():
         filename = data.get('filename')
         point_data = data.get('point')
         point_index = data.get('point_index', 0)
-        detection_mode = data.get('mode', 'fast')  # 'fast' or 'sahi'
+        detection_mode = data.get('mode', 'fast')  # 'fast' or 'zoom'
 
         if not point_data:
             return jsonify({"status": "error", "message": "No point provided"}), 400
@@ -665,12 +665,12 @@ def sam_segment():
         model = load_mobilesam_model()
 
         # Configure parameters based on detection mode
-        if detection_mode == 'sahi':
-            # SAHI mode: Higher resolution for better small object detection
+        if detection_mode == 'zoom':
+            # Zoom mode: Higher resolution for better small object detection
             imgsz = 1024  # Higher resolution
             retina_masks = True  # Better quality masks
             conf_threshold = 0.3  # Lower threshold for small objects
-            print(f"  → Using SAHI mode: imgsz={imgsz}, retina_masks=True, conf={conf_threshold}")
+            print(f"  → Using Zoom mode: imgsz={imgsz}, retina_masks=True, conf={conf_threshold}")
         else:
             # Fast mode: Optimized for speed
             imgsz = SEGMENT_IMGSZ  # 720 for speed

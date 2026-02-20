@@ -66,7 +66,7 @@ with st.sidebar:
         ">Settings</div>
     """, unsafe_allow_html=True)
 
-    st.info("💡 **Tip**: Start with Fast Mode for quick previews. Use SAHI Mode for better accuracy with small or distant birds.")
+    st.info("💡 **Tip**: Start with Fast Mode for quick previews. Use Zoom Mode for small or distant birds.")
 
 # ============================================================================
 # PAGE HEADER
@@ -98,7 +98,7 @@ with st.expander("ℹ️ About the Model", expanded=False):
 
     ### Processing Modes
     - **⚡ Fast Mode**: Quick inference using downsampling for large images. Best for real-time previews.
-    - **🎯 SAHI Mode**: Uses [SAHI](https://github.com/obss/sahi) (Slicing Aided Hyper Inference) for intelligent image slicing with optimal overlap. More accurate for detecting small or distant birds, but slower.
+    - **🎯 Zoom Mode**: Uses intelligent image slicing with optimal overlap. Better for detecting small or distant birds, but slower.
 
     ### Future Enhancements
     - 🐦 **Bird species classification** using ImageNet-based models
@@ -109,7 +109,7 @@ with st.expander("ℹ️ About the Model", expanded=False):
     - **Input image size**: 1024x1024 pixels
     - **Confidence threshold**: Adjustable (default 0.25)
     - **Model architecture**: YOLO-based object detection (ONNX format)
-    - **Smart slicing**: SAHI with 20% overlap for accurate mode
+    - **Smart slicing**: 20% overlap for Zoom mode
     - **Model file**: `server/seconditer.onnx`
     """)
 
@@ -146,9 +146,9 @@ st.markdown("**Processing Mode**")
 fast_mode = st.radio(
     "Choose detection mode:",
     options=[True, False],
-    format_func=lambda x: "⚡ Fast Mode (Recommended)" if x else "🎯 SAHI Mode (Accurate)",
+    format_func=lambda x: "⚡ Fast Mode (Recommended)" if x else "🎯 Zoom Mode",
     index=0,
-    help="Fast Mode: Quick inference with downsampling, best for previews.\nSAHI Mode: Smart slicing with optimal overlap, more accurate for detecting small objects but slower.",
+    help="Fast Mode: Quick inference with downsampling, best for previews.\nZoom Mode: Smart slicing with optimal overlap for detecting small or distant birds, but slower.",
     label_visibility="collapsed"
 )
 
