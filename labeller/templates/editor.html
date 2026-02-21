@@ -3,9 +3,23 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Labeling - {{ username }}</title>
+    <title>Nestperts - {{ username }}</title>
     <style>
-        body { margin: 0; padding: 0; display: flex; height: 100vh; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; overflow: hidden; background: #121212; color: #e0e0e0; }
+        body { margin: 0; padding: 0; display: flex; flex-direction: column; height: 100vh; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; overflow: hidden; background: #121212; color: #e0e0e0; }
+
+        .navbar { background: #1E1E1E; border-bottom: 1px solid #333; padding: 0.75rem 1.5rem; display: flex; justify-content: space-between; align-items: center; flex-shrink: 0; }
+        .navbar-brand { display: flex; align-items: center; gap: 0.75rem; }
+        .navbar-brand-icon { font-size: 1.25rem; }
+        .navbar-brand-text { font-size: 1rem; font-weight: 600; color: #E5E5E5; }
+        .navbar-links { display: flex; gap: 1rem; align-items: center; }
+        .navbar-link { color: #A0A0A0; text-decoration: none; padding: 0.5rem 1rem; border-radius: 6px; transition: all 0.2s; font-size: 0.875rem; }
+        .navbar-link:hover { color: #CC785C; background: rgba(204, 120, 92, 0.1); }
+        .service-status { display: flex; align-items: center; gap: 0.5rem; font-size: 0.75rem; color: #999; }
+        .status-dot { width: 8px; height: 8px; border-radius: 50%; }
+        .status-running { background: #4CAF50; }
+        .status-offline { background: #FF6464; }
+
+        .main-content { display: flex; flex-grow: 1; overflow: hidden; }
         
         #sidebar { 
             width: 320px; 
@@ -152,14 +166,32 @@
 </head>
 <body>
 
+<nav class="navbar">
+    <div class="navbar-brand">
+        <span class="navbar-brand-icon">🦅</span>
+        <span class="navbar-brand-text">NestScope</span>
+        <span style="color: #666; font-size: 0.875rem; margin-left: 0.5rem;">/</span>
+        <span style="color: #CC785C; font-size: 0.875rem; margin-left: 0.5rem;">Nestperts</span>
+    </div>
+    <div class="navbar-links">
+        <div class="service-status" id="service-status">
+            <span class="status-dot status-offline" id="status-indicator"></span>
+            <span id="status-text">Checking...</span>
+        </div>
+        <a href="/" class="navbar-link">Dashboard</a>
+        <a href="http://localhost:8501" target="_blank" class="navbar-link">← Back to NestScope</a>
+    </div>
+</nav>
+
 <div id="loader">
     <div class="spinner"></div>
     <div id="loader-text">Loading...</div>
 </div>
 
+<div class="main-content">
 <div id="sidebar">
     <div class="sidebar-header">
-        <h2 style="margin:0 0 5px 0; color: #fff;">OliseLabel</h2>
+        <h2 style="margin:0 0 5px 0; color: #fff;">Nestperts</h2>
         <div style="display:flex; justify-content:space-between; align-items:center; font-size:0.85em; color:#aaa;">
             <span>
                 <span id="username-display">{{ username }}</span>
@@ -198,6 +230,10 @@
         </div>
         
         <div id="selected-box-actions" style="display:none;">
+            <h4 style="margin: 15px 0 10px 0; color: #ccc;">Species Identification</h4>
+            <select id="species-select" style="width: 100%; padding: 10px; background: #1e1e1e; border: 1px solid #444; color: white; border-radius: 6px; margin-bottom: 10px;">
+                <option value="">Select Species...</option>
+            </select>
             <button id="delete-btn" class="btn-danger" onclick="deleteSelected()">Delete Selected Box</button>
         </div>
     </div>
@@ -234,6 +270,7 @@
             </div>
         </div>
 </div>
+</div> <!-- end main-content -->
 
 <script>
     const USERNAME = "{{ username }}";
@@ -245,10 +282,11 @@
     // --- STATE ---
     let appState = {
         classes: {{ classes | tojson }},
+        speciesList: {{ species_list | tojson }},
         currentImage: null,
         currentIndex: 0,
         totalImages: 0,
-        labels: [], // {class_id, x, y, w, h} (normalized 0-1)
+        labels: [], // {class_id, x, y, w, h, species} (normalized 0-1)
 
         selectedClassId: 0,
         selectedLabelIndex: -1,
@@ -287,6 +325,7 @@
     // --- INITIALIZATION ---
     function init() {
         renderClassList();
+        renderSpeciesList();
 
         // Initial Resize
         resizeCanvas();
@@ -676,12 +715,13 @@
                 ctx.fillRect(x + w - handleSize/2, y + h - handleSize/2, handleSize, handleSize);
             }
 
-            // Text (class name)
+            // Text (class name + species if available)
             ctx.save();
             ctx.fillStyle = color;
             ctx.font = `${14 / appState.scale}px Arial`;
             const className = appState.classes[l.class_id] || `Class ${l.class_id}`;
-            const text = className;
+            const speciesText = l.species ? ` - ${l.species}` : '';
+            const text = className + speciesText;
             const textWidth = ctx.measureText(text).width;
 
             // Draw background for text
@@ -749,6 +789,12 @@
 
         if (appState.selectedLabelIndex !== -1) {
             actionsDiv.style.display = 'block';
+            // Update species dropdown to show current species
+            const currentLabel = appState.labels[appState.selectedLabelIndex];
+            const speciesSelect = document.getElementById('species-select');
+            if (speciesSelect && currentLabel) {
+                speciesSelect.value = currentLabel.species || '';
+            }
         } else {
             actionsDiv.style.display = 'none';
         }
@@ -1210,6 +1256,31 @@
         });
     }
 
+    function renderSpeciesList() {
+        const speciesSelect = document.getElementById('species-select');
+        if (!speciesSelect) return;
+
+        // Clear existing options (keep first placeholder)
+        speciesSelect.innerHTML = '<option value="">Select Species...</option>';
+
+        // Add species options
+        appState.speciesList.forEach(species => {
+            const option = document.createElement('option');
+            option.value = species.code;
+            option.textContent = `${species.code} - ${species.name}`;
+            speciesSelect.appendChild(option);
+        });
+
+        // Add event listener for species selection
+        speciesSelect.onchange = function() {
+            if (appState.selectedLabelIndex !== -1) {
+                const selectedSpecies = this.value;
+                appState.labels[appState.selectedLabelIndex].species = selectedSpecies;
+                draw(); // Redraw to show species in label
+            }
+        };
+    }
+
     function showLoader(msg) {
         document.getElementById('loader').style.display = 'flex';
         document.getElementById('loader-text').innerText = msg;
@@ -1220,6 +1291,41 @@
     }
 
     init();
+
+    // Check service status
+    async function checkServiceStatus() {
+        try {
+            const response = await fetch('http://localhost:8000/services/status');
+            const data = await response.json();
+
+            const statusIndicator = document.getElementById('status-indicator');
+            const statusText = document.getElementById('status-text');
+
+            const services = data.services || {};
+            const runningCount = Object.values(services).filter(s => s.status === 'running').length;
+            const totalCount = Object.keys(services).length;
+
+            if (data.overall_status === 'healthy') {
+                statusIndicator.className = 'status-dot status-running';
+                statusText.textContent = 'All Services Online';
+            } else if (runningCount > 0) {
+                statusIndicator.className = 'status-dot status-offline';
+                statusText.textContent = `${runningCount}/${totalCount} Services Online`;
+            } else {
+                statusIndicator.className = 'status-dot status-offline';
+                statusText.textContent = 'Services Offline';
+            }
+        } catch (error) {
+            document.getElementById('status-indicator').className = 'status-dot status-offline';
+            document.getElementById('status-text').textContent = 'Status Unavailable';
+        }
+    }
+
+    // Check status on page load
+    checkServiceStatus();
+
+    // Refresh status every 30 seconds
+    setInterval(checkServiceStatus, 30000);
 </script>
 
 </body>

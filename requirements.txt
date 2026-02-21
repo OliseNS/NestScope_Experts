@@ -6,6 +6,9 @@ pandas>=2.0.0               # Data manipulation and CSV processing
 openai>=1.0.0               # OpenAI SDK for OpenRouter API access
 onnxruntime>=1.16.0         # ONNX Runtime for fast model inference
 
+# Backend Layer
+httpx>=0.25.0               # Async HTTP client for service status checks
+
 # Frontend Layer
 streamlit>=1.28.0           # Web application framework
 plotly>=5.18.0              # Interactive data visualizations

@@ -11,9 +11,9 @@ from PIL import Image
 
 # Import from modular structure
 from services import run_cv_inference, get_example_images, fetch_example_image, API_BASE_URL
-from utils import extract_crops_from_detections, load_species_list
+from utils import load_species_list
 from styles import get_custom_css
-from components import render_sidebar_header
+from components import render_sidebar_section, render_service_status_link
 
 # ============================================================================
 # PAGE CONFIGURATION
@@ -28,6 +28,40 @@ st.set_page_config(
 # Apply custom CSS
 st.markdown(get_custom_css(), unsafe_allow_html=True)
 
+# Hide Streamlit's default page navigation and add fixed header
+st.markdown("""
+<style>
+    [data-testid="stSidebarNav"] {
+        display: none;
+    }
+    .fixed-header {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        background: #1E1E1E;
+        border-bottom: 1px solid #333;
+        padding: 0.75rem 1.5rem;
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        z-index: 999999;
+    }
+    .main-content {
+        margin-top: 4rem;
+    }
+</style>
+""", unsafe_allow_html=True)
+
+# Fixed header
+st.markdown("""
+    <div class="fixed-header">
+        <span style="font-size: 1.5rem;">🦅</span>
+        <span style="font-size: 1rem; font-weight: 600; color: #E5E5E5;">NestScope</span>
+        <span style="color: #666; font-size: 0.875rem;">Avian Monitoring Suite</span>
+    </div>
+""", unsafe_allow_html=True)
+
 # ============================================================================
 # SESSION STATE INITIALIZATION
 # ============================================================================
@@ -41,32 +75,35 @@ if "cv_detection_result" not in st.session_state:
     st.session_state.cv_detection_result = None
 if "cv_last_processed_image" not in st.session_state:
     st.session_state.cv_last_processed_image = None
-if "crop_identifications" not in st.session_state:
-    st.session_state.crop_identifications = {}
 
 # ============================================================================
 # SIDEBAR
 # ============================================================================
 
 with st.sidebar:
-    # Render brand header
-    render_sidebar_header()
+    # Navigation Section
+    render_sidebar_section("Navigation")
 
-    # Settings Section
-    st.markdown("""
-        <div style="
-            font-size: 0.6875rem;
-            font-weight: 600;
-            text-transform: uppercase;
-            letter-spacing: 0.08em;
-            color: #A0A0A0;
-            margin: 1.5rem 0 0.75rem;
-            padding: 0 0.5rem;
-            opacity: 0.7;
-        ">Settings</div>
-    """, unsafe_allow_html=True)
+    if st.button("🏠 Home", use_container_width=True, help="Return to home page"):
+        st.switch_page("app.py")
 
-    st.info("💡 **Tip**: Start with Fast Mode for quick previews. Use Zoom Mode for small or distant birds.")
+    if st.button("💬 NestChat", use_container_width=True, help="Natural language data queries"):
+        st.switch_page("pages/01_nest_chat.py")
+
+    if st.button("🦅 NestVision", use_container_width=True, help="AI bird detection & counting", type="primary"):
+        st.rerun()
+
+    if st.button("🗄️ NestDB", use_container_width=True, help="Database management interface"):
+        st.switch_page("pages/04_db_editor.py")
+
+    # Tools section
+    render_sidebar_section("Tools")
+
+    st.link_button("🧑‍🔬 Nestperts", "http://localhost:5000", use_container_width=True, help="Expert species training platform")
+
+    # System Status section
+    render_sidebar_section("System Status")
+    render_service_status_link()
 
 # ============================================================================
 # PAGE HEADER
@@ -100,10 +137,10 @@ with st.expander("ℹ️ About the Model", expanded=False):
     - **⚡ Fast Mode**: Quick inference using downsampling for large images. Best for real-time previews.
     - **🎯 Zoom Mode**: Uses intelligent image slicing with optimal overlap. Better for detecting small or distant birds, but slower.
 
-    ### Future Enhancements
-    - 🐦 **Bird species classification** using ImageNet-based models
-    - 🎯 Identification of **specific bird species**, not just detection and counting
-    - 📈 **Combined detection + classification** will provide complete bird analysis
+    ### Species Identification
+    - For **expert species identification and training**, use the **Nestperts** platform
+    - Nestperts allows experts to assign species to detected birds
+    - Expert-labeled data is used to train future species classification models
 
     ### Technical Details
     - **Input image size**: 1024x1024 pixels
@@ -328,9 +365,9 @@ if image_to_process:
                     type="secondary"
                 )
             with col2:
-                if st.button("🔧 Correct AI", use_container_width=True, type="primary"):
-                    # Send image and detections to labeller
-                    with st.spinner("Uploading to labeller..."):
+                if st.button("🧑‍🔬 Train with Experts", use_container_width=True, type="primary"):
+                    # Send image and detections to Nestperts
+                    with st.spinner("Uploading to Nestperts..."):
                         correction_data = {
                             "image_base64": base64.b64encode(image_to_process).decode('utf-8'),
                             "detections": result.get("detections", [])
@@ -348,8 +385,8 @@ if image_to_process:
                                 correction_url = f"http://localhost:5000{correction_result['correction_url']}"
                                 image_filename = correction_result.get('image_filename', '')
 
-                                # Auto-open labeller in new tab using JavaScript
-                                st.success(f"✅ Uploaded as {image_filename}! Opening labeller...")
+                                # Auto-open Nestperts in new tab using JavaScript
+                                st.success(f"✅ Uploaded as {image_filename}! Opening Nestperts...")
 
                                 # JavaScript to open in new window
                                 js_code = f"""
@@ -360,12 +397,12 @@ if image_to_process:
                                 st.components.v1.html(js_code, height=0)
 
                                 # Also provide a fallback link
-                                st.markdown(f"**If the page didn't open automatically:** [Click here to open labeller]({correction_url})")
-                                st.info("💡 Your image has been added to the 'Corrections' user in the labeller. Use all the labelling tools to fix the detections!")
+                                st.markdown(f"**If the page didn't open automatically:** [Click here to open Nestperts]({correction_url})")
+                                st.info("💡 Your image has been added to the 'Experts' queue in Nestperts. Experts can refine detections and identify species!")
                             else:
                                 st.error(f"Failed to upload: {correction_response.status_code}")
                         except Exception as e:
-                            st.error(f"Error: Make sure the labeller app is running on port 5000")
+                            st.error(f"Error: Make sure the Nestperts app is running on port 5000")
                             st.code(f"python labeller/app.py --data nestvision")
 
         # ====================================================================
@@ -399,85 +436,6 @@ if image_to_process:
                             "detections": detections
                         })
 
-        # ====================================================================
-        # SPECIES IDENTIFICATION SECTION
-        # ====================================================================
-
-        if bird_count > 0:
-            st.markdown("---")
-            st.markdown("### 🐦 Species Identification Training")
-            st.caption("Help improve species recognition by identifying birds in these crops")
-
-            # Extract random crops
-            detections = result.get("detections", [])
-            crops = extract_crops_from_detections(image_to_process, detections, num_crops=5)
-
-            if crops:
-                # Load species list
-                species_list = load_species_list()
-                species_options = ["Not a bird"] + [f"{code} - {name}" for code, name in species_list]
-
-                # Display crops in a grid
-                num_cols = min(5, len(crops))
-                cols = st.columns(num_cols)
-
-                for idx, (crop_bytes, det) in enumerate(crops):
-                    with cols[idx % num_cols]:
-                        # Display crop
-                        crop_img = Image.open(BytesIO(crop_bytes))
-                        st.image(crop_img, use_container_width=True, caption=f"Detection #{idx+1}")
-
-                        # Species selector
-                        crop_key = f"crop_{id(image_name)}_{idx}"
-                        selected_species = st.selectbox(
-                            "Species",
-                            options=species_options,
-                            key=f"species_select_{crop_key}",
-                            label_visibility="collapsed"
-                        )
-
-                        # Save button
-                        if st.button("💾 Save", key=f"save_crop_{crop_key}", use_container_width=True):
-                            if selected_species == "Not a bird":
-                                st.warning("Please select a species")
-                            else:
-                                # Extract species code
-                                species_code = selected_species.split(" - ")[0]
-                                species_name = selected_species.split(" - ")[-1]
-
-                                # Send to backend
-                                with st.spinner("Saving crop..."):
-                                    try:
-                                        crop_data = {
-                                            "crop_base64": base64.b64encode(crop_bytes).decode('utf-8'),
-                                            "species_code": species_code,
-                                            "species_name": species_name
-                                        }
-
-                                        crop_response = requests.post(
-                                            "http://localhost:5000/api/crop/save",
-                                            json=crop_data,
-                                            timeout=30
-                                        )
-
-                                        if crop_response.status_code == 200:
-                                            st.success(f"✅ Saved as {species_code}!")
-                                            st.session_state.crop_identifications[crop_key] = species_code
-                                        else:
-                                            st.error("Failed to save crop")
-                                    except Exception as e:
-                                        st.error("Error: Make sure labeller app is running")
-                                        st.code("python labeller/app.py")
-
-                st.markdown("---")
-                st.info("""
-                **Why identify species?**
-
-                These identified crops will be used to train a species classification model.
-                The more accurate identifications we collect, the better the model becomes!
-
-                Crops are saved to: `nestvision/crops/`
-                """)
 
     elif result and "error" in result:
         st.error(f"❌ Inference failed: {result['error']}")

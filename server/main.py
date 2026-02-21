@@ -18,6 +18,7 @@ import json
 import asyncio
 import cv2
 import base64
+import httpx
 from server.cv_tools.inference import BirdDetector, get_example_images
 
 # Load environment variables
@@ -97,6 +98,57 @@ class InsightsRequest(BaseModel):
 class InsightsResponse(BaseModel):
     success: bool
     insights: Optional[str]
+    error: Optional[str] = None
+
+class TableListResponse(BaseModel):
+    tables: List[str]
+
+class TableDataRequest(BaseModel):
+    table_name: str
+    page: int = 1
+    page_size: int = 50
+
+class TableDataResponse(BaseModel):
+    success: bool
+    data: Optional[List[Dict[str, Any]]]
+    total_rows: int
+    page: int
+    page_size: int
+    total_pages: int
+    error: Optional[str] = None
+
+class TableSchemaResponse(BaseModel):
+    success: bool
+    table_name: str
+    columns: Optional[List[Dict[str, Any]]]
+    error: Optional[str] = None
+
+class RowUpdateRequest(BaseModel):
+    table_name: str
+    row_id: Dict[str, Any]  # Primary key column(s) and value(s)
+    updates: Dict[str, Any]  # Columns to update
+
+class RowUpdateResponse(BaseModel):
+    success: bool
+    message: Optional[str]
+    error: Optional[str] = None
+
+class RowDeleteRequest(BaseModel):
+    table_name: str
+    row_id: Dict[str, Any]  # Primary key column(s) and value(s)
+
+class RowDeleteResponse(BaseModel):
+    success: bool
+    message: Optional[str]
+    error: Optional[str] = None
+
+class RowInsertRequest(BaseModel):
+    table_name: str
+    row_data: Dict[str, Any]  # Column names and values
+
+class RowInsertResponse(BaseModel):
+    success: bool
+    message: Optional[str]
     error: Optional[str] = None
 
 # Database configuration
@@ -578,6 +630,62 @@ async def health():
     except Exception as e:
         raise HTTPException(status_code=503, detail=f"Database connection failed: {str(e)}")
 
+@app.get("/services/status")
+async def get_services_status():
+    """
+    Check the status of all NestScope services
+    Returns the health status of:
+    - FastAPI backend (port 8000)
+    - Streamlit frontend (port 8501)
+    - Flask Labeller (port 5000)
+    """
+    import httpx
+
+    services = {
+        "backend": {
+            "name": "FastAPI Backend",
+            "url": "http://localhost:8000/health",
+            "status": "unknown",
+            "port": 8000
+        },
+        "frontend": {
+            "name": "Streamlit Frontend",
+            "url": "http://localhost:8501",
+            "status": "unknown",
+            "port": 8501
+        },
+        "labeller": {
+            "name": "Flask Labeller",
+            "url": "http://localhost:5000",
+            "status": "unknown",
+            "port": 5000
+        }
+    }
+
+    # Check each service with a short timeout
+    async with httpx.AsyncClient(timeout=2.0) as client:
+        for service_key, service_info in services.items():
+            try:
+                response = await client.get(service_info["url"])
+                if response.status_code == 200:
+                    services[service_key]["status"] = "running"
+                else:
+                    services[service_key]["status"] = "error"
+            except (httpx.ConnectError, httpx.TimeoutException):
+                services[service_key]["status"] = "offline"
+            except Exception as e:
+                services[service_key]["status"] = "error"
+                services[service_key]["error"] = str(e)
+
+    # Overall status
+    all_running = all(s["status"] == "running" for s in services.values())
+
+    return {
+        "overall_status": "healthy" if all_running else "degraded",
+        "services": services,
+        "timestamp": pd.Timestamp.now().isoformat()
+    }
+
 @app.get("/schema", response_model=SchemaResponse)
 async def get_schema():
     """Get database schema"""
@@ -972,6 +1080,314 @@ Column Statistics:
         return InsightsResponse(
             success=False,
             insights=None,
+            error=str(e)
+        )
+
+# ============================================================================
+# DATABASE BROWSER ENDPOINTS
+# ============================================================================
+
+@app.get("/db/tables", response_model=TableListResponse)
+async def get_tables():
+    """
+    Get list of all tables in the database.
+
+    Returns:
+        TableListResponse with list of table names
+    """
+    try:
+        conn = chatbot.get_connection()
+        cursor = conn.cursor()
+
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")
+        tables = [row[0] for row in cursor.fetchall()]
+
+        conn.close()
+
+        return TableListResponse(tables=tables)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/db/table/{table_name}", response_model=TableDataResponse)
+async def get_table_data(table_name: str, page: int = 1, page_size: int = 50):
+    """
+    Get paginated data from a specific table.
+
+    Args:
+        table_name: Name of the table
+        page: Page number (1-indexed)
+        page_size: Number of rows per page
+
+    Returns:
+        TableDataResponse with paginated data
+    """
+    try:
+        conn = chatbot.get_connection()
+        cursor = conn.cursor()
+
+        # Validate table exists
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name=?", (table_name,))
+        if not cursor.fetchone():
+            conn.close()
+            return TableDataResponse(
+                success=False,
+                data=None,
+                total_rows=0,
+                page=page,
+                page_size=page_size,
+                total_pages=0,
+                error=f"Table '{table_name}' not found"
+            )
+
+        # Get total row count
+        cursor.execute(f"SELECT COUNT(*) FROM {table_name}")
+        total_rows = cursor.fetchone()[0]
+
+        # Calculate pagination
+        total_pages = (total_rows + page_size - 1) // page_size
+        offset = (page - 1) * page_size
+
+        # Get paginated data
+        query = f"SELECT * FROM {table_name} LIMIT ? OFFSET ?"
+        df = pd.read_sql_query(query, conn, params=(page_size, offset))
+
+        conn.close()
+
+        # Convert DataFrame to list of dicts
+        data = df.to_dict('records')
+
+        return TableDataResponse(
+            success=True,
+            data=data,
+            total_rows=total_rows,
+            page=page,
+            page_size=page_size,
+            total_pages=total_pages,
+            error=None
+        )
+    except Exception as e:
+        return TableDataResponse(
+            success=False,
+            data=None,
+            total_rows=0,
+            page=page,
+            page_size=page_size,
+            total_pages=0,
+            error=str(e)
+        )
+
+@app.get("/db/table/{table_name}/schema", response_model=TableSchemaResponse)
+async def get_table_schema(table_name: str):
+    """
+    Get schema information for a specific table.
+
+    Args:
+        table_name: Name of the table
+
+    Returns:
+        TableSchemaResponse with column information
+    """
+    try:
+        conn = chatbot.get_connection()
+        cursor = conn.cursor()
+
+        # Validate table exists
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name=?", (table_name,))
+        if not cursor.fetchone():
+            conn.close()
+            return TableSchemaResponse(
+                success=False,
+                table_name=table_name,
+                columns=None,
+                error=f"Table '{table_name}' not found"
+            )
+
+        # Get column info
+        cursor.execute(f"PRAGMA table_info({table_name})")
+        columns_raw = cursor.fetchall()
+
+        columns = []
+        for col in columns_raw:
+            columns.append({
+                'cid': col[0],
+                'name': col[1],
+                'type': col[2],
+                'notnull': bool(col[3]),
+                'default_value': col[4],
+                'pk': bool(col[5])
+            })
+
+        conn.close()
+
+        return TableSchemaResponse(
+            success=True,
+            table_name=table_name,
+            columns=columns,
+            error=None
+        )
+    except Exception as e:
+        return TableSchemaResponse(
+            success=False,
+            table_name=table_name,
+            columns=None,
+            error=str(e)
+        )
+
+@app.put("/db/table/{table_name}/row", response_model=RowUpdateResponse)
+async def update_table_row(table_name: str, request: RowUpdateRequest):
+    """
+    Update a row in a table.
+
+    Args:
+        table_name: Name of the table
+        request: RowUpdateRequest with row_id and updates
+
+    Returns:
+        RowUpdateResponse with success status
+    """
+    try:
+        conn = chatbot.get_connection()
+        cursor = conn.cursor()
+
+        # Build WHERE clause from row_id
+        where_parts = []
+        where_values = []
+        for col, val in request.row_id.items():
+            where_parts.append(f"{col} = ?")
+            where_values.append(val)
+        where_clause = " AND ".join(where_parts)
+
+        # Build UPDATE SET clause
+        set_parts = []
+        set_values = []
+        for col, val in request.updates.items():
+            set_parts.append(f"{col} = ?")
+            set_values.append(val)
+        set_clause = ", ".join(set_parts)
+
+        # Execute update
+        query = f"UPDATE {table_name} SET {set_clause} WHERE {where_clause}"
+        cursor.execute(query, set_values + where_values)
+        conn.commit()
+
+        rows_affected = cursor.rowcount
+        conn.close()
+
+        if rows_affected == 0:
+            return RowUpdateResponse(
+                success=False,
+                message=None,
+                error="No rows were updated. Row may not exist."
+            )
+
+        return RowUpdateResponse(
+            success=True,
+            message=f"Successfully updated {rows_affected} row(s)",
+            error=None
+        )
+    except Exception as e:
+        return RowUpdateResponse(
+            success=False,
+            message=None,
+            error=str(e)
+        )
+
+@app.delete("/db/table/{table_name}/row", response_model=RowDeleteResponse)
+async def delete_table_row(table_name: str, request: RowDeleteRequest):
+    """
+    Delete a row from a table.
+
+    Args:
+        table_name: Name of the table
+        request: RowDeleteRequest with row_id
+
+    Returns:
+        RowDeleteResponse with success status
+    """
+    try:
+        conn = chatbot.get_connection()
+        cursor = conn.cursor()
+
+        # Build WHERE clause from row_id
+        where_parts = []
+        where_values = []
+        for col, val in request.row_id.items():
+            where_parts.append(f"{col} = ?")
+            where_values.append(val)
+        where_clause = " AND ".join(where_parts)
+
+        # Execute delete
+        query = f"DELETE FROM {table_name} WHERE {where_clause}"
+        cursor.execute(query, where_values)
+        conn.commit()
+
+        rows_affected = cursor.rowcount
+        conn.close()
+
+        if rows_affected == 0:
+            return RowDeleteResponse(
+                success=False,
+                message=None,
+                error="No rows were deleted. Row may not exist."
+            )
+
+        return RowDeleteResponse(
+            success=True,
+            message=f"Successfully deleted {rows_affected} row(s)",
+            error=None
+        )
+    except Exception as e:
+        return RowDeleteResponse(
+            success=False,
+            message=None,
+            error=str(e)
+        )
+
+@app.post("/db/table/{table_name}/row", response_model=RowInsertResponse)
+async def insert_table_row(table_name: str, request: RowInsertRequest):
+    """
+    Insert a new row into a table.
+
+    Args:
+        table_name: Name of the table
+        request: RowInsertRequest with row_data
+
+    Returns:
+        RowInsertResponse with success status
+    """
+    try:
+        conn = chatbot.get_connection()
+        cursor = conn.cursor()
+
+        # Build INSERT query
+        columns = list(request.row_data.keys())
+        values = list(request.row_data.values())
+        placeholders = ", ".join(["?" for _ in values])
+        columns_str = ", ".join(columns)
+
+        query = f"INSERT INTO {table_name} ({columns_str}) VALUES ({placeholders})"
+        cursor.execute(query, values)
+        conn.commit()
+
+        rows_affected = cursor.rowcount
+        conn.close()
+
+        if rows_affected == 0:
+            return RowInsertResponse(
+                success=False,
+                message=None,
+                error="No rows were inserted."
+            )
+
+        return RowInsertResponse(
+            success=True,
+            message=f"Successfully inserted {rows_affected} row(s)",
+            error=None
+        )
+    except Exception as e:
+        return RowInsertResponse(
+            success=False,
+            message=None,
             error=str(e)
         )
 
