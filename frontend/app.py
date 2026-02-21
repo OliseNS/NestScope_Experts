@@ -5,7 +5,7 @@ Avian Monitoring Analytics Platform
 
 import streamlit as st
 from styles import get_custom_css
-from components import render_sidebar_header
+from components import render_sidebar_section, render_service_status_link
 
 # Page configuration
 st.set_page_config(
@@ -15,58 +15,156 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
+# Hide Streamlit's default page navigation
+st.markdown("""
+<style>
+    /* Hide Streamlit's page navigation */
+    [data-testid="stSidebarNav"] {
+        display: none;
+    }
+
+    /* Fixed header */
+    .fixed-header {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        background: #1E1E1E;
+        border-bottom: 1px solid #333;
+        padding: 0.75rem 1.5rem;
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        z-index: 999999;
+    }
+
+    .main-content {
+        margin-top: 4rem;
+    }
+</style>
+""", unsafe_allow_html=True)
+
+# Set page name for top bar
+if 'page_name' not in st.session_state:
+    st.session_state.page_name = "Home"
+
 # Apply custom styling
 st.markdown(get_custom_css(), unsafe_allow_html=True)
 
-# Render sidebar
+# Fixed header
+st.markdown("""
+    <div class="fixed-header">
+        <span style="font-size: 1.5rem;">🦅</span>
+        <span style="font-size: 1rem; font-weight: 600; color: #E5E5E5;">NestScope</span>
+        <span style="color: #666; font-size: 0.875rem;">Avian Monitoring Suite</span>
+    </div>
+""", unsafe_allow_html=True)
+
+# Render sidebar with Google Cloud-like organization
 with st.sidebar:
-    render_sidebar_header()
+    # Navigation section
+    render_sidebar_section("Navigation")
 
-    st.markdown("""
-        <div style="
-            font-size: 0.6875rem;
-            font-weight: 600;
-            text-transform: uppercase;
-            letter-spacing: 0.08em;
-            color: #A0A0A0;
-            margin: 1.5rem 0 0.75rem;
-            padding: 0 0.5rem;
-            opacity: 0.7;
-        ">Features</div>
-    """, unsafe_allow_html=True)
+    if st.button("🏠 Home", use_container_width=True, help="Return to home page", type="primary"):
+        st.rerun()
 
-    if st.button("💬 NestChat", use_container_width=True, help="Natural language queries"):
+    if st.button("💬 NestChat", use_container_width=True, help="Natural language data queries"):
         st.switch_page("pages/01_nest_chat.py")
 
-    if st.button("🦅 NestVision", use_container_width=True, help="Bird detection & counting"):
+    if st.button("🦅 NestVision", use_container_width=True, help="AI bird detection & counting"):
         st.switch_page("pages/02_nest_vision.py")
 
-# Main landing page
-st.title("NestScope")
-st.caption("AI-powered Gulf Coast avian monitoring analytics")
+    if st.button("🗄️ NestDB", use_container_width=True, help="Database management interface"):
+        st.switch_page("pages/04_db_editor.py")
 
+    # Tools section
+    render_sidebar_section("Tools")
+
+    # Nestperts link using st.link_button
+    st.link_button("🧑‍🔬 Nestperts", "http://localhost:5000", use_container_width=True, help="Expert species training platform")
+
+    # System Status section
+    render_sidebar_section("System Status")
+    render_service_status_link()
+
+# Main content wrapper
+st.markdown('<div class="main-content">', unsafe_allow_html=True)
+
+# Main landing page - Google Cloud style
 st.markdown("""
-<div class="title-card">
-    <h3>Welcome to NestScope</h3>
-    <p>
+    <div style="margin: 0 0 2.5rem 0;">
+        <div style="display: flex; align-items: center; margin-bottom: 0.75rem;">
+            <h1 style="
+                color: #E5E5E5;
+                font-size: 2.5rem;
+                font-weight: 600;
+                margin: 0;
+                letter-spacing: -0.03em;
+            ">Welcome to NestScope</h1>
+        </div>
+        <p style="
+            color: #A0A0A0;
+            font-size: 1rem;
+            margin: 0;
+            line-height: 1.6;
+        ">AI-powered Gulf Coast avian monitoring and analytics platform</p>
+    </div>
+""", unsafe_allow_html=True)
+
+# Overview card
+st.markdown("""
+<div style="
+    background: linear-gradient(135deg, rgba(217, 119, 87, 0.08) 0%, rgba(217, 119, 87, 0.02) 100%);
+    border: 1px solid rgba(217, 119, 87, 0.2);
+    border-radius: 12px;
+    padding: 2rem;
+    margin-bottom: 2.5rem;
+">
+    <p style="color: #E5E5E5; font-size: 1rem; line-height: 1.7; margin: 0;">
         Explore Gulf Coast bird colony data from 2010-2021 using natural language queries and AI-powered computer vision.
         Ask questions, visualize trends, and detect birds in aerial imagery.
     </p>
 </div>
 """, unsafe_allow_html=True)
 
-# Feature cards with clean styling
-st.markdown("### Features")
-col1, col2 = st.columns(2, gap="medium")
+# Feature cards with Google Cloud style
+st.markdown("""
+    <div style="
+        font-size: 0.6875rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: #A0A0A0;
+        margin-bottom: 1rem;
+    ">Features</div>
+""", unsafe_allow_html=True)
+
+col1, col2 = st.columns(2, gap="large")
 
 with col1:
     st.markdown("""
-    <div style="background: var(--claude-surface); border: 1px solid var(--claude-border); border-radius: 12px; padding: 1.5rem; height: 100%;">
-        <h4 style="color: var(--claude-orange); margin-top: 0; font-size: 1.125rem; font-weight: 600;">💬 NestChat</h4>
-        <p style="color: var(--claude-text-light); font-size: 0.875rem; line-height: 1.6; margin-bottom: 1rem;">
-            Natural language interface for querying bird survey data
+    <div style="
+        background: #2D2D2D;
+        border: 1px solid #404040;
+        border-radius: 12px;
+        padding: 1.75rem;
+        height: 100%;
+        transition: all 0.2s ease;
+    " onmouseover="this.style.borderColor='#D97757'; this.style.background='#333';" onmouseout="this.style.borderColor='#404040'; this.style.background='#2D2D2D';">
+        <div style="
+            display: inline-block;
+            background: rgba(217, 119, 87, 0.15);
+            border-radius: 8px;
+            padding: 0.5rem 0.75rem;
+            margin-bottom: 1rem;
+        ">
+            <span style="font-size: 1.5rem;">💬</span>
+        </div>
+        <h3 style="color: #E5E5E5; margin: 0 0 0.75rem 0; font-size: 1.25rem; font-weight: 600;">NestChat</h3>
+        <p style="color: #A0A0A0; font-size: 0.875rem; line-height: 1.6; margin-bottom: 1.25rem;">
+            Natural language interface for querying bird survey data with intelligent visualizations
         </p>
-        <ul style="color: var(--claude-text); font-size: 0.875rem; line-height: 1.8; margin-left: 1.25rem;">
+        <ul style="color: #E5E5E5; font-size: 0.875rem; line-height: 1.8; margin-left: 1.25rem; padding-left: 0;">
             <li>Ask questions in plain English</li>
             <li>Instant visualizations and insights</li>
             <li>Interactive maps and charts</li>
@@ -77,12 +175,28 @@ with col1:
 
 with col2:
     st.markdown("""
-    <div style="background: var(--claude-surface); border: 1px solid var(--claude-border); border-radius: 12px; padding: 1.5rem; height: 100%;">
-        <h4 style="color: var(--claude-orange); margin-top: 0; font-size: 1.125rem; font-weight: 600;">🦅 NestVision</h4>
-        <p style="color: var(--claude-text-light); font-size: 0.875rem; line-height: 1.6; margin-bottom: 1rem;">
-            Computer vision for bird detection and counting
+    <div style="
+        background: #2D2D2D;
+        border: 1px solid #404040;
+        border-radius: 12px;
+        padding: 1.75rem;
+        height: 100%;
+        transition: all 0.2s ease;
+    " onmouseover="this.style.borderColor='#D97757'; this.style.background='#333';" onmouseout="this.style.borderColor='#404040'; this.style.background='#2D2D2D';">
+        <div style="
+            display: inline-block;
+            background: rgba(217, 119, 87, 0.15);
+            border-radius: 8px;
+            padding: 0.5rem 0.75rem;
+            margin-bottom: 1rem;
+        ">
+            <span style="font-size: 1.5rem;">🦅</span>
+        </div>
+        <h3 style="color: #E5E5E5; margin: 0 0 0.75rem 0; font-size: 1.25rem; font-weight: 600;">NestVision</h3>
+        <p style="color: #A0A0A0; font-size: 0.875rem; line-height: 1.6; margin-bottom: 1.25rem;">
+            AI-powered computer vision for bird detection and counting in colony images
         </p>
-        <ul style="color: var(--claude-text); font-size: 0.875rem; line-height: 1.8; margin-left: 1.25rem;">
+        <ul style="color: #E5E5E5; font-size: 0.875rem; line-height: 1.8; margin-left: 1.25rem; padding-left: 0;">
             <li>Upload colony images</li>
             <li>Automatic bird detection</li>
             <li>Export annotated results</li>
@@ -91,10 +205,20 @@ with col2:
     </div>
     """, unsafe_allow_html=True)
 
-st.markdown("<br>", unsafe_allow_html=True)
+st.markdown("<div style='height: 2rem;'></div>", unsafe_allow_html=True)
 
-# Dataset info in a compact grid
-st.markdown("### Dataset Overview")
+# Dataset metrics - Google Cloud style
+st.markdown("""
+    <div style="
+        font-size: 0.6875rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: #A0A0A0;
+        margin-bottom: 1rem;
+    ">Dataset Overview</div>
+""", unsafe_allow_html=True)
+
 metric_col1, metric_col2, metric_col3, metric_col4 = st.columns(4)
 with metric_col1:
     st.metric("Years", "2010-2021")
@@ -105,15 +229,26 @@ with metric_col3:
 with metric_col4:
     st.metric("Observations", "100K+")
 
-st.markdown("<br>", unsafe_allow_html=True)
+st.markdown("<div style='height: 2rem;'></div>", unsafe_allow_html=True)
 
-# Quick start guide
+# Quick start guide - cleaner format
 st.markdown("""
-### Getting Started
+    <div style="
+        font-size: 0.6875rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: #A0A0A0;
+        margin-bottom: 1rem;
+    ">Getting Started</div>
+""", unsafe_allow_html=True)
 
-1. **NestChat**: Ask questions about bird populations, trends, and locations
-2. **NestVision**: Upload images for automatic bird detection and counting
-3. **Export**: Download results as CSV files or annotated images
-
-Navigate to a feature using the sidebar menu.
-""")
+st.markdown("""
+<div style="background: #2D2D2D; border: 1px solid #404040; border-radius: 12px; padding: 1.5rem;">
+    <ol style="color: #E5E5E5; font-size: 0.875rem; line-height: 2; margin: 0; padding-left: 1.5rem;">
+        <li><strong style="color: #D97757;">NestChat:</strong> Ask questions about bird populations, trends, and locations</li>
+        <li><strong style="color: #D97757;">NestVision:</strong> Upload images for automatic bird detection and counting</li>
+        <li><strong style="color: #D97757;">Export:</strong> Download results as CSV files or annotated images</li>
+    </ol>
+</div>
+""", unsafe_allow_html=True)

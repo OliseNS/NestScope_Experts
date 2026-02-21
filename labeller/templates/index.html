@@ -3,10 +3,21 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>OliseLabel - Dashboard</title>
+    <title>Nestperts - Bird Species Training</title>
     <style>
-        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background: #0F0F0F; color: #E0E0E0; margin: 0; padding: 20px; }
-        .container { max-width: 800px; margin: 0 auto; background: #1E1E1E; padding: 40px; border-radius: 12px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3); }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background: #0F0F0F; color: #E0E0E0; margin: 0; padding: 0; }
+        .navbar { background: #1E1E1E; border-bottom: 1px solid #333; padding: 1rem 2rem; display: flex; justify-content: space-between; align-items: center; }
+        .navbar-brand { display: flex; align-items: center; gap: 0.75rem; }
+        .navbar-brand-icon { font-size: 1.5rem; }
+        .navbar-brand-text { font-size: 1.25rem; font-weight: 600; color: #E5E5E5; }
+        .navbar-links { display: flex; gap: 1rem; align-items: center; }
+        .navbar-link { color: #A0A0A0; text-decoration: none; padding: 0.5rem 1rem; border-radius: 6px; transition: all 0.2s; font-size: 0.875rem; }
+        .navbar-link:hover { color: #CC785C; background: rgba(204, 120, 92, 0.1); }
+        .service-status { display: flex; align-items: center; gap: 0.5rem; font-size: 0.75rem; color: #999; }
+        .status-dot { width: 8px; height: 8px; border-radius: 50%; }
+        .status-running { background: #4CAF50; }
+        .status-offline { background: #FF6464; }
+        .container { max-width: 800px; margin: 0 auto; background: #1E1E1E; padding: 40px; border-radius: 12px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3); margin-top: 20px; margin-bottom: 20px; }
         h1 { color: #FFFFFF; margin-bottom: 30px; }
         .setup-box { border: 2px dashed #444; padding: 20px; border-radius: 8px; text-align: center; }
         input[type="text"], input[type="number"] { width: 100%; padding: 10px; margin: 10px 0; border: 1px solid #444; background: #252526; color: #E0E0E0; border-radius: 6px; box-sizing: border-box; }
@@ -54,13 +65,29 @@
 </head>
 <body>
 
+<nav class="navbar">
+    <div class="navbar-brand">
+        <span class="navbar-brand-icon">🦅</span>
+        <span class="navbar-brand-text">NestScope</span>
+        <span style="color: #666; font-size: 0.875rem; margin-left: 0.5rem;">/</span>
+        <span style="color: #CC785C; font-size: 0.875rem; margin-left: 0.5rem;">Nestperts</span>
+    </div>
+    <div class="navbar-links">
+        <div class="service-status" id="service-status">
+            <span class="status-dot status-offline" id="status-indicator"></span>
+            <span id="status-text">Checking...</span>
+        </div>
+        <a href="http://localhost:8501" target="_blank" class="navbar-link">← Back to NestScope</a>
+    </div>
+</nav>
+
 <div class="container">
-    <h1>OliseLabel Manager</h1>
+    <h1>Nestperts - Expert Training Platform</h1>
 
     {% if setup_needed %}
     <div class="setup-box">
         <h2>Initialize Project</h2>
-        <p>This folder hasn't been set up yet. Configure your labeling team.</p>
+        <p>Configure your expert team for bird species training and annotation.</p>
         <form action="/setup" method="POST">
             <label style="display:block; text-align:left; font-weight:bold;">Number of Team Members</label>
             <input type="number" name="num_users" value="4" min="1" required>
@@ -230,6 +257,41 @@
             }
         }
     }
+
+    // Check service status
+    async function checkServiceStatus() {
+        try {
+            const response = await fetch('http://localhost:8000/services/status');
+            const data = await response.json();
+
+            const statusIndicator = document.getElementById('status-indicator');
+            const statusText = document.getElementById('status-text');
+
+            const services = data.services || {};
+            const runningCount = Object.values(services).filter(s => s.status === 'running').length;
+            const totalCount = Object.keys(services).length;
+
+            if (data.overall_status === 'healthy') {
+                statusIndicator.className = 'status-dot status-running';
+                statusText.textContent = 'All Services Online';
+            } else if (runningCount > 0) {
+                statusIndicator.className = 'status-dot status-offline';
+                statusText.textContent = `${runningCount}/${totalCount} Services Online`;
+            } else {
+                statusIndicator.className = 'status-dot status-offline';
+                statusText.textContent = 'Services Offline';
+            }
+        } catch (error) {
+            document.getElementById('status-indicator').className = 'status-dot status-offline';
+            document.getElementById('status-text').textContent = 'Status Unavailable';
+        }
+    }
+
+    // Check status on page load
+    checkServiceStatus();
+
+    // Refresh status every 30 seconds
+    setInterval(checkServiceStatus, 30000);
 </script>
 
 </body>

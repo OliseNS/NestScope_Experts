@@ -7,7 +7,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 **NestScope** is an AI-powered Gulf Coast avian monitoring platform that combines:
 - Natural language database queries (NestChat)
 - Computer vision bird detection and counting (NestVision)
-- Manual annotation correction tool (Labeller)
+- Expert species training and annotation platform (Nestperts)
 
 Data covers 2010-2021 bird colony observations across Texas, Louisiana, Mississippi, Alabama, and Florida.
 
@@ -23,12 +23,12 @@ Start all services at once:
 This launches three services:
 - **FastAPI backend**: http://localhost:8000 (health check at `/health`)
 - **Streamlit frontend**: http://localhost:8501
-- **Labeller app**: http://localhost:5000
+- **Nestperts app**: http://localhost:5000
 
 Logs are written to `logs/` directory:
 - `logs/server.log` - FastAPI backend logs
 - `logs/streamlit.log` - Streamlit frontend logs
-- `logs/labeller.log` - Flask labeller logs
+- `logs/nestperts.log` - Flask Nestperts logs
 
 ### Running Services Individually
 
@@ -42,7 +42,7 @@ python -m uvicorn server.main:app --host 0.0.0.0 --port 8000 --reload
 streamlit run frontend/app.py --server.port 8501
 ```
 
-**Labeller:**
+**Nestperts:**
 ```bash
 python labeller/app.py --data labeller/nestvision
 ```
@@ -142,18 +142,19 @@ else:
 - No confidence labels displayed (clean annotation)
 - Boxes drawn with 3px thickness
 
-### 3. Annotation Labeller (Correction Tool)
+### 3. Nestperts (Expert Species Training Platform)
 
-**Purpose:** Manual correction of bird detection results using MobileSAM segmentation
+**Purpose:** Expert platform for bird species identification and training data annotation using MobileSAM segmentation
 
-**Flask-based UI** at port 5000 with dataset management:
-- Multi-user annotation workflow
+**Flask-based UI** at port 5000 with expert workflow features:
+- Multi-expert annotation workflow
+- Species identification and classification
 - Project state tracked in `project_state.json`
-- YOLO format labels (normalized coordinates)
+- YOLO format labels (normalized coordinates) with species metadata
 
 **MobileSAM Integration:**
 
-The labeller uses MobileSAM (from Ultralytics) for interactive segmentation:
+Nestperts uses MobileSAM (from Ultralytics) for interactive segmentation:
 - Point-based segmentation: user clicks on bird → generates bounding box
 - Two detection modes:
   - **Fast mode**: 720x720 resolution, no retina masks (optimized for speed)
@@ -164,14 +165,15 @@ The labeller uses MobileSAM (from Ultralytics) for interactive segmentation:
 - `GET /api/sam_status` - Model status and device info (GPU/CPU)
 - `POST /api/correction/upload` - Upload image with detections for correction
 
-**Correction Workflow:**
-1. User runs inference on image in NestVision
-2. Clicks "Correct Annotations" button
-3. Image uploaded to labeller via `/api/correction/upload`
+**Expert Training Workflow:**
+1. Expert runs inference on image in NestVision
+2. Clicks "Train with Experts" button to send to Nestperts
+3. Image uploaded to Nestperts via `/api/correction/upload`
 4. Image saved to `labeller/nestvision/images/`
 5. Initial detections saved as YOLO labels in `labeller/nestvision/labels/`
-6. User can refine labels using MobileSAM point clicks
-7. Corrections saved and can be used for retraining
+6. Expert refines bounding boxes using MobileSAM point clicks
+7. Expert assigns species to each detected bird
+8. Species-labeled data saved for training classification models
 
 **Important Implementation Details:**
 - `IMAGE_CACHE` reduces redundant image loading during segmentation
@@ -193,10 +195,10 @@ The labeller uses MobileSAM (from Ultralytics) for interactive segmentation:
 - `frontend/services/api_client.py` - Backend API communication
 - `frontend/styles/` - UI theming and styles
 
-### Labeller (Flask)
-- `labeller/app.py` - Flask app with MobileSAM integration
-- `labeller/templates/` - HTML templates for UI
-- `labeller/nestvision/` - Dataset directory (images/, labels/, classes.txt)
+### Nestperts (Flask)
+- `labeller/app.py` - Flask app with MobileSAM integration and species training
+- `labeller/templates/` - HTML templates for expert UI
+- `labeller/nestvision/` - Dataset directory (images/, labels/, classes.txt, species data)
 
 ### Models
 - `models/seconditer.onnx` - YOLOv8 bird detection model (1024x1024 input)
@@ -223,7 +225,7 @@ open http://localhost:8000/docs
 # Tail logs in real-time
 tail -f logs/server.log
 tail -f logs/streamlit.log
-tail -f logs/labeller.log
+tail -f logs/nestperts.log
 ```
 
 ### Testing CV Inference
@@ -282,6 +284,6 @@ Replace `models/seconditer.onnx` and update `MODEL_PATH` in `server/cv_tools/inf
 
 - The OpenRouter API key is required for NestChat (text-to-SQL) functionality
 - NestVision (CV inference) works offline once models are downloaded
-- The labeller can run independently with `--data` pointing to any YOLO dataset
+- Nestperts can run independently with `--data` pointing to any YOLO dataset
 - All coordinates in labels are normalized (0-1 range) following YOLO format
 - Fast mode is recommended for large images unless high precision is critical

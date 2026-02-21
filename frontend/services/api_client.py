@@ -216,3 +216,158 @@ def get_ai_insights(results_data: List[Dict[str, Any]], sample_size: int = 50) -
         return response.json()
     except requests.exceptions.RequestException as e:
         return {"success": False, "error": str(e), "insights": None}
+
+
+def get_tables() -> Dict[str, Any]:
+    """
+    Get list of all tables in the database.
+
+    Returns:
+        Dictionary containing list of table names
+    """
+    from .config import API_BASE_URL
+
+    try:
+        response = requests.get(f"{API_BASE_URL}/db/tables", timeout=10)
+        response.raise_for_status()
+        return response.json()
+    except requests.exceptions.RequestException as e:
+        return {"tables": [], "error": str(e)}
+
+
+def get_table_data(table_name: str, page: int = 1, page_size: int = 50) -> Dict[str, Any]:
+    """
+    Get paginated data from a specific table.
+
+    Args:
+        table_name: Name of the table
+        page: Page number (1-indexed)
+        page_size: Number of rows per page
+
+    Returns:
+        Dictionary containing table data and pagination info
+    """
+    from .config import API_BASE_URL
+
+    try:
+        response = requests.get(
+            f"{API_BASE_URL}/db/table/{table_name}",
+            params={"page": page, "page_size": page_size},
+            timeout=30
+        )
+        response.raise_for_status()
+        return response.json()
+    except requests.exceptions.RequestException as e:
+        return {
+            "success": False,
+            "data": None,
+            "total_rows": 0,
+            "page": page,
+            "page_size": page_size,
+            "total_pages": 0,
+            "error": str(e)
+        }
+
+
+def get_table_schema(table_name: str) -> Dict[str, Any]:
+    """
+    Get schema information for a specific table.
+
+    Args:
+        table_name: Name of the table
+
+    Returns:
+        Dictionary containing table schema
+    """
+    from .config import API_BASE_URL
+
+    try:
+        response = requests.get(
+            f"{API_BASE_URL}/db/table/{table_name}/schema",
+            timeout=10
+        )
+        response.raise_for_status()
+        return response.json()
+    except requests.exceptions.RequestException as e:
+        return {
+            "success": False,
+            "table_name": table_name,
+            "columns": None,
+            "error": str(e)
+        }
+
+
+def update_table_row(table_name: str, row_id: Dict[str, Any], updates: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Update a row in a table.
+
+    Args:
+        table_name: Name of the table
+        row_id: Primary key column(s) and value(s)
+        updates: Columns to update
+
+    Returns:
+        Dictionary containing success status
+    """
+    from .config import API_BASE_URL
+
+    try:
+        response = requests.put(
+            f"{API_BASE_URL}/db/table/{table_name}/row",
+            json={"table_name": table_name, "row_id": row_id, "updates": updates},
+            timeout=30
+        )
+        response.raise_for_status()
+        return response.json()
+    except requests.exceptions.RequestException as e:
+        return {"success": False, "message": None, "error": str(e)}
+
+
+def delete_table_row(table_name: str, row_id: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Delete a row from a table.
+
+    Args:
+        table_name: Name of the table
+        row_id: Primary key column(s) and value(s)
+
+    Returns:
+        Dictionary containing success status
+    """
+    from .config import API_BASE_URL
+
+    try:
+        response = requests.delete(
+            f"{API_BASE_URL}/db/table/{table_name}/row",
+            json={"table_name": table_name, "row_id": row_id},
+            timeout=30
+        )
+        response.raise_for_status()
+        return response.json()
+    except requests.exceptions.RequestException as e:
+        return {"success": False, "message": None, "error": str(e)}
+
+
+def insert_table_row(table_name: str, row_data: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Insert a new row into a table.
+
+    Args:
+        table_name: Name of the table
+        row_data: Column names and values for the new row
+
+    Returns:
+        Dictionary containing success status
+    """
+    from .config import API_BASE_URL
+
+    try:
+        response = requests.post(
+            f"{API_BASE_URL}/db/table/{table_name}/row",
+            json={"table_name": table_name, "row_data": row_data},
+            timeout=30
+        )
+        response.raise_for_status()
+        return response.json()
+    except requests.exceptions.RequestException as e:
+        return {"success": False, "message": None, "error": str(e)}

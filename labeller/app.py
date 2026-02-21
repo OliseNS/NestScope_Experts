@@ -86,13 +86,13 @@ def get_classes():
     if os.path.exists(yaml_path):
         try:
             with open(yaml_path, 'r') as f:
-                # Simple parsing to avoid strict pyyaml dependency if possible, 
+                # Simple parsing to avoid strict pyyaml dependency if possible,
                 # but assume standard yaml structure.
                 # If pyyaml is installed: import yaml; data = yaml.safe_load(f)
                 content = f.read()
                 # Very basic manual parse for "names: [a, b]" or "names:\n  0: a"
                 # For robustness, let's just return empty and let user input if parsing fails without lib
-                pass 
+                pass
         except:
             pass
 
@@ -101,6 +101,31 @@ def get_classes():
     if state and 'classes' in state:
         return state['classes']
     return []
+
+def get_species_list():
+    """Load species codes and names from CSV file for expert identification"""
+    species_csv = os.path.join("..", "CSV_Files", "tblSpeciesCodes.csv")
+    species_list = []
+
+    if os.path.exists(species_csv):
+        try:
+            with open(species_csv, 'r') as f:
+                # Skip header
+                next(f)
+                for line in f:
+                    # Parse CSV line (handle quoted strings)
+                    parts = line.strip().split(',')
+                    if len(parts) >= 2:
+                        code = parts[0].strip('"')
+                        name = parts[1].strip('"')
+                        if code and name:
+                            species_list.append({"code": code, "name": name})
+        except Exception as e:
+            print(f"Warning: Could not load species list: {e}")
+    else:
+        print(f"Warning: Species CSV not found at {species_csv}")
+
+    return species_list
 
 @app.route('/')
 def index():
@@ -189,7 +214,11 @@ def editor(username):
     state = load_state()
     if not state or username not in state['assignments']:
         return redirect(url_for('index'))
-    return render_template('editor.html', username=username, classes=state['classes'])
+
+    # Load species list for expert identification
+    species_list = get_species_list()
+
+    return render_template('editor.html', username=username, classes=state['classes'], species_list=species_list)
 
 # --- API ENDPOINTS ---
 
@@ -274,19 +303,23 @@ def get_image_data(filename):
     txt_name = os.path.splitext(filename)[0] + ".txt"
     path = os.path.join(get_label_dir(), txt_name)
     labels = []
-    
+
     if os.path.exists(path):
         with open(path, 'r') as f:
             for line in f:
                 parts = line.strip().split()
                 if len(parts) >= 5:
-                    labels.append({
+                    label = {
                         "class_id": int(parts[0]),
                         "x": float(parts[1]),
                         "y": float(parts[2]),
                         "w": float(parts[3]),
                         "h": float(parts[4])
-                    })
+                    }
+                    # Check if species code exists (6th field)
+                    if len(parts) >= 6:
+                        label["species"] = parts[5]
+                    labels.append(label)
     return jsonify(labels)
 
 @app.route('/images/<path:filename>')
@@ -309,27 +342,31 @@ def save_labels():
     data = request.json
     username = data.get('username')
     filename = data.get('filename')
-    labels = data.get('labels') 
-    
+    labels = data.get('labels')
+
     txt_name = os.path.splitext(filename)[0] + ".txt"
-    
+
     # Ensure label dir exists
     label_dir = get_label_dir()
     if not os.path.exists(label_dir):
         os.makedirs(label_dir, exist_ok=True)
-        
+
     txt_path = os.path.join(label_dir, txt_name)
-    
+
     with open(txt_path, 'w') as f:
         for l in labels:
-            line = f"{l['class_id']} {l['x']:.6f} {l['y']:.6f} {l['w']:.6f} {l['h']:.6f}\n"
+            # Extended YOLO format: class_id x y w h species_code (optional)
+            line = f"{l['class_id']} {l['x']:.6f} {l['y']:.6f} {l['w']:.6f} {l['h']:.6f}"
+            if 'species' in l and l['species']:
+                line += f" {l['species']}"
+            line += "\n"
             f.write(line)
-            
+
     state = load_state()
     if filename not in state['assignments'][username]['completed']:
         state['assignments'][username]['completed'].append(filename)
         save_state(state)
-        
+
     return jsonify({"status": "success"})
 
 @app.route('/api/rename_user', methods=['POST'])
@@ -613,11 +650,11 @@ def sam_status():
 @app.route('/api/sam_segment', methods=['POST'])
 def sam_segment():
     """
-    Accepts a single point click {x, y} in normalized 0-1, point_index, mode ('fast' or 'sahi'), and image filename.
+    Accepts a single point click {x, y} in normalized 0-1, point_index, mode ('fast' or 'zoom'), and image filename.
     Returns a bounding box from MobileSAM segmentation of the clicked object.
     NOW USING: MobileSAM from ultralytics for fast, accurate segmentation.
     OPTIMIZED: Lower resolution, caching, and FP16 for sub-second inference.
-    Supports SAHI (Slicing Aided Hyper Inference) for better small object detection.
+    Supports Zoom mode for better small object detection with higher resolution.
     """
     try:
         import time
@@ -626,7 +663,7 @@ def sam_segment():
         filename = data.get('filename')
         point_data = data.get('point')
         point_index = data.get('point_index', 0)
-        detection_mode = data.get('mode', 'fast')  # 'fast' or 'sahi'
+        detection_mode = data.get('mode', 'fast')  # 'fast' or 'zoom'
 
         if not point_data:
             return jsonify({"status": "error", "message": "No point provided"}), 400
@@ -665,12 +702,12 @@ def sam_segment():
         model = load_mobilesam_model()
 
         # Configure parameters based on detection mode
-        if detection_mode == 'sahi':
-            # SAHI mode: Higher resolution for better small object detection
+        if detection_mode == 'zoom':
+            # Zoom mode: Higher resolution for better small object detection
             imgsz = 1024  # Higher resolution
             retina_masks = True  # Better quality masks
             conf_threshold = 0.3  # Lower threshold for small objects
-            print(f"  → Using SAHI mode: imgsz={imgsz}, retina_masks=True, conf={conf_threshold}")
+            print(f"  → Using Zoom mode: imgsz={imgsz}, retina_masks=True, conf={conf_threshold}")
         else:
             # Fast mode: Optimized for speed
             imgsz = SEGMENT_IMGSZ  # 720 for speed
@@ -872,7 +909,7 @@ if __name__ == '__main__':
     dataset_parent = os.path.dirname(Config.DATASET_PATH) if os.path.dirname(Config.DATASET_PATH) else "."
     Config.STATE_FILE = os.path.join(dataset_parent, "project_state.json")
 
-    print(f"Starting OliseLabel on {Config.DATASET_PATH}")
+    print(f"Starting Nestperts on {Config.DATASET_PATH}")
     print(f"State file: {Config.STATE_FILE}")
     print(f"Images directory: {get_image_dir()}")
     print(f"Labels directory: {get_label_dir()}")
