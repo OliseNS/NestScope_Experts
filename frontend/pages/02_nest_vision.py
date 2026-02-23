@@ -116,6 +116,9 @@ st.markdown("""
             Powered by AI computer vision, NestVision automatically detects and counts birds in your images.
             Upload a photo or try our example images to see the model in action.
         </p>
+        <p style="font-size: 0.8rem; color: #888; margin-top: 0.5rem;">
+            ⚡ Powered by <code style="background: #2d2d2d; padding: 2px 6px; border-radius: 3px; color: #D97757;">YOLOv8 (ONNX)</code>
+        </p>
     </div>
 """, unsafe_allow_html=True)
 

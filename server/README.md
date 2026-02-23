@@ -1,76 +1,242 @@
-# Bird Colony SQL Chatbot API Server
+# Server - FastAPI Backend
 
-A FastAPI-based REST API server that converts natural language questions into SQL queries and provides answers based on bird colony observation data from 2010-2021.
+The server is the **backend** of NestScope - it handles all the heavy lifting: database queries, AI inference, and API endpoints. It's built with **FastAPI**, a modern Python web framework designed for building APIs quickly and efficiently.
+
+## What is FastAPI?
+
+FastAPI is a Python framework for creating REST APIs (Application Programming Interfaces). Think of it as a waiter in a restaurant:
+- **Frontend**: Customer orders food
+- **Backend**: Kitchen prepares food
+- **API**: Waiter takes orders and delivers food
+
+FastAPI automatically:
+- Validates incoming data
+- Generates API documentation
+- Handles async operations
+- Serializes responses to JSON
 
 ## Features
 
-- **Natural Language to SQL**: Converts user questions to SQL queries using LLM
-- **Query Execution**: Executes SQL queries against SQLite database
+### NestChat (Text-to-SQL)
+- **Natural Language to SQL**: Converts user questions to SQL using Claude LLM
+- **Query Execution**: Runs SQL queries against SQLite database
 - **Natural Language Answers**: Generates human-readable answers from query results
-- **RESTful API**: Clean REST endpoints for integration with any client
-- **CORS Enabled**: Can be accessed from web browsers
-- **Health Monitoring**: Health check endpoint for monitoring
+- **Agentic Visualization**: LLM decides which charts/maps to show
+- **Streaming Responses**: Words appear one-by-one (better UX)
 
-## Installation
+### NestVision (Computer Vision)
+- **Bird Detection**: YOLOv8 ONNX model for bird counting
+- **Two Inference Modes**: Fast (downsampling) and SAHI (sliced inference)
+- **Annotation**: Bounding boxes with Claude orange color
+- **Example Images**: Built-in test images for demos
 
-### Prerequisites
+### General
+- **RESTful API**: Clean REST endpoints
+- **Auto-Generated Docs**: Swagger UI at `/docs`
+- **CORS Enabled**: Works from web browsers
+- **Health Monitoring**: Health check endpoint
+
+## How to Run
+
+Start the backend server:
+```bash
+python -m uvicorn server.main:app --host 0.0.0.0 --port 8000 --reload
+```
+
+**Flag explanations:**
+- `server.main:app`: Python module path (server/main.py, variable `app`)
+- `--host 0.0.0.0`: Listen on all network interfaces (allows external access)
+- `--port 8000`: Use port 8000
+- `--reload`: Auto-restart when code changes (dev only!)
+
+Then open your browser to: **http://localhost:8000/docs** for interactive API documentation.
+
+## Prerequisites
 
 - Python 3.8+
-- SQLite database (`bird_data.db`) in parent directory
-- OpenRouter API key
+- SQLite database (`data/bird_data_complete.db`)
+- OpenRouter API key (for Claude LLM)
+- ONNX Runtime (for computer vision)
 
-### Setup
+## Environment Variables
 
-1. Install dependencies:
-```bash
-pip install -r requirements.txt
-```
-
-2. Configure environment variables:
-Create a `.env` file in the parent directory (or set environment variables):
+Create a `.env` file in the project root:
 ```env
 OPENROUTER_API_KEY=your_api_key_here
-DB_PATH=../bird_data.db  # Optional, defaults to ../bird_data.db
+DB_PATH=data/bird_data_complete.db
+DB_TYPE=sqlite
+MODEL_NAME=anthropic/claude-sonnet-4.5
+API_BASE_URL=http://localhost:8000
 ```
 
-## Running the Server
+## Project Structure
 
-### Development Mode
-
-```bash
-python main.py
+```
+server/
+├── main.py                     # FastAPI app and all endpoints
+├── prompt.txt                  # System prompt for SQL generation
+├── cv_tools/                   # Computer vision module
+│   ├── inference.py           # BirdDetector class (ONNX inference)
+│   └── images/                # Example images for testing
+├── README.md                   # This file
+└── __pycache__/               # Python bytecode cache
 ```
 
-The server will start on `http://localhost:8000`
+## Key Concepts
 
-### Production Mode with Uvicorn
+### 1. REST API
+REST (Representational State Transfer) is a way to design APIs using HTTP methods:
+- **GET**: Retrieve data (e.g., get database schema)
+- **POST**: Send data (e.g., ask a question)
+- **PUT**: Update data
+- **DELETE**: Remove data
 
-```bash
-uvicorn main:app --host 0.0.0.0 --port 8000
+**Example:**
+```
+GET /schema → Returns database schema
+POST /ask → Send question, get answer
 ```
 
-### With Auto-Reload (for development)
-
-```bash
-uvicorn main:app --reload --host 0.0.0.0 --port 8000
+### 2. JSON (JavaScript Object Notation)
+APIs communicate using JSON - a text format for structured data:
+```json
+{
+  "question": "How many colonies are in Texas?",
+  "model": "anthropic/claude-sonnet-4.5"
+}
 ```
 
-## API Endpoints
+FastAPI automatically converts Python dictionaries to JSON and vice versa.
 
-### GET `/`
-Root endpoint that returns API information and available endpoints.
+### 3. Pydantic Models
+Pydantic validates incoming data. If someone sends bad data, FastAPI rejects it automatically:
+```python
+class AskRequest(BaseModel):
+    question: str  # Required string
+    model: str = "anthropic/claude-sonnet-4.5"  # Optional with default
+```
+
+### 4. Async/Await
+FastAPI uses async functions for concurrent operations:
+```python
+async def ask_question(request: AskRequest):
+    # Can handle multiple requests simultaneously
+```
+
+**Why async?** While waiting for database/LLM responses, server can handle other requests.
+
+## Main API Endpoints
+
+### NestChat Endpoints
+
+#### POST `/ask`
+Ask a question in natural language and get a complete response (non-streaming).
+
+**Request:**
+```json
+{
+  "question": "What colonies had the most Brown Pelicans in 2015?",
+  "model": "anthropic/claude-sonnet-4.5"
+}
+```
 
 **Response:**
 ```json
 {
-  "message": "Bird Colony SQL Chatbot API",
-  "version": "1.0.0",
-  "endpoints": {
-    "/ask": "POST - Ask a question in natural language",
-    "/schema": "GET - Get database schema",
-    "/stats": "GET - Get database statistics",
-    "/health": "GET - Health check"
-  }
+  "sql_query": "SELECT ColonyName, SUM(Birds) as Total...",
+  "results": [...],
+  "answer": "The top colony was Smith Island with 1,234 Brown Pelicans...",
+  "viz_directive": "bar",
+  "error": null
+}
+```
+
+**How it works:**
+1. LLM reads question + database schema
+2. Generates SQL query
+3. Execute query against SQLite
+4. LLM reads results and writes answer
+5. LLM decides visualization type
+
+#### POST `/ask/stream`
+Same as `/ask` but streams the answer word-by-word (better UX for long responses).
+
+**Response:** Server-Sent Events (SSE) stream
+```
+data: {"type": "sql", "content": "SELECT..."}
+data: {"type": "answer", "content": "The"}
+data: {"type": "answer", "content": " top"}
+data: {"type": "answer", "content": " colony"}
+data: {"type": "done"}
+```
+
+**Why streaming?**
+- User sees progress immediately
+- Feels faster (perception)
+- Can cancel long-running queries
+
+### Computer Vision Endpoints
+
+#### POST `/cv/inference`
+Detect and count birds in an uploaded image.
+
+**Request:** `multipart/form-data`
+- `file`: Image file (JPG, PNG)
+- `conf_threshold`: Confidence threshold (0.0-1.0, default: 0.25)
+- `fast_mode`: Use fast inference (boolean, default: true)
+
+**Response:**
+```json
+{
+  "bird_count": 12,
+  "detections": [
+    {"bbox": [100, 150, 250, 400], "confidence": 0.89},
+    ...
+  ],
+  "annotated_image": "base64_encoded_image_string",
+  "inference_time": 0.234
+}
+```
+
+**How it works:**
+1. Receive image upload
+2. Preprocess image (resize if needed)
+3. Run YOLO ONNX inference
+4. Apply NMS (Non-Maximum Suppression) to remove duplicates
+5. Draw bounding boxes
+6. Return annotated image and results
+
+**Two modes:**
+- **Fast**: Downsample large images, quick inference
+- **SAHI**: Slice large images into patches, slower but more accurate
+
+#### GET `/cv/examples`
+List example images available for testing.
+
+**Response:**
+```json
+{
+  "examples": [
+    {"name": "pelicans_colony.jpg", "path": "server/cv_tools/images/pelicans_colony.jpg"},
+    ...
+  ]
+}
+```
+
+### Utility Endpoints
+
+#### GET `/`
+API information and documentation.
+
+#### GET `/health`
+Health check for monitoring.
+
+**Response:**
+```json
+{
+  "status": "healthy",
+  "database": "connected",
+  "cv_model": "loaded"
 }
 ```
 
@@ -233,22 +399,116 @@ FastAPI automatically generates interactive API documentation:
 
 These interfaces allow you to test all endpoints directly from your browser.
 
-## Architecture
+## Architecture Deep Dive
 
-The server uses a three-step process for each question:
+### Text-to-SQL Pipeline (NestChat)
 
-1. **SQL Generation**: Uses an LLM to convert natural language to SQL
-   - Includes database schema in prompt
-   - Validates question relevance
-   - Cleans and formats SQL output
+The pipeline has 4 stages:
 
-2. **Query Execution**: Executes the SQL query against SQLite database
-   - Returns results as pandas DataFrame
-   - Handles errors gracefully
+**1. SQL Generation**
+```
+User question + Database schema → Claude LLM → SQL query
+```
+- Loads system prompt from `server/prompt.txt`
+- Includes full database schema in prompt
+- LLM generates SQL query
+- Validates query format and relevance
 
-3. **Answer Generation**: Uses an LLM to create natural language answer
-   - Includes query results in prompt
-   - Provides contextual, informative responses
+**2. Query Execution**
+```
+SQL query → SQLite database → Results (pandas DataFrame)
+```
+- Executes query with error handling
+- Limits results to prevent memory issues
+- Converts to JSON-serializable format
+
+**3. Answer Generation**
+```
+Question + SQL + Results → Claude LLM → Natural language answer
+```
+- LLM analyzes results
+- Writes human-friendly explanation
+- Embeds visualization directives (e.g., `[SHOW_CHART: bar]`)
+
+**4. Visualization Directive Parsing**
+```
+Answer text → Parse directives → Clean answer + viz type
+```
+- Extracts `[SHOW_CHART: ...]` or `[SHOW_MAP: ...]`
+- Removes directives from displayed answer
+- Frontend renders appropriate visualizations
+
+### Agentic Visualization Control
+
+The **key innovation** in NestScope is agentic visualization. Traditional systems use rule-based logic:
+```python
+# Traditional approach (brittle)
+if "over time" in question:
+    show_line_chart()
+elif "top" in question or "most" in question:
+    show_bar_chart()
+```
+
+NestScope uses the LLM to decide:
+```python
+# Agentic approach (intelligent)
+answer = llm_generate_answer(question, results)
+# LLM embeds: "[SHOW_CHART: bar]" in answer
+viz_type = parse_visualization_directives(answer)
+```
+
+**Why better?**
+- LLM understands context and intent
+- Handles ambiguous cases intelligently
+- No hardcoded rules to maintain
+
+### Computer Vision Pipeline (NestVision)
+
+**1. Image Loading**
+```python
+image = cv2.imread(image_path)
+height, width = image.shape[:2]
+```
+
+**2. Mode Selection**
+```python
+if fast_mode:
+    if height > 1024 or width > 1024:
+        # Downsample image for speed
+        detections = _downsample_and_predict(image)
+    else:
+        # Standard inference
+        detections = _predict_standard(image)
+else:
+    # SAHI: Slice into patches
+    detections = _predict_with_sahi(image)
+```
+
+**3. ONNX Inference**
+```python
+# Preprocess
+input_tensor = preprocess(image)  # Resize, normalize
+
+# Run inference
+outputs = onnx_session.run(None, {"images": input_tensor})
+
+# Postprocess
+detections = postprocess(outputs)  # Extract boxes, scores, classes
+```
+
+**4. Non-Maximum Suppression (NMS)**
+Removes duplicate/overlapping boxes:
+```
+Before NMS: [box1, box2, box3, box4]  # Many overlapping boxes on same bird
+After NMS:  [box1, box3]                # One box per bird
+```
+
+**5. Annotation**
+Draw bounding boxes using Claude orange color:
+```python
+for detection in detections:
+    cv2.rectangle(image, bbox, color=(87, 119, 217), thickness=3)
+```
 
 ## Database Schema
 
@@ -310,57 +570,157 @@ For production deployment:
 5. **Database Access**: Use read-only database connection
 6. **Environment Variables**: Secure storage for API keys
 
-## Troubleshooting
+## Debugging and Common Issues
 
-### Database Connection Error
-
-Ensure `bird_data.db` exists in the parent directory or set `DB_PATH` environment variable:
-
+### Check Server Health
 ```bash
-export DB_PATH=/path/to/bird_data.db
+curl http://localhost:8000/health
 ```
 
-### OpenRouter API Error
+Expected response:
+```json
+{"status": "healthy", "database": "connected"}
+```
 
-Verify your API key is set correctly:
+### View API Documentation
+FastAPI auto-generates interactive docs:
+- **Swagger UI**: http://localhost:8000/docs
+- **ReDoc**: http://localhost:8000/redoc
 
+You can test endpoints directly in the browser!
+
+### Tail Logs in Real-Time
 ```bash
-export OPENROUTER_API_KEY=your_key_here
+tail -f logs/server.log
 ```
 
-### Port Already in Use
+Logs show all requests, errors, and SQL queries.
 
-Change the port:
+### Common Issues
 
-```bash
-uvicorn main:app --port 8001
+#### "Database Connection Error"
+**Problem**: Can't connect to SQLite database
+**Solutions:**
+- Check `DB_PATH` in `.env` points to correct file
+- Verify file exists: `ls -la data/bird_data_complete.db`
+- Check file permissions: `chmod 644 data/bird_data_complete.db`
+
+#### "OpenRouter API Error"
+**Problem**: LLM requests failing
+**Solutions:**
+- Verify API key: `echo $OPENROUTER_API_KEY`
+- Check key is in `.env` file
+- Test key with curl:
+  ```bash
+  curl https://openrouter.ai/api/v1/models \
+    -H "Authorization: Bearer $OPENROUTER_API_KEY"
+  ```
+
+#### "ONNX Model Not Found"
+**Problem**: Can't load bird detection model
+**Solutions:**
+- Check model exists: `ls -la models/seconditer.onnx`
+- Verify path in `server/cv_tools/inference.py`:
+  ```python
+  MODEL_PATH = "models/seconditer.onnx"
+  ```
+
+#### "Port Already in Use"
+**Problem**: Another process using port 8000
+**Solutions:**
+- Find process: `lsof -i :8000`
+- Kill it: `kill -9 <PID>`
+- Or use different port: `--port 8001`
+
+#### "Inference Too Slow"
+**Problem**: CV inference takes >10 seconds
+**Solutions:**
+- Use `fast_mode=true` (enabled by default)
+- Reduce image size before uploading
+- Check CPU usage (should use all cores)
+- Consider GPU acceleration (requires CUDA setup)
+
+## System Prompt Engineering
+
+The SQL generation quality depends heavily on `server/prompt.txt`. This file contains:
+
+### 1. Database Schema
+Complete table structures with column names, types, and descriptions.
+
+### 2. Example Q&A Pairs
+```
+Question: "What colonies are in Texas?"
+SQL: SELECT DISTINCT ColonyName FROM observations WHERE State = 'TX'
 ```
 
-## Development
+### 3. Critical Rules
+- **Always include Latitude/Longitude** when grouping by colony (enables maps)
+- **Limit results** to 50 rows to prevent memory issues
+- **Validate relevance** - reject unrelated questions
 
-### Running Tests
+### 4. Visualization Directives
+Instructions for when to use `[SHOW_CHART: line]`, `[SHOW_MAP: true]`, etc.
 
-```bash
-# Install test dependencies
-pip install pytest httpx
+**To modify SQL behavior:**
+1. Edit `server/prompt.txt`
+2. Add examples of desired behavior
+3. Test with various questions
+4. No server restart needed (auto-reloads)
 
-# Run tests
-pytest
+## Development Workflow
+
+### 1. Add New Endpoint
+```python
+@app.post("/new_endpoint")
+async def new_endpoint(data: RequestModel):
+    # Your logic here
+    return {"result": "success"}
 ```
 
-### Code Structure
+### 2. Test in Swagger UI
+Open http://localhost:8000/docs and test interactively.
+
+### 3. Update Frontend
+Modify `frontend/services/api_client.py` to call new endpoint.
+
+### 4. Document in README
+Add endpoint description above.
+
+## Learning Resources
+
+### FastAPI
+- **Official Docs**: https://fastapi.tiangolo.com/
+- **Tutorial**: https://fastapi.tiangolo.com/tutorial/
+- **Async/Await Guide**: https://realpython.com/async-io-python/
+
+### Computer Vision
+- **ONNX Runtime**: https://onnxruntime.ai/docs/
+- **YOLO**: https://docs.ultralytics.com/
+- **SAHI**: https://github.com/obss/sahi
+
+### LLM Integration
+- **OpenRouter**: https://openrouter.ai/docs
+- **Prompt Engineering**: https://www.promptingguide.ai/
+
+## Next Steps
+
+To understand the backend better:
+1. Read `main.py` top-to-bottom (start with imports and class definitions)
+2. Test endpoints in Swagger UI (/docs)
+3. Check `server/prompt.txt` to understand SQL generation
+4. Read `cv_tools/inference.py` to understand bird detection
+5. Watch server logs while testing: `tail -f logs/server.log`
+
+## Connection to Other Components
 
 ```
-server/
-├── main.py              # FastAPI application and endpoints
-├── requirements.txt     # Python dependencies
-└── README.md           # This file
+Frontend (Streamlit) → API requests → Server (FastAPI)
+                                      ↓
+                                    Database (SQLite)
+                                      ↓
+                                    LLM (Claude via OpenRouter)
+                                      ↓
+                                    CV Model (YOLO ONNX)
 ```
 
-## License
-
-[Your License Here]
-
-## Support
-
-For issues or questions, please open an issue in the repository.
+The server is the central hub - everything connects through it!

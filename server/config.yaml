@@ -1,0 +1,46 @@
+# NestScope Server Configuration
+# This file is version-controlled and shared across all team members
+
+# SECURITY NOTE:
+# - NestChat operates in READ-ONLY mode (only SELECT queries allowed)
+# - NestDB admin interface has write access (controlled by separate endpoints)
+# - Database connections use URI mode=ro for NestChat queries
+
+model:
+  # Default LLM model for NestChat (text-to-SQL and answer generation)
+  name: minimax/minimax-m2.5
+
+  # Model parameters
+  temperature: 0.7  # Answer generation temperature (0.0-1.0, higher = more creative)
+  max_tokens: 1000  # Maximum tokens for answer generation
+  sql_temperature: 0.1  # SQL generation temperature (lower = more deterministic)
+  sql_max_tokens: 500  # Maximum tokens for SQL generation
+
+# Database Configuration
+database:
+  # Path to SQLite database (relative to project root)
+  default_path: data/bird_data_complete.db
+
+# Computer Vision Configuration
+cv:
+  # Default confidence threshold for bird detection
+  default_confidence: 0.25
+
+  # Model input size (must match ONNX model)
+  image_size: 1024
+
+  # Default to fast mode for better performance
+  default_fast_mode: true
+
+# API Configuration
+api:
+  host: 0.0.0.0
+  port: 8000
+
+  # CORS settings
+  cors_origins:
+    - "*"  # Allow all origins (restrict in production)
+
+# Logging Configuration
+logging:
+  level: INFO  # DEBUG, INFO, WARNING, ERROR, CRITICAL

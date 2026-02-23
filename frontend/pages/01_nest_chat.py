@@ -9,7 +9,8 @@ import random
 # Import from modular structure
 from services import (
     ask_question_streaming,
-    ask_question_to_backend
+    ask_question_to_backend,
+    get_backend_config
 )
 from components import render_chart, render_map, render_sidebar_section, render_service_status_link
 from styles import get_custom_css
@@ -173,6 +174,18 @@ with st.sidebar:
 
 st.title("NestChat")
 st.caption("Natural language interface for Gulf Coast avian monitoring data")
+
+# Display current model being used
+try:
+    backend_config = get_backend_config()
+    model_name = backend_config.get("model", {}).get("name", "Unknown")
+    st.markdown(
+        f'<p style="font-size: 0.8rem; color: #888; margin-top: -0.5rem; margin-bottom: 1rem;">⚡ Powered by <code style="background: #2d2d2d; padding: 2px 6px; border-radius: 3px; color: #D97757;">{model_name}</code></p>',
+        unsafe_allow_html=True
+    )
+except Exception:
+    # Silently fail if backend is unreachable
+    pass
 
 # ============================================================================
 # CHAT INTERFACE
