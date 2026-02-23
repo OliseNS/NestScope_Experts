@@ -127,6 +127,36 @@ def run_cv_inference(image_file, conf_threshold: float = 0.25, fast_mode: bool =
 
 
 @st.cache_data(ttl=3600)
+def get_backend_config() -> Dict[str, Any]:
+    """
+    Fetch backend configuration to stay synchronized with server settings.
+    Cached for 1 hour to reduce API calls.
+
+    Returns:
+        Dictionary containing model and CV configuration
+    """
+    from .config import API_BASE_URL
+
+    try:
+        response = requests.get(f"{API_BASE_URL}/config", timeout=5)
+        response.raise_for_status()
+        return response.json()
+    except requests.exceptions.RequestException:
+        # Fallback to default if backend is unreachable
+        return {
+            "model": {
+                "name": "minimax/minimax-m2.5",
+                "temperature": 0.7,
+                "max_tokens": 1000
+            },
+            "cv": {
+                "default_confidence": 0.25,
+                "default_fast_mode": True
+            }
+        }
+
+
+@st.cache_data(ttl=3600)
 def get_example_images() -> List[str]:
     """
     Fetch list of example images from the backend.

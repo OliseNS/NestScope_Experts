@@ -18,6 +18,7 @@ Pillow>=10.0.0              # Image processing for computer vision tab
 
 # Environment Management
 python-dotenv>=1.0.0        # Environment variable management
+PyYAML>=6.0.0               # YAML configuration file parsing
 
 # Optional: Caching (if time permits)
 # redis>=5.0.0              # Query result caching

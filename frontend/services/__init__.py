@@ -16,7 +16,8 @@ from .api_client import (
     get_table_schema,
     update_table_row,
     delete_table_row,
-    insert_table_row
+    insert_table_row,
+    get_backend_config
 )
 from .config import API_BASE_URL
 
@@ -35,5 +36,6 @@ __all__ = [
     'update_table_row',
     'delete_table_row',
     'insert_table_row',
+    'get_backend_config',
     'API_BASE_URL'
 ]

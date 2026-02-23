@@ -168,15 +168,38 @@ python scripts/data_management/import_all_to_sqlite.py
 
 This imports CSV files from `CSV_Files/` into `data/bird_data_complete.db`.
 
-### Environment Configuration
+### Configuration
+
+**Two-tier configuration system:**
+
+1. **`server/config.yaml`** (Version-controlled, shared across team)
+   - Model selection and parameters
+   - Database paths
+   - CV settings
+   - API configuration
+   - **This is the SINGLE SOURCE OF TRUTH for team-wide settings**
+
+2. **`.env` file** (Local, NOT version-controlled)
+   - API keys and secrets
+   - Local development overrides
 
 Required environment variables (`.env` file):
 ```
 OPENROUTER_API_KEY=your-key-here
 DB_PATH=data/bird_data_complete.db
-DB_TYPE=sqlite
 API_BASE_URL=http://localhost:8000
+
+# Optional: Override model locally (defaults to config.yaml)
+# MODEL_NAME=anthropic/claude-sonnet-4.5
 ```
+
+**To change the default model for everyone:**
+- Edit `server/config.yaml` and commit the change
+- Do NOT change `.env` (that's local-only)
+
+**To test a different model locally:**
+- Uncomment and set `MODEL_NAME` in your local `.env` file
+- Backend will show a warning when using .env override
 
 ## Architecture
 
@@ -210,8 +233,16 @@ This enables map visualizations. The prompt includes extensive examples of corre
 - `SQLChatbot` class in `server/main.py`
 - Two answer generation modes: streaming (`/ask/stream`) and non-streaming (`/ask`)
 - System prompt loaded from `server/prompt.txt`
-- Uses OpenRouter API (default model: `anthropic/claude-sonnet-4.5`, configurable via `MODEL_NAME` in `.env`)
-- **Centralized configuration**: Model is set in ONE place only (`.env` file) and used by both backend and frontend
+- Uses OpenRouter API (default model: configured in `server/config.yaml`)
+- **Centralized configuration**: Model is set in `server/config.yaml` (version-controlled) and shared by backend and frontend
+- Frontend fetches model config from backend `/config` endpoint to stay synchronized
+
+**Security Features:**
+- ✅ **Read-Only Mode**: NestChat database connection is read-only (SQLite URI mode=ro)
+- ✅ **Query Validation**: Only SELECT and WITH (CTE) statements allowed
+- ✅ **Blocked Operations**: INSERT, UPDATE, DELETE, DROP, CREATE, ALTER, TRUNCATE are rejected
+- ✅ **Write Access**: NestDB admin interface uses separate read-write connection
+- ✅ **Comment Stripping**: SQL comments removed before validation to prevent bypass attempts
 
 ### 2. Computer Vision Pipeline (NestVision)
 

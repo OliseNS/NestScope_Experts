@@ -19,11 +19,33 @@ import asyncio
 import cv2
 import base64
 import httpx
+import yaml
 from server.cv_tools.inference import BirdDetector, get_example_images
 from server.generate_prompt import generate_dynamic_prompt
 
-# Load environment variables
+# Load environment variables (for secrets like API keys)
 load_dotenv()
+
+# Load server configuration from YAML (for shared settings)
+SERVER_DIR = Path(__file__).parent
+CONFIG_PATH = SERVER_DIR / "config.yaml"
+
+def load_config():
+    """Load configuration from YAML file with .env overrides"""
+    with open(CONFIG_PATH, 'r') as f:
+        config = yaml.safe_load(f)
+
+    # Allow .env to override model name for local development/testing
+    if os.getenv("MODEL_NAME"):
+        config['model']['name'] = os.getenv("MODEL_NAME")
+        print(f"⚠️  MODEL_NAME override from .env: {config['model']['name']}")
+
+    return config
+
+# Load configuration
+config = load_config()
+print(f"✓ Loaded configuration from {CONFIG_PATH}")
+print(f"✓ Using model: {config['model']['name']}")
 
 # Initialize OpenRouter client
 client = OpenAI(
@@ -153,14 +175,15 @@ class RowInsertResponse(BaseModel):
     error: Optional[str] = None
 
 # Database configuration
-DB_PATH = os.getenv("DB_PATH", "../data/bird_data_complete.db")
+# .env override takes priority, otherwise use config.yaml default
+DB_PATH = os.getenv("DB_PATH", config['database']['default_path'])
 
 # Model configuration - SINGLE SOURCE OF TRUTH
-# Change this in .env file only
-MODEL_NAME = os.getenv("MODEL_NAME", "anthropic/claude-sonnet-4.5")
+# Primary source: config.yaml (version controlled)
+# Override: .env MODEL_NAME (for local testing only)
+MODEL_NAME = config['model']['name']
 
 # Get the directory where this file is located
-SERVER_DIR = Path(__file__).parent
 DEFAULT_PROMPT_PATH = SERVER_DIR / "prompt.txt"
 
 def parse_visualization_directives(answer_text: str, results_df=None) -> Dict[str, Any]:
@@ -293,9 +316,24 @@ class SQLChatbot:
                     f"Please ensure database_metadata.json exists or restore prompt.txt"
                 )
 
-    def get_connection(self):
-        """Get a database connection"""
-        return sqlite3.connect(self.db_path, check_same_thread=False)
+    def get_connection(self, read_only=True):
+        """
+        Get a database connection.
+
+        Args:
+            read_only: If True, opens database in read-only mode (default: True for safety)
+
+        Returns:
+            sqlite3.Connection: Database connection
+        """
+        if read_only:
+            # Open in read-only mode - prevents any write operations
+            # URI format: file:path?mode=ro
+            uri = f"file:{self.db_path}?mode=ro"
+            return sqlite3.connect(uri, uri=True, check_same_thread=False)
+        else:
+            # Regular read-write connection (only for admin operations)
+            return sqlite3.connect(self.db_path, check_same_thread=False)
 
     def get_database_schema(self):
         """Get the database schema for the LLM"""
@@ -369,8 +407,8 @@ Generate the SQL query now:"""
             response = client.chat.completions.create(
                 model=self.model,
                 messages=messages,
-                temperature=0.1,
-                max_tokens=500
+                temperature=config['model']['sql_temperature'],
+                max_tokens=config['model']['sql_max_tokens']
             )
 
             sql_query = response.choices[0].message.content.strip()
@@ -382,9 +420,9 @@ Generate the SQL query now:"""
             elif sql_query.startswith("```"):
                 sql_query = sql_query.split("```")[1].split("```")[0].strip()
 
-            # Remove any remaining explanatory text before SELECT/WITH/INSERT/UPDATE/DELETE
-            # Find the first SQL keyword
-            sql_keywords = ['SELECT', 'WITH', 'INSERT', 'UPDATE', 'DELETE', 'CREATE', 'DROP', 'ALTER']
+            # Remove any remaining explanatory text before SELECT/WITH
+            # SECURITY: Only look for read-only SQL keywords
+            sql_keywords = ['SELECT', 'WITH']
             for keyword in sql_keywords:
                 if keyword in sql_query.upper():
                     idx = sql_query.upper().find(keyword)
@@ -397,9 +435,41 @@ Generate the SQL query now:"""
             return f"ERROR: {e}"
 
     def execute_query(self, sql_query):
-        """Execute SQL query and return results"""
+        """
+        Execute SQL query and return results.
+
+        SECURITY: Only allows SELECT and WITH (CTE) statements.
+        All other operations (INSERT, UPDATE, DELETE, DROP, etc.) are blocked.
+        """
         try:
-            conn = self.get_connection()
+            # SECURITY: Validate that query is read-only
+            query_upper = sql_query.strip().upper()
+
+            # Remove comments and whitespace for validation
+            import re
+            query_clean = re.sub(r'--.*$', '', query_upper, flags=re.MULTILINE)  # Remove SQL comments
+            query_clean = re.sub(r'/\*.*?\*/', '', query_clean, flags=re.DOTALL)  # Remove block comments
+            query_clean = query_clean.strip()
+
+            # Allow only SELECT and WITH (Common Table Expressions)
+            allowed_keywords = ['SELECT', 'WITH']
+            dangerous_keywords = ['INSERT', 'UPDATE', 'DELETE', 'DROP', 'CREATE', 'ALTER', 'TRUNCATE', 'REPLACE', 'PRAGMA']
+
+            # Check if query starts with an allowed keyword
+            starts_with_allowed = any(query_clean.startswith(kw) for kw in allowed_keywords)
+
+            # Check if query contains dangerous keywords
+            contains_dangerous = any(kw in query_clean for kw in dangerous_keywords)
+
+            if not starts_with_allowed or contains_dangerous:
+                return None, (
+                    "Security Error: Only SELECT queries are allowed. "
+                    f"Detected prohibited operation. "
+                    "NestChat is read-only to protect your data."
+                )
+
+            # Execute the validated query with read-only connection
+            conn = self.get_connection(read_only=True)
             df = pd.read_sql_query(sql_query, conn)
             conn.close()
 
@@ -501,8 +571,8 @@ Please provide a clear, informative answer to the question based on these result
             response = client.chat.completions.create(
                 model=self.model,
                 messages=messages,
-                temperature=0.7,
-                max_tokens=1000
+                temperature=config['model']['temperature'],
+                max_tokens=config['model']['max_tokens']
             )
 
             answer = response.choices[0].message.content
@@ -603,8 +673,8 @@ Please provide a clear, informative answer to the question based on these result
             stream = client.chat.completions.create(
                 model=self.model,
                 messages=messages,
-                temperature=0.7,
-                max_tokens=1000,
+                temperature=config['model']['temperature'],
+                max_tokens=config['model']['max_tokens'],
                 stream=True
             )
 
@@ -635,7 +705,8 @@ async def root():
             "/ask": "POST - Ask a question in natural language",
             "/schema": "GET - Get database schema",
             "/stats": "GET - Get database statistics",
-            "/health": "GET - Health check"
+            "/health": "GET - Health check",
+            "/config": "GET - Get server configuration"
         }
     }
 
@@ -648,6 +719,24 @@ async def health():
         return {"status": "healthy", "database": "connected"}
     except Exception as e:
         raise HTTPException(status_code=503, detail=f"Database connection failed: {str(e)}")
+
+@app.get("/config")
+async def get_config():
+    """
+    Get server configuration (non-sensitive settings only).
+    Frontend can use this to stay synchronized with backend settings.
+    """
+    return {
+        "model": {
+            "name": config['model']['name'],
+            "temperature": config['model']['temperature'],
+            "max_tokens": config['model']['max_tokens']
+        },
+        "cv": {
+            "default_confidence": config['cv']['default_confidence'],
+            "default_fast_mode": config['cv']['default_fast_mode']
+        }
+    }
 
 @app.get("/services/status")
 async def get_services_status():
@@ -1083,7 +1172,7 @@ Column Statistics:
         response = client.chat.completions.create(
             model=chatbot.model,
             messages=messages,
-            temperature=0.7,
+            temperature=config['model']['temperature'],
             max_tokens=800
         )
 
@@ -1267,7 +1356,8 @@ async def update_table_row(table_name: str, request: RowUpdateRequest):
         RowUpdateResponse with success status
     """
     try:
-        conn = chatbot.get_connection()
+        # Use read_only=False for write operations (NestDB admin interface)
+        conn = chatbot.get_connection(read_only=False)
         cursor = conn.cursor()
 
         # Build WHERE clause from row_id
@@ -1328,7 +1418,8 @@ async def delete_table_row(table_name: str, request: RowDeleteRequest):
         RowDeleteResponse with success status
     """
     try:
-        conn = chatbot.get_connection()
+        # Use read_only=False for write operations (NestDB admin interface)
+        conn = chatbot.get_connection(read_only=False)
         cursor = conn.cursor()
 
         # Build WHERE clause from row_id
@@ -1381,7 +1472,8 @@ async def insert_table_row(table_name: str, request: RowInsertRequest):
         RowInsertResponse with success status
     """
     try:
-        conn = chatbot.get_connection()
+        # Use read_only=False for write operations (NestDB admin interface)
+        conn = chatbot.get_connection(read_only=False)
         cursor = conn.cursor()
 
         # Build INSERT query

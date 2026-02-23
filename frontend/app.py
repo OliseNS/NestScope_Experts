@@ -6,6 +6,7 @@ Avian Monitoring Analytics Platform
 import streamlit as st
 from styles import get_custom_css
 from components import render_sidebar_section, render_service_status_link
+from services import get_backend_config
 
 # Page configuration
 st.set_page_config(
@@ -141,8 +142,15 @@ st.markdown("""
 
 col1, col2 = st.columns(2, gap="large")
 
+# Fetch model configuration
+try:
+    backend_config = get_backend_config()
+    model_name = backend_config.get("model", {}).get("name", "minimax/minimax-m2.5")
+except Exception:
+    model_name = "minimax/minimax-m2.5"
+
 with col1:
-    st.markdown("""
+    st.markdown(f"""
     <div style="
         background: #2D2D2D;
         border: 1px solid #404040;
@@ -170,6 +178,11 @@ with col1:
             <li>Interactive maps and charts</li>
             <li>10+ years of survey data</li>
         </ul>
+        <div style="margin-top: 1rem; padding-top: 1rem; border-top: 1px solid #404040;">
+            <p style="font-size: 0.75rem; color: #888; margin: 0;">
+                ⚡ Powered by <code style="background: #1E1E1E; padding: 2px 6px; border-radius: 3px; color: #D97757;">{model_name}</code>
+            </p>
+        </div>
     </div>
     """, unsafe_allow_html=True)
 
@@ -202,6 +215,11 @@ with col2:
             <li>Export annotated results</li>
             <li>Manual correction tools</li>
         </ul>
+        <div style="margin-top: 1rem; padding-top: 1rem; border-top: 1px solid #404040;">
+            <p style="font-size: 0.75rem; color: #888; margin: 0;">
+                ⚡ Powered by <code style="background: #1E1E1E; padding: 2px 6px; border-radius: 3px; color: #D97757;">YOLOv8 (ONNX)</code>
+            </p>
+        </div>
     </div>
     """, unsafe_allow_html=True)
 
