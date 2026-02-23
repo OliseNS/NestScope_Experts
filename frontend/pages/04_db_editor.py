@@ -13,7 +13,8 @@ from services import (
     get_table_schema,
     update_table_row,
     delete_table_row,
-    insert_table_row
+    insert_table_row,
+    execute_custom_sql
 )
 from components import render_sidebar_section, render_service_status_link
 from styles import get_custom_css
@@ -123,8 +124,8 @@ with st.sidebar:
 st.title("NestDB")
 st.caption("Database management interface - view, edit, and add data")
 
-# Create tabs for Table Browser and Schema Viewer
-tab1, tab2 = st.tabs(["📊 Table Browser", "📋 Schema Viewer"])
+# Create tabs for Table Browser, Schema Viewer, and SQL Query Editor
+tab1, tab2, tab3 = st.tabs(["📊 Table Browser", "📋 Schema Viewer", "⚙️ SQL Query Editor"])
 
 # ============================================================================
 # TAB 1: TABLE BROWSER
@@ -518,3 +519,165 @@ with tab2:
             file_name=f"{schema_table}_schema.csv",
             mime="text/csv",
         )
+
+# ============================================================================
+# TAB 3: SQL QUERY EDITOR
+# ============================================================================
+
+with tab3:
+    st.markdown("""
+        <div class="title-card">
+            <h3>SQL Query Editor</h3>
+            <p>
+                Execute custom SQL queries directly against the database.
+                Write SELECT, JOIN, or complex analytical queries for advanced data exploration.
+            </p>
+        </div>
+    """, unsafe_allow_html=True)
+
+    # Initialize session state for query history
+    if "sql_query_history" not in st.session_state:
+        st.session_state.sql_query_history = []
+
+    if "sql_last_query" not in st.session_state:
+        st.session_state.sql_last_query = ""
+
+    # Example queries section
+    with st.expander("📚 Example Queries", expanded=False):
+        st.markdown("""
+        **Basic Queries:**
+        ```sql
+        -- View all observations from Texas
+        SELECT * FROM observations WHERE State = 'TX' LIMIT 100;
+
+        -- Count observations by year
+        SELECT Year, COUNT(*) as count
+        FROM observations
+        GROUP BY Year
+        ORDER BY Year;
+
+        -- Top 10 colonies by total bird count
+        SELECT ColonyName, SUM(Total) as TotalBirds
+        FROM observations
+        GROUP BY ColonyName
+        ORDER BY TotalBirds DESC
+        LIMIT 10;
+        ```
+
+        **Advanced Queries:**
+        ```sql
+        -- Species diversity by state
+        SELECT State, COUNT(DISTINCT Species) as SpeciesCount
+        FROM observations
+        GROUP BY State
+        ORDER BY SpeciesCount DESC;
+
+        -- Year-over-year growth for a specific colony
+        SELECT Year, Total,
+               Total - LAG(Total) OVER (ORDER BY Year) as YearOverYearChange
+        FROM observations
+        WHERE ColonyName = 'Your Colony Name Here'
+        ORDER BY Year;
+        ```
+        """)
+
+    # Query input area
+    st.markdown("### Write Your Query")
+    sql_query = st.text_area(
+        "SQL Query",
+        value=st.session_state.sql_last_query,
+        height=200,
+        placeholder="SELECT * FROM observations LIMIT 100;",
+        help="Write your SQL query here. Use standard SQLite syntax.",
+        label_visibility="collapsed"
+    )
+
+    # Execute button and safety note
+    col1, col2, col3 = st.columns([1, 2, 1])
+    with col2:
+        execute_button = st.button("▶️ Execute Query", type="primary", use_container_width=True)
+
+    # Safety warning
+    st.info("💡 **Tip:** This editor is read-only for safety. Only SELECT queries are recommended. Modifying queries (INSERT, UPDATE, DELETE) may work but use caution.")
+
+    # Execute query
+    if execute_button:
+        if not sql_query.strip():
+            st.warning("Please enter a SQL query.")
+        else:
+            # Store query in session state
+            st.session_state.sql_last_query = sql_query
+
+            # Add to history if not duplicate
+            if sql_query not in st.session_state.sql_query_history:
+                st.session_state.sql_query_history.insert(0, sql_query)
+                # Keep only last 10 queries
+                st.session_state.sql_query_history = st.session_state.sql_query_history[:10]
+
+            with st.spinner("Executing query..."):
+                response = execute_custom_sql(sql_query)
+
+            # Display results
+            if response.get("success"):
+                results = response.get("results", [])
+                results_count = response.get("results_count", 0)
+
+                st.success(f"✅ Query executed successfully! Returned {results_count:,} row(s).")
+
+                if results_count > 0:
+                    # Convert to dataframe
+                    results_df = pd.DataFrame(results)
+
+                    # Display results
+                    st.markdown("### Query Results")
+                    st.dataframe(results_df, use_container_width=True, height=400)
+
+                    # Download button
+                    csv = results_df.to_csv(index=False).encode('utf-8')
+                    st.download_button(
+                        label=f"📥 Download Results ({results_count} rows)",
+                        data=csv,
+                        file_name="query_results.csv",
+                        mime="text/csv",
+                    )
+                else:
+                    st.info("Query executed successfully but returned no rows.")
+
+            else:
+                error_msg = response.get("error", "Unknown error")
+                st.error(f"❌ Query failed: {error_msg}")
+
+                # Show helpful error tips
+                with st.expander("💡 Common Error Solutions"):
+                    st.markdown("""
+                    **Table doesn't exist?**
+                    - Check the Schema Viewer tab for available tables
+                    - Table names are case-sensitive
+
+                    **Syntax error?**
+                    - SQLite uses standard SQL syntax
+                    - Use single quotes for strings: `'TX'` not `"TX"`
+                    - End statements with semicolon (optional)
+
+                    **Column doesn't exist?**
+                    - Check the Schema Viewer for correct column names
+                    - Column names are case-sensitive
+                    """)
+
+    # Query history section
+    if st.session_state.sql_query_history:
+        st.markdown("---")
+        st.markdown("### 📜 Query History")
+
+        for idx, hist_query in enumerate(st.session_state.sql_query_history[:5]):
+            with st.expander(f"Query {idx + 1}: {hist_query[:50]}..."):
+                st.code(hist_query, language="sql")
+                col1, col2 = st.columns([1, 1])
+                with col1:
+                    if st.button(f"↩️ Reuse", key=f"reuse_{idx}", use_container_width=True):
+                        st.session_state.sql_last_query = hist_query
+                        st.rerun()
+                with col2:
+                    if st.button(f"🗑️ Remove", key=f"remove_{idx}", use_container_width=True):
+                        st.session_state.sql_query_history.pop(idx)
+                        st.rerun()

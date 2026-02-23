@@ -1,96 +1,32 @@
 {
-  "created_at": "2026-02-07T21:49:08.457636",
-  "database_size_mb": 10.45703125,
+  "created_at": "2026-02-21T19:33:31.105999",
+  "database_size_mb": 7.85,
+  "source_database": "Colibri2010-2021CWBColonies_2Jan2023.accdb",
   "tables": {
-    "colony_coordinates": {
-      "row_count": 87,
+    "tblColonySiteNotes2011-2021": {
+      "row_count": 3738,
       "columns": [
-        "ColonyID",
-        "ActiveInventory",
-        "ColonyGroupBuffer",
-        "ColonyName",
-        "State",
-        "Year_ChandeleursOnly",
-        "Longitude",
-        "Latitude",
-        "GeoRegion",
-        "ExtrapArea",
-        "TerrestEcoRegion",
-        "MarineEcoRegion",
-        "FormerNames",
-        "OrigDotterID",
-        "NOTES August 2022",
-        "Colony Years Within 500 m"
-      ]
-    },
-    "colony_inventory": {
-      "row_count": 592,
-      "columns": [
-        "ColonyID",
-        "ActiveInventory",
-        "ColonyGroupBuffer",
-        "ColonyName",
-        "State",
-        "Longitude",
-        "Latitude",
-        "PrimaryHabitat",
-        "LandForm",
-        "GeoRegion",
-        "ExtrapArea",
-        "TerrestEcoRegion",
-        "MarineEcoRegion",
-        "FormerNames",
-        "OrigDotterID",
-        "NOTES August 2022"
-      ]
-    },
-    "colony_site_notes": {
-      "row_count": 4035,
-      "columns": [
-        "ActiveMayJune?",
-        "AdditionalNotes",
-        "ColonyName",
-        "CombineMayJuneData?",
-        "Date",
-        "Dotter",
-        "Dotter'sColonyNumber",
-        "Habitat",
-        "ID",
-        "Latitude",
-        "Longitude",
-        "Notes",
-        "Oil",
-        "SpeciesCode",
-        "Year"
-      ]
-    },
-    "colony_totals": {
-      "row_count": 5931,
-      "columns": [
-        "ID",
         "Year",
         "Date",
-        "State",
-        "GeoRegion",
         "ColonyName",
-        "Latitude",
-        "Longitude",
+        "Dotter",
+        "Habitat",
+        "Oil",
         "SpeciesCode",
-        "Nests",
-        "Birds",
+        "ActiveMayJune?",
+        "CombineMayJuneData?",
         "Notes",
-        "BestForBPE",
-        "CombinedMayJuneTotal"
+        "AdditionalNotes"
       ]
     },
-    "species_codes": {
+    "tblSpeciesCodes": {
       "row_count": 73,
       "columns": [
         "SpeciesCode",
         "SpeciesName"
       ]
     },
-    "species_data_2010": {
+    "tblSpeciesData2010": {
       "row_count": 9557,
       "columns": [
         "AutoID",
@@ -125,7 +61,7 @@
         "Notes"
       ]
     },
-    "species_data_2011_2013": {
+    "tblSpeciesData2011-2013": {
       "row_count": 15920,
       "columns": [
         "AutoID",
@@ -154,12 +90,12 @@
         "UnknownAge",
         "Dotter",
         "DateDotted",
-        "BestForBPE",
+        "BestForBPE?",
         "Notes",
         "AdditionalNotes"
       ]
     },
-    "species_data_2015_2021": {
+    "tblSpeciesData2015_2018_2021": {
       "row_count": 23747,
       "columns": [
         "AutoID",
@@ -185,9 +121,85 @@
         "OtherBirds",
         "Dotter",
         "DateDotted",
-        "BestForBPE",
+        "BestForBPE?",
         "Notes",
         "AdditionalNotes"
+      ]
+    },
+    "tblColonySiteNotes2010": {
+      "row_count": 299,
+      "columns": [
+        "ID",
+        "Latitude",
+        "Longitude",
+        "Dotter",
+        "Dotter'sColonyNumber",
+        "ColonyName",
+        "Habitat",
+        "Oil",
+        "Notes",
+        "AdditionalNotes"
+      ]
+    },
+    "tblColonyTotals2010-2021_MayJuneCombined": {
+      "row_count": 5931,
+      "columns": [
+        "ID",
+        "Year",
+        "Date",
+        "State",
+        "GeoRegion",
+        "ColonyName",
+        "Latitude",
+        "Longitude",
+        "SpeciesCode",
+        "Nests",
+        "Birds",
+        "Notes",
+        "BestForBPE?",
+        "CombinedMayJuneTotal?"
+      ]
+    },
+    "tblRWCWB_ColonyInventory_10Nov22": {
+      "row_count": 592,
+      "columns": [
+        "ColonyID",
+        "ActiveInventory",
+        "ColonyGroupBuffer",
+        "ColonyName",
+        "State",
+        "Longitude",
+        "Latitude",
+        "PrimaryHabitat",
+        "LandForm",
+        "GeoRegion",
+        "ExtrapArea",
+        "TerrestEcoRegion",
+        "MarineEcoRegion",
+        "FormerNames",
+        "OrigDotterID",
+        "NOTES August 2022"
+      ]
+    },
+    "tblChandeleurNorthSouth_2010-2021ColonyCentroidCoordinates": {
+      "row_count": 87,
+      "columns": [
+        "ColonyID",
+        "ActiveInventory",
+        "ColonyGroupBuffer",
+        "ColonyName",
+        "State",
+        "Year (ChandeleursOnly)",
+        "Longitude",
+        "Latitude",
+        "GeoRegion",
+        "ExtrapArea",
+        "TerrestEcoRegion",
+        "MarineEcoRegion",
+        "FormerNames",
+        "OrigDotterID",
+        "NOTES August 2022",
+        "Colony Years Within 500 m"
       ]
     }
   }

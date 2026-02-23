@@ -20,6 +20,7 @@ import cv2
 import base64
 import httpx
 from server.cv_tools.inference import BirdDetector, get_example_images
+from server.generate_prompt import generate_dynamic_prompt
 
 # Load environment variables
 load_dotenv()
@@ -267,12 +268,30 @@ class SQLChatbot:
         self.system_prompt = self._load_system_prompt()
 
     def _load_system_prompt(self):
-        """Load system prompt from prompt.txt file"""
+        """
+        Load system prompt dynamically from database metadata.
+
+        Falls back to prompt.txt file if dynamic generation fails.
+        """
         try:
-            with open(self.prompt_path, 'r', encoding='utf-8') as f:
-                return f.read()
-        except FileNotFoundError:
-            raise FileNotFoundError(f"System prompt file not found at: {self.prompt_path}")
+            # Try to generate dynamic prompt from database_metadata.json
+            print("📝 Generating dynamic system prompt from database metadata...")
+            prompt = generate_dynamic_prompt()
+            print("✓ Dynamic system prompt loaded successfully")
+            return prompt
+        except Exception as e:
+            # Fallback to static prompt.txt if dynamic generation fails
+            print(f"⚠ Warning: Failed to generate dynamic prompt: {e}")
+            print(f"📄 Falling back to static prompt file: {self.prompt_path}")
+            try:
+                with open(self.prompt_path, 'r', encoding='utf-8') as f:
+                    return f.read()
+            except FileNotFoundError:
+                raise FileNotFoundError(
+                    f"System prompt file not found at: {self.prompt_path}\n"
+                    f"AND dynamic prompt generation failed.\n"
+                    f"Please ensure database_metadata.json exists or restore prompt.txt"
+                )
 
     def get_connection(self):
         """Get a database connection"""
@@ -1140,7 +1159,8 @@ async def get_table_data(table_name: str, page: int = 1, page_size: int = 50):
             )
 
         # Get total row count
-        cursor.execute(f"SELECT COUNT(*) FROM {table_name}")
+        # Escape table name with double quotes to handle special characters (hyphens, spaces)
+        cursor.execute(f'SELECT COUNT(*) FROM "{table_name}"')
         total_rows = cursor.fetchone()[0]
 
         # Calculate pagination
@@ -1148,7 +1168,7 @@ async def get_table_data(table_name: str, page: int = 1, page_size: int = 50):
         offset = (page - 1) * page_size
 
         # Get paginated data
-        query = f"SELECT * FROM {table_name} LIMIT ? OFFSET ?"
+        query = f'SELECT * FROM "{table_name}" LIMIT ? OFFSET ?'
         df = pd.read_sql_query(query, conn, params=(page_size, offset))
 
         conn.close()
@@ -1203,7 +1223,8 @@ async def get_table_schema(table_name: str):
             )
 
         # Get column info
-        cursor.execute(f"PRAGMA table_info({table_name})")
+        # Escape table name with double quotes to handle special characters
+        cursor.execute(f'PRAGMA table_info("{table_name}")')
         columns_raw = cursor.fetchall()
 
         columns = []
@@ -1250,10 +1271,11 @@ async def update_table_row(table_name: str, request: RowUpdateRequest):
         cursor = conn.cursor()
 
         # Build WHERE clause from row_id
+        # Escape column names with double quotes to handle special characters
         where_parts = []
         where_values = []
         for col, val in request.row_id.items():
-            where_parts.append(f"{col} = ?")
+            where_parts.append(f'"{col}" = ?')
             where_values.append(val)
         where_clause = " AND ".join(where_parts)
 
@@ -1261,12 +1283,13 @@ async def update_table_row(table_name: str, request: RowUpdateRequest):
         set_parts = []
         set_values = []
         for col, val in request.updates.items():
-            set_parts.append(f"{col} = ?")
+            set_parts.append(f'"{col}" = ?')
             set_values.append(val)
         set_clause = ", ".join(set_parts)
 
         # Execute update
-        query = f"UPDATE {table_name} SET {set_clause} WHERE {where_clause}"
+        # Escape table name with double quotes to handle special characters
+        query = f'UPDATE "{table_name}" SET {set_clause} WHERE {where_clause}'
         cursor.execute(query, set_values + where_values)
         conn.commit()
 
@@ -1309,15 +1332,17 @@ async def delete_table_row(table_name: str, request: RowDeleteRequest):
         cursor = conn.cursor()
 
         # Build WHERE clause from row_id
+        # Escape column names with double quotes to handle special characters
         where_parts = []
         where_values = []
         for col, val in request.row_id.items():
-            where_parts.append(f"{col} = ?")
+            where_parts.append(f'"{col}" = ?')
             where_values.append(val)
         where_clause = " AND ".join(where_parts)
 
         # Execute delete
-        query = f"DELETE FROM {table_name} WHERE {where_clause}"
+        # Escape table name with double quotes to handle special characters
+        query = f'DELETE FROM "{table_name}" WHERE {where_clause}'
         cursor.execute(query, where_values)
         conn.commit()
 
@@ -1360,12 +1385,13 @@ async def insert_table_row(table_name: str, request: RowInsertRequest):
         cursor = conn.cursor()
 
         # Build INSERT query
+        # Escape column names and table name with double quotes to handle special characters
         columns = list(request.row_data.keys())
         values = list(request.row_data.values())
         placeholders = ", ".join(["?" for _ in values])
-        columns_str = ", ".join(columns)
+        columns_str = ", ".join([f'"{col}"' for col in columns])
 
-        query = f"INSERT INTO {table_name} ({columns_str}) VALUES ({placeholders})"
+        query = f'INSERT INTO "{table_name}" ({columns_str}) VALUES ({placeholders})'
         cursor.execute(query, values)
         conn.commit()
 
