@@ -95,11 +95,11 @@ def render_map(df: pd.DataFrame):
         else:
             zoom = 7
 
-        # Create map with light clean theme
+        # Create map with clear shoreline and vegetation visualization
         m = folium.Map(
             location=[avg_lat, avg_lon],
             zoom_start=zoom,
-            tiles='CartoDB positron',
+            tiles='OpenStreetMap',
             control_scale=True
         )
 
@@ -173,7 +173,7 @@ def render_map(df: pd.DataFrame):
 
         # Show summary statistics
         if len(map_df) > 1:
-            col1, col2, col3 = st.columns(3)
+            col1, col2 = st.columns(2)
             with col1:
                 st.metric("📍 Locations", len(map_df))
             with col2:
@@ -181,8 +181,6 @@ def render_map(df: pd.DataFrame):
                     st.metric("🦅 Species", len(unique_species))
                 else:
                     st.metric("🗺️ Zoom", zoom)
-            with col3:
-                st.metric("📐 Area (°)", f"{max_range:.2f}")
 
     except Exception as e:
         st.error(f"❌ Error generating map: {str(e)}")
