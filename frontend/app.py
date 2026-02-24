@@ -170,13 +170,13 @@ with col1:
         </div>
         <h3 style="color: #E5E5E5; margin: 0 0 0.75rem 0; font-size: 1.25rem; font-weight: 600;">NestChat</h3>
         <p style="color: #A0A0A0; font-size: 0.875rem; line-height: 1.6; margin-bottom: 1.25rem;">
-            Natural language interface for querying bird survey data with intelligent visualizations
+            Natural language interface for querying bird survey data with intelligent visualizations and PDF report generation
         </p>
         <ul style="color: #E5E5E5; font-size: 0.875rem; line-height: 1.8; margin-left: 1.25rem; padding-left: 0;">
             <li>Ask questions in plain English</li>
             <li>Instant visualizations and insights</li>
             <li>Interactive maps and charts</li>
-            <li>10+ years of survey data</li>
+            <li>Generate professional PDF analysis reports</li>
         </ul>
         <div style="margin-top: 1rem; padding-top: 1rem; border-top: 1px solid #404040;">
             <p style="font-size: 0.75rem; color: #888; margin: 0;">
@@ -218,6 +218,85 @@ with col2:
         <div style="margin-top: 1rem; padding-top: 1rem; border-top: 1px solid #404040;">
             <p style="font-size: 0.75rem; color: #888; margin: 0;">
                 ⚡ Powered by <code style="background: #1E1E1E; padding: 2px 6px; border-radius: 3px; color: #D97757;">YOLOv8 (ONNX)</code>
+            </p>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+st.markdown("<div style='height: 2rem;'></div>", unsafe_allow_html=True)
+
+# Third feature card for NestDB
+col3, col4 = st.columns(2, gap="large")
+
+with col3:
+    st.markdown("""
+    <div style="
+        background: #2D2D2D;
+        border: 1px solid #404040;
+        border-radius: 12px;
+        padding: 1.75rem;
+        height: 100%;
+        transition: all 0.2s ease;
+    " onmouseover="this.style.borderColor='#D97757'; this.style.background='#333';" onmouseout="this.style.borderColor='#404040'; this.style.background='#2D2D2D';">
+        <div style="
+            display: inline-block;
+            background: rgba(217, 119, 87, 0.15);
+            border-radius: 8px;
+            padding: 0.5rem 0.75rem;
+            margin-bottom: 1rem;
+        ">
+            <span style="font-size: 1.5rem;">🗄️</span>
+        </div>
+        <h3 style="color: #E5E5E5; margin: 0 0 0.75rem 0; font-size: 1.25rem; font-weight: 600;">NestDB</h3>
+        <p style="color: #A0A0A0; font-size: 0.875rem; line-height: 1.6; margin-bottom: 1.25rem;">
+            Database management interface for viewing and editing survey data tables
+        </p>
+        <ul style="color: #E5E5E5; font-size: 0.875rem; line-height: 1.8; margin-left: 1.25rem; padding-left: 0;">
+            <li>Browse all database tables</li>
+            <li>View and edit records</li>
+            <li>Search and filter data</li>
+            <li>Export to CSV</li>
+        </ul>
+        <div style="margin-top: 1rem; padding-top: 1rem; border-top: 1px solid #404040;">
+            <p style="font-size: 0.75rem; color: #888; margin: 0;">
+                ⚡ Direct database access
+            </p>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+with col4:
+    st.markdown("""
+    <div style="
+        background: #2D2D2D;
+        border: 1px solid #404040;
+        border-radius: 12px;
+        padding: 1.75rem;
+        height: 100%;
+        transition: all 0.2s ease;
+    " onmouseover="this.style.borderColor='#D97757'; this.style.background='#333';" onmouseout="this.style.borderColor='#404040'; this.style.background='#2D2D2D';">
+        <div style="
+            display: inline-block;
+            background: rgba(217, 119, 87, 0.15);
+            border-radius: 8px;
+            padding: 0.5rem 0.75rem;
+            margin-bottom: 1rem;
+        ">
+            <span style="font-size: 1.5rem;">🧑‍🔬</span>
+        </div>
+        <h3 style="color: #E5E5E5; margin: 0 0 0.75rem 0; font-size: 1.25rem; font-weight: 600;">Nestperts</h3>
+        <p style="color: #A0A0A0; font-size: 0.875rem; line-height: 1.6; margin-bottom: 1.25rem;">
+            Expert species training and annotation platform for creating labeled datasets
+        </p>
+        <ul style="color: #E5E5E5; font-size: 0.875rem; line-height: 1.8; margin-left: 1.25rem; padding-left: 0;">
+            <li>MobileSAM segmentation</li>
+            <li>Species identification</li>
+            <li>Multi-expert workflow</li>
+            <li>Training data generation</li>
+        </ul>
+        <div style="margin-top: 1rem; padding-top: 1rem; border-top: 1px solid #404040;">
+            <p style="font-size: 0.75rem; color: #888; margin: 0;">
+                ⚡ Flask app on port 5000
             </p>
         </div>
     </div>
