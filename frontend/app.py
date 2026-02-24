@@ -4,92 +4,18 @@ Avian Monitoring Analytics Platform
 """
 
 import streamlit as st
-from styles import get_custom_css
-from components import render_sidebar_section, render_service_status_link
+from components import init_page, render_header, render_sidebar
 from services import get_backend_config
 
-# Page configuration
-st.set_page_config(
-    page_title="NestScope",
-    page_icon="🦅",
-    layout="wide",
-    initial_sidebar_state="expanded"
-)
+# Initialize page with shared layout
+init_page(page_title="NestScope", page_icon="🦅", layout="wide")
 
-# Hide Streamlit's default page navigation
-st.markdown("""
-<style>
-    /* Hide Streamlit's page navigation */
-    [data-testid="stSidebarNav"] {
-        display: none;
-    }
+# Render shared header
+render_header()
 
-    /* Fixed header */
-    .fixed-header {
-        position: fixed;
-        top: 0;
-        left: 0;
-        right: 0;
-        background: #1E1E1E;
-        border-bottom: 1px solid #333;
-        padding: 0.75rem 1.5rem;
-        display: flex;
-        align-items: center;
-        gap: 0.75rem;
-        z-index: 999999;
-    }
-
-    .main-content {
-        margin-top: 4rem;
-    }
-</style>
-""", unsafe_allow_html=True)
-
-# Set page name for top bar
-if 'page_name' not in st.session_state:
-    st.session_state.page_name = "Home"
-
-# Apply custom styling
-st.markdown(get_custom_css(), unsafe_allow_html=True)
-
-# Fixed header
-st.markdown("""
-    <div class="fixed-header">
-        <span style="font-size: 1.5rem;">🦅</span>
-        <span style="font-size: 1rem; font-weight: 600; color: #E5E5E5;">NestScope</span>
-        <span style="color: #666; font-size: 0.875rem;">Avian Monitoring Suite</span>
-    </div>
-""", unsafe_allow_html=True)
-
-# Render sidebar with Google Cloud-like organization
+# Render shared sidebar
 with st.sidebar:
-    # Navigation section
-    render_sidebar_section("Navigation")
-
-    if st.button("🏠 Home", use_container_width=True, help="Return to home page", type="primary"):
-        st.rerun()
-
-    if st.button("💬 NestChat", use_container_width=True, help="Natural language data queries"):
-        st.switch_page("pages/01_nest_chat.py")
-
-    if st.button("🦅 NestVision", use_container_width=True, help="AI bird detection & counting"):
-        st.switch_page("pages/02_nest_vision.py")
-
-    if st.button("🗄️ NestDB", use_container_width=True, help="Database management interface"):
-        st.switch_page("pages/04_db_editor.py")
-
-    # Tools section
-    render_sidebar_section("Tools")
-
-    # Nestperts link using st.link_button
-    st.link_button("🧑‍🔬 Nestperts", "http://localhost:5000", use_container_width=True, help="Expert species training platform")
-
-    # System Status section
-    render_sidebar_section("System Status")
-    render_service_status_link()
-
-# Main content wrapper
-st.markdown('<div class="main-content">', unsafe_allow_html=True)
+    render_sidebar(active_page="home")
 
 # Main landing page - Google Cloud style
 st.markdown("""

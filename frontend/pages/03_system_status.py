@@ -5,67 +5,29 @@ Detailed view of all NestScope service health statuses
 
 import streamlit as st
 from components import (
-    render_sidebar_section,
+    init_page,
+    render_header,
+    render_sidebar,
     get_services_status
 )
-from styles import get_custom_css
 
 # ============================================================================
 # PAGE CONFIG
 # ============================================================================
 
-st.set_page_config(
-    page_title="System Status - NestScope",
-    page_icon="🦅",
-    layout="wide",
-    initial_sidebar_state="expanded"
-)
+# Initialize page with shared layout
+init_page(page_title="System Status - NestScope", page_icon="🦅", layout="wide")
 
-# Apply custom styling
-st.markdown(get_custom_css(), unsafe_allow_html=True)
+# Render shared header
+render_header(page_name="System Status")
 
 # ============================================================================
 # SIDEBAR
 # ============================================================================
 
 with st.sidebar:
-    # Navigation Section
-    render_sidebar_section("Navigation")
-
-    if st.button("🏠 Home", use_container_width=True, help="Return to home page"):
-        st.switch_page("app.py")
-
-    if st.button("💬 NestChat", use_container_width=True, help="Natural language data queries"):
-        st.switch_page("pages/01_nest_chat.py")
-
-    if st.button("🦅 NestVision", use_container_width=True, help="AI bird detection & counting"):
-        st.switch_page("pages/02_nest_vision.py")
-
-    if st.button("🗄️ NestDB", use_container_width=True, help="Database management interface"):
-        st.switch_page("pages/04_db_editor.py")
-
-    # Tools section
-    render_sidebar_section("Tools")
-
-    st.link_button("🧑‍🔬 Nestperts", "http://localhost:5000", use_container_width=True, help="Expert species training platform")
-
-    # System Status section
-    render_sidebar_section("System Status")
-
-    st.markdown("""
-        <div style="
-            background: rgba(76, 175, 80, 0.1);
-            border: 1px solid rgba(76, 175, 80, 0.3);
-            border-radius: 6px;
-            padding: 0.75rem;
-            margin: 0.5rem 0;
-        ">
-            <div style="display: flex; align-items: center; gap: 0.5rem;">
-                <span style="color: #4CAF50; font-size: 1rem;">●</span>
-                <span style="color: #E5E5E5; font-size: 0.75rem; font-weight: 500;">Viewing Status Page</span>
-            </div>
-        </div>
-    """, unsafe_allow_html=True)
+    # Render shared navigation, tools, and status
+    render_sidebar(active_page="status")
 
 # ============================================================================
 # MAIN CONTENT
