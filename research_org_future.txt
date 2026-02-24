@@ -1,0 +1,36 @@
+Future Directions
+
+Jump to Section: 
+Historical Data Updates
+Web Interface Updates
+
+The Avian Data Monitoring Portal represents a highly comprehensive resource intentionally designed to inform and visualize colonial waterbird benefits generated in association with Deepwater Horizon restoration activities throughout Louisiana and the broader northern Gulf. Simply put, the Portal gives everyone direct access to actually see their resources being restored (QB Image). It’s that capacity that has prompted interest in its potential to inform and extend not only avian restoration efforts, but efforts to restore other natural resources along the northern Gulf. LA-TIG is supporting further advancement of this project over the next 5 years. Below we highlight some of the future directions for the Avian Data Monitoring Portal.  
+Survey and Dotting Methods Upgrades
+
+Researchers at The Water Institute, in collaboration with Colibri have revised the avian surveying data collection methods for the 2024, 2026, and 2028 collection periods. This evolution in data collection and processing workflow is designed to deliver imagery and species observations in a format that can be directly integrated into web-based GIS platforms.
+
+ A broad overview of modifications to the survey and dotting methodologies is as follows: 
+
+    High altitude overview imagery will be collected using a fixed camera mount capable of ensuring on-nadir (i.e., directly below) imagery outputs. Survey flightlines for this altitude will be parallel transects structured to achieve a ground sampling distance (GSD) of 3.5 cm. There are no proposed changes to low altitude detail imagery collection methods. 
+    High altitude overview imagery will be used to create high resolution mosaics of colony locations georeferenced to orthoimagery from the National Agricultural Imagery Program (NAIP). These colony-specific high altitude imagery mosaics are intended to serve as detailed reference layers to automate the georeferencing of collected low altitude detail imagery.  
+    Dotting activities for the georeferenced detail imagery will be conducted in a desktop GIS rather than a standalone imaging program without geospatial capabilities. The attributes of output GIS dotting features will mirror the schema of the original collection methods insofar as distinguishing specific species and observation categories.  
+    Georeferenced imagery and geospatially enabled dotting point features will be ingested into a web GIS application frontend allowing users to access the data in an interactive map interface. The elevated geospatial utility of the data supports additional summary and analysis functionality to generate custom reports and extracts of the source data based on spatial and attribute queries.  
+
+
+An example of the types of outputs that will be available from this effort is available for survey data collected for Queen Bess Island in Louisiana in 2023, and can be seen here. 
+
+This evolution is consistent with Monitoring and Adaptive Management (MAM) Fundamental Objectives 1 and 2: To restore, maintain, and enhance nesting, foraging, and loafing habitat across coastal Louisiana to support shrub and ground-nesting birds, with sufficient elevation for supratidal habitat and vegetation above the intertidal zone. 
+Historical Data Updates
+
+In addition to upgrading survey methodologies, previously collected data (2010-2021) will also be upgraded to this geospatially enabled format to support direct analysis (e.g., linking to habitat types, weather, geomorphology, or storm events, etc.) with a dotting geolocation accuracy (nests and birds) of less than one meter. The upgrade will increase data value and utility for end users, enabling additional analytical capabilities such as the creation of dynamic data summaries for selected geographic areas and time periods. Finally, the upgrade will positively impact efforts designed to increase data discoverability by providing a direct linkage (seamless transition) between web interface presentations of the 2022-on geospatially enabled data and the source high-resolution images used to generate it. 
+Web Interface Updates
+
+A website will be upgraded to provide end users with a seamless linkage between primary data (high resolution photographs used to identify nests), the web accessible geolocated data (nests; either transferred from low-resolution dotted images or dotted directly onto the GIS web interface) and associated metadata (species, etc.). This system will directly support: 
+
+    Trustee's ability to develop and report on SMART objectives and inform restoration project design and implementation. 
+    Enhancement of bird count data access (by species and year) for any defined geographic extent (project, island, and program), and value and overall experience for targeted end users (restoration practitioners, managers, planners, researchers with emphasis placed on the general public). 
+    Self-service analytical capabilities such as the creation of dynamic data summaries 'on the fly' for selected geographic areas and time periods. 
+
+
+
+To ensure DWH information access and compliance, a direct linkage between the AWS server and National Oceanic and Atmospheric Administration's (NOAA) Data Integration Visualization Exploration and Reporting (DIVER) site is maintained. All activities have been developed in concert with NOAA DIVER and the CPRA Coastal Information Management System (CIMS).
