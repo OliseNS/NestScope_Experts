@@ -387,24 +387,71 @@ class AccessToSQLiteMigrator:
     def generate_metadata(self, conn: sqlite3.Connection,
                          tables_info: Dict[str, Dict[str, Any]]) -> Dict[str, Any]:
         """
-        Generate metadata JSON for the database.
+        Generate enhanced metadata JSON for the database with relationships.
 
         Args:
             conn: SQLite connection
             tables_info: Dictionary mapping table names to their metadata
 
         Returns:
-            Complete metadata dictionary
+            Complete enhanced metadata dictionary
         """
         # Get database file size
         db_size_bytes = self.sqlite_path.stat().st_size
         db_size_mb = db_size_bytes / (1024 * 1024)
 
+        # Define table relationships (foreign keys)
+        relationships = [
+            {
+                'from_table': 'tblColonyTotals2010-2021_MayJuneCombined',
+                'from_column': 'SpeciesCode',
+                'to_table': 'tblSpeciesCodes',
+                'to_column': 'SpeciesCode',
+                'type': 'many-to-one'
+            },
+            {
+                'from_table': 'tblColonyTotals2010-2021_MayJuneCombined',
+                'from_column': 'ColonyName',
+                'to_table': 'tblRWCWB_ColonyInventory_10Nov22',
+                'to_column': 'ColonyName',
+                'type': 'many-to-one'
+            },
+            {
+                'from_table': 'tblSpeciesData2010',
+                'from_column': 'SpeciesCode',
+                'to_table': 'tblSpeciesCodes',
+                'to_column': 'SpeciesCode',
+                'type': 'many-to-one'
+            },
+            {
+                'from_table': 'tblSpeciesData2011-2013',
+                'from_column': 'SpeciesCode',
+                'to_table': 'tblSpeciesCodes',
+                'to_column': 'SpeciesCode',
+                'type': 'many-to-one'
+            },
+            {
+                'from_table': 'tblSpeciesData2015_2018_2021',
+                'from_column': 'SpeciesCode',
+                'to_table': 'tblSpeciesCodes',
+                'to_column': 'SpeciesCode',
+                'type': 'many-to-one'
+            }
+        ]
+
+        # Build clean table metadata
+        enhanced_tables = {}
+        for table_name, table_info in tables_info.items():
+            enhanced_tables[table_name] = {
+                'row_count': table_info['row_count'],
+                'columns': table_info['columns']
+            }
+
         metadata = {
             'created_at': datetime.now().isoformat(),
             'database_size_mb': round(db_size_mb, 2),
-            'source_database': str(self.accdb_path.name),
-            'tables': tables_info
+            'relationships': relationships,
+            'tables': enhanced_tables
         }
 
         return metadata
@@ -447,17 +494,17 @@ class AccessToSQLiteMigrator:
                     # Continue with other tables
                     continue
 
-            # Generate metadata
+            # Generate enhanced metadata
             print("\n" + "=" * 70)
-            print("📊 Generating Metadata")
+            print("📊 Generating Enhanced Metadata")
             print("=" * 70)
             metadata = self.generate_metadata(conn, tables_info)
 
-            # Write metadata to file
+            # Write enhanced metadata to file
             with open(self.metadata_path, 'w') as f:
                 json.dump(metadata, f, indent=2)
 
-            print(f"✓ Metadata written to {self.metadata_path}")
+            print(f"✓ Enhanced metadata written to {self.metadata_path}")
 
             # Print summary
             print("\n" + "=" * 70)
@@ -506,8 +553,8 @@ Examples:
 
     parser.add_argument(
         '--metadata', '-m',
-        default='database_metadata.json',
-        help='Path for output metadata JSON file'
+        default='database_metadata_enhanced.json',
+        help='Path for output enhanced metadata JSON file'
     )
 
     args = parser.parse_args()

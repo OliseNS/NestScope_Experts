@@ -1,7 +1,43 @@
 {
-  "created_at": "2026-02-21T19:33:31.105999",
+  "created_at": "2026-02-23T20:41:20.008958",
   "database_size_mb": 7.85,
-  "source_database": "Colibri2010-2021CWBColonies_2Jan2023.accdb",
+  "relationships": [
+    {
+      "from_table": "tblColonyTotals2010-2021_MayJuneCombined",
+      "from_column": "SpeciesCode",
+      "to_table": "tblSpeciesCodes",
+      "to_column": "SpeciesCode",
+      "type": "many-to-one"
+    },
+    {
+      "from_table": "tblColonyTotals2010-2021_MayJuneCombined",
+      "from_column": "ColonyName",
+      "to_table": "tblRWCWB_ColonyInventory_10Nov22",
+      "to_column": "ColonyName",
+      "type": "many-to-one"
+    },
+    {
+      "from_table": "tblSpeciesData2010",
+      "from_column": "SpeciesCode",
+      "to_table": "tblSpeciesCodes",
+      "to_column": "SpeciesCode",
+      "type": "many-to-one"
+    },
+    {
+      "from_table": "tblSpeciesData2011-2013",
+      "from_column": "SpeciesCode",
+      "to_table": "tblSpeciesCodes",
+      "to_column": "SpeciesCode",
+      "type": "many-to-one"
+    },
+    {
+      "from_table": "tblSpeciesData2015_2018_2021",
+      "from_column": "SpeciesCode",
+      "to_table": "tblSpeciesCodes",
+      "to_column": "SpeciesCode",
+      "type": "many-to-one"
+    }
+  ],
   "tables": {
     "tblColonySiteNotes2011-2021": {
       "row_count": 3738,

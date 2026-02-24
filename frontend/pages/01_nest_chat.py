@@ -194,11 +194,58 @@ except Exception:
 if not st.session_state.messages:
     st.markdown("""
         <div class="title-card">
-            <h3>How can I help you today?</h3>
-            <p>
-                I can help you explore bird survey data from the Gulf Coast (2010-2021).
-                Ask about population trends, colony locations, species distribution, or habitat patterns across Texas, Louisiana, Mississippi, Alabama, and Florida.
+            <h3 style="margin-top: 0;">🚀 Your AI-Powered Research & Decision Support Tool</h3>
+            <p style="font-size: 1.05rem; margin-bottom: 1.5rem; color: #E5E5E5;">
+                Transform <strong>days of data analysis into minutes of insights</strong>. Ask questions in plain English—no SQL expertise required.
             </p>
+        </div>
+    """, unsafe_allow_html=True)
+
+    # Use native Streamlit columns with gap for feature cards
+    col1, col2 = st.columns(2, gap="medium")
+
+    with col1:
+        st.markdown("""
+            <div style="background: rgba(217, 119, 87, 0.08); padding: 1rem; border-radius: 10px; border-left: 3px solid #D97757; margin-bottom: 0.75rem; height: 100%;">
+                <div style="color: #E5E5E5; font-weight: 600; margin-bottom: 0.5rem;">📊 For Researchers</div>
+                <div style="font-size: 0.875rem; color: #B0B0B0; line-height: 1.5;">Instant trend analysis, baseline comparisons, grant proposal data</div>
+            </div>
+        """, unsafe_allow_html=True)
+
+        st.markdown("""
+            <div style="background: rgba(217, 119, 87, 0.08); padding: 1rem; border-radius: 10px; border-left: 3px solid #D97757; height: 100%;">
+                <div style="color: #E5E5E5; font-weight: 600; margin-bottom: 0.5rem;">📈 For Presentations</div>
+                <div style="font-size: 0.875rem; color: #B0B0B0; line-height: 1.5;">Auto-generated charts, maps, and publication-ready visualizations</div>
+            </div>
+        """, unsafe_allow_html=True)
+
+    with col2:
+        st.markdown("""
+            <div style="background: rgba(217, 119, 87, 0.08); padding: 1rem; border-radius: 10px; border-left: 3px solid #D97757; margin-bottom: 0.75rem; height: 100%;">
+                <div style="color: #E5E5E5; font-weight: 600; margin-bottom: 0.5rem;">🎯 For Managers</div>
+                <div style="font-size: 0.875rem; color: #B0B0B0; line-height: 1.5;">Restoration site prioritization, resource allocation insights</div>
+            </div>
+        """, unsafe_allow_html=True)
+
+        st.markdown("""
+            <div style="background: rgba(217, 119, 87, 0.08); padding: 1rem; border-radius: 10px; border-left: 3px solid #D97757; height: 100%;">
+                <div style="color: #E5E5E5; font-weight: 600; margin-bottom: 0.5rem;">👥 For Stakeholders</div>
+                <div style="font-size: 0.875rem; color: #B0B0B0; line-height: 1.5;">Real-time answers during meetings, community engagement</div>
+            </div>
+        """, unsafe_allow_html=True)
+
+    # Dataset stats and examples
+    st.markdown("""
+        <div style="margin-top: 1.5rem; padding: 1rem 1.25rem; background: rgba(255, 255, 255, 0.03); border-radius: 10px; border: 1px solid rgba(255, 255, 255, 0.08);">
+            <div style="font-size: 0.95rem; color: #B0B0B0; margin-bottom: 1rem;">
+                <strong style="color: #E5E5E5;">11 years</strong> of Gulf Coast colonial waterbird data (2010-2021) •
+                <strong style="color: #E5E5E5;">5 states</strong> (TX, LA, MS, AL, FL) •
+                <strong style="color: #E5E5E5;">592 colonies</strong> •
+                <strong style="color: #E5E5E5;">73 species</strong>
+            </div>
+            <div style="font-size: 0.875rem; color: #888; border-top: 1px solid rgba(255, 255, 255, 0.08); padding-top: 1rem;">
+                💡 <em>Try asking:</em> "Show me post-Deepwater Horizon recovery trends" • "Which colonies need monitoring?" • "Compare species diversity across restoration sites"
+            </div>
         </div>
     """, unsafe_allow_html=True)
 

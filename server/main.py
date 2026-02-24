@@ -21,7 +21,7 @@ import base64
 import httpx
 import yaml
 from server.cv_tools.inference import BirdDetector, get_example_images
-from server.generate_prompt import generate_dynamic_prompt
+# Removed: No longer using dynamic prompt generators
 
 # Load environment variables (for secrets like API keys)
 load_dotenv()
@@ -285,36 +285,33 @@ class SQLChatbot:
     def __init__(self, db_path=DB_PATH, model=None, prompt_path=None):
         """Initialize the SQL chatbot"""
         self.db_path = db_path
-        self.model = model or MODEL_NAME  # Use MODEL_NAME from env if not specified
+        self.model = model or MODEL_NAME
         self.schema = None
         self.prompt_path = prompt_path or str(DEFAULT_PROMPT_PATH)
         self.system_prompt = self._load_system_prompt()
+        self.metadata = self._load_metadata()
 
     def _load_system_prompt(self):
-        """
-        Load system prompt dynamically from database metadata.
-
-        Falls back to prompt.txt file if dynamic generation fails.
-        """
+        """Load the focused system prompt from prompt.txt"""
         try:
-            # Try to generate dynamic prompt from database_metadata.json
-            print("📝 Generating dynamic system prompt from database metadata...")
-            prompt = generate_dynamic_prompt()
-            print("✓ Dynamic system prompt loaded successfully")
+            with open(self.prompt_path, 'r', encoding='utf-8') as f:
+                prompt = f.read()
+            print(f"✓ System prompt loaded from {self.prompt_path}")
             return prompt
-        except Exception as e:
-            # Fallback to static prompt.txt if dynamic generation fails
-            print(f"⚠ Warning: Failed to generate dynamic prompt: {e}")
-            print(f"📄 Falling back to static prompt file: {self.prompt_path}")
-            try:
-                with open(self.prompt_path, 'r', encoding='utf-8') as f:
-                    return f.read()
-            except FileNotFoundError:
-                raise FileNotFoundError(
-                    f"System prompt file not found at: {self.prompt_path}\n"
-                    f"AND dynamic prompt generation failed.\n"
-                    f"Please ensure database_metadata.json exists or restore prompt.txt"
-                )
+        except FileNotFoundError:
+            raise FileNotFoundError(f"System prompt file not found: {self.prompt_path}")
+
+    def _load_metadata(self):
+        """Load enhanced database metadata JSON"""
+        metadata_path = SERVER_DIR.parent / "data" / "database_metadata_enhanced.json"
+        try:
+            with open(metadata_path, 'r', encoding='utf-8') as f:
+                metadata = json.load(f)
+            print(f"✓ Enhanced metadata loaded from {metadata_path}")
+            return metadata
+        except FileNotFoundError:
+            print(f"⚠ Warning: Enhanced metadata not found at {metadata_path}")
+            return None
 
     def get_connection(self, read_only=True):
         """
@@ -377,12 +374,54 @@ class SQLChatbot:
         self.schema = schema_info
         return schema_info
 
+    def _format_metadata_context(self):
+        """Format metadata as a compact context message"""
+        if not self.metadata:
+            return "No metadata available."
+
+        context = "# DATABASE SCHEMA\n\n"
+
+        # Add tables with columns
+        tables = self.metadata.get('tables', {})
+        for table_name, table_info in tables.items():
+            rows = table_info.get('row_count', 0)
+            columns = table_info.get('columns', [])
+
+            context += f"## {table_name}\n"
+            context += f"Rows: {rows:,}\n"
+
+            # Show first 10 columns to keep it compact
+            if columns:
+                context += "Columns: "
+                col_list = columns[:10] if len(columns) > 10 else columns
+                context += ", ".join(f'"{c}"' for c in col_list)
+                if len(columns) > 10:
+                    context += f" ... ({len(columns)} total)"
+                context += "\n"
+            context += "\n"
+
+        # Add relationships
+        relationships = self.metadata.get('relationships', [])
+        if relationships:
+            context += "# RELATIONSHIPS\n"
+            for rel in relationships:
+                context += f"- {rel['from_table']}.{rel['from_column']} → {rel['to_table']}.{rel['to_column']} ({rel['type']})\n"
+            context += "\n"
+
+        return context
+
     def generate_sql_query(self, user_question, conversation_history=None):
         """Generate SQL query from natural language using LLM with conversation context"""
-        # Use the system prompt loaded from prompt.txt
+        # Build messages starting with system prompt
         messages = [
             {"role": "system", "content": self.system_prompt}
         ]
+
+        # Inject metadata as context (only once at the start)
+        if self.metadata and not conversation_history:
+            # Only add metadata for the first message to save tokens
+            metadata_context = self._format_metadata_context()
+            messages.append({"role": "system", "content": metadata_context})
 
         # Add conversation history for context (last 3 exchanges to keep token usage reasonable)
         if conversation_history:

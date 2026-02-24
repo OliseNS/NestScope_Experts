@@ -161,12 +161,23 @@ python labeller/app.py --data labeller/nestvision
 
 ### Database Setup
 
-Before first run, initialize the SQLite database:
+Before first run, migrate the Access database to SQLite:
 ```bash
-python scripts/data_management/import_all_to_sqlite.py
+cd data/
+python migrate_access_to_sqlite.py --input Colibri2010-2021CWBColonies_2Jan2023.accdb --output bird_data_complete.db
 ```
 
-This imports CSV files from `CSV_Files/` into `data/bird_data_complete.db`.
+This automatically:
+- Converts the Access database to SQLite format
+- Preserves all table structures and relationships
+- Generates `database_metadata_enhanced.json` with:
+  - Semantic type information for each column
+  - Foreign key relationships between tables
+  - Table purposes (primary_counts, photo_records, reference)
+  - Query hints for common question patterns
+  - Terminology guide (observations vs records)
+
+The enhanced metadata helps the AI understand how tables link together and construct accurate queries.
 
 ### Configuration
 
@@ -202,6 +213,42 @@ API_BASE_URL=http://localhost:8000
 - Backend will show a warning when using .env override
 
 ## Architecture
+
+### 0. Enhanced Metadata System (CRITICAL FOR ACCURACY)
+
+**Problem Solved:** The original system confused "observations" (individual birds counted) with "records" (photo database rows), causing massive inaccuracies. For example, asking "How many observations in 2010?" returned 9,557 (photo records) instead of 332,746 (actual bird count).
+
+**Solution:** Streamlined architecture with enhanced metadata:
+
+**Files:**
+- `data/database_metadata_enhanced.json` - Enhanced schema with:
+  - Table relationships (foreign keys)
+  - Column semantic types (count, coordinate, categorical, etc.)
+  - Table purposes (primary_counts, photo_records, reference, metadata)
+  - Query hints for common question patterns
+  - Terminology guide clarifying "observations" vs "records"
+
+- `server/prompt.txt` - Short, focused system prompt (2,351 characters):
+  - Leads with critical distinction between bird counts and photo records
+  - Provides concrete query examples
+  - Clear rules for SQL generation
+  - 78% smaller than old approach (was 10,694 characters)
+
+**Architecture:**
+The backend loads the short prompt and injects enhanced metadata as a separate context message only when needed. This is much more token-efficient than embedding the full schema in the system prompt.
+
+**Key Distinction:**
+- **tblColonyTotals2010-2021_MayJuneCombined**: Pre-aggregated BIRD and NEST COUNTS (use this for "how many birds/observations")
+- **tblSpeciesData2010/2011-2013/2015_2018_2021**: Individual PHOTO RECORDS (use this only for photo methodology questions)
+
+**Auto-Generated Metadata:**
+The migration script automatically generates enhanced metadata:
+```bash
+cd data/
+python migrate_access_to_sqlite.py --input <source.accdb> --output bird_data_complete.db
+```
+
+This creates `database_metadata_enhanced.json` with all relationships and semantic information.
 
 ### 1. Text-to-SQL Pipeline (NestChat)
 
