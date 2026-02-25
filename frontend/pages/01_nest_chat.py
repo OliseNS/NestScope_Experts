@@ -310,6 +310,18 @@ if prompt:
                         st.info(f"{step_info['icon']} {step_info['content']}" +
                                (f" (Attempt {current_attempt}/3)" if current_attempt > 1 else ""))
 
+                elif event_type == 'question_analysis':
+                    # Store detailed question analysis
+                    analysis_data = event.get('content', {})
+                    thinking_steps.append({
+                        'step': 'question_analysis',
+                        'content': 'Question analyzed',
+                        'icon': '🔍',
+                        'status': 'completed',
+                        'analysis': analysis_data,
+                        'attempt': event.get('attempt', 1)
+                    })
+
                 elif event_type == 'sql_generated':
                     sql_query = event.get('content')
                     # Mark SQL generation as complete
@@ -328,18 +340,23 @@ if prompt:
                 elif event_type == 'validation_result':
                     is_valid = event.get('is_valid')
                     feedback = event.get('feedback')
+                    reasoning = event.get('reasoning', feedback)
 
                     if is_valid:
                         thinking_steps.append({
                             'icon': '✅',
                             'content': 'SQL validation passed!',
-                            'status': 'completed'
+                            'status': 'completed',
+                            'reasoning': reasoning,
+                            'step': 'sql_validation'
                         })
                     else:
                         thinking_steps.append({
                             'icon': '⚠️',
                             'content': f'Validation issue: {feedback}',
-                            'status': 'warning'
+                            'status': 'warning',
+                            'reasoning': reasoning,
+                            'step': 'sql_validation'
                         })
 
                 elif event_type == 'results':
@@ -354,18 +371,23 @@ if prompt:
                 elif event_type == 'results_validation':
                     is_valid = event.get('is_valid')
                     feedback = event.get('feedback')
+                    reasoning = event.get('reasoning', feedback)
 
                     if is_valid:
                         thinking_steps.append({
                             'icon': '✅',
                             'content': 'Results validated!',
-                            'status': 'completed'
+                            'status': 'completed',
+                            'reasoning': reasoning,
+                            'step': 'results_validation'
                         })
                     else:
                         thinking_steps.append({
                             'icon': '⚠️',
                             'content': f'Results issue: {feedback}',
-                            'status': 'warning'
+                            'status': 'warning',
+                            'reasoning': reasoning,
+                            'step': 'results_validation'
                         })
 
                 elif event_type == 'retry':
@@ -382,39 +404,45 @@ if prompt:
                     # Clear live status and show the full reasoning track
                     thinking_status_placeholder.empty()
 
-                    # Build a natural, conversational thought process display
+                    # Build a detailed, step-by-step thought process display
                     with thought_process_placeholder.expander(
-                        f"💭 My Thought Process{f' (took {current_attempt} tries)' if current_attempt > 1 else ''}",
+                        f"🔍 Detailed Reasoning & Validation{f' (took {current_attempt} tries)' if current_attempt > 1 else ''}",
                         expanded=False
                     ):
+                        st.markdown("*This shows the step-by-step reasoning process to ensure accuracy and reliability.*")
+                        st.markdown("")
+
                         # Group steps by attempt
                         attempts_data = {}
                         for step in thinking_steps:
                             attempt = step.get('attempt', 1)
                             if attempt not in attempts_data:
                                 attempts_data[attempt] = {
+                                    'analysis': None,
                                     'sql_query': None,
+                                    'sql_validation_reasoning': None,
                                     'validation_passed': False,
                                     'validation_feedback': None,
+                                    'results_validation_reasoning': None,
                                     'results_validation_passed': False,
                                     'results_feedback': None,
                                     'rows_returned': None
                                 }
 
                             # Extract key information
-                            if step.get('sql_query'):
+                            if step.get('step') == 'question_analysis' and step.get('analysis'):
+                                attempts_data[attempt]['analysis'] = step['analysis']
+                            elif step.get('sql_query'):
                                 attempts_data[attempt]['sql_query'] = step['sql_query']
-                            elif step.get('status') == 'completed' and '✅' in step.get('icon', ''):
-                                if 'SQL validation' in step.get('content', ''):
-                                    attempts_data[attempt]['validation_passed'] = True
-                                elif 'Results validated' in step.get('content', ''):
-                                    attempts_data[attempt]['results_validation_passed'] = True
-                            elif step.get('status') == 'warning' and '⚠️' in step.get('icon', ''):
-                                if 'Validation issue' in step.get('content', ''):
-                                    attempts_data[attempt]['validation_passed'] = False
+                            elif step.get('step') == 'sql_validation':
+                                attempts_data[attempt]['sql_validation_reasoning'] = step.get('reasoning')
+                                attempts_data[attempt]['validation_passed'] = step.get('status') == 'completed'
+                                if not attempts_data[attempt]['validation_passed']:
                                     attempts_data[attempt]['validation_feedback'] = step.get('content', '').replace('Validation issue: ', '')
-                                elif 'Results issue' in step.get('content', ''):
-                                    attempts_data[attempt]['results_validation_passed'] = False
+                            elif step.get('step') == 'results_validation':
+                                attempts_data[attempt]['results_validation_reasoning'] = step.get('reasoning')
+                                attempts_data[attempt]['results_validation_passed'] = step.get('status') == 'completed'
+                                if not attempts_data[attempt]['results_validation_passed']:
                                     attempts_data[attempt]['results_feedback'] = step.get('content', '').replace('Results issue: ', '')
                             elif '💾' in step.get('icon', '') and 'rows' in step.get('content', ''):
                                 # Extract row count
@@ -423,37 +451,127 @@ if prompt:
                                 if match:
                                     attempts_data[attempt]['rows_returned'] = match.group(1)
 
-                        # Display each attempt in natural language
+                        # Show question analysis only once (from first attempt)
+                        first_attempt_analysis = None
+                        for attempt_num in sorted(attempts_data.keys()):
+                            if attempts_data[attempt_num]['analysis']:
+                                first_attempt_analysis = attempts_data[attempt_num]['analysis']
+                                break
+
+                        if first_attempt_analysis:
+                            st.markdown("### 📋 Step 1: Question Analysis")
+                            analysis = first_attempt_analysis
+
+                            # Handle case where analysis might be a string or improperly formatted
+                            if isinstance(analysis, str):
+                                st.markdown(f"**Understanding:** {analysis}")
+                            elif isinstance(analysis, dict):
+                                # Extract summary
+                                summary = analysis.get('summary', '')
+                                if summary and not summary.startswith('{'):  # Check it's not raw JSON
+                                    st.markdown(f"**Understanding:** {summary}")
+
+                                # Extract reasoning steps
+                                reasoning_steps = analysis.get('step_by_step_reasoning', [])
+                                if reasoning_steps and isinstance(reasoning_steps, list):
+                                    # Filter out any non-string items or raw JSON strings
+                                    clean_steps = []
+                                    for step in reasoning_steps:
+                                        if isinstance(step, str) and not step.strip().startswith('{'):
+                                            clean_steps.append(step)
+
+                                    if clean_steps:
+                                        st.markdown("**Reasoning Steps:**")
+                                        for i, reasoning_step in enumerate(clean_steps, 1):
+                                            st.markdown(f"{i}. {reasoning_step}")
+
+                                # Extract query type
+                                query_type = analysis.get('question_type', '')
+                                if query_type and query_type != 'unknown':
+                                    st.markdown(f"**Query Type:** {query_type}")
+
+                                # Extract tables needed
+                                tables = analysis.get('tables_needed', [])
+                                if tables and isinstance(tables, list) and len(tables) > 0:
+                                    st.markdown(f"**Tables Required:** {', '.join(tables)}")
+
+                            st.markdown("")
+
+                        # Display each attempt with SQL and validation
                         for attempt_num in sorted(attempts_data.keys()):
                             attempt_info = attempts_data[attempt_num]
 
                             if attempt_num > 1:
                                 st.divider()
-                                st.markdown(f"### 🔄 Second Try")
+                                st.markdown(f"### 🔄 Retry Attempt {attempt_num}")
                                 if attempt_info['validation_feedback']:
-                                    st.markdown(f"*I noticed an issue with my first query: {attempt_info['validation_feedback']}*")
+                                    st.warning(f"**Issue found in previous attempt:** {attempt_info['validation_feedback']}")
                                 elif attempt_info['results_feedback']:
-                                    st.markdown(f"*The first results didn't look right: {attempt_info['results_feedback']}*")
+                                    st.warning(f"**Results concern from previous attempt:** {attempt_info['results_feedback']}")
+                                st.markdown("")
 
-                            # Show thought process in natural language
+                            # SQL Query
                             if attempt_info['sql_query']:
                                 if attempt_num == 1:
-                                    st.markdown("**Here's the query I wrote to get your answer:**")
+                                    st.markdown("### 📝 Step 2: SQL Query Construction")
                                 else:
-                                    st.markdown("**Here's my corrected query:**")
+                                    st.markdown("### 📝 Revised SQL Query")
                                 st.code(attempt_info['sql_query'], language="sql")
+                                st.markdown("")
 
-                            # Conversational validation feedback
-                            if attempt_info['validation_passed']:
-                                st.markdown("✓ *I double-checked the query and it looks correct*")
+                            # SQL Validation (only show reasoning in collapsible if validation passed)
+                            if attempt_info['sql_validation_reasoning']:
+                                if attempt_num == 1:
+                                    st.markdown("### ✅ Step 3: SQL Validation")
+                                else:
+                                    st.markdown("### ✅ SQL Validation")
 
-                            # Show execution in natural language
+                                if attempt_info['validation_passed']:
+                                    st.success("✓ Query validated and meets accuracy requirements")
+                                    # Show reasoning in expander
+                                    with st.expander("View validation details"):
+                                        reasoning = attempt_info['sql_validation_reasoning']
+                                        if isinstance(reasoning, dict) and 'reasoning' in reasoning:
+                                            reasoning = reasoning['reasoning']
+                                        if isinstance(reasoning, str):
+                                            st.markdown(reasoning)
+                                else:
+                                    st.error(f"✗ Validation failed: {attempt_info['validation_feedback']}")
+
+                                st.markdown("")
+
+                            # Query Execution
                             if attempt_info['rows_returned']:
-                                st.markdown(f"✓ *I ran this query and found **{attempt_info['rows_returned']} rows** of data*")
+                                if attempt_num == 1:
+                                    st.markdown("### ⚡ Step 4: Query Execution")
+                                else:
+                                    st.markdown("### ⚡ Query Execution")
+                                st.markdown(f"Retrieved **{attempt_info['rows_returned']} rows**")
+                                st.markdown("")
 
-                            # Show results validation naturally
-                            if attempt_info['results_validation_passed']:
-                                st.markdown("✓ *I verified these results make sense for your question*")
+                            # Results Validation (only show reasoning in collapsible if validation passed)
+                            if attempt_info['results_validation_reasoning']:
+                                if attempt_num == 1:
+                                    st.markdown("### 🔬 Step 5: Results Validation")
+                                else:
+                                    st.markdown("### 🔬 Results Validation")
+
+                                if attempt_info['results_validation_passed']:
+                                    st.success("✓ Results validated and match the question")
+                                    # Show reasoning in expander
+                                    with st.expander("View validation details"):
+                                        reasoning = attempt_info['results_validation_reasoning']
+                                        if isinstance(reasoning, dict) and 'reasoning' in reasoning:
+                                            reasoning = reasoning['reasoning']
+                                        if isinstance(reasoning, str):
+                                            st.markdown(reasoning)
+                                else:
+                                    st.error(f"✗ Results concern: {attempt_info['results_feedback']}")
+
+                                st.markdown("")
+
+                        st.divider()
+                        st.markdown("*This multi-step validation process ensures accuracy and reliability of the data you receive.*")
 
                 elif event_type == 'answer_chunk':
                     chunk = event.get('content', '')

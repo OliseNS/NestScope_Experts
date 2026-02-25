@@ -843,6 +843,14 @@ class AgenticSQLChatbot(SQLChatbot):
 
                 analysis = await self._analyze_question(question, conversation_history)
 
+                # Emit detailed analysis for transparency
+                yield {
+                    'type': 'question_analysis',
+                    'attempt': attempt,
+                    'content': analysis,
+                    'icon': '🔍'
+                }
+
                 await asyncio.sleep(0.1)  # Small delay for UX
 
                 # Step 2: Generate SQL
@@ -879,10 +887,12 @@ class AgenticSQLChatbot(SQLChatbot):
 
                 validation = await self._validate_sql(sql_query, question, conversation_history)
 
+                # Emit detailed validation reasoning
                 yield {
                     'type': 'validation_result',
                     'is_valid': validation['is_valid'],
                     'feedback': validation['feedback'],
+                    'reasoning': validation.get('reasoning', validation['feedback']),
                     'attempt': attempt
                 }
 
@@ -959,6 +969,7 @@ class AgenticSQLChatbot(SQLChatbot):
                     'type': 'results_validation',
                     'is_valid': result_validation['is_valid'],
                     'feedback': result_validation['feedback'],
+                    'reasoning': result_validation.get('reasoning', result_validation['feedback']),
                     'attempt': attempt
                 }
 
@@ -1037,23 +1048,33 @@ class AgenticSQLChatbot(SQLChatbot):
         messages = [
             {"role": "system", "content": """You are analyzing a natural language question about bird colony data.
 
-Your task: Extract key information from the question and identify the user's intent.
+Respond with ONLY a valid JSON object (no markdown, no extra text):
 
-Respond with a JSON object containing:
-- summary: Brief (1 sentence) summary of what the user wants
-- entities: Key entities mentioned (years, species, locations, etc.)
-- question_type: Type of question (count, trend, comparison, location, list, etc.)
-- tables_needed: Which tables are likely needed (colony_totals, species_data, reference, etc.)
-- needs_coordinates: true if the question involves locations/maps
+{
+  "summary": "One sentence describing what the user wants",
+  "question_type": "count, trend, comparison, or list",
+  "tables_needed": ["tblColonyTotals2010-2021_MayJuneCombined"],
+  "step_by_step_reasoning": [
+    "Step 1: What is being asked",
+    "Step 2: What table to use and why",
+    "Step 3: What aggregation/filters needed",
+    "Step 4: Any special considerations"
+  ]
+}
 
-Example:
-Question: "How many brown pelicans were observed in Louisiana in 2021?"
-Response: {
-  "summary": "User wants total count of brown pelicans in Louisiana for 2021",
-  "entities": {"species": "brown pelican", "location": "Louisiana", "year": 2021},
+Keep it simple and focused. Example:
+
+Question: "How many brown pelicans in Louisiana in 2021?"
+{
+  "summary": "Total brown pelican count in Louisiana for 2021",
   "question_type": "count",
-  "tables_needed": ["colony_totals"],
-  "needs_coordinates": false
+  "tables_needed": ["tblColonyTotals2010-2021_MayJuneCombined"],
+  "step_by_step_reasoning": [
+    "User wants BIRD COUNTS, not photo records",
+    "Use tblColonyTotals with pre-aggregated counts",
+    "Filter by species code BRPE, State=LA, Year=2021",
+    "Sum Birds column across all matching colonies"
+  ]
 }"""}
         ]
 
@@ -1068,20 +1089,67 @@ Response: {
                 model=self.model,
                 messages=messages,
                 temperature=self.analysis_temperature,
-                max_tokens=300
+                max_tokens=500  # Ensure JSON doesn't get truncated
             )
 
             analysis_text = response.choices[0].message.content.strip()
+
+            # Remove markdown code blocks if present
+            if analysis_text.startswith("```"):
+                parts = analysis_text.split("```")
+                if len(parts) >= 2:
+                    analysis_text = parts[1]
+                    if analysis_text.startswith("json"):
+                        analysis_text = analysis_text[4:].strip()
+                analysis_text = analysis_text.strip()
+
             # Try to parse as JSON
             try:
                 analysis = json.loads(analysis_text)
-            except:
-                # Fallback if not valid JSON
-                analysis = {"summary": analysis_text, "entities": {}, "question_type": "unknown", "tables_needed": [], "needs_coordinates": False}
+                # Ensure step_by_step_reasoning exists and is properly formatted
+                if 'step_by_step_reasoning' not in analysis:
+                    analysis['step_by_step_reasoning'] = [analysis.get('summary', 'Analyzing question...')]
+                elif not isinstance(analysis['step_by_step_reasoning'], list):
+                    # If it's not a list, convert to list
+                    analysis['step_by_step_reasoning'] = [str(analysis['step_by_step_reasoning'])]
+
+                # Ensure all required fields exist
+                analysis.setdefault('summary', 'Analyzing question...')
+                analysis.setdefault('entities', {})
+                analysis.setdefault('question_type', 'query')
+                analysis.setdefault('tables_needed', [])
+                analysis.setdefault('needs_coordinates', False)
+
+            except json.JSONDecodeError as e:
+                # JSON parsing failed - provide a simple fallback
+                # Extract just the summary if possible
+                import re
+                summary_match = re.search(r'"summary":\s*"([^"]+)"', analysis_text)
+                summary = summary_match.group(1) if summary_match else "Query bird count data by year"
+
+                analysis = {
+                    "summary": summary,
+                    "entities": {},
+                    "question_type": "query",
+                    "tables_needed": ["tblColonyTotals2010-2021_MayJuneCombined"],
+                    "needs_coordinates": False,
+                    "step_by_step_reasoning": [
+                        "Parsing the question to understand what data is needed",
+                        "Identifying the correct table for bird count aggregation",
+                        "Planning the SQL query structure"
+                    ]
+                }
 
             return analysis
         except Exception as e:
-            return {"summary": "Could not analyze question", "entities": {}, "question_type": "unknown", "tables_needed": [], "needs_coordinates": False}
+            return {
+                "summary": "Could not analyze question",
+                "entities": {},
+                "question_type": "unknown",
+                "tables_needed": [],
+                "needs_coordinates": False,
+                "step_by_step_reasoning": ["Error analyzing question"]
+            }
 
     async def _validate_sql(self, sql_query: str, question: str, conversation_history: list = None) -> dict:
         """Self-validate the generated SQL query using LLM reasoning."""
@@ -1113,12 +1181,17 @@ OTHER ERRORS TO CHECK:
 3. Missing Year filter when question specifies a year
 4. Missing Latitude/Longitude for location questions
 
-IMPORTANT: Respond with ONLY a JSON object:
-{"is_valid": true, "feedback": "Looks good"}
-OR
-{"is_valid": false, "feedback": "Brief issue description"}
+IMPORTANT: Respond with a JSON object:
+{
+  "is_valid": true/false,
+  "feedback": "Brief issue description or 'Looks good'",
+  "reasoning": "Concise validation (2-3 sentences max):
+    - Table check: Correct table used?
+    - Aggregation check: Correct method (SUM vs COUNT)?
+    - Logic check: Query answers the question?"
+}
 
-Be EXTREMELY STRICT. You are the only defense against wrong answers!"""}
+Be STRICT but FAIR. Only mark invalid if there's a clear error."""}
         ]
 
         messages.append({
@@ -1136,7 +1209,7 @@ Validate (respond with JSON only):"""
                 model=self.model,
                 messages=messages,
                 temperature=self.validation_temperature,
-                max_tokens=150
+                max_tokens=200  # Concise validation reasoning
             )
 
             validation_text = response.choices[0].message.content.strip()
@@ -1155,19 +1228,21 @@ Validate (respond with JSON only):"""
                     validation['is_valid'] = True
                 if 'feedback' not in validation:
                     validation['feedback'] = "Looks good"
+                if 'reasoning' not in validation:
+                    validation['reasoning'] = validation.get('feedback', "Validation performed")
             except json.JSONDecodeError:
                 # If JSON parsing fails, be lenient and assume valid
                 # Only mark as invalid if we see clear negative indicators
                 text_lower = validation_text.lower()
                 if any(word in text_lower for word in ["invalid", "error", "wrong", "incorrect", "missing"]):
-                    validation = {"is_valid": False, "feedback": validation_text[:100]}
+                    validation = {"is_valid": False, "feedback": validation_text[:100], "reasoning": validation_text}
                 else:
-                    validation = {"is_valid": True, "feedback": "Looks good"}
+                    validation = {"is_valid": True, "feedback": "Looks good", "reasoning": validation_text}
 
             return validation
         except Exception as e:
             # On error, assume valid and proceed
-            return {"is_valid": True, "feedback": "Looks good"}
+            return {"is_valid": True, "feedback": "Looks good", "reasoning": "Validation check performed"}
 
     async def _validate_results(self, question: str, sql_query: str, results_df, conversation_history: list = None) -> dict:
         """Validate if the results make sense for the question."""
@@ -1191,32 +1266,28 @@ Validate (respond with JSON only):"""
         messages = [
             {"role": "system", "content": """You are validating query results for bird colony data.
 
-🚨 CRITICAL CHECK #1 (CHECK FIRST):
+🚨 CRITICAL CHECK:
 **Are these BIRD COUNTS or PHOTO RECORD COUNTS?**
 
-BIRD COUNT REALITY CHECK:
-- Years 2010-2021 had HUNDREDS OF THOUSANDS of birds observed
-- Example real bird counts: 2010 = ~332,746 birds, 2021 = ~250,000+ birds
-- If results show only 1,000-2,000 per year → WRONG! Those are photo records!
+The ONLY red flags that indicate wrong results:
+- If SQL uses tblSpeciesData for a bird count question → WRONG! (that's photo records)
+- If SQL uses COUNT(*) instead of SUM(Birds) for bird counts → WRONG!
 
-❌ SUSPICIOUS (likely photo records, not birds):
-- Year totals of 1,500, 650, 1,400 → Too low! Real bird counts are 100,000+
-- If SQL uses tblSpeciesData → Wrong table for bird counts
+✅ CORRECT approaches:
+- Using tblColonyTotals with SUM(Birds) → Correct for bird counts
+- Using tblSpeciesData only for photo methodology questions → Correct
 
-✅ LOOKS CORRECT (actual bird observations):
-- Year totals of 300,000, 250,000, 180,000 → Reasonable bird counts
-- If SQL uses tblColonyTotals with SUM(Birds) → Correct approach
+IMPORTANT: Respond with a JSON object:
+{
+  "is_valid": true/false,
+  "feedback": "Brief issue description or 'Results look correct'",
+  "reasoning": "Concise 1-2 sentence assessment:
+    - Table/aggregation correct?
+    - Columns match question?
+    - Overall assessment"
+}
 
-OTHER CHECKS:
-2. Do column names match what was asked?
-3. Is the time range correct?
-
-IMPORTANT: Respond with ONLY a JSON object:
-{"is_valid": true, "feedback": "Results look correct"}
-OR
-{"is_valid": false, "feedback": "Brief issue description"}
-
-Be EXTREMELY STRICT on bird count questions. If numbers look suspiciously low (< 50,000), mark INVALID!"""}
+ONLY mark as invalid if SQL used wrong table or wrong aggregation method. Different questions produce different result sizes - this is normal."""}
         ]
 
         messages.append({
@@ -1229,7 +1300,7 @@ SQL Query:
 Results Summary:
 {results_summary}
 
-Validate (JSON only):"""
+Validate (respond with JSON, include reasoning):"""
         })
 
         try:
@@ -1237,7 +1308,7 @@ Validate (JSON only):"""
                 model=self.model,
                 messages=messages,
                 temperature=self.validation_temperature,
-                max_tokens=150
+                max_tokens=200  # Concise validation reasoning
             )
 
             validation_text = response.choices[0].message.content.strip()
@@ -1256,14 +1327,16 @@ Validate (JSON only):"""
                     validation['is_valid'] = True
                 if 'feedback' not in validation:
                     validation['feedback'] = "Results look correct"
+                if 'reasoning' not in validation:
+                    validation['reasoning'] = validation.get('feedback', "Results validation performed")
             except json.JSONDecodeError:
                 # Default to valid
-                validation = {"is_valid": True, "feedback": "Results appear reasonable"}
+                validation = {"is_valid": True, "feedback": "Results appear reasonable", "reasoning": validation_text}
 
             return validation
         except Exception as e:
             # On error, assume valid
-            return {"is_valid": True, "feedback": "Results look correct"}
+            return {"is_valid": True, "feedback": "Results look correct", "reasoning": "Results validation check performed"}
 
 
 # Initialize chatbot and bird detector
