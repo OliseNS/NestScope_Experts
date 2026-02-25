@@ -16,55 +16,17 @@ from services import (
     insert_table_row,
     execute_custom_sql
 )
-from components import render_sidebar_section, render_service_status_link
-from styles import get_custom_css
+from components import init_page, render_header, render_sidebar
 
 # ============================================================================
 # PAGE CONFIGURATION
 # ============================================================================
 
-st.set_page_config(
-    page_title="NestDB - NestScope",
-    page_icon="🗄️",
-    layout="wide"
-)
+# Initialize page with shared layout
+init_page(page_title="NestDB - NestScope", page_icon="🗄️", layout="wide")
 
-# Apply custom CSS
-st.markdown(get_custom_css(), unsafe_allow_html=True)
-
-# Hide Streamlit's default page navigation and add fixed header
-st.markdown("""
-<style>
-    [data-testid="stSidebarNav"] {
-        display: none;
-    }
-    .fixed-header {
-        position: fixed;
-        top: 0;
-        left: 0;
-        right: 0;
-        background: #1E1E1E;
-        border-bottom: 1px solid #333;
-        padding: 0.75rem 1.5rem;
-        display: flex;
-        align-items: center;
-        gap: 0.75rem;
-        z-index: 999999;
-    }
-    .main-content {
-        margin-top: 4rem;
-    }
-</style>
-""", unsafe_allow_html=True)
-
-# Fixed header
-st.markdown("""
-    <div class="fixed-header">
-        <span style="font-size: 1.5rem;">🦅</span>
-        <span style="font-size: 1rem; font-weight: 600; color: #E5E5E5;">NestScope</span>
-        <span style="color: #666; font-size: 0.875rem;">Avian Monitoring Suite</span>
-    </div>
-""", unsafe_allow_html=True)
+# Render shared header
+render_header(page_name="NestDB")
 
 # ============================================================================
 # SESSION STATE INITIALIZATION
@@ -93,29 +55,8 @@ if "db_show_add_row" not in st.session_state:
 # ============================================================================
 
 with st.sidebar:
-    # Navigation Section
-    render_sidebar_section("Navigation")
-
-    if st.button("🏠 Home", use_container_width=True, help="Return to home page"):
-        st.switch_page("app.py")
-
-    if st.button("💬 NestChat", use_container_width=True, help="Natural language data queries"):
-        st.switch_page("pages/01_nest_chat.py")
-
-    if st.button("🦅 NestVision", use_container_width=True, help="AI bird detection & counting"):
-        st.switch_page("pages/02_nest_vision.py")
-
-    if st.button("🗄️ NestDB", use_container_width=True, help="Database management interface", type="primary"):
-        st.rerun()
-
-    # Tools section
-    render_sidebar_section("Tools")
-
-    st.link_button("🧑‍🔬 Nestperts", "http://localhost:5000", use_container_width=True, help="Expert species training platform")
-
-    # System Status section
-    render_sidebar_section("System Status")
-    render_service_status_link()
+    # Render shared navigation, tools, and status
+    render_sidebar(active_page="nestdb")
 
 # ============================================================================
 # MAIN INTERFACE

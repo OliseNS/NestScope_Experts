@@ -1,11 +1,16 @@
 # NestScope Server Configuration
 
 model:
-  name: anthropic/claude-sonnet-4.6  # Research-grade accuracy with 1M token context
+  name: minimax/minimax-m2.5:nitro # Research-grade accuracy with 1M token context
   temperature: 0.7
   max_tokens: 1000
   sql_temperature: 0.1
   sql_max_tokens: 500
+
+agentic:
+  max_attempts: 5 # Number of retry attempts for agentic self-correction
+  validation_temperature: 0.1 # Low temperature for strict validation
+  analysis_temperature: 0.3 # Moderate temperature for question analysis
 
 database:
   default_path: data/bird_data_complete.db
