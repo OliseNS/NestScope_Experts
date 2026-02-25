@@ -21,7 +21,6 @@ import base64
 import httpx
 import yaml
 from server.cv_tools.inference import BirdDetector, get_example_images
-from server.report_generator import ReportGenerator
 # Removed: No longer using dynamic prompt generators
 
 # Load environment variables (for secrets like API keys)
@@ -173,17 +172,6 @@ class RowInsertRequest(BaseModel):
 class RowInsertResponse(BaseModel):
     success: bool
     message: Optional[str]
-    error: Optional[str] = None
-
-class PresentationRequest(BaseModel):
-    description: str
-    model: Optional[str] = None  # Use MODEL_NAME if not specified
-
-class PresentationResponse(BaseModel):
-    success: bool
-    file_path: Optional[str] = None
-    num_slides: Optional[int] = None
-    title: Optional[str] = None
     error: Optional[str] = None
 
 # Database configuration
@@ -802,10 +790,6 @@ try:
 except Exception as e:
     print(f"Warning: Bird detector initialization failed: {e}")
     bird_detector = None
-
-# Initialize report generator
-report_generator = ReportGenerator(chatbot)
-print("Report generator initialized successfully!")
 
 # API Endpoints
 @app.get("/")
@@ -1621,95 +1605,6 @@ async def insert_table_row(table_name: str, request: RowInsertRequest):
             message=None,
             error=str(e)
         )
-
-@app.post("/presentation/generate", response_model=PresentationResponse)
-async def generate_report(request: PresentationRequest):
-    """
-    Generate a PDF analysis report based on user's description.
-
-    This endpoint uses AI to:
-    1. Plan the report structure (sections, visualizations)
-    2. Execute SQL queries to fetch relevant data
-    3. Generate charts, maps, and tables
-    4. Assemble everything into a professionally typeset PDF
-
-    Args:
-        request: PresentationRequest with description
-
-    Returns:
-        PresentationResponse with file path and metadata (num_slides = num_sections)
-    """
-    try:
-        # Update model if provided
-        if request.model:
-            report_generator.chatbot.model = request.model
-
-        # Generate report (output_dir defaults to "reports")
-        result = report_generator.generate(
-            user_description=request.description,
-            output_dir="reports"
-        )
-
-        if result['success']:
-            return PresentationResponse(
-                success=True,
-                file_path=result['file_path'],
-                num_slides=result['num_sections'],  # num_sections mapped to num_slides for compatibility
-                title=result['title'],
-                error=None
-            )
-        else:
-            return PresentationResponse(
-                success=False,
-                file_path=None,
-                num_slides=None,
-                title=None,
-                error=result.get('error', 'Unknown error')
-            )
-
-    except Exception as e:
-        return PresentationResponse(
-            success=False,
-            file_path=None,
-            num_slides=None,
-            title=None,
-            error=str(e)
-        )
-
-@app.get("/presentation/download/{filename}")
-async def download_report(filename: str):
-    """
-    Download a generated PDF report file.
-
-    Args:
-        filename: Name of the PDF report file
-
-    Returns:
-        PDF file for download
-    """
-    try:
-        from fastapi.responses import FileResponse
-
-        reports_dir = Path("reports")
-        file_path = reports_dir / filename
-
-        if not file_path.exists():
-            raise HTTPException(status_code=404, detail="Report file not found")
-
-        # Security check: ensure filename doesn't try to escape directory
-        if not str(file_path.resolve()).startswith(str(reports_dir.resolve())):
-            raise HTTPException(status_code=403, detail="Access denied")
-
-        return FileResponse(
-            path=str(file_path),
-            media_type="application/pdf",
-            filename=filename
-        )
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
 
 if __name__ == "__main__":
     import uvicorn

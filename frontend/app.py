@@ -96,13 +96,13 @@ with col1:
         </div>
         <h3 style="color: #E5E5E5; margin: 0 0 0.75rem 0; font-size: 1.25rem; font-weight: 600;">NestChat</h3>
         <p style="color: #A0A0A0; font-size: 0.875rem; line-height: 1.6; margin-bottom: 1.25rem;">
-            Natural language interface for querying bird survey data with intelligent visualizations and PDF report generation
+            Natural language interface for querying bird survey data with intelligent visualizations
         </p>
         <ul style="color: #E5E5E5; font-size: 0.875rem; line-height: 1.8; margin-left: 1.25rem; padding-left: 0;">
             <li>Ask questions in plain English</li>
             <li>Instant visualizations and insights</li>
             <li>Interactive maps and charts</li>
-            <li>Generate professional PDF analysis reports</li>
+            <li>Export data to CSV format</li>
         </ul>
         <div style="margin-top: 1rem; padding-top: 1rem; border-top: 1px solid #404040;">
             <p style="font-size: 0.75rem; color: #888; margin: 0;">

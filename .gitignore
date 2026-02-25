@@ -70,6 +70,7 @@ models/**/*
 logs/
 tmp/
 temp/
+reports/
 
 # Environment and configuration
 .env

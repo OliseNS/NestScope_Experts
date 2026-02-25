@@ -50,91 +50,6 @@ def build_conversation_history():
             })
     return history
 
-def generate_presentation(description):
-    """
-    Generate PowerPoint presentation from user description.
-    Shows step-by-step progress indicators.
-    """
-    progress_placeholder = st.empty()
-    status_placeholder = st.empty()
-
-    try:
-        # Step 1: Planning
-        progress_placeholder.progress(0.1)
-        status_placeholder.markdown("🤖 **Step 1/4:** Planning report structure and sections...")
-
-        # Make the API call
-        progress_placeholder.progress(0.3)
-        status_placeholder.markdown("🔍 **Step 2/4:** Querying bird survey data...")
-
-        response = requests.post(
-            f"{API_BASE_URL}/presentation/generate",
-            json={"description": description},
-            timeout=300
-        )
-
-        progress_placeholder.progress(0.6)
-        status_placeholder.markdown("📊 **Step 3/4:** Generating charts and visualizations...")
-
-        if response.status_code == 200:
-            result = response.json()
-
-            progress_placeholder.progress(0.9)
-            status_placeholder.markdown("📄 **Step 4/4:** Building PDF report...")
-
-            if result['success']:
-                progress_placeholder.progress(1.0)
-                status_placeholder.empty()
-
-                st.success(f"✅ PDF report generated successfully!")
-                st.markdown(f"**{result['title']}** • {result['num_slides']} sections")
-
-                import os
-                filename = os.path.basename(result['file_path'])
-                download_url = f"{API_BASE_URL}/presentation/download/{filename}"
-
-                st.markdown(f"""
-                    <a href="{download_url}" target="_blank">
-                        <button style="
-                            background: #D97757;
-                            color: white;
-                            border: none;
-                            padding: 0.75rem 2rem;
-                            border-radius: 8px;
-                            font-size: 1rem;
-                            font-weight: 600;
-                            cursor: pointer;
-                            margin: 1rem 0;
-                            box-shadow: 0 2px 8px rgba(217, 119, 87, 0.3);
-                        ">
-                            📥 Download PDF Report
-                        </button>
-                    </a>
-                """, unsafe_allow_html=True)
-
-                return True
-            else:
-                progress_placeholder.empty()
-                status_placeholder.empty()
-                st.error(f"❌ Error: {result.get('error', 'Unknown error')}")
-                return False
-        else:
-            progress_placeholder.empty()
-            status_placeholder.empty()
-            st.error(f"❌ Server error: {response.status_code}")
-            return False
-
-    except requests.exceptions.Timeout:
-        progress_placeholder.empty()
-        status_placeholder.empty()
-        st.error("❌ Request timed out. The presentation generation took too long. Please try with a simpler request.")
-        return False
-    except Exception as e:
-        progress_placeholder.empty()
-        status_placeholder.empty()
-        st.error(f"❌ Error: {str(e)}")
-        return False
-
 # ============================================================================
 # SESSION STATE INITIALIZATION
 # ============================================================================
@@ -157,14 +72,6 @@ if "chat_placeholder" not in st.session_state:
         "Identify colonies with declining populations"
     ]
     st.session_state.chat_placeholder = f'Try "{random.choice(placeholder_examples)}"'
-
-# Presentation mode state
-if "show_presentation_form" not in st.session_state:
-    st.session_state.show_presentation_form = False
-
-if "report_description" not in st.session_state:
-    st.session_state.report_description = ""
-
 
 # ============================================================================
 # SIDEBAR
@@ -240,42 +147,18 @@ if not st.session_state.messages:
         </div>
     """, unsafe_allow_html=True)
 
-    # Two-column layout: Chat Examples | PDF Report Generator
-    col1, col2 = st.columns([1.2, 1], gap="large")
-
-    with col1:
-        st.markdown("""
-            <div style="background: rgba(255, 255, 255, 0.02); padding: 1.25rem; border-radius: 10px; border: 1px solid rgba(255, 255, 255, 0.08);">
-                <div style="font-size: 0.875rem; color: #888; margin-bottom: 0.75rem;">💡 Example questions:</div>
-                <div style="font-size: 0.9rem; color: #B0B0B0; line-height: 1.8;">
-                    • "Show me post-Deepwater Horizon recovery trends"<br>
-                    • "Which colonies need monitoring?"<br>
-                    • "Compare Brown Pelican populations 2010 vs 2021"<br>
-                    • "Map all Louisiana colonies with their locations"
-                </div>
+    # Example questions card
+    st.markdown("""
+        <div style="background: rgba(255, 255, 255, 0.02); padding: 1.25rem; border-radius: 10px; border: 1px solid rgba(255, 255, 255, 0.08);">
+            <div style="font-size: 0.875rem; color: #888; margin-bottom: 0.75rem;">💡 Example questions:</div>
+            <div style="font-size: 0.9rem; color: #B0B0B0; line-height: 1.8;">
+                • "Show me post-Deepwater Horizon recovery trends"<br>
+                • "Which colonies need monitoring?"<br>
+                • "Compare Brown Pelican populations 2010 vs 2021"<br>
+                • "Map all Louisiana colonies with their locations"
             </div>
-        """, unsafe_allow_html=True)
-
-    with col2:
-        # PDF Report Generator - Prominent Feature Card
-        st.markdown("""
-            <div style="background: linear-gradient(135deg, rgba(217, 119, 87, 0.15) 0%, rgba(217, 119, 87, 0.08) 100%);
-                        padding: 1.25rem; border-radius: 10px; border: 2px solid rgba(217, 119, 87, 0.3);
-                        box-shadow: 0 4px 12px rgba(217, 119, 87, 0.15);">
-                <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.5rem;">
-                    <span style="font-size: 1.5rem;">📊</span>
-                    <h4 style="margin: 0; color: #E5E5E5;">PDF Reports</h4>
-                </div>
-                <p style="font-size: 0.875rem; color: #B0B0B0; margin: 0 0 1rem 0; line-height: 1.5;">
-                    Generate professional analysis reports with charts, maps, and insights
-                </p>
-            </div>
-        """, unsafe_allow_html=True)
-
-        # Show PDF form toggle button
-        if st.button("✨ Create PDF Report", key="show_pdf_form", type="primary", use_container_width=True):
-            st.session_state.show_presentation_form = True
-            st.rerun()
+        </div>
+    """, unsafe_allow_html=True)
 
 # ============================================================================
 # CHAT HISTORY DISPLAY
@@ -347,86 +230,6 @@ for message in st.session_state.messages:
                         mime="text/csv",
                         key=f"download_simple_{message.get('content', '')[:20]}_{id(message)}"
                     )
-
-# ============================================================================
-# PRESENTATION GENERATOR
-# ============================================================================
-
-# Show PDF Report Generator form when activated
-if st.session_state.show_presentation_form:
-    st.markdown("---")
-    st.markdown("""
-        <div style="background: rgba(217, 119, 87, 0.05); padding: 1.5rem; border-radius: 10px; border-left: 4px solid #D97757; margin-bottom: 1.5rem;">
-            <h3 style="margin: 0 0 0.5rem 0; color: #E5E5E5;">📊 PDF Report Generator</h3>
-            <p style="font-size: 0.9rem; color: #B0B0B0; margin: 0;">
-                Create professional analysis reports with data-driven insights, charts, and maps
-            </p>
-        </div>
-    """, unsafe_allow_html=True)
-
-    # Template descriptions
-    templates = {
-        "species_trend": "Create an analysis report examining population trends for major bird species across the Gulf Coast from 2010-2021, including annual counts, geographic patterns, and key findings.",
-        "regional": "Create a comprehensive report on bird diversity and colony distribution across Gulf Coast states, with maps, species counts, and conservation priorities.",
-        "annual": "Create a detailed summary report of bird survey results for 2021, including top species, colony counts, geographic distribution, and year-over-year changes.",
-        "conservation": "Create a conservation-focused report highlighting endangered species trends, priority restoration sites, and data-driven recommendations for stakeholders."
-    }
-
-    # Quick template buttons
-    st.markdown("**Quick Templates** • Select a pre-configured report:")
-    col1, col2 = st.columns(2)
-
-    with col1:
-        if st.button("📈 Species Trend Report", key="tmpl_species", use_container_width=True):
-            st.session_state.report_description = templates["species_trend"]
-            st.rerun()
-
-        if st.button("🗺️ Regional Overview", key="tmpl_regional", use_container_width=True):
-            st.session_state.report_description = templates["regional"]
-            st.rerun()
-
-    with col2:
-        if st.button("📊 Annual Summary", key="tmpl_annual", use_container_width=True):
-            st.session_state.report_description = templates["annual"]
-            st.rerun()
-
-        if st.button("🦅 Conservation Focus", key="tmpl_conservation", use_container_width=True):
-            st.session_state.report_description = templates["conservation"]
-            st.rerun()
-
-    st.markdown("---")
-    st.markdown("**Custom Report** • Describe what you want to analyze:")
-
-    with st.form("presentation_form"):
-        # Main description field with value from session state
-        pres_description = st.text_area(
-            "Report description",
-            value=st.session_state.report_description,
-            placeholder="Example: Create an analysis report about Brown Pelican population trends from 2010-2021 across the Gulf Coast. Include annual counts, geographic distribution maps, and comparison with other species. Target audience: wildlife managers.",
-            height=120,
-            help="Be specific about: topic, time period, geographic scope, key questions, and target audience",
-            label_visibility="collapsed"
-        )
-
-        # Form buttons
-        col1, col2 = st.columns([3, 1])
-        with col1:
-            generate_button = st.form_submit_button("✨ Generate PDF Report", type="primary", use_container_width=True)
-        with col2:
-            cancel_button = st.form_submit_button("Cancel", use_container_width=True)
-
-        if generate_button and pres_description:
-            # Update session state with current description
-            st.session_state.report_description = pres_description
-            generate_presentation(pres_description)
-        elif generate_button:
-            st.warning("Please describe what kind of report you want to create.")
-        elif cancel_button:
-            st.session_state.show_presentation_form = False
-            st.session_state.report_description = ""
-            st.rerun()
-
-    st.markdown("---")
 
 # ============================================================================
 # USER INPUT HANDLING
