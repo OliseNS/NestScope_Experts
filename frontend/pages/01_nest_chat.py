@@ -10,6 +10,7 @@ import requests
 # Import from modular structure
 from services import (
     ask_question_streaming,
+    ask_question_agentic_streaming,
     ask_question_to_backend,
     get_backend_config
 )
@@ -62,14 +63,14 @@ if "query_history" not in st.session_state:
 
 if "chat_placeholder" not in st.session_state:
     placeholder_examples = [
-        "Show brown pelican trends from 2015 to 2021",
-        "What were the top 5 species in 2020?",
-        "List all bird colonies in Louisiana",
-        "How many observations were recorded per year?",
-        "Compare species diversity across different colonies",
-        "Which habitat had the most bird sightings?",
-        "Analyze the population growth of Seagulls",
-        "Identify colonies with declining populations"
+        "Show the total bird count for Brown Pelican from 2015 to 2021",
+        "What were the top 5 species by bird count in 2021?",
+        "List all bird colonies in Louisiana with their coordinates",
+        "What is the total bird count for each year?",
+        "Show the number of different species at each colony",
+        "Which colony location had the highest total bird count?",
+        "Show the total bird count for Laughing Gull by year",
+        "Which colonies had decreasing bird counts over time?"
     ]
     st.session_state.chat_placeholder = f'Try "{random.choice(placeholder_examples)}"'
 
@@ -86,11 +87,11 @@ with st.sidebar:
     render_sidebar_section("Quick Examples")
 
     examples = [
-        ("📈 Trends", "Show brown pelican trends from 2015 to 2021"),
-        ("🏆 Top Species", "What were the top 5 species in 2021?"),
-        ("📍 Locations", "Show all bird colonies in Louisiana with their locations"),
-        ("📊 Annual Counts", "How many observations were recorded per year?"),
-        ("🎯 Diversity", "Compare species diversity across different colonies")
+        ("📈 Trends", "Show the total bird count for Brown Pelican from 2015 to 2021"),
+        ("🏆 Top Species", "What were the top 5 species by bird count in 2021?"),
+        ("📍 Locations", "Show all bird colonies in Louisiana with their coordinates"),
+        ("📊 Annual Counts", "What is the total bird count for each year?"),
+        ("🎯 Diversity", "Show the number of different species observed at each colony")
     ]
 
     for label, full_prompt in examples:
@@ -256,8 +257,8 @@ if prompt:
     with st.chat_message("assistant"):
         try:
             # Placeholders for streaming content
-            status_placeholder = st.empty()
-            sql_expander_placeholder = st.empty()
+            thinking_status_placeholder = st.empty()  # Live status (will be replaced)
+            thought_process_placeholder = st.empty()  # Final thought process (persistent)
             answer_placeholder = st.empty()
 
             # Variables to store response data
@@ -267,110 +268,215 @@ if prompt:
             answer = ""
             error = None
             query_error = None
-            use_streaming = True
 
             # Visualization directives from backend
             show_chart = False
             chart_type = None
             show_map = False
 
-            status_placeholder.markdown("🔄 **Processing your question...**")
+            # Agentic mode tracking
+            thinking_steps = []
+            current_attempt = 1
 
             # Build conversation history for context
             conversation_history = build_conversation_history()
 
-            # Try streaming first, fallback to regular API if it fails
-            try:
-                for event in ask_question_streaming(prompt, conversation_history=conversation_history):
-                    event_type = event.get('type')
+            # Use agentic streaming for better accuracy
+            for event in ask_question_agentic_streaming(prompt, conversation_history=conversation_history):
+                event_type = event.get('type')
 
-                    if event_type == 'error':
-                        error_content = event.get('content', '')
-                        # Check if it's a 404 error (streaming not available)
-                        if '404' in str(error_content):
-                            use_streaming = False
-                            break
-                        else:
-                            error = error_content
-                            status_placeholder.empty()
-                            st.error(error)
-                            st.session_state.messages.append({"role": "assistant", "content": error})
-                            st.stop()
-
-                    elif event_type == 'sql_query':
-                        sql_query = event.get('content')
-                        status_placeholder.markdown("🔄 **Executing query...**")
-
-                    elif event_type == 'results':
-                        results = event.get('content')
-                        results_count = event.get('count', 0)
-                        status_placeholder.markdown("🔄 **Analyzing results...**")
-
-                        # Display SQL query in expander
-                        with sql_expander_placeholder.expander("🔍 View Generated SQL Query"):
-                            st.code(sql_query, language="sql")
-
-                    elif event_type == 'query_error':
-                        query_error = event.get('content')
-
-                    elif event_type == 'answer_start':
-                        status_placeholder.empty()
-
-                    elif event_type == 'answer_chunk':
-                        chunk = event.get('content', '')
-                        answer += chunk
-                        # Update the answer display with streaming text
-                        answer_placeholder.markdown(answer + "▌")
-
-                    elif event_type == 'answer_end':
-                        # Remove cursor and show final answer
-                        answer_placeholder.markdown(answer)
-
-                    elif event_type == 'visualization':
-                        # Backend tells us what to visualize
-                        show_chart = event.get('show_chart', False)
-                        chart_type = event.get('chart_type')
-                        show_map = event.get('show_map', False)
-
-                    elif event_type == 'done':
-                        break
-            except Exception as e:
-                # If streaming fails, fall back to regular API
-                if '404' in str(e):
-                    use_streaming = False
-                else:
-                    raise
-
-            # Fallback to non-streaming API if streaming is not available
-            if not use_streaming:
-                status_placeholder.markdown("🔄 **Processing your question...**")
-                response = ask_question_to_backend(prompt, conversation_history=conversation_history)
-
-                if response.get('error'):
-                    error_msg = response['error']
-                    status_placeholder.empty()
-                    st.error(error_msg)
-                    st.session_state.messages.append({"role": "assistant", "content": error_msg})
+                if event_type == 'error':
+                    error_content = event.get('content', '')
+                    thinking_status_placeholder.empty()
+                    st.error(f"❌ Error: {error_content}")
+                    st.session_state.messages.append({"role": "assistant", "content": f"Error: {error_content}"})
                     st.stop()
 
-                # Extract response components
-                sql_query = response['sql_query']
-                answer = response['answer']
-                results = response['results']
+                elif event_type == 'thinking_step':
+                    # Add or update thinking step
+                    step_info = {
+                        'step': event.get('step'),
+                        'content': event.get('content'),
+                        'icon': event.get('icon', '⚙️'),
+                        'attempt': event.get('attempt', 1),
+                        'status': 'in_progress',
+                        'details': event.get('details')
+                    }
+                    thinking_steps.append(step_info)
+                    current_attempt = event.get('attempt', 1)
 
-                # Get visualization directives from backend
-                show_chart = response.get('show_chart', False)
-                chart_type = response.get('chart_type')
-                show_map = response.get('show_map', False)
+                    # Display live status (compact view)
+                    with thinking_status_placeholder.container():
+                        st.info(f"{step_info['icon']} {step_info['content']}" +
+                               (f" (Attempt {current_attempt}/3)" if current_attempt > 1 else ""))
 
-                status_placeholder.empty()
+                elif event_type == 'sql_generated':
+                    sql_query = event.get('content')
+                    # Mark SQL generation as complete
+                    if thinking_steps:
+                        thinking_steps[-1]['status'] = 'completed'
 
-                # Display SQL query in expander
-                with sql_expander_placeholder.expander("🔍 View Generated SQL Query"):
-                    st.code(sql_query, language="sql")
+                    # Add SQL to thinking steps for the reasoning track
+                    thinking_steps.append({
+                        'step': 'sql_generated',
+                        'content': 'SQL query generated',
+                        'icon': '📝',
+                        'status': 'completed',
+                        'sql_query': sql_query
+                    })
 
-                # Display the answer
-                answer_placeholder.markdown(answer)
+                elif event_type == 'validation_result':
+                    is_valid = event.get('is_valid')
+                    feedback = event.get('feedback')
+
+                    if is_valid:
+                        thinking_steps.append({
+                            'icon': '✅',
+                            'content': 'SQL validation passed!',
+                            'status': 'completed'
+                        })
+                    else:
+                        thinking_steps.append({
+                            'icon': '⚠️',
+                            'content': f'Validation issue: {feedback}',
+                            'status': 'warning'
+                        })
+
+                elif event_type == 'results':
+                    results = event.get('content')
+                    results_count = event.get('count', 0)
+                    thinking_steps.append({
+                        'icon': '💾',
+                        'content': f'Query executed successfully ({results_count} rows)',
+                        'status': 'completed'
+                    })
+
+                elif event_type == 'results_validation':
+                    is_valid = event.get('is_valid')
+                    feedback = event.get('feedback')
+
+                    if is_valid:
+                        thinking_steps.append({
+                            'icon': '✅',
+                            'content': 'Results validated!',
+                            'status': 'completed'
+                        })
+                    else:
+                        thinking_steps.append({
+                            'icon': '⚠️',
+                            'content': f'Results issue: {feedback}',
+                            'status': 'warning'
+                        })
+
+                elif event_type == 'retry':
+                    reason = event.get('reason')
+                    attempt = event.get('attempt')
+                    thinking_steps.append({
+                        'icon': '🔄',
+                        'content': f'Retrying... {reason}',
+                        'status': 'retry',
+                        'attempt': attempt + 1
+                    })
+
+                elif event_type == 'answer_start':
+                    # Clear live status and show the full reasoning track
+                    thinking_status_placeholder.empty()
+
+                    # Build a natural, conversational thought process display
+                    with thought_process_placeholder.expander(
+                        f"💭 My Thought Process{f' (took {current_attempt} tries)' if current_attempt > 1 else ''}",
+                        expanded=False
+                    ):
+                        # Group steps by attempt
+                        attempts_data = {}
+                        for step in thinking_steps:
+                            attempt = step.get('attempt', 1)
+                            if attempt not in attempts_data:
+                                attempts_data[attempt] = {
+                                    'sql_query': None,
+                                    'validation_passed': False,
+                                    'validation_feedback': None,
+                                    'results_validation_passed': False,
+                                    'results_feedback': None,
+                                    'rows_returned': None
+                                }
+
+                            # Extract key information
+                            if step.get('sql_query'):
+                                attempts_data[attempt]['sql_query'] = step['sql_query']
+                            elif step.get('status') == 'completed' and '✅' in step.get('icon', ''):
+                                if 'SQL validation' in step.get('content', ''):
+                                    attempts_data[attempt]['validation_passed'] = True
+                                elif 'Results validated' in step.get('content', ''):
+                                    attempts_data[attempt]['results_validation_passed'] = True
+                            elif step.get('status') == 'warning' and '⚠️' in step.get('icon', ''):
+                                if 'Validation issue' in step.get('content', ''):
+                                    attempts_data[attempt]['validation_passed'] = False
+                                    attempts_data[attempt]['validation_feedback'] = step.get('content', '').replace('Validation issue: ', '')
+                                elif 'Results issue' in step.get('content', ''):
+                                    attempts_data[attempt]['results_validation_passed'] = False
+                                    attempts_data[attempt]['results_feedback'] = step.get('content', '').replace('Results issue: ', '')
+                            elif '💾' in step.get('icon', '') and 'rows' in step.get('content', ''):
+                                # Extract row count
+                                import re
+                                match = re.search(r'\((\d+) rows\)', step.get('content', ''))
+                                if match:
+                                    attempts_data[attempt]['rows_returned'] = match.group(1)
+
+                        # Display each attempt in natural language
+                        for attempt_num in sorted(attempts_data.keys()):
+                            attempt_info = attempts_data[attempt_num]
+
+                            if attempt_num > 1:
+                                st.divider()
+                                st.markdown(f"### 🔄 Second Try")
+                                if attempt_info['validation_feedback']:
+                                    st.markdown(f"*I noticed an issue with my first query: {attempt_info['validation_feedback']}*")
+                                elif attempt_info['results_feedback']:
+                                    st.markdown(f"*The first results didn't look right: {attempt_info['results_feedback']}*")
+
+                            # Show thought process in natural language
+                            if attempt_info['sql_query']:
+                                if attempt_num == 1:
+                                    st.markdown("**Here's the query I wrote to get your answer:**")
+                                else:
+                                    st.markdown("**Here's my corrected query:**")
+                                st.code(attempt_info['sql_query'], language="sql")
+
+                            # Conversational validation feedback
+                            if attempt_info['validation_passed']:
+                                st.markdown("✓ *I double-checked the query and it looks correct*")
+
+                            # Show execution in natural language
+                            if attempt_info['rows_returned']:
+                                st.markdown(f"✓ *I ran this query and found **{attempt_info['rows_returned']} rows** of data*")
+
+                            # Show results validation naturally
+                            if attempt_info['results_validation_passed']:
+                                st.markdown("✓ *I verified these results make sense for your question*")
+
+                elif event_type == 'answer_chunk':
+                    chunk = event.get('content', '')
+                    answer += chunk
+                    # Update the answer display with streaming text
+                    answer_placeholder.markdown(answer + "▌")
+
+                elif event_type == 'answer_end':
+                    # Remove cursor and show final answer
+                    answer_placeholder.markdown(answer)
+
+                elif event_type == 'visualization':
+                    # Backend tells us what to visualize
+                    show_chart = event.get('show_chart', False)
+                    chart_type = event.get('chart_type')
+                    show_map = event.get('show_map', False)
+
+                elif event_type == 'success':
+                    # Query completed successfully
+                    pass
+
+                elif event_type == 'done':
+                    break
 
             # Save to history (on success only)
             if prompt and prompt not in [h[1] for h in st.session_state.query_history]:

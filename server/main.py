@@ -782,8 +782,493 @@ Please provide a clear, informative answer to the question based on these result
                 'error': str(e)
             }
 
+class AgenticSQLChatbot(SQLChatbot):
+    """
+    Agentic chatbot with multi-step reasoning and self-correction.
+
+    The agent follows these steps:
+    1. Analyze the question - understand what's being asked
+    2. Generate SQL - create a candidate query
+    3. Self-validate SQL - check for common mistakes
+    4. Execute query - run the SQL
+    5. Validate results - check if results make sense
+    6. Retry if needed - regenerate with feedback (configurable max attempts)
+
+    Progress is streamed to the frontend in real-time.
+    """
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Load agentic configuration from config.yaml
+        self.max_attempts = config.get('agentic', {}).get('max_attempts', 3)
+        self.validation_temperature = config.get('agentic', {}).get('validation_temperature', 0.1)
+        self.analysis_temperature = config.get('agentic', {}).get('analysis_temperature', 0.3)
+
+    async def agentic_ask_stream(self, question: str, conversation_history: list = None):
+        """
+        Process question with agentic reasoning and stream progress updates.
+
+        Yields events:
+        - thinking_start: Agent begins reasoning
+        - thinking_step: Progress update with current step details
+        - sql_generated: SQL query created
+        - validation_start: Beginning validation
+        - validation_result: Validation passed/failed with feedback
+        - execution_start: Running query
+        - results_check: Checking if results make sense
+        - retry: Retrying with feedback
+        - success: Final results ready
+        - error: Critical error occurred
+        """
+
+        for attempt in range(1, self.max_attempts + 1):
+            try:
+                # Step 1: Analyze question
+                if attempt == 1:
+                    yield {
+                        'type': 'thinking_step',
+                        'step': 'analyze',
+                        'attempt': attempt,
+                        'content': "Reading your question and understanding what you need...",
+                        'icon': '💭'
+                    }
+                else:
+                    yield {
+                        'type': 'thinking_step',
+                        'step': 'analyze',
+                        'attempt': attempt,
+                        'content': f"I found an issue. Let me try a different approach... (Attempt {attempt}/{self.max_attempts})",
+                        'icon': '🔄'
+                    }
+
+                analysis = await self._analyze_question(question, conversation_history)
+
+                await asyncio.sleep(0.1)  # Small delay for UX
+
+                # Step 2: Generate SQL
+                yield {
+                    'type': 'thinking_step',
+                    'step': 'generate_sql',
+                    'attempt': attempt,
+                    'content': "Writing a database query to get this information...",
+                    'icon': '✏️'
+                }
+
+                sql_query = self.generate_sql_query(question, conversation_history=conversation_history)
+
+                if sql_query.startswith("ERROR"):
+                    yield {'type': 'error', 'content': sql_query}
+                    return
+
+                yield {
+                    'type': 'sql_generated',
+                    'content': sql_query,
+                    'attempt': attempt
+                }
+
+                await asyncio.sleep(0.1)
+
+                # Step 3: Self-validate SQL
+                yield {
+                    'type': 'thinking_step',
+                    'step': 'validate_sql',
+                    'attempt': attempt,
+                    'content': "Double-checking my query to make sure it's correct...",
+                    'icon': '🔍'
+                }
+
+                validation = await self._validate_sql(sql_query, question, conversation_history)
+
+                yield {
+                    'type': 'validation_result',
+                    'is_valid': validation['is_valid'],
+                    'feedback': validation['feedback'],
+                    'attempt': attempt
+                }
+
+                if not validation['is_valid']:
+                    # SQL failed validation - retry with feedback
+                    yield {
+                        'type': 'retry',
+                        'attempt': attempt,
+                        'reason': validation['feedback'],
+                        'content': f"Hmm, I spotted an issue: {validation['feedback']}. Let me rewrite this..."
+                    }
+                    # Add validation feedback to conversation for next attempt
+                    if conversation_history is None:
+                        conversation_history = []
+                    conversation_history.append({
+                        'role': 'system',
+                        'content': f"Previous SQL had an issue: {validation['feedback']}. Please fix this in the next attempt."
+                    })
+                    continue  # Try again
+
+                await asyncio.sleep(0.1)
+
+                # Step 4: Execute query
+                yield {
+                    'type': 'thinking_step',
+                    'step': 'execute',
+                    'attempt': attempt,
+                    'content': "Running the query on the database...",
+                    'icon': '⚡'
+                }
+
+                results_df, error = self.execute_query(sql_query)
+
+                if error:
+                    # Query execution failed - retry with error feedback
+                    yield {
+                        'type': 'retry',
+                        'attempt': attempt,
+                        'reason': error,
+                        'content': f"The query didn't work: {error}. Let me fix it..."
+                    }
+                    if conversation_history is None:
+                        conversation_history = []
+                    conversation_history.append({
+                        'role': 'system',
+                        'content': f"Previous query failed with error: {error}. Please fix this."
+                    })
+                    continue  # Try again
+
+                results = results_df.to_dict(orient='records') if results_df is not None else None
+                results_count = len(results_df) if results_df is not None else 0
+
+                yield {
+                    'type': 'results',
+                    'content': results,
+                    'count': results_count,
+                    'attempt': attempt
+                }
+
+                await asyncio.sleep(0.1)
+
+                # Step 5: Validate results
+                yield {
+                    'type': 'thinking_step',
+                    'step': 'validate_results',
+                    'attempt': attempt,
+                    'content': "Verifying that these results make sense for your question...",
+                    'icon': '🔬'
+                }
+
+                result_validation = await self._validate_results(question, sql_query, results_df, conversation_history)
+
+                yield {
+                    'type': 'results_validation',
+                    'is_valid': result_validation['is_valid'],
+                    'feedback': result_validation['feedback'],
+                    'attempt': attempt
+                }
+
+                if not result_validation['is_valid'] and attempt < self.max_attempts:
+                    # Results look suspicious - retry with feedback
+                    yield {
+                        'type': 'retry',
+                        'attempt': attempt,
+                        'reason': result_validation['feedback'],
+                        'content': f"Wait, something doesn't look right: {result_validation['feedback']}. Let me reconsider..."
+                    }
+                    if conversation_history is None:
+                        conversation_history = []
+                    conversation_history.append({
+                        'role': 'system',
+                        'content': f"Previous query returned suspicious results: {result_validation['feedback']}. Please revise the SQL."
+                    })
+                    continue  # Try again
+
+                # Success! Generate final answer
+                yield {
+                    'type': 'thinking_step',
+                    'step': 'generate_answer',
+                    'attempt': attempt,
+                    'content': "Perfect! Now let me explain what I found...",
+                    'icon': '✨'
+                }
+
+                yield {'type': 'answer_start'}
+
+                full_answer = ""
+                for chunk in self.generate_answer_stream(question, sql_query, results_df, conversation_history=conversation_history):
+                    full_answer += chunk
+                    yield {'type': 'answer_chunk', 'content': chunk}
+                    await asyncio.sleep(0)
+
+                yield {'type': 'answer_end'}
+
+                # Parse visualization directives
+                viz_directives = parse_visualization_directives(full_answer, results_df)
+                yield {
+                    'type': 'visualization',
+                    'show_chart': viz_directives['show_chart'],
+                    'chart_type': viz_directives['chart_type'],
+                    'show_map': viz_directives['show_map']
+                }
+
+                yield {
+                    'type': 'success',
+                    'attempts_used': attempt,
+                    'content': 'Query completed successfully!'
+                }
+
+                yield {'type': 'done'}
+                return
+
+            except Exception as e:
+                if attempt < self.max_attempts:
+                    yield {
+                        'type': 'retry',
+                        'attempt': attempt,
+                        'reason': str(e),
+                        'content': f"Unexpected error: {str(e)}. Retrying..."
+                    }
+                    continue
+                else:
+                    yield {'type': 'error', 'content': f"Failed after {self.max_attempts} attempts: {str(e)}"}
+                    return
+
+        # If we get here, all attempts failed
+        yield {'type': 'error', 'content': f"Failed to generate accurate results after {self.max_attempts} attempts. Please try rephrasing your question."}
+
+    async def _analyze_question(self, question: str, conversation_history: list = None) -> dict:
+        """Analyze the question to understand what's being asked."""
+
+        messages = [
+            {"role": "system", "content": """You are analyzing a natural language question about bird colony data.
+
+Your task: Extract key information from the question and identify the user's intent.
+
+Respond with a JSON object containing:
+- summary: Brief (1 sentence) summary of what the user wants
+- entities: Key entities mentioned (years, species, locations, etc.)
+- question_type: Type of question (count, trend, comparison, location, list, etc.)
+- tables_needed: Which tables are likely needed (colony_totals, species_data, reference, etc.)
+- needs_coordinates: true if the question involves locations/maps
+
+Example:
+Question: "How many brown pelicans were observed in Louisiana in 2021?"
+Response: {
+  "summary": "User wants total count of brown pelicans in Louisiana for 2021",
+  "entities": {"species": "brown pelican", "location": "Louisiana", "year": 2021},
+  "question_type": "count",
+  "tables_needed": ["colony_totals"],
+  "needs_coordinates": false
+}"""}
+        ]
+
+        if conversation_history:
+            for msg in conversation_history[-4:]:
+                messages.append(msg)
+
+        messages.append({"role": "user", "content": f"Question: {question}"})
+
+        try:
+            response = client.chat.completions.create(
+                model=self.model,
+                messages=messages,
+                temperature=self.analysis_temperature,
+                max_tokens=300
+            )
+
+            analysis_text = response.choices[0].message.content.strip()
+            # Try to parse as JSON
+            try:
+                analysis = json.loads(analysis_text)
+            except:
+                # Fallback if not valid JSON
+                analysis = {"summary": analysis_text, "entities": {}, "question_type": "unknown", "tables_needed": [], "needs_coordinates": False}
+
+            return analysis
+        except Exception as e:
+            return {"summary": "Could not analyze question", "entities": {}, "question_type": "unknown", "tables_needed": [], "needs_coordinates": False}
+
+    async def _validate_sql(self, sql_query: str, question: str, conversation_history: list = None) -> dict:
+        """Self-validate the generated SQL query using LLM reasoning."""
+
+        # Pure LLM validation - no hard-coded rules
+        messages = [
+            {"role": "system", "content": """You are a SQL validator for bird colony database queries.
+
+🚨 ERROR #1 (MOST COMMON - CHECK FIRST):
+**Using tblSpeciesData for bird/observation counts = WRONG!**
+
+This is the MOST COMMON MISTAKE. Check IMMEDIATELY:
+
+❌ WRONG (counts photo records, not birds):
+- SELECT Year, COUNT(*) FROM tblSpeciesData GROUP BY Year
+- Anything using tblSpeciesData for "how many birds/observations"
+
+✅ CORRECT (counts actual birds):
+- SELECT Year, SUM(Birds) FROM tblColonyTotals2010-2021_MayJuneCombined GROUP BY Year
+
+RULE: If question asks about "how many birds/observations/nests/counts", MUST use:
+- Table: tblColonyTotals2010-2021_MayJuneCombined
+- Aggregation: SUM(Birds) or SUM(Nests), NOT COUNT(*)
+
+Only use tblSpeciesData for questions about PHOTO METHODOLOGY, not bird counts!
+
+OTHER ERRORS TO CHECK:
+2. Using COUNT(*) when should use SUM(Birds) for bird totals
+3. Missing Year filter when question specifies a year
+4. Missing Latitude/Longitude for location questions
+
+IMPORTANT: Respond with ONLY a JSON object:
+{"is_valid": true, "feedback": "Looks good"}
+OR
+{"is_valid": false, "feedback": "Brief issue description"}
+
+Be EXTREMELY STRICT. You are the only defense against wrong answers!"""}
+        ]
+
+        messages.append({
+            "role": "user",
+            "content": f"""Question: {question}
+
+SQL Query:
+{sql_query}
+
+Validate (respond with JSON only):"""
+        })
+
+        try:
+            response = client.chat.completions.create(
+                model=self.model,
+                messages=messages,
+                temperature=self.validation_temperature,
+                max_tokens=150
+            )
+
+            validation_text = response.choices[0].message.content.strip()
+
+            # Remove markdown code blocks if present
+            if validation_text.startswith("```"):
+                validation_text = validation_text.split("```")[1]
+                if validation_text.startswith("json"):
+                    validation_text = validation_text[4:].strip()
+                validation_text = validation_text.strip()
+
+            try:
+                validation = json.loads(validation_text)
+                # Ensure required fields exist
+                if 'is_valid' not in validation:
+                    validation['is_valid'] = True
+                if 'feedback' not in validation:
+                    validation['feedback'] = "Looks good"
+            except json.JSONDecodeError:
+                # If JSON parsing fails, be lenient and assume valid
+                # Only mark as invalid if we see clear negative indicators
+                text_lower = validation_text.lower()
+                if any(word in text_lower for word in ["invalid", "error", "wrong", "incorrect", "missing"]):
+                    validation = {"is_valid": False, "feedback": validation_text[:100]}
+                else:
+                    validation = {"is_valid": True, "feedback": "Looks good"}
+
+            return validation
+        except Exception as e:
+            # On error, assume valid and proceed
+            return {"is_valid": True, "feedback": "Looks good"}
+
+    async def _validate_results(self, question: str, sql_query: str, results_df, conversation_history: list = None) -> dict:
+        """Validate if the results make sense for the question."""
+
+        if results_df is None or len(results_df) == 0:
+            return {"is_valid": True, "feedback": "No results to validate"}
+
+        # Pure LLM validation - no hard-coded rules
+        # Convert results to text summary for LLM validation
+        results_summary = f"{len(results_df)} rows returned. "
+        if len(results_df) > 0:
+            # Show column names and sample values
+            results_summary += f"Columns: {', '.join(results_df.columns[:5])}. "
+            if len(results_df.columns) > 5:
+                results_summary += f"({len(results_df.columns)} total columns). "
+
+            # Show first row as sample
+            first_row = results_df.iloc[0].to_dict()
+            results_summary += f"Sample row: {first_row}"
+
+        messages = [
+            {"role": "system", "content": """You are validating query results for bird colony data.
+
+🚨 CRITICAL CHECK #1 (CHECK FIRST):
+**Are these BIRD COUNTS or PHOTO RECORD COUNTS?**
+
+BIRD COUNT REALITY CHECK:
+- Years 2010-2021 had HUNDREDS OF THOUSANDS of birds observed
+- Example real bird counts: 2010 = ~332,746 birds, 2021 = ~250,000+ birds
+- If results show only 1,000-2,000 per year → WRONG! Those are photo records!
+
+❌ SUSPICIOUS (likely photo records, not birds):
+- Year totals of 1,500, 650, 1,400 → Too low! Real bird counts are 100,000+
+- If SQL uses tblSpeciesData → Wrong table for bird counts
+
+✅ LOOKS CORRECT (actual bird observations):
+- Year totals of 300,000, 250,000, 180,000 → Reasonable bird counts
+- If SQL uses tblColonyTotals with SUM(Birds) → Correct approach
+
+OTHER CHECKS:
+2. Do column names match what was asked?
+3. Is the time range correct?
+
+IMPORTANT: Respond with ONLY a JSON object:
+{"is_valid": true, "feedback": "Results look correct"}
+OR
+{"is_valid": false, "feedback": "Brief issue description"}
+
+Be EXTREMELY STRICT on bird count questions. If numbers look suspiciously low (< 50,000), mark INVALID!"""}
+        ]
+
+        messages.append({
+            "role": "user",
+            "content": f"""Question: {question}
+
+SQL Query:
+{sql_query}
+
+Results Summary:
+{results_summary}
+
+Validate (JSON only):"""
+        })
+
+        try:
+            response = client.chat.completions.create(
+                model=self.model,
+                messages=messages,
+                temperature=self.validation_temperature,
+                max_tokens=150
+            )
+
+            validation_text = response.choices[0].message.content.strip()
+
+            # Remove markdown code blocks if present
+            if validation_text.startswith("```"):
+                validation_text = validation_text.split("```")[1]
+                if validation_text.startswith("json"):
+                    validation_text = validation_text[4:].strip()
+                validation_text = validation_text.strip()
+
+            try:
+                validation = json.loads(validation_text)
+                # Ensure required fields
+                if 'is_valid' not in validation:
+                    validation['is_valid'] = True
+                if 'feedback' not in validation:
+                    validation['feedback'] = "Results look correct"
+            except json.JSONDecodeError:
+                # Default to valid
+                validation = {"is_valid": True, "feedback": "Results appear reasonable"}
+
+            return validation
+        except Exception as e:
+            # On error, assume valid
+            return {"is_valid": True, "feedback": "Results look correct"}
+
+
 # Initialize chatbot and bird detector
 chatbot = SQLChatbot()
+agentic_chatbot = AgenticSQLChatbot()
 try:
     bird_detector = BirdDetector()
     print("Bird detector initialized successfully!")
@@ -800,6 +1285,8 @@ async def root():
         "version": "1.0.0",
         "endpoints": {
             "/ask": "POST - Ask a question in natural language",
+            "/ask/stream": "POST - Ask with streaming response",
+            "/ask/agentic/stream": "POST - Ask with agentic self-correction (recommended for accuracy)",
             "/schema": "GET - Get database schema",
             "/stats": "GET - Get database statistics",
             "/health": "GET - Health check",
@@ -1052,6 +1539,48 @@ async def ask_question_stream(request: QuestionRequest):
             yield f"data: {json.dumps({'type': 'visualization', 'show_chart': viz_directives['show_chart'], 'chart_type': viz_directives['chart_type'], 'show_map': viz_directives['show_map']})}\n\n"
 
             yield f"data: {json.dumps({'type': 'done'})}\n\n"
+
+        except Exception as e:
+            yield f"data: {json.dumps({'type': 'error', 'content': str(e)})}\n\n"
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no"
+        }
+    )
+
+@app.post("/ask/agentic/stream")
+async def ask_question_agentic_stream(request: QuestionRequest):
+    """
+    Ask a question with agentic self-correction and real-time progress updates.
+
+    This endpoint uses multi-step reasoning:
+    1. Analyze question
+    2. Generate SQL
+    3. Self-validate SQL
+    4. Execute query
+    5. Validate results
+    6. Retry if needed (max 3 attempts)
+
+    Returns a stream of Server-Sent Events (SSE) with progress updates.
+    """
+    async def event_generator():
+        try:
+            # Update model if provided
+            if request.model:
+                agentic_chatbot.model = request.model
+
+            # Stream agentic reasoning process
+            async for event in agentic_chatbot.agentic_ask_stream(
+                request.question,
+                conversation_history=request.conversation_history
+            ):
+                yield f"data: {json.dumps(event)}\n\n"
+                await asyncio.sleep(0)  # Allow other tasks to run
 
         except Exception as e:
             yield f"data: {json.dumps({'type': 'error', 'content': str(e)})}\n\n"

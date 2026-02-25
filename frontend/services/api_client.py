@@ -81,6 +81,61 @@ def ask_question_streaming(question: str, model: str = None, conversation_histor
         yield {"type": "error", "content": str(e)}
 
 
+def ask_question_agentic_streaming(question: str, model: str = None, conversation_history: List[Dict[str, str]] = None) -> Generator[Dict[str, Any], None, None]:
+    """
+    Send a question to the FastAPI backend with agentic self-correction and stream progress updates.
+
+    This uses multi-step reasoning with real-time progress updates:
+    1. Analyze question
+    2. Generate SQL
+    3. Self-validate SQL
+    4. Execute query
+    5. Validate results
+    6. Retry if needed (max 3 attempts)
+
+    Args:
+        question: Natural language question
+        model: LLM model to use (defaults to MODEL_NAME from .env)
+        conversation_history: Previous conversation messages for context
+
+    Yields:
+        Events: {
+            'type': 'thinking_step'|'sql_generated'|'validation_result'|'results'|
+                    'retry'|'answer_chunk'|'success'|'error'|'done',
+            'content': ...,
+            ...
+        }
+    """
+    from .config import API_BASE_URL
+
+    # Use DEFAULT_MODEL from config if not specified
+    if model is None:
+        model = DEFAULT_MODEL
+
+    try:
+        response = requests.post(
+            f"{API_BASE_URL}/ask/agentic/stream",
+            json={"question": question, "model": model, "conversation_history": conversation_history},
+            stream=True,
+            timeout=120  # Longer timeout for agentic mode
+        )
+        response.raise_for_status()
+
+        # Process the SSE stream
+        for line in response.iter_lines():
+            if line:
+                line = line.decode('utf-8')
+                if line.startswith('data: '):
+                    data = line[6:]  # Remove 'data: ' prefix
+                    try:
+                        event = json.loads(data)
+                        yield event
+                    except json.JSONDecodeError:
+                        continue
+    except requests.exceptions.RequestException as e:
+        yield {"type": "error", "content": str(e)}
+
+
 def get_stats_from_backend() -> Dict[str, Any]:
     """
     Fetch database statistics from the FastAPI backend.
