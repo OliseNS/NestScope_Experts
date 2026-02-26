@@ -528,13 +528,13 @@ if prompt:
 
                                 if attempt_info['validation_passed']:
                                     st.success("✓ Query validated and meets accuracy requirements")
-                                    # Show reasoning in expander
-                                    with st.expander("View validation details"):
-                                        reasoning = attempt_info['sql_validation_reasoning']
-                                        if isinstance(reasoning, dict) and 'reasoning' in reasoning:
-                                            reasoning = reasoning['reasoning']
-                                        if isinstance(reasoning, str):
-                                            st.markdown(reasoning)
+                                    # Show reasoning in a collapsible markdown section
+                                    reasoning = attempt_info['sql_validation_reasoning']
+                                    if isinstance(reasoning, dict) and 'reasoning' in reasoning:
+                                        reasoning = reasoning['reasoning']
+                                    if isinstance(reasoning, str):
+                                        with st.container():
+                                            st.markdown(f"<details><summary>View validation details</summary>{reasoning}</details>", unsafe_allow_html=True)
                                 else:
                                     st.error(f"✗ Validation failed: {attempt_info['validation_feedback']}")
 
@@ -558,13 +558,13 @@ if prompt:
 
                                 if attempt_info['results_validation_passed']:
                                     st.success("✓ Results validated and match the question")
-                                    # Show reasoning in expander
-                                    with st.expander("View validation details"):
-                                        reasoning = attempt_info['results_validation_reasoning']
-                                        if isinstance(reasoning, dict) and 'reasoning' in reasoning:
-                                            reasoning = reasoning['reasoning']
-                                        if isinstance(reasoning, str):
-                                            st.markdown(reasoning)
+                                    # Show reasoning in a collapsible markdown section
+                                    reasoning = attempt_info['results_validation_reasoning']
+                                    if isinstance(reasoning, dict) and 'reasoning' in reasoning:
+                                        reasoning = reasoning['reasoning']
+                                    if isinstance(reasoning, str):
+                                        with st.container():
+                                            st.markdown(f"<details><summary>View validation details</summary>{reasoning}</details>", unsafe_allow_html=True)
                                 else:
                                     st.error(f"✗ Results concern: {attempt_info['results_feedback']}")
 

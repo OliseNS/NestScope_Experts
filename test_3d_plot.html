@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test 3D Plot</title>
+    <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+</head>
+<body style="background: #1e1e1e; color: white; font-family: sans-serif;">
+    <h1>3D Plot Test</h1>
+    <div id="test-plot" style="width: 100%; height: 600px; border: 2px solid #CC785C;"></div>
+
+    <script>
+        console.log('Starting test...');
+
+        // Fetch real data
+        fetch('http://localhost:5000/api/cluster_data')
+            .then(r => r.json())
+            .then(data => {
+                console.log('Data received:', {
+                    totalBirds: data.total_birds,
+                    nClusters: data.n_clusters,
+                    positionsCount: data.positions.length
+                });
+
+                // Get all x, y, z coordinates
+                const allX = data.positions.map(p => p.x);
+                const allY = data.positions.map(p => p.y);
+                const allZ = data.positions.map(p => p.z);
+                const allClusters = data.positions.map(p => p.cluster);
+
+                console.log('Coordinate ranges:');
+                console.log('  X:', Math.min(...allX).toFixed(2), 'to', Math.max(...allX).toFixed(2));
+                console.log('  Y:', Math.min(...allY).toFixed(2), 'to', Math.max(...allY).toFixed(2));
+                console.log('  Z:', Math.min(...allZ).toFixed(2), 'to', Math.max(...allZ).toFixed(2));
+
+                // Create simple scatter plot with ALL points in one trace
+                const trace = {
+                    x: allX,
+                    y: allY,
+                    z: allZ,
+                    mode: 'markers',
+                    type: 'scatter3d',
+                    marker: {
+                        size: 3,
+                        color: allClusters,
+                        colorscale: 'Viridis',
+                        showscale: true,
+                        opacity: 0.8
+                    },
+                    text: data.positions.map(p => `Cluster ${p.cluster}<br>Bird ${p.bird_id}`),
+                    hoverinfo: 'text'
+                };
+
+                const layout = {
+                    title: 'Simple 3D Test - All Birds',
+                    scene: {
+                        xaxis: { title: 'X' },
+                        yaxis: { title: 'Y' },
+                        zaxis: { title: 'Z' }
+                    },
+                    margin: { l: 0, r: 0, b: 0, t: 40 }
+                };
+
+                console.log('Creating plot...');
+                Plotly.newPlot('test-plot', [trace], layout);
+                console.log('Plot created!');
+            })
+            .catch(err => {
+                console.error('Error:', err);
+                document.body.innerHTML += '<p style="color: red;">Error: ' + err.message + '</p>';
+            });
+    </script>
+</body>
+</html>

@@ -1,0 +1,527 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bird Cluster Explorer - NestScope</title>
+    <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #1e1e1e 0%, #2d2d2d 100%);
+            color: #fff;
+            overflow: hidden;
+        }
+
+        .navbar {
+            background: #1a1a1a;
+            padding: 1rem 2rem;
+            border-bottom: 1px solid #333;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .navbar-brand {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-size: 1.5rem;
+            font-weight: 600;
+        }
+
+        .navbar-brand-icon {
+            font-size: 1.8rem;
+        }
+
+        .navbar-links {
+            display: flex;
+            gap: 1.5rem;
+            align-items: center;
+        }
+
+        .navbar-link {
+            color: #CC785C;
+            text-decoration: none;
+            font-weight: 500;
+            transition: color 0.2s;
+        }
+
+        .navbar-link:hover {
+            color: #D98968;
+        }
+
+        .container {
+            display: flex;
+            height: calc(100vh - 65px);
+        }
+
+        .sidebar {
+            width: 320px;
+            background: #1a1a1a;
+            border-right: 1px solid #333;
+            padding: 1.5rem;
+            overflow-y: auto;
+        }
+
+        .main-content {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .plot-container {
+            flex: 1;
+            padding: 1rem;
+            position: relative;
+        }
+
+        #tsne-plot {
+            width: 100%;
+            height: 100%;
+        }
+
+        .info-panel {
+            background: #2a2a2a;
+            border-radius: 8px;
+            padding: 1rem;
+            margin-bottom: 1rem;
+        }
+
+        .info-panel h3 {
+            margin-bottom: 0.75rem;
+            color: #CC785C;
+            font-size: 1rem;
+        }
+
+        .stat-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 0.5rem 0;
+            border-bottom: 1px solid #333;
+        }
+
+        .stat-row:last-child {
+            border-bottom: none;
+        }
+
+        .stat-label {
+            color: #888;
+            font-size: 0.9rem;
+        }
+
+        .stat-value {
+            color: #fff;
+            font-weight: 600;
+        }
+
+        .cluster-info {
+            background: #2a2a2a;
+            border-radius: 8px;
+            padding: 1rem;
+            margin-top: 1rem;
+        }
+
+        .cluster-info h3 {
+            margin-bottom: 0.75rem;
+            color: #CC785C;
+        }
+
+        .cluster-preview {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 0.5rem;
+            margin-top: 1rem;
+        }
+
+        .cluster-preview img {
+            width: 100%;
+            height: 80px;
+            object-fit: cover;
+            border-radius: 4px;
+            border: 2px solid #444;
+            transition: border-color 0.2s;
+            cursor: pointer;
+        }
+
+        .cluster-preview img:hover {
+            border-color: #CC785C;
+        }
+
+        .loading {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+        }
+
+        .spinner {
+            border: 4px solid #333;
+            border-top: 4px solid #CC785C;
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 1rem;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .instructions {
+            background: #2a2a2a;
+            border-radius: 8px;
+            padding: 1rem;
+            margin-bottom: 1rem;
+            border-left: 3px solid #CC785C;
+        }
+
+        .instructions h3 {
+            margin-bottom: 0.5rem;
+            color: #CC785C;
+            font-size: 0.95rem;
+        }
+
+        .instructions ul {
+            list-style: none;
+            font-size: 0.85rem;
+            line-height: 1.6;
+            color: #aaa;
+        }
+
+        .instructions li {
+            padding: 0.25rem 0;
+        }
+
+        .instructions li:before {
+            content: "• ";
+            color: #CC785C;
+            font-weight: bold;
+            margin-right: 0.5rem;
+        }
+
+        .no-data {
+            text-align: center;
+            padding: 3rem;
+            color: #888;
+        }
+
+        .no-data h2 {
+            margin-bottom: 1rem;
+            color: #CC785C;
+        }
+
+        .btn {
+            display: inline-block;
+            padding: 0.75rem 1.5rem;
+            background: #CC785C;
+            color: white;
+            text-decoration: none;
+            border-radius: 6px;
+            font-weight: 500;
+            margin-top: 1rem;
+            transition: background 0.2s;
+        }
+
+        .btn:hover {
+            background: #D98968;
+        }
+
+        .tooltip-image {
+            max-width: 200px;
+            max-height: 200px;
+            border-radius: 4px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+        }
+    </style>
+</head>
+<body>
+    <nav class="navbar">
+        <div class="navbar-brand">
+            <span class="navbar-brand-icon">🦅</span>
+            <span>NestScope</span>
+            <span style="color: #666; font-size: 0.875rem; margin-left: 0.5rem;">/</span>
+            <span style="color: #CC785C; font-size: 0.875rem; margin-left: 0.5rem;">Cluster Explorer</span>
+        </div>
+        <div class="navbar-links">
+            <a href="/editor/User_1" class="navbar-link">← Back to Editor</a>
+            <a href="/" class="navbar-link">Dashboard</a>
+        </div>
+    </nav>
+
+    <div class="container">
+        <div class="sidebar">
+            <div class="instructions">
+                <h3>🎯 How to Explore</h3>
+                <ul>
+                    <li>Hover over points to see bird images</li>
+                    <li>Click a point to highlight its cluster</li>
+                    <li>Zoom and pan to explore</li>
+                    <li>Colors represent different clusters</li>
+                    <li>Nearby birds look similar!</li>
+                </ul>
+            </div>
+
+            <div class="info-panel">
+                <h3>📊 Dataset Overview</h3>
+                <div class="stat-row">
+                    <span class="stat-label">Total Birds</span>
+                    <span class="stat-value" id="total-birds">-</span>
+                </div>
+                <div class="stat-row">
+                    <span class="stat-label">Clusters Found</span>
+                    <span class="stat-value" id="total-clusters">-</span>
+                </div>
+                <div class="stat-row">
+                    <span class="stat-label">Avg Cluster Size</span>
+                    <span class="stat-value" id="avg-cluster-size">-</span>
+                </div>
+                <div class="stat-row">
+                    <span class="stat-label">Largest Cluster</span>
+                    <span class="stat-value" id="largest-cluster">-</span>
+                </div>
+            </div>
+
+            <div class="cluster-info" id="cluster-info" style="display: none;">
+                <h3>Selected Cluster</h3>
+                <div class="stat-row">
+                    <span class="stat-label">Cluster ID</span>
+                    <span class="stat-value" id="selected-cluster-id">-</span>
+                </div>
+                <div class="stat-row">
+                    <span class="stat-label">Birds in Cluster</span>
+                    <span class="stat-value" id="selected-cluster-size">-</span>
+                </div>
+                <div class="stat-row">
+                    <span class="stat-label">Percentage</span>
+                    <span class="stat-value" id="selected-cluster-pct">-</span>
+                </div>
+                <div class="cluster-preview" id="cluster-preview">
+                    <!-- Populated by JavaScript -->
+                </div>
+            </div>
+        </div>
+
+        <div class="main-content">
+            <div class="plot-container">
+                <div id="loading" class="loading">
+                    <div class="spinner"></div>
+                    <p>Loading cluster data...</p>
+                </div>
+                <div id="no-data" class="no-data" style="display: none;">
+                    <h2>No Cluster Data Found</h2>
+                    <p>Run clustering first to generate visualization data.</p>
+                    <a href="#" class="btn" onclick="runClustering()">Run Clustering Now</a>
+                </div>
+                <div id="tsne-plot"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let clusterData = null;
+        let selectedCluster = null;
+
+        // Load cluster data
+        async function loadClusterData() {
+            try {
+                const response = await fetch('/api/cluster_data');
+                const data = await response.json();
+
+                if (data.error || !data.clusters) {
+                    showNoData();
+                    return;
+                }
+
+                clusterData = data;
+                hideLoading();
+                updateStatistics();
+                createVisualization();
+            } catch (error) {
+                console.error('Error loading cluster data:', error);
+                showNoData();
+            }
+        }
+
+        function hideLoading() {
+            document.getElementById('loading').style.display = 'none';
+        }
+
+        function showNoData() {
+            document.getElementById('loading').style.display = 'none';
+            document.getElementById('no-data').style.display = 'block';
+        }
+
+        function updateStatistics() {
+            if (!clusterData) return;
+
+            document.getElementById('total-birds').textContent = clusterData.total_birds.toLocaleString();
+            document.getElementById('total-clusters').textContent = clusterData.n_clusters;
+
+            const avgSize = Math.round(clusterData.total_birds / clusterData.n_clusters);
+            document.getElementById('avg-cluster-size').textContent = avgSize.toLocaleString();
+
+            // Find largest cluster
+            let maxSize = 0;
+            let maxClusterId = 0;
+            for (const [clusterId, cluster] of Object.entries(clusterData.clusters)) {
+                if (cluster.total_birds > maxSize) {
+                    maxSize = cluster.total_birds;
+                    maxClusterId = clusterId;
+                }
+            }
+            document.getElementById('largest-cluster').textContent =
+                `#${maxClusterId} (${maxSize.toLocaleString()} birds)`;
+        }
+
+        function createVisualization() {
+            if (!clusterData || !clusterData.positions) {
+                console.error('No position data available');
+                return;
+            }
+
+            // Prepare data for Plotly
+            const traces = [];
+            const colorScale = generateColors(clusterData.n_clusters);
+
+            // Create a trace for each cluster
+            for (const [clusterId, cluster] of Object.entries(clusterData.clusters)) {
+                const clusterPoints = clusterData.positions.filter(
+                    p => p.cluster === parseInt(clusterId)
+                );
+
+                if (clusterPoints.length === 0) continue;
+
+                const trace = {
+                    x: clusterPoints.map(p => p.x),
+                    y: clusterPoints.map(p => p.y),
+                    mode: 'markers',
+                    type: 'scatter',
+                    name: `Cluster ${clusterId}`,
+                    marker: {
+                        color: colorScale[parseInt(clusterId)],
+                        size: 8,
+                        opacity: 0.7,
+                        line: {
+                            color: '#fff',
+                            width: 0.5
+                        }
+                    },
+                    text: clusterPoints.map(p =>
+                        `Cluster ${clusterId}<br>Bird ID: ${p.bird_id}<br>Image: ${p.image_name}`
+                    ),
+                    hoverinfo: 'text',
+                    customdata: clusterPoints.map(p => ({
+                        cluster: clusterId,
+                        bird_id: p.bird_id,
+                        image_name: p.image_name,
+                        crop_path: p.crop_path
+                    }))
+                };
+
+                traces.push(trace);
+            }
+
+            const layout = {
+                title: {
+                    text: 'Bird Cluster Map (t-SNE Projection)',
+                    font: { color: '#fff', size: 18 }
+                },
+                paper_bgcolor: '#1e1e1e',
+                plot_bgcolor: '#2a2a2a',
+                xaxis: {
+                    title: 't-SNE Dimension 1',
+                    showgrid: true,
+                    gridcolor: '#333',
+                    color: '#888'
+                },
+                yaxis: {
+                    title: 't-SNE Dimension 2',
+                    showgrid: true,
+                    gridcolor: '#333',
+                    color: '#888'
+                },
+                hovermode: 'closest',
+                showlegend: true,
+                legend: {
+                    font: { color: '#fff' },
+                    bgcolor: '#2a2a2a',
+                    bordercolor: '#444',
+                    borderwidth: 1
+                }
+            };
+
+            const config = {
+                responsive: true,
+                displayModeBar: true,
+                modeBarButtonsToRemove: ['lasso2d', 'select2d'],
+                displaylogo: false
+            };
+
+            Plotly.newPlot('tsne-plot', traces, layout, config);
+
+            // Add click handler
+            document.getElementById('tsne-plot').on('plotly_click', function(data) {
+                const point = data.points[0];
+                const cluster = point.customdata.cluster;
+                selectCluster(cluster);
+            });
+        }
+
+        function selectCluster(clusterId) {
+            selectedCluster = clusterId;
+            const cluster = clusterData.clusters[clusterId];
+
+            if (!cluster) return;
+
+            // Update cluster info panel
+            document.getElementById('cluster-info').style.display = 'block';
+            document.getElementById('selected-cluster-id').textContent = clusterId;
+            document.getElementById('selected-cluster-size').textContent =
+                cluster.total_birds.toLocaleString();
+
+            const percentage = (cluster.total_birds / clusterData.total_birds * 100).toFixed(1);
+            document.getElementById('selected-cluster-pct').textContent = percentage + '%';
+
+            // Show preview images (first 6 birds)
+            const previewContainer = document.getElementById('cluster-preview');
+            previewContainer.innerHTML = '';
+
+            const previewBirds = cluster.birds.slice(0, 6);
+            previewBirds.forEach(bird => {
+                const img = document.createElement('img');
+                img.src = `/api/bird_crop/${bird.crop_id || bird.bird_id}`;
+                img.alt = `Bird from cluster ${clusterId}`;
+                img.title = `Source: ${bird.image_name}`;
+                previewContainer.appendChild(img);
+            });
+        }
+
+        function generateColors(n) {
+            // Generate distinct colors for clusters
+            const colors = [];
+            for (let i = 0; i < n; i++) {
+                const hue = (i * 360 / n) % 360;
+                colors[i] = `hsl(${hue}, 70%, 60%)`;
+            }
+            return colors;
+        }
+
+        function runClustering() {
+            alert('Run this command in terminal:\n\npython scripts/cluster_birds.py --data labeller/nestvision --clusters 30');
+        }
+
+        // Load data on page load
+        window.addEventListener('load', loadClusterData);
+    </script>
+</body>
+</html>

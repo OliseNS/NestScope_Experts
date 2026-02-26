@@ -1,0 +1,576 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Clustering Dashboard - Nestperts</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0F0F0F; color: #E0E0E0; }
+
+        .navbar {
+            background: #1E1E1E;
+            border-bottom: 1px solid #333;
+            padding: 1rem 2rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .navbar-brand {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            font-size: 1.25rem;
+            font-weight: 600;
+        }
+
+        .navbar-links {
+            display: flex;
+            gap: 1rem;
+        }
+
+        .navbar-link {
+            color: #A0A0A0;
+            text-decoration: none;
+            padding: 0.5rem 1rem;
+            border-radius: 6px;
+            transition: all 0.2s;
+        }
+
+        .navbar-link:hover {
+            color: #CC785C;
+            background: rgba(204, 120, 92, 0.1);
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 2rem auto;
+            padding: 0 1rem;
+        }
+
+        .header {
+            margin-bottom: 2rem;
+        }
+
+        .header h1 {
+            font-size: 2rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .header p {
+            color: #999;
+            font-size: 1rem;
+        }
+
+        .pipeline {
+            display: grid;
+            gap: 1.5rem;
+            margin-bottom: 2rem;
+        }
+
+        .step-card {
+            background: #1E1E1E;
+            border: 1px solid #333;
+            border-radius: 8px;
+            padding: 1.5rem;
+        }
+
+        .step-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1rem;
+        }
+
+        .step-title {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            font-size: 1.125rem;
+            font-weight: 600;
+        }
+
+        .step-number {
+            background: #CC785C;
+            color: white;
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+        }
+
+        .step-status {
+            font-size: 0.875rem;
+            padding: 0.25rem 0.75rem;
+            border-radius: 4px;
+        }
+
+        .status-pending { background: #444; color: #999; }
+        .status-running { background: #CC785C; color: white; animation: pulse 2s infinite; }
+        .status-complete { background: #4CAF50; color: white; }
+        .status-error { background: #FF6464; color: white; }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.6; }
+        }
+
+        .step-description {
+            color: #999;
+            margin-bottom: 1rem;
+            line-height: 1.6;
+        }
+
+        .step-actions {
+            display: flex;
+            gap: 0.75rem;
+        }
+
+        .btn {
+            padding: 0.75rem 1.5rem;
+            border: none;
+            border-radius: 6px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            font-size: 0.875rem;
+        }
+
+        .btn-primary {
+            background: #CC785C;
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #B86A4F;
+        }
+
+        .btn-primary:disabled {
+            background: #444;
+            cursor: not-allowed;
+            opacity: 0.5;
+        }
+
+        .btn-secondary {
+            background: #333;
+            color: #E0E0E0;
+        }
+
+        .btn-secondary:hover {
+            background: #444;
+        }
+
+        .progress-bar {
+            width: 100%;
+            height: 8px;
+            background: #333;
+            border-radius: 4px;
+            overflow: hidden;
+            margin-top: 1rem;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #CC785C, #D98968);
+            transition: width 0.3s ease;
+        }
+
+        .results-card {
+            background: #1E1E1E;
+            border: 1px solid #333;
+            border-radius: 8px;
+            padding: 1.5rem;
+            margin-top: 1.5rem;
+        }
+
+        .results-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+            margin-top: 1rem;
+        }
+
+        .result-item {
+            background: #252526;
+            padding: 1rem;
+            border-radius: 6px;
+            text-align: center;
+        }
+
+        .result-value {
+            font-size: 2rem;
+            font-weight: bold;
+            color: #CC785C;
+        }
+
+        .result-label {
+            font-size: 0.875rem;
+            color: #999;
+            margin-top: 0.5rem;
+        }
+
+        .logs {
+            background: #252526;
+            border: 1px solid #333;
+            border-radius: 6px;
+            padding: 1rem;
+            font-family: 'Courier New', monospace;
+            font-size: 0.875rem;
+            max-height: 300px;
+            overflow-y: auto;
+            margin-top: 1rem;
+        }
+
+        .log-line {
+            margin: 0.25rem 0;
+            color: #999;
+        }
+
+        .log-success { color: #4CAF50; }
+        .log-error { color: #FF6464; }
+        .log-info { color: #5BA3D0; }
+    </style>
+</head>
+<body>
+    <nav class="navbar">
+        <div class="navbar-brand">
+            <span style="font-size: 1.5rem;">🦅</span>
+            <span>NestScope</span>
+            <span style="color: #666; margin: 0 0.5rem;">/</span>
+            <span style="color: #CC785C;">Clustering Dashboard</span>
+        </div>
+        <div class="navbar-links">
+            <a href="/clusters" class="navbar-link">📊 View Clusters</a>
+            <a href="/" class="navbar-link">← Dashboard</a>
+        </div>
+    </nav>
+
+    <div class="container">
+        <div class="header">
+            <h1>Bird Clustering Pipeline</h1>
+            <p>Extract crops, generate embeddings, and cluster birds by visual similarity</p>
+        </div>
+
+        <div class="pipeline">
+            <!-- Step 1: Extract Crops -->
+            <div class="step-card">
+                <div class="step-header">
+                    <div class="step-title">
+                        <div class="step-number">1</div>
+                        <span>Extract Bird Crops</span>
+                    </div>
+                    <span class="step-status" id="step1-status">Pending</span>
+                </div>
+                <div class="step-description">
+                    Extract individual bird images from YOLO bounding boxes.
+                    Preserves original crop resolution for maximum detail.
+                </div>
+                <div class="step-actions">
+                    <button class="btn btn-primary" onclick="runStep1()" id="step1-btn">
+                        Extract Crops
+                    </button>
+                    <span id="step1-info" style="color: #999; font-size: 0.875rem;"></span>
+                </div>
+                <div id="step1-progress" style="display: none;">
+                    <div class="progress-bar">
+                        <div class="progress-fill" id="step1-progress-fill"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Step 2: Generate Embeddings -->
+            <div class="step-card">
+                <div class="step-header">
+                    <div class="step-title">
+                        <div class="step-number">2</div>
+                        <span>Generate Deep Learning Embeddings</span>
+                    </div>
+                    <span class="step-status status-pending" id="step2-status">Pending</span>
+                </div>
+                <div class="step-description">
+                    Use deep learning to extract high-dimensional feature vectors.
+                    EfficientNet (recommended): Fast, 1280-dim. DINOv2: Best quality, 1024-dim.
+                </div>
+                <div class="step-actions">
+                    <select id="model-select" class="btn btn-secondary" style="padding: 0.75rem 1rem;">
+                        <option value="siglip">SigLIP (Recommended - Fastest)</option>
+                        <option value="dinov2">DINOv2 (Best Quality)</option>
+                        <option value="efficientnet">EfficientNet</option>
+                        <option value="resnet50">ResNet-50</option>
+                        <option value="clip">CLIP</option>
+                    </select>
+                    <button class="btn btn-primary" onclick="runStep2()" id="step2-btn" disabled>
+                        Generate Embeddings
+                    </button>
+                    <span id="step2-info" style="color: #999; font-size: 0.875rem;"></span>
+                </div>
+                <div id="step2-progress" style="display: none;">
+                    <div class="progress-bar">
+                        <div class="progress-fill" id="step2-progress-fill"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Step 3: Run Clustering -->
+            <div class="step-card">
+                <div class="step-header">
+                    <div class="step-title">
+                        <div class="step-number">3</div>
+                        <span>Cluster by Visual Similarity</span>
+                    </div>
+                    <span class="step-status status-pending" id="step3-status">Pending</span>
+                </div>
+                <div class="step-description">
+                    Group birds into clusters by visual similarity. Auto mode determines optimal number of clusters automatically.
+                </div>
+                <div class="step-actions">
+                    <select id="clustering-method" class="btn btn-secondary" style="padding: 0.75rem 1rem; margin-right: 0.5rem;" onchange="toggleClusterInput()">
+                        <option value="kmeans">K-means (Manual)</option>
+                        <option value="auto">Auto-Cluster (DBSCAN)</option>
+                    </select>
+                    <input type="number" id="n-clusters" value="30" min="10" max="100"
+                           style="width: 100px; padding: 0.75rem; background: #252526; border: 1px solid #444;
+                                  color: white; border-radius: 6px; margin-right: 0.5rem;"
+                           placeholder="Clusters">
+                    <button class="btn btn-primary" onclick="runStep3()" id="step3-btn" disabled>
+                        Run Clustering
+                    </button>
+                    <span id="step3-info" style="color: #999; font-size: 0.875rem;"></span>
+                </div>
+                <div id="step3-progress" style="display: none;">
+                    <div class="progress-bar">
+                        <div class="progress-fill" id="step3-progress-fill"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Results Section -->
+        <div class="results-card" id="results" style="display: none;">
+            <h2>Results</h2>
+            <div class="results-grid" id="results-grid"></div>
+            <div style="text-align: center; margin-top: 1.5rem;">
+                <a href="/clusters" class="btn btn-primary" style="text-decoration: none; display: inline-block;">
+                    🎯 Explore Clusters in 3D
+                </a>
+            </div>
+        </div>
+
+        <!-- Logs -->
+        <div class="results-card">
+            <h3>Logs</h3>
+            <div class="logs" id="logs">
+                <div class="log-line">Ready to start...</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let currentStep = 0;
+
+        function addLog(message, type = 'info') {
+            const logs = document.getElementById('logs');
+            const logLine = document.createElement('div');
+            logLine.className = `log-line log-${type}`;
+            logLine.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+            logs.appendChild(logLine);
+            logs.scrollTop = logs.scrollHeight;
+        }
+
+        async function runStep1() {
+            updateStepStatus(1, 'running');
+            document.getElementById('step1-btn').disabled = true;
+            document.getElementById('step1-progress').style.display = 'block';
+
+            addLog('Starting crop extraction...', 'info');
+
+            try {
+                const response = await fetch('/api/clustering/extract_crops', {
+                    method: 'POST'
+                });
+                const data = await response.json();
+
+                if (data.status === 'success') {
+                    addLog(`✓ Extracted ${data.total_crops} bird crops`, 'success');
+                    updateStepStatus(1, 'complete');
+                    document.getElementById('step2-btn').disabled = false;
+                    document.getElementById('step1-info').textContent = `${data.total_crops} crops`;
+                    currentStep = 1;
+                } else {
+                    throw new Error(data.message || 'Unknown error');
+                }
+            } catch (error) {
+                addLog(`✗ Error: ${error.message}`, 'error');
+                updateStepStatus(1, 'error');
+                document.getElementById('step1-btn').disabled = false;
+            }
+
+            document.getElementById('step1-progress').style.display = 'none';
+        }
+
+        async function runStep2() {
+            updateStepStatus(2, 'running');
+            document.getElementById('step2-btn').disabled = true;
+            document.getElementById('step2-progress').style.display = 'block';
+
+            const model = document.getElementById('model-select').value;
+            addLog(`Generating embeddings with ${model}...`, 'info');
+
+            try {
+                const response = await fetch('/api/clustering/generate_embeddings', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({model_name: model})
+                });
+                const data = await response.json();
+
+                if (data.status === 'success') {
+                    addLog(`✓ Generated ${data.embedding_dim}-dimensional embeddings`, 'success');
+                    updateStepStatus(2, 'complete');
+                    document.getElementById('step3-btn').disabled = false;
+                    document.getElementById('step2-info').textContent = `${data.num_crops} embeddings`;
+                    currentStep = 2;
+                } else {
+                    throw new Error(data.message || 'Unknown error');
+                }
+            } catch (error) {
+                addLog(`✗ Error: ${error.message}`, 'error');
+                updateStepStatus(2, 'error');
+                document.getElementById('step2-btn').disabled = false;
+            }
+
+            document.getElementById('step2-progress').style.display = 'none';
+        }
+
+        function toggleClusterInput() {
+            const method = document.getElementById('clustering-method').value;
+            const nClustersInput = document.getElementById('n-clusters');
+
+            if (method === 'auto') {
+                nClustersInput.disabled = true;
+                nClustersInput.style.opacity = '0.5';
+            } else {
+                nClustersInput.disabled = false;
+                nClustersInput.style.opacity = '1';
+            }
+        }
+
+        async function runStep3() {
+            updateStepStatus(3, 'running');
+            document.getElementById('step3-btn').disabled = true;
+            document.getElementById('step3-progress').style.display = 'block';
+
+            const method = document.getElementById('clustering-method').value;
+            const nClusters = method === 'kmeans' ? parseInt(document.getElementById('n-clusters').value) : null;
+
+            if (method === 'auto') {
+                addLog('Running auto-clustering (DBSCAN)...', 'info');
+            } else {
+                addLog(`Running K-means clustering with ${nClusters} clusters...`, 'info');
+            }
+
+            try {
+                const payload = method === 'auto'
+                    ? {method: 'dbscan'}
+                    : {n_clusters: nClusters, method: 'kmeans'};
+
+                const response = await fetch('/api/clustering/run_clustering', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(payload)
+                });
+                const data = await response.json();
+
+                if (data.status === 'success') {
+                    addLog('✓ Clustering complete!', 'success');
+                    addLog(`Created ${data.n_clusters} clusters`, 'success');
+                    updateStepStatus(3, 'complete');
+                    document.getElementById('step3-info').textContent = `${data.n_clusters} clusters`;
+                    currentStep = 3;
+
+                    // Show results
+                    showResults(data);
+                } else {
+                    throw new Error(data.message || 'Unknown error');
+                }
+            } catch (error) {
+                addLog(`✗ Error: ${error.message}`, 'error');
+                updateStepStatus(3, 'error');
+                document.getElementById('step3-btn').disabled = false;
+            }
+
+            document.getElementById('step3-progress').style.display = 'none';
+        }
+
+        function updateStepStatus(step, status) {
+            const statusEl = document.getElementById(`step${step}-status`);
+            statusEl.className = `step-status status-${status}`;
+            statusEl.textContent = status.charAt(0).toUpperCase() + status.slice(1);
+        }
+
+        function showResults(data) {
+            const resultsDiv = document.getElementById('results');
+            const resultsGrid = document.getElementById('results-grid');
+
+            resultsGrid.innerHTML = `
+                <div class="result-item">
+                    <div class="result-value">${data.total_birds}</div>
+                    <div class="result-label">Total Birds</div>
+                </div>
+                <div class="result-item">
+                    <div class="result-value">${data.n_clusters}</div>
+                    <div class="result-label">Clusters</div>
+                </div>
+                <div class="result-item">
+                    <div class="result-value">${Math.round(data.total_birds / data.n_clusters)}</div>
+                    <div class="result-label">Avg Cluster Size</div>
+                </div>
+            `;
+
+            resultsDiv.style.display = 'block';
+        }
+
+        // Check status on page load
+        window.addEventListener('DOMContentLoaded', async () => {
+            try {
+                const response = await fetch('/api/clustering/status');
+                const data = await response.json();
+
+                if (data.crops_extracted) {
+                    updateStepStatus(1, 'complete');
+                    document.getElementById('step2-btn').disabled = false;
+                    document.getElementById('step1-info').textContent = `${data.num_crops} crops`;
+                    currentStep = 1;
+                    addLog(`Found ${data.num_crops} existing crops`, 'info');
+                }
+
+                if (data.embeddings_generated) {
+                    updateStepStatus(2, 'complete');
+                    document.getElementById('step3-btn').disabled = false;
+                    document.getElementById('step2-info').textContent = `${data.num_crops} embeddings`;
+                    currentStep = 2;
+                    addLog(`Found ${data.embedding_dim}D embeddings`, 'info');
+                }
+
+                if (data.clustering_done) {
+                    updateStepStatus(3, 'complete');
+                    document.getElementById('step3-info').textContent = `${data.n_clusters} clusters`;
+                    currentStep = 3;
+                    addLog(`Found ${data.n_clusters} existing clusters`, 'info');
+
+                    showResults({
+                        total_birds: data.total_birds,
+                        n_clusters: data.n_clusters
+                    });
+                }
+            } catch (error) {
+                addLog('Checking for existing data...', 'info');
+            }
+        });
+    </script>
+</body>
+</html>

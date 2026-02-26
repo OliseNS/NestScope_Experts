@@ -1,4 +1,5 @@
 import os
+import sys
 import json
 import glob
 import math
@@ -10,6 +11,14 @@ import torch
 import threading
 import time
 from flask import Flask, render_template, request, jsonify, send_from_directory, redirect, url_for
+
+# Add project root to path so we can import labeller.services modules
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if PROJECT_ROOT not in sys.path:
+    sys.path.insert(0, PROJECT_ROOT)
+
+# Import species service for database access
+from services.species_service import get_species_service
 
 app = Flask(__name__)
 
@@ -103,29 +112,19 @@ def get_classes():
     return []
 
 def get_species_list():
-    """Load species codes and names from CSV file for expert identification"""
-    species_csv = os.path.join("..", "CSV_Files", "tblSpeciesCodes.csv")
-    species_list = []
+    """
+    Load species codes and names from database for expert identification.
 
-    if os.path.exists(species_csv):
-        try:
-            with open(species_csv, 'r') as f:
-                # Skip header
-                next(f)
-                for line in f:
-                    # Parse CSV line (handle quoted strings)
-                    parts = line.strip().split(',')
-                    if len(parts) >= 2:
-                        code = parts[0].strip('"')
-                        name = parts[1].strip('"')
-                        if code and name:
-                            species_list.append({"code": code, "name": name})
-        except Exception as e:
-            print(f"Warning: Could not load species list: {e}")
-    else:
-        print(f"Warning: Species CSV not found at {species_csv}")
+    This function now uses the SpeciesService to load species from the
+    SQLite database instead of a CSV file. Species are cached in memory
+    for fast access.
 
-    return species_list
+    Returns:
+        list: List of dicts with 'code' and 'name' keys
+              Example: [{"code": "AMAV", "name": "American Avocet"}, ...]
+    """
+    service = get_species_service()
+    return service.get_all_species()
 
 @app.route('/')
 def index():
@@ -406,6 +405,46 @@ def add_class():
 
         return jsonify({"status": "success", "id": len(state['classes'])-1})
     return jsonify({"status": "exists"})
+
+@app.route('/api/species', methods=['GET'])
+def get_species():
+    """
+    Get all bird species from database.
+
+    This endpoint returns the complete list of bird species loaded from
+    the tblSpeciesCodes table. Species are cached in memory on startup,
+    so this endpoint is very fast.
+
+    Returns:
+        JSON response with species list and count:
+        {
+            "species": [
+                {"code": "AMAV", "name": "American Avocet"},
+                {"code": "AMOY", "name": "American Oystercatcher"},
+                ...
+            ],
+            "count": 73
+        }
+    """
+    try:
+        service = get_species_service()
+        species_list = service.get_all_species()
+
+        return jsonify({
+            "species": species_list,
+            "count": len(species_list)
+        })
+
+    except Exception as e:
+        print(f"ERROR in /api/species: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({
+            "status": "error",
+            "message": str(e),
+            "species": [],
+            "count": 0
+        }), 500
 
 # ============================================================================
 # NESTVISION CORRECTION ENDPOINTS
@@ -895,6 +934,306 @@ def sam_auto_detect():
         "boxes": [],
         "count": 0
     })
+
+# ==================== CLUSTER EXPLORER ROUTES ====================
+
+@app.route('/clusters')
+def cluster_explorer():
+    """
+    3D Cluster Explorer: Aerial view of bird clusters with actual images.
+
+    View clusters from above like looking at mountain ranges.
+    All bird images are loaded and visible.
+    """
+    return render_template('cluster_explorer_aerial.html')
+
+@app.route('/clusters/fps')
+def cluster_explorer_fps():
+    """
+    Alternative FPS-style cluster explorer (walk-through mode).
+    """
+    return render_template('cluster_explorer_fps.html')
+
+@app.route('/clusters/orbit')
+def cluster_explorer_orbit():
+    """
+    Alternative orbit-based cluster explorer (Three.js with orbit controls).
+    """
+    return render_template('cluster_explorer_threejs.html')
+
+@app.route('/clusters/plotly')
+def cluster_explorer_plotly():
+    """
+    Alternative Plotly-based cluster explorer (dot-based visualization).
+    """
+    return render_template('cluster_explorer_3d.html')
+
+@app.route('/api/cluster_data')
+def get_cluster_data():
+    """
+    API endpoint to serve cluster data for visualization.
+
+    Returns:
+        JSON with cluster assignments, t-SNE positions, and metadata
+    """
+    clusters_file = os.path.join(Config.DATASET_PATH, "bird_crops", "clusters", "clusters_for_labeling.json")
+    results_file = os.path.join(Config.DATASET_PATH, "bird_crops", "clusters", "clustering_results.pkl")
+
+    # Check if clustering has been run
+    if not os.path.exists(clusters_file):
+        return jsonify({
+            "error": "No cluster data found",
+            "message": "Run clustering first: python scripts/cluster_birds.py --data labeller/nestvision --clusters 30"
+        }), 404
+
+    # Load cluster data
+    with open(clusters_file, 'r') as f:
+        cluster_data = json.load(f)
+
+    # Load t-SNE positions if available
+    positions = []
+    if os.path.exists(results_file):
+        import pickle
+        with open(results_file, 'rb') as f:
+            results = pickle.load(f)
+
+        # Extract t-SNE positions (prefer t-SNE over PCA for visualization)
+        X_proj = results.get('X_tsne', results.get('X_pca'))
+        labels = results.get('labels', [])
+        metadata = results.get('metadata', [])
+
+        if X_proj and labels:
+            # Detect if 2D or 3D coordinates
+            is_3d = len(X_proj[0]) == 3 if len(X_proj) > 0 else False
+
+            for i, (pos, label) in enumerate(zip(X_proj, labels)):
+                meta = metadata[i] if i < len(metadata) else {}
+                position = {
+                    'x': float(pos[0]),
+                    'y': float(pos[1]),
+                    'cluster': int(label),
+                    'bird_id': i,
+                    'image_name': meta.get('source_image', meta.get('image_name', 'unknown')),
+                    'crop_path': f'/api/bird_crop/{i}'
+                }
+
+                # Add z coordinate if 3D
+                if is_3d:
+                    position['z'] = float(pos[2])
+
+                positions.append(position)
+
+    return jsonify({
+        'total_birds': cluster_data['total_birds'],
+        'n_clusters': cluster_data['n_clusters'],
+        'clusters': cluster_data['clusters'],
+        'positions': positions
+    })
+
+@app.route('/api/bird_crop/<int:crop_id>')
+def get_bird_crop(crop_id):
+    """
+    Serve individual bird crop images for visualization.
+
+    Args:
+        crop_id: Index of the bird crop to retrieve
+    """
+    # Use absolute path to avoid working directory issues
+    crops_dir = os.path.abspath(os.path.join(Config.DATASET_PATH, "bird_crops", "images"))
+
+    # Try to find the crop file
+    crop_filename = f"bird_{crop_id:06d}.jpg"
+    crop_path = os.path.join(crops_dir, crop_filename)
+
+    print(f"[DEBUG] Looking for bird crop {crop_id}")
+    print(f"[DEBUG] Crops dir: {crops_dir}")
+    print(f"[DEBUG] Crop path: {crop_path}")
+    print(f"[DEBUG] Exists: {os.path.exists(crop_path)}")
+
+    if os.path.exists(crop_path):
+        return send_from_directory(crops_dir, crop_filename)
+
+    # If not found, return placeholder
+    from flask import send_file
+    from io import BytesIO
+
+    # Generate a placeholder image
+    placeholder = np.ones((100, 100, 3), dtype=np.uint8) * 50
+    cv2.putText(placeholder, 'N/A', (20, 60), cv2.FONT_HERSHEY_SIMPLEX, 1, (200, 200, 200), 2)
+
+    _, buffer = cv2.imencode('.jpg', placeholder)
+    return send_file(BytesIO(buffer.tobytes()), mimetype='image/jpeg')
+
+# ==================== END CLUSTER EXPLORER ROUTES ====================
+
+# ==================== CLUSTERING PIPELINE ROUTES ====================
+
+@app.route('/clustering')
+def clustering_dashboard():
+    """
+    Clustering Dashboard: Integrated UI for running the complete pipeline.
+
+    Provides a step-by-step interface to:
+    1. Extract bird crops
+    2. Generate deep learning embeddings
+    3. Run clustering and t-SNE
+    """
+    return render_template('clustering_dashboard.html')
+
+@app.route('/api/clustering/status')
+def clustering_status():
+    """Check status of clustering pipeline"""
+    crops_dir = os.path.join(Config.DATASET_PATH, "bird_crops")
+    clusters_dir = os.path.join(crops_dir, "clusters")
+
+    status = {
+        'crops_extracted': False,
+        'embeddings_generated': False,
+        'clustering_done': False
+    }
+
+    # Check crops
+    if os.path.exists(os.path.join(crops_dir, "metadata.json")):
+        status['crops_extracted'] = True
+        with open(os.path.join(crops_dir, "metadata.json"), 'r') as f:
+            meta = json.load(f)
+            status['num_crops'] = meta.get('total_crops', 0)
+
+    # Check embeddings
+    if os.path.exists(os.path.join(crops_dir, "embeddings.npy")):
+        status['embeddings_generated'] = True
+        with open(os.path.join(crops_dir, "config.json"), 'r') as f:
+            config = json.load(f)
+            status['embedding_dim'] = config.get('embedding_dim', 0)
+
+    # Check clustering
+    if os.path.exists(os.path.join(clusters_dir, "clusters_for_labeling.json")):
+        status['clustering_done'] = True
+        with open(os.path.join(clusters_dir, "clusters_for_labeling.json"), 'r') as f:
+            cluster_data = json.load(f)
+            status['n_clusters'] = cluster_data.get('n_clusters', 0)
+            status['total_birds'] = cluster_data.get('total_birds', 0)
+
+    return jsonify(status)
+
+@app.route('/api/clustering/extract_crops', methods=['POST'])
+def extract_crops():
+    """Extract bird crops from YOLO dataset (can take 5-10 seconds)"""
+    try:
+        from labeller.services.embedding_service import BirdCropManager
+
+        crops_dir = os.path.join(Config.DATASET_PATH, "bird_crops")
+        print(f"[Clustering] Starting crop extraction from {Config.DATASET_PATH}")
+        print(f"[Clustering] Output directory: {crops_dir}")
+
+        manager = BirdCropManager(crops_dir)
+
+        # Extract crops (no resizing for better quality, with padding for context)
+        # Note: This can take 5-10 seconds for ~500 images
+        manager.extract_and_save_crops(
+            dataset_dir=Config.DATASET_PATH,
+            resize=None,  # Preserve original resolution
+            min_size=20,
+            max_size=10000,
+            padding_percent=0.15  # Add 15% padding around birds for full context
+        )
+
+        # Load metadata to get count
+        metadata_path = os.path.join(crops_dir, "metadata.json")
+        print(f"[Clustering] Reading metadata from {metadata_path}")
+
+        if not os.path.exists(metadata_path):
+            raise Exception(f"Metadata file not found at {metadata_path}")
+
+        with open(metadata_path, 'r') as f:
+            meta = json.load(f)
+
+        total_crops = meta.get('total_crops', 0)
+        print(f"[Clustering] ✓ Extracted {total_crops} crops successfully")
+
+        return jsonify({
+            'status': 'success',
+            'total_crops': total_crops
+        })
+
+    except Exception as e:
+        import traceback
+        print(f"[Clustering] ✗ Error during extraction:")
+        traceback.print_exc()
+        return jsonify({
+            'status': 'error',
+            'message': str(e)
+        }), 500
+
+@app.route('/api/clustering/generate_embeddings', methods=['POST'])
+def generate_embeddings():
+    """Generate deep learning embeddings from bird crops"""
+    try:
+        from labeller.services.embedding_service import BirdCropManager
+
+        data = request.json or {}
+        model_name = data.get('model_name', 'efficientnet')  # Default to EfficientNet for speed
+
+        crops_dir = os.path.join(Config.DATASET_PATH, "bird_crops")
+        manager = BirdCropManager(crops_dir)
+
+        # Generate embeddings
+        manager.generate_embeddings(model_name=model_name, batch_size=32)
+
+        # Load config to get info
+        with open(os.path.join(crops_dir, "config.json"), 'r') as f:
+            config = json.load(f)
+
+        return jsonify({
+            'status': 'success',
+            'embedding_dim': config['embedding_dim'],
+            'num_crops': config['num_crops'],
+            'model_name': config['model_name']
+        })
+
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({
+            'status': 'error',
+            'message': str(e)
+        }), 500
+
+@app.route('/api/clustering/run_clustering', methods=['POST'])
+def run_clustering():
+    """Run clustering on embeddings and generate 3D visualization"""
+    try:
+        from labeller.services.clustering_service import ClusteringService
+
+        data = request.json or {}
+        method = data.get('method', 'kmeans')
+        n_clusters = data.get('n_clusters', 30)
+
+        print(f"[Clustering] Running clustering with method={method}, n_clusters={n_clusters}")
+
+        crops_dir = os.path.join(Config.DATASET_PATH, "bird_crops")
+        service = ClusteringService(crops_dir)
+
+        # Run clustering with 3D visualization
+        # DBSCAN determines n_clusters automatically, K-means uses the provided value
+        results = service.run_clustering(n_clusters=n_clusters, method=method)
+
+        print(f"[Clustering] ✓ Clustering complete: {results['n_clusters']} clusters found")
+
+        return jsonify({
+            'status': 'success',
+            **results
+        })
+
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({
+            'status': 'error',
+            'message': str(e)
+        }), 500
+
+# ==================== END CLUSTERING PIPELINE ROUTES ====================
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()

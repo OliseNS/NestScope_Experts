@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test Image Loading</title>
+    <style>
+        body { background: #1a1a1a; color: white; font-family: sans-serif; padding: 2rem; }
+        img { border: 2px solid #CC785C; margin: 1rem; }
+        .error { color: #ff6b6b; }
+        .success { color: #51cf66; }
+    </style>
+</head>
+<body>
+    <h1>Test Bird Crop Image Loading</h1>
+
+    <h2>Test 1: Direct URL</h2>
+    <p>URL: <a href="http://localhost:5000/api/bird_crop/0" target="_blank">http://localhost:5000/api/bird_crop/0</a></p>
+    <img id="test1" src="http://localhost:5000/api/bird_crop/0" width="200" alt="Test 1">
+    <div id="result1"></div>
+
+    <h2>Test 2: Fetch API</h2>
+    <div id="test2-container"></div>
+    <div id="result2"></div>
+
+    <h2>Test 3: Multiple Images</h2>
+    <div id="test3-container"></div>
+
+    <script>
+        // Test 1: Regular img tag
+        const img1 = document.getElementById('test1');
+        img1.onload = () => {
+            document.getElementById('result1').innerHTML = '<span class="success">✓ Image loaded successfully!</span>';
+        };
+        img1.onerror = () => {
+            document.getElementById('result1').innerHTML = '<span class="error">✗ Failed to load image</span>';
+        };
+
+        // Test 2: Fetch API
+        fetch('http://localhost:5000/api/bird_crop/1')
+            .then(response => {
+                console.log('Response status:', response.status);
+                console.log('Response headers:', [...response.headers.entries()]);
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}`);
+                }
+                return response.blob();
+            })
+            .then(blob => {
+                const url = URL.createObjectURL(blob);
+                const img = document.createElement('img');
+                img.src = url;
+                img.width = 200;
+                document.getElementById('test2-container').appendChild(img);
+                document.getElementById('result2').innerHTML = '<span class="success">✓ Fetch successful!</span>';
+            })
+            .catch(error => {
+                document.getElementById('result2').innerHTML = `<span class="error">✗ Fetch failed: ${error.message}</span>`;
+            });
+
+        // Test 3: Load first 10 images
+        const container3 = document.getElementById('test3-container');
+        for (let i = 0; i < 10; i++) {
+            const img = document.createElement('img');
+            img.src = `http://localhost:5000/api/bird_crop/${i}`;
+            img.width = 150;
+            img.title = `Bird ${i}`;
+            img.style.display = 'inline-block';
+
+            img.onload = () => {
+                img.style.border = '2px solid #51cf66';
+            };
+            img.onerror = () => {
+                img.style.border = '2px solid #ff6b6b';
+                img.alt = `Failed ${i}`;
+            };
+
+            container3.appendChild(img);
+        }
+    </script>
+</body>
+</html>

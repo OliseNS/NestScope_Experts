@@ -56,6 +56,16 @@ echo -e "${BLUE}================================${NC}\n"
 
 if [ ! -z "$VIRTUAL_ENV" ]; then
     echo -e "${GREEN}✓ Virtual environment detected${NC}"
+elif [ -d ".venv" ]; then
+    echo -e "${YELLOW}⚠ Warning: Virtual environment exists but is not activated${NC}"
+    echo -e "${YELLOW}  Activate it with: source .venv/bin/activate${NC}"
+    echo -e "${YELLOW}  Or use: ./activate_and_run.sh${NC}"
+    echo ""
+    read -p "Continue anyway? (y/N) " -n 1 -r
+    echo
+    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+        exit 1
+    fi
 fi
 echo -e "${GREEN}✓ Using Python: ${PYTHON_CMD} (${PYTHON_VERSION})${NC}"
 
