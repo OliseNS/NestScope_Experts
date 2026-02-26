@@ -128,10 +128,17 @@ def get_species_list():
 
 @app.route('/')
 def index():
+    """
+    New role-based homepage with clear separation of:
+    - LABELING JOB (draw bounding boxes)
+    - CLASSIFICATION JOB (identify species)
+
+    Addresses judge feedback about clear user workflows.
+    """
     state = load_state()
     if not state:
-        return render_template('index.html', setup_needed=True)
-    
+        return render_template('index_new.html', setup_needed=True, users=[])
+
     users_progress = []
     for user, data in state['assignments'].items():
         total = len(data['images'])
@@ -143,8 +150,8 @@ def index():
             'completed': completed,
             'percent': percent
         })
-    
-    return render_template('index.html', setup_needed=False, users=users_progress)
+
+    return render_template('index_new.html', setup_needed=False, users=users_progress)
 
 @app.route('/setup', methods=['POST'])
 def setup():
@@ -1234,6 +1241,266 @@ def run_clustering():
         }), 500
 
 # ==================== END CLUSTERING PIPELINE ROUTES ====================
+
+# ==================== SPECIES LABELING ROUTES ====================
+
+@app.route('/classify')
+def species_classification_interface():
+    """
+    Cluster-Aware Species Classification Interface.
+
+    This is where users identify species for INDIVIDUAL birds within clusters!
+    Clustering groups visually similar birds and filters relevant species options.
+
+    IMPORTANT: Each bird is labeled individually - clusters are NOT uniform!
+    """
+    return render_template('species_classification.html')
+
+@app.route('/classify-tree')
+def species_classification_tree():
+    """
+    Decision Tree-Based Species Classification Interface.
+
+    Uses hierarchical decision tree (Size → Color → Species) for accurate
+    bird identification. Shows full original aerial images instead of crops,
+    with birds highlighted by bounding boxes.
+
+    This method addresses the low-resolution crop problem and provides
+    systematic identification workflow based on ornithological research.
+    """
+    return render_template('species_classification_tree.html')
+
+@app.route('/diagnostic')
+def diagnostic_page():
+    """
+    Diagnostic page for testing image loading and API endpoints.
+
+    Helps troubleshoot issues with image display, cluster data, and API responses.
+    Access at: http://localhost:5000/diagnostic
+    """
+    return render_template('diagnostic.html')
+
+@app.route('/api/original_image/<path:image_name>')
+def get_original_image(image_name):
+    """
+    Serve full original aerial images for classification.
+
+    Instead of serving low-res crops, this serves the full high-res image
+    so experts can see bird details clearly. The frontend highlights the
+    bird's bounding box on the full image.
+
+    Args:
+        image_name: Name of the image file (e.g., "29May2012Cam1Card3 227_x1024_y0")
+                   Extension (.jpg) is added automatically if not present
+
+    Returns:
+        Full resolution image file
+    """
+    image_dir = get_image_dir()
+
+    # Add .jpg extension if not present
+    if not image_name.endswith('.jpg'):
+        image_name = image_name + '.jpg'
+
+    # Security: ensure the path doesn't escape the image directory
+    safe_path = os.path.join(image_dir, os.path.basename(image_name))
+
+    if not os.path.exists(safe_path):
+        return jsonify({
+            'status': 'error',
+            'message': f'Image not found: {image_name}'
+        }), 404
+
+    return send_from_directory(image_dir, os.path.basename(image_name))
+
+@app.route('/static/bird_classification_tree.json')
+def get_decision_tree():
+    """
+    Serve the ornithological decision tree JSON.
+
+    Returns the hierarchical classification tree with species data,
+    key features, confidence tips, and identification guidance.
+    """
+    tree_path = os.path.join(os.path.dirname(__file__), 'bird_classification_tree.json')
+
+    if not os.path.exists(tree_path):
+        return jsonify({
+            'status': 'error',
+            'message': 'Decision tree file not found'
+        }), 404
+
+    with open(tree_path, 'r') as f:
+        tree_data = json.load(f)
+
+    return jsonify(tree_data)
+
+@app.route('/api/labeling/progress')
+def get_labeling_progress():
+    """Get overall labeling progress across all clusters"""
+    try:
+        from labeller.services.labeling_service import LabelingService
+
+        service = LabelingService(Config.DATASET_PATH)
+        progress = service.get_overall_progress()
+
+        return jsonify({
+            'status': 'success',
+            **progress
+        })
+
+    except FileNotFoundError as e:
+        return jsonify({
+            'status': 'error',
+            'message': str(e)
+        }), 404
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({
+            'status': 'error',
+            'message': str(e)
+        }), 500
+
+@app.route('/api/labeling/cluster/<int:cluster_id>/info')
+def get_cluster_labeling_info(cluster_id):
+    """Get detailed info about a cluster for labeling"""
+    try:
+        from labeller.services.labeling_service import LabelingService
+
+        service = LabelingService(Config.DATASET_PATH)
+        info = service.get_cluster_info(str(cluster_id))
+
+        if info is None:
+            return jsonify({
+                'status': 'error',
+                'message': f'Cluster {cluster_id} not found'
+            }), 404
+
+        return jsonify({
+            'status': 'success',
+            **info
+        })
+
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({
+            'status': 'error',
+            'message': str(e)
+        }), 500
+
+@app.route('/api/labeling/cluster/<int:cluster_id>/next')
+def get_next_bird_to_label(cluster_id):
+    """Get next unlabeled bird in a cluster"""
+    try:
+        from labeller.services.labeling_service import LabelingService
+
+        service = LabelingService(Config.DATASET_PATH)
+        bird_data = service.get_next_unlabeled_bird(str(cluster_id))
+
+        if bird_data is None:
+            return jsonify({
+                'status': 'success',
+                'completed': True,
+                'message': 'All birds in this cluster are labeled!'
+            })
+
+        return jsonify({
+            'status': 'success',
+            'completed': False,
+            **bird_data
+        })
+
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({
+            'status': 'error',
+            'message': str(e)
+        }), 500
+
+@app.route('/api/labeling/bird/<bird_id>/label', methods=['POST'])
+def save_bird_label(bird_id):
+    """Save species label for a bird"""
+    try:
+        from labeller.services.labeling_service import LabelingService
+
+        data = request.json or {}
+        species = data.get('species')
+        confidence = data.get('confidence', 'high')
+        cluster_id = data.get('cluster_id')
+
+        if not species:
+            return jsonify({
+                'status': 'error',
+                'message': 'Species code is required'
+            }), 400
+
+        service = LabelingService(Config.DATASET_PATH)
+        label_data = service.save_label(bird_id, species, confidence, cluster_id)
+
+        # Get updated progress
+        progress = service.get_overall_progress()
+
+        return jsonify({
+            'status': 'success',
+            'label': label_data,
+            'progress': progress
+        })
+
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({
+            'status': 'error',
+            'message': str(e)
+        }), 500
+
+@app.route('/api/labeling/cluster/<int:cluster_id>/outliers')
+def get_cluster_outliers(cluster_id):
+    """Detect potentially mislabeled birds in a cluster"""
+    try:
+        from labeller.services.labeling_service import LabelingService
+
+        service = LabelingService(Config.DATASET_PATH)
+        outliers = service.detect_outliers(str(cluster_id))
+
+        return jsonify({
+            'status': 'success',
+            'outliers': outliers,
+            'count': len(outliers)
+        })
+
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({
+            'status': 'error',
+            'message': str(e)
+        }), 500
+
+@app.route('/api/species/list')
+def list_species():
+    """Get all species with codes and names"""
+    try:
+        species_service = get_species_service()
+        species_list = species_service.get_all_species()
+
+        return jsonify({
+            'status': 'success',
+            'species': species_list,
+            'count': len(species_list)
+        })
+
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({
+            'status': 'error',
+            'message': str(e)
+        }), 500
+
+# ==================== END SPECIES LABELING ROUTES ====================
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()

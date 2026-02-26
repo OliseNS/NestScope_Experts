@@ -1,0 +1,1308 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Decision Tree Classification - Nestperts</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #0F0F0F;
+            color: #E0E0E0;
+            overflow: hidden;
+        }
+
+        /* Navbar */
+        .navbar {
+            background: #1E1E1E;
+            border-bottom: 1px solid #333;
+            padding: 1rem 2rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .navbar-brand {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            font-size: 1.25rem;
+            font-weight: 600;
+        }
+
+        .navbar-links {
+            display: flex;
+            gap: 1rem;
+        }
+
+        .navbar-link {
+            color: #A0A0A0;
+            text-decoration: none;
+            padding: 0.5rem 1rem;
+            border-radius: 6px;
+            transition: all 0.2s;
+        }
+
+        .navbar-link:hover {
+            color: #CC785C;
+            background: rgba(204, 120, 92, 0.1);
+        }
+
+        /* Main Layout */
+        .container {
+            display: grid;
+            grid-template-columns: 200px 1fr 400px;
+            height: calc(100vh - 70px);
+        }
+
+        /* Sidebar - Cluster List */
+        .sidebar {
+            background: #1A1A1A;
+            border-right: 1px solid #333;
+            padding: 1.5rem;
+            overflow-y: auto;
+        }
+
+        .sidebar h2 {
+            font-size: 0.9rem;
+            margin-bottom: 1rem;
+            color: #999;
+            text-transform: uppercase;
+        }
+
+        .cluster-list {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+
+        .cluster-item {
+            background: #252526;
+            border: 1px solid #333;
+            border-radius: 6px;
+            padding: 0.75rem;
+            cursor: pointer;
+            transition: all 0.2s;
+            text-align: center;
+        }
+
+        .cluster-item:hover {
+            border-color: #CC785C;
+        }
+
+        .cluster-item.active {
+            border-color: #CC785C;
+            background: rgba(204, 120, 92, 0.1);
+        }
+
+        /* Image Viewer */
+        .image-viewer {
+            position: relative;
+            background: #000;
+            overflow: hidden;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .full-image-container {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            overflow: auto;
+            cursor: grab;
+        }
+
+        .full-image-container:active {
+            cursor: grabbing;
+        }
+
+        .full-image {
+            max-width: none;
+            display: block;
+        }
+
+        .bird-highlight {
+            position: absolute;
+            border: 4px solid #CC785C;
+            box-shadow: 0 0 20px rgba(204, 120, 92, 0.6);
+            pointer-events: none;
+            z-index: 10;
+        }
+
+        .bird-label {
+            position: absolute;
+            background: rgba(204, 120, 92, 0.9);
+            color: white;
+            padding: 0.5rem 1rem;
+            border-radius: 4px;
+            font-weight: 600;
+            z-index: 11;
+            top: -40px;
+            left: 0;
+        }
+
+        /* Zoom Controls */
+        .zoom-controls {
+            position: absolute;
+            top: 1rem;
+            right: 1rem;
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+            z-index: 20;
+        }
+
+        .zoom-btn {
+            background: #1A1A1A;
+            border: 1px solid #333;
+            color: #E0E0E0;
+            width: 40px;
+            height: 40px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 1.2rem;
+            transition: all 0.2s;
+        }
+
+        .zoom-btn:hover {
+            background: #CC785C;
+            border-color: #CC785C;
+        }
+
+        .zoom-level {
+            background: #1A1A1A;
+            border: 1px solid #333;
+            padding: 0.5rem;
+            border-radius: 6px;
+            text-align: center;
+            font-size: 0.85rem;
+        }
+
+        /* Decision Panel */
+        .decision-panel {
+            background: #1A1A1A;
+            border-left: 1px solid #333;
+            display: flex;
+            flex-direction: column;
+            overflow-y: auto;
+        }
+
+        /* Mode Selector */
+        .mode-selector {
+            background: #252526;
+            border-bottom: 1px solid #333;
+            padding: 1rem;
+            display: flex;
+            gap: 0.5rem;
+        }
+
+        .mode-btn {
+            flex: 1;
+            background: #1A1A1A;
+            border: 2px solid #333;
+            color: #999;
+            padding: 0.75rem;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: 600;
+            font-size: 0.9rem;
+            transition: all 0.2s;
+        }
+
+        .mode-btn:hover {
+            border-color: #CC785C;
+            color: #E0E0E0;
+        }
+
+        .mode-btn.active {
+            background: rgba(204, 120, 92, 0.15);
+            border-color: #CC785C;
+            color: #CC785C;
+        }
+
+        /* Progress Breadcrumbs */
+        .progress-breadcrumbs {
+            background: #252526;
+            border-bottom: 1px solid #333;
+            padding: 1rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-size: 0.85rem;
+        }
+
+        .breadcrumb {
+            color: #666;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .breadcrumb.active {
+            color: #CC785C;
+            font-weight: 600;
+        }
+
+        .breadcrumb.completed {
+            color: #E0E0E0;
+        }
+
+        /* Decision Step */
+        .decision-step {
+            padding: 1.5rem;
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .step-header {
+            margin-bottom: 1.5rem;
+        }
+
+        .step-number {
+            color: #CC785C;
+            font-size: 0.85rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            margin-bottom: 0.5rem;
+        }
+
+        .step-question {
+            font-size: 1.25rem;
+            font-weight: 700;
+            margin-bottom: 0.5rem;
+        }
+
+        .step-help {
+            color: #999;
+            font-size: 0.9rem;
+        }
+
+        /* Options Grid */
+        .options-grid {
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+            margin-bottom: 1.5rem;
+            flex: 1;
+            overflow-y: auto;
+        }
+
+        /* Quick Search Mode */
+        .quick-search-container {
+            padding: 1.5rem;
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .search-box {
+            width: 100%;
+            padding: 0.75rem;
+            background: #252526;
+            border: 2px solid #333;
+            color: #E0E0E0;
+            border-radius: 6px;
+            font-size: 1rem;
+            margin-bottom: 1rem;
+        }
+
+        .search-box:focus {
+            outline: none;
+            border-color: #CC785C;
+        }
+
+        .species-count {
+            color: #999;
+            font-size: 0.9rem;
+            margin-bottom: 1rem;
+        }
+
+        .species-scroll-grid {
+            flex: 1;
+            overflow-y: auto;
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 0.75rem;
+            padding-right: 0.5rem;
+        }
+
+        .quick-species-card {
+            background: #252526;
+            border: 2px solid #333;
+            border-radius: 8px;
+            padding: 1rem;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .quick-species-card:hover {
+            border-color: #CC785C;
+            background: #2A2A2A;
+        }
+
+        .quick-species-card.selected {
+            border-color: #CC785C;
+            background: rgba(204, 120, 92, 0.15);
+        }
+
+        .quick-species-code {
+            font-size: 1.1rem;
+            font-weight: 700;
+            color: #CC785C;
+            margin-bottom: 0.25rem;
+        }
+
+        .quick-species-name {
+            font-size: 0.85rem;
+            color: #AAA;
+        }
+
+        .option-card {
+            background: #252526;
+            border: 2px solid #333;
+            border-radius: 8px;
+            padding: 1rem;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+
+        .option-card:hover {
+            border-color: #CC785C;
+            background: #2A2A2A;
+        }
+
+        .option-card.selected {
+            border-color: #CC785C;
+            background: rgba(204, 120, 92, 0.15);
+        }
+
+        .option-icon {
+            font-size: 2rem;
+            min-width: 50px;
+            text-align: center;
+        }
+
+        .option-content {
+            flex: 1;
+        }
+
+        .option-label {
+            font-weight: 700;
+            font-size: 1.1rem;
+            margin-bottom: 0.25rem;
+        }
+
+        .option-description {
+            color: #999;
+            font-size: 0.85rem;
+        }
+
+        /* Species Options - More Detailed */
+        .species-option {
+            flex-direction: column;
+            align-items: stretch;
+        }
+
+        .species-header {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            margin-bottom: 0.75rem;
+        }
+
+        .species-code {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: #CC785C;
+        }
+
+        .species-name {
+            flex: 1;
+            font-size: 1.1rem;
+            font-weight: 600;
+        }
+
+        .species-size {
+            color: #999;
+            font-size: 0.85rem;
+        }
+
+        .species-features {
+            margin-bottom: 0.75rem;
+        }
+
+        .species-features strong {
+            color: #CC785C;
+            font-size: 0.9rem;
+            display: block;
+            margin-bottom: 0.5rem;
+        }
+
+        .features-list {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+        }
+
+        .feature-tag {
+            background: #333;
+            color: #E0E0E0;
+            padding: 0.25rem 0.75rem;
+            border-radius: 4px;
+            font-size: 0.8rem;
+        }
+
+        .species-tips {
+            background: rgba(204, 120, 92, 0.1);
+            border: 1px solid rgba(204, 120, 92, 0.3);
+            border-radius: 6px;
+            padding: 0.75rem;
+            font-size: 0.85rem;
+            color: #AAA;
+        }
+
+        .species-tips strong {
+            color: #CC785C;
+        }
+
+        /* Reference Photos */
+        .reference-section {
+            margin-top: 1rem;
+            padding-top: 1rem;
+            border-top: 1px solid #333;
+        }
+
+        .reference-label {
+            font-size: 0.85rem;
+            color: #999;
+            margin-bottom: 0.5rem;
+        }
+
+        .reference-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 0.5rem;
+        }
+
+        .reference-image {
+            width: 100%;
+            height: 100px;
+            object-fit: cover;
+            border-radius: 4px;
+            background: #333;
+            border: 1px solid #444;
+        }
+
+        /* Action Buttons */
+        .action-buttons {
+            display: flex;
+            gap: 0.75rem;
+            padding: 1.5rem;
+            border-top: 1px solid #333;
+            background: #1A1A1A;
+        }
+
+        .btn {
+            flex: 1;
+            padding: 1rem;
+            border: none;
+            border-radius: 6px;
+            font-weight: 600;
+            font-size: 1rem;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .btn-primary {
+            background: #CC785C;
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #B86A4F;
+        }
+
+        .btn-primary:disabled {
+            background: #555;
+            cursor: not-allowed;
+            opacity: 0.5;
+        }
+
+        .btn-secondary {
+            background: #333;
+            color: #E0E0E0;
+        }
+
+        .btn-secondary:hover {
+            background: #444;
+        }
+
+        .btn-back {
+            background: #444;
+            color: #E0E0E0;
+            flex: 0.7;
+        }
+
+        .btn-back:hover {
+            background: #555;
+        }
+
+        .btn-skip {
+            background: #666;
+            color: #E0E0E0;
+            flex: 0.7;
+        }
+
+        .btn-skip:hover {
+            background: #777;
+        }
+
+        /* Loading State */
+        .loading {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 3rem;
+            color: #999;
+        }
+
+        .spinner {
+            border: 3px solid #333;
+            border-top: 3px solid #CC785C;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin-right: 1rem;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        /* Info Display */
+        .bird-info-display {
+            position: absolute;
+            bottom: 1rem;
+            left: 1rem;
+            background: rgba(26, 26, 26, 0.95);
+            border: 1px solid #333;
+            border-radius: 6px;
+            padding: 1rem;
+            max-width: 300px;
+            z-index: 20;
+        }
+
+        .bird-info-display h3 {
+            font-size: 1rem;
+            margin-bottom: 0.5rem;
+            color: #CC785C;
+        }
+
+        .bird-info-display p {
+            font-size: 0.85rem;
+            color: #999;
+            line-height: 1.4;
+        }
+    </style>
+</head>
+<body>
+    <!-- Navbar -->
+    <div class="navbar">
+        <div class="navbar-brand">
+            <span style="filter: sepia(1) saturate(3) hue-rotate(340deg) brightness(1.1);">🦅</span>
+            <span>Decision Tree Classification</span>
+        </div>
+        <div class="navbar-links">
+            <a href="/" class="navbar-link">← Back Home</a>
+            <a href="/classify" class="navbar-link">Grid View</a>
+        </div>
+    </div>
+
+    <!-- Main Container -->
+    <div class="container">
+        <!-- Sidebar - Cluster List -->
+        <div class="sidebar">
+            <h2>Clusters</h2>
+            <div class="cluster-list" id="clusterList">
+                <div class="loading">
+                    <div class="spinner"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Image Viewer -->
+        <div class="image-viewer">
+            <div class="full-image-container" id="imageContainer">
+                <img id="fullImage" class="full-image" alt="Bird aerial view">
+                <div class="bird-highlight" id="birdHighlight" style="display: none;">
+                    <div class="bird-label">Current Bird</div>
+                </div>
+            </div>
+
+            <!-- Zoom Controls -->
+            <div class="zoom-controls">
+                <button class="zoom-btn" onclick="zoomIn()">+</button>
+                <div class="zoom-level" id="zoomLevel">100%</div>
+                <button class="zoom-btn" onclick="zoomOut()">−</button>
+                <button class="zoom-btn" onclick="resetZoom()">⟲</button>
+            </div>
+
+            <!-- Bird Info Display -->
+            <div class="bird-info-display" id="birdInfo" style="display: none;">
+                <h3>🔍 Classification Tips</h3>
+                <p id="birdInfoText"></p>
+            </div>
+        </div>
+
+        <!-- Decision Panel -->
+        <div class="decision-panel">
+            <!-- Mode Selector -->
+            <div class="mode-selector" id="modeSelector" style="display: none;">
+                <button class="mode-btn active" onclick="switchMode('tree')">
+                    Decision Tree
+                </button>
+                <button class="mode-btn" onclick="switchMode('search')">
+                    Quick Search
+                </button>
+            </div>
+
+            <!-- Progress Breadcrumbs (Tree Mode Only) -->
+            <div class="progress-breadcrumbs" id="breadcrumbs" style="display: none;">
+                <span class="breadcrumb active">Size</span>
+                <span>→</span>
+                <span class="breadcrumb">Color</span>
+                <span>→</span>
+                <span class="breadcrumb">Species</span>
+            </div>
+
+            <!-- Decision Step -->
+            <div class="decision-step" id="decisionStep">
+                <div class="step-header">
+                    <div class="step-number">Select a cluster to begin</div>
+                    <div class="step-question">Choose a cluster from the sidebar</div>
+                </div>
+            </div>
+
+            <!-- Action Buttons -->
+            <div class="action-buttons" id="actionButtons" style="display: none;">
+                <button class="btn btn-back" onclick="goBack()">← Back</button>
+                <button class="btn btn-skip" onclick="skipBird()">Skip</button>
+                <button class="btn btn-primary" id="nextButton" disabled onclick="goNext()">Next →</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // State
+        let currentCluster = null;
+        let currentBird = null;
+        let decisionTree = null;
+        let allSpecies = [];
+        let classificationMode = 'tree'; // 'tree' or 'search'
+        let currentStep = 1; // 1=Size, 2=Color, 3=Species
+        let selectedSize = null;
+        let selectedColor = null;
+        let selectedSpecies = null;
+        let imageZoom = 1;
+        let isPanning = false;
+        let panStart = { x: 0, y: 0 };
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', async () => {
+            await loadDecisionTree();
+            await loadAllSpecies();
+            await loadClusters();
+            setupImagePanning();
+        });
+
+        // Load decision tree from JSON
+        async function loadDecisionTree() {
+            try {
+                const response = await fetch('/static/bird_classification_tree.json');
+                decisionTree = await response.json();
+                console.log('Decision tree loaded:', decisionTree);
+            } catch (error) {
+                console.error('Error loading decision tree:', error);
+            }
+        }
+
+        // Load all species from database
+        async function loadAllSpecies() {
+            try {
+                const response = await fetch('/api/species/list');
+                const data = await response.json();
+                if (data.status === 'success') {
+                    allSpecies = data.species;
+                    console.log(`Loaded ${allSpecies.length} species from database`);
+                }
+            } catch (error) {
+                console.error('Error loading species:', error);
+            }
+        }
+
+        // Load clusters
+        async function loadClusters() {
+            try {
+                const response = await fetch('/api/labeling/progress');
+                const data = await response.json();
+
+                if (data.status === 'success') {
+                    renderClusterList(data.clusters);
+                }
+            } catch (error) {
+                console.error('Error loading clusters:', error);
+            }
+        }
+
+        // Render cluster list
+        function renderClusterList(clusters) {
+            const container = document.getElementById('clusterList');
+
+            if (clusters.length === 0) {
+                container.innerHTML = '<div style="padding: 1rem; color: #666;">No clusters found</div>';
+                return;
+            }
+
+            container.innerHTML = clusters.map(cluster => {
+                const progress = Math.round(cluster.progress * 100);
+                return `
+                    <div class="cluster-item ${cluster.cluster_id === currentCluster ? 'active' : ''}"
+                         onclick="selectCluster(${cluster.cluster_id})">
+                        <div style="font-weight: 700; margin-bottom: 0.5rem;">Cluster ${cluster.cluster_id}</div>
+                        <div style="font-size: 0.75rem; color: #999;">${cluster.labeled}/${cluster.total}</div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        // Select cluster
+        async function selectCluster(clusterId) {
+            currentCluster = clusterId;
+            currentStep = 1;
+            selectedSize = null;
+            selectedColor = null;
+            selectedSpecies = null;
+
+            // Update active cluster
+            document.querySelectorAll('.cluster-item').forEach(el => el.classList.remove('active'));
+            event.target.closest('.cluster-item').classList.add('active');
+
+            // Load next bird
+            await loadNextBird(clusterId);
+        }
+
+        // Switch between tree and search modes
+        function switchMode(mode) {
+            classificationMode = mode;
+
+            // Update mode buttons
+            document.querySelectorAll('.mode-btn').forEach(btn => btn.classList.remove('active'));
+            event.target.classList.add('active');
+
+            // Re-render current view
+            if (mode === 'tree') {
+                renderStep1();
+                document.getElementById('breadcrumbs').style.display = 'flex';
+            } else {
+                renderQuickSearch();
+                document.getElementById('breadcrumbs').style.display = 'none';
+            }
+        }
+
+        // Load next bird
+        async function loadNextBird(clusterId) {
+            try {
+                const response = await fetch(`/api/labeling/cluster/${clusterId}/next`);
+                const data = await response.json();
+
+                console.log('API response for next bird:', data);
+
+                if (data.completed) {
+                    showCompletionMessage();
+                    return;
+                }
+
+                currentBird = data;
+                console.log('Current bird data:', {
+                    bird_id: data.bird_id,
+                    crop_filename: data.crop_filename,
+                    image_name: data.image_name,
+                    crop_url: data.crop_url,
+                    full_image_url: data.full_image_url,
+                    bbox: data.bbox
+                });
+                currentStep = 1;
+                selectedSize = null;
+                selectedColor = null;
+                selectedSpecies = null;
+                classificationMode = 'tree'; // Reset to tree mode for new bird
+
+                // Load full image
+                await loadFullImage(data);
+
+                // Show mode selector
+                document.getElementById('modeSelector').style.display = 'flex';
+                document.getElementById('breadcrumbs').style.display = 'flex';
+
+                // Reset mode buttons
+                document.querySelectorAll('.mode-btn').forEach((btn, idx) => {
+                    btn.classList.toggle('active', idx === 0); // First button active
+                });
+
+                // Show step 1 (Size selection) in tree mode
+                renderStep1();
+
+                // Show action buttons
+                document.getElementById('actionButtons').style.display = 'flex';
+
+            } catch (error) {
+                console.error('Error loading bird:', error);
+            }
+        }
+
+        // Load full image with bird highlighted
+        async function loadFullImage(bird) {
+            const img = document.getElementById('fullImage');
+            const container = document.getElementById('imageContainer');
+            const highlight = document.getElementById('birdHighlight');
+
+            // Use direct URL from API response
+            const imagePath = bird.full_image_url || `/api/original_image/${bird.image_name}`;
+
+            console.log(`Loading image for bird ${bird.bird_id}:`, imagePath);
+
+            img.src = imagePath;
+            img.onerror = () => {
+                console.error(`Failed to load full image: ${imagePath}`);
+                console.error(`Bird data:`, bird);
+
+                // Try fallback to crop image
+                console.log('Trying fallback to crop image...');
+                const cropPath = bird.crop_url || `/api/bird_crop/${bird.bird_id}`;
+                img.src = cropPath;
+
+                // If crop also fails, show error
+                img.onerror = () => {
+                    alert(`Error: Could not load image for bird ${bird.bird_id}.\n\nFull image: ${imagePath}\nCrop image: ${cropPath}\n\nCheck server logs for details.`);
+                };
+            };
+
+            img.onload = () => {
+                console.log(`Image loaded successfully: ${img.naturalWidth}x${img.naturalHeight}`);
+                // Get bird bounding box from metadata
+                // bbox format: [x_center, y_center, width, height] in normalized coords (0-1)
+                if (bird.bbox) {
+                    const [xCenter, yCenter, width, height] = bird.bbox;
+                    const imgWidth = img.naturalWidth;
+                    const imgHeight = img.naturalHeight;
+
+                    // Convert to pixel coordinates
+                    const xPx = (xCenter - width/2) * imgWidth;
+                    const yPx = (yCenter - height/2) * imgHeight;
+                    const wPx = width * imgWidth;
+                    const hPx = height * imgHeight;
+
+                    // Position highlight box
+                    highlight.style.display = 'block';
+                    highlight.style.left = `${xPx}px`;
+                    highlight.style.top = `${yPx}px`;
+                    highlight.style.width = `${wPx}px`;
+                    highlight.style.height = `${hPx}px`;
+
+                    // Center view on bird
+                    container.scrollLeft = xPx - container.clientWidth / 2 + wPx / 2;
+                    container.scrollTop = yPx - container.clientHeight / 2 + hPx / 2;
+                }
+
+                resetZoom();
+            };
+        }
+
+        // STEP 1: Size Selection
+        function renderStep1() {
+            updateBreadcrumbs(1);
+            const step = decisionTree.decision_tree.step_1_size;
+            const container = document.getElementById('decisionStep');
+
+            container.innerHTML = `
+                <div class="step-header">
+                    <div class="step-number">Step 1 of 3</div>
+                    <div class="step-question">${step.question}</div>
+                    <div class="step-help">${step.help_text}</div>
+                </div>
+                <div class="options-grid">
+                    ${step.options.map(option => `
+                        <div class="option-card" onclick="selectSize('${option.label}')">
+                            <div class="option-icon">${option.icon}</div>
+                            <div class="option-content">
+                                <div class="option-label">${option.label}</div>
+                                <div class="option-description">${option.description}</div>
+                            </div>
+                        </div>
+                    `).join('')}
+                </div>
+            `;
+
+            document.getElementById('nextButton').disabled = true;
+            document.getElementById('nextButton').textContent = 'Next →';
+            document.getElementById('birdInfo').style.display = 'none';
+
+            // Show back button in tree mode
+            document.querySelector('.btn-back').style.display = 'block';
+        }
+
+        // STEP 2: Color Selection
+        function renderStep2() {
+            updateBreadcrumbs(2);
+            const colorOptions = decisionTree.decision_tree.step_2_color[selectedSize];
+            const container = document.getElementById('decisionStep');
+
+            container.innerHTML = `
+                <div class="step-header">
+                    <div class="step-number">Step 2 of 3 · ${selectedSize} bird</div>
+                    <div class="step-question">${colorOptions.question}</div>
+                    <div class="step-help">${colorOptions.help_text}</div>
+                </div>
+                <div class="options-grid">
+                    ${colorOptions.options.map(option => `
+                        <div class="option-card" onclick="selectColor('${option.label}')">
+                            <div class="option-icon">${option.icon}</div>
+                            <div class="option-content">
+                                <div class="option-label">${option.label}</div>
+                                <div class="option-description">${option.description}</div>
+                            </div>
+                        </div>
+                    `).join('')}
+                </div>
+            `;
+
+            document.getElementById('nextButton').disabled = true;
+        }
+
+        // STEP 3: Species Selection
+        function renderStep3() {
+            updateBreadcrumbs(3);
+            const categoryKey = `${selectedSize}_${selectedColor.replace('/', '')}`.replace(/[\s-]/g, '_').toUpperCase();
+            const speciesData = decisionTree.decision_tree.step_3_features[categoryKey];
+
+            if (!speciesData) {
+                console.error('No species data for:', categoryKey);
+                return;
+            }
+
+            const container = document.getElementById('decisionStep');
+
+            container.innerHTML = `
+                <div class="step-header">
+                    <div class="step-number">Step 3 of 3 · ${selectedSize} ${selectedColor} bird</div>
+                    <div class="step-question">${speciesData.question}</div>
+                    ${speciesData.help_text ? `<div class="step-help">${speciesData.help_text}</div>` : ''}
+                </div>
+                <div class="options-grid">
+                    ${speciesData.species.map(species => `
+                        <div class="option-card species-option" onclick="selectSpecies('${species.code}')">
+                            <div class="species-header">
+                                <div class="species-code">${species.code}</div>
+                                <div class="species-name">${species.name}</div>
+                                <div class="species-size">${species.size}</div>
+                            </div>
+                            <div class="species-features">
+                                <strong>Key Features:</strong>
+                                <div class="features-list">
+                                    ${species.key_features.map(f => `<span class="feature-tag">${f}</span>`).join('')}
+                                </div>
+                            </div>
+                            <div class="species-tips">
+                                <strong>💡 Tip:</strong> ${species.confidence_tips}
+                            </div>
+                            <div class="reference-section">
+                                <div class="reference-label">📸 Reference Photos (Coming Soon)</div>
+                                <div class="reference-grid">
+                                    <div class="reference-image"></div>
+                                    <div class="reference-image"></div>
+                                </div>
+                            </div>
+                        </div>
+                    `).join('')}
+                </div>
+            `;
+
+            document.getElementById('nextButton').disabled = true;
+        }
+
+        // QUICK SEARCH MODE
+        function renderQuickSearch() {
+            const container = document.getElementById('decisionStep');
+
+            container.innerHTML = `
+                <div class="quick-search-container">
+                    <h3 style="margin-bottom: 1rem; font-size: 1.1rem;">Quick Species Search</h3>
+                    <input type="text"
+                           id="quickSearchInput"
+                           class="search-box"
+                           placeholder="Type species code or name..."
+                           onkeyup="filterQuickSpecies()">
+                    <div class="species-count" id="speciesCount">${allSpecies.length} species available</div>
+                    <div class="species-scroll-grid" id="quickSpeciesGrid">
+                        ${allSpecies.map(species => `
+                            <div class="quick-species-card" onclick="selectQuickSpecies('${species.code}')" data-code="${species.code}" data-name="${species.name}">
+                                <div class="quick-species-code">${species.code}</div>
+                                <div class="quick-species-name">${species.name}</div>
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+            `;
+
+            // Update button
+            const nextBtn = document.getElementById('nextButton');
+            nextBtn.textContent = 'Save Classification ✓';
+            nextBtn.disabled = true;
+
+            // Hide back button in search mode
+            document.querySelector('.btn-back').style.display = 'none';
+        }
+
+        function filterQuickSpecies() {
+            const searchTerm = document.getElementById('quickSearchInput').value.toLowerCase();
+            const cards = document.querySelectorAll('.quick-species-card');
+            let visibleCount = 0;
+
+            cards.forEach(card => {
+                const code = card.dataset.code.toLowerCase();
+                const name = card.dataset.name.toLowerCase();
+
+                if (code.includes(searchTerm) || name.includes(searchTerm)) {
+                    card.style.display = 'block';
+                    visibleCount++;
+                } else {
+                    card.style.display = 'none';
+                }
+            });
+
+            document.getElementById('speciesCount').textContent = `${visibleCount} species ${searchTerm ? 'found' : 'available'}`;
+        }
+
+        function selectQuickSpecies(code) {
+            selectedSpecies = code;
+            selectedSize = null; // Clear tree mode selections
+            selectedColor = null;
+
+            // Update UI
+            document.querySelectorAll('.quick-species-card').forEach(card => card.classList.remove('selected'));
+            event.target.closest('.quick-species-card').classList.add('selected');
+
+            // Enable save button
+            document.getElementById('nextButton').disabled = false;
+        }
+
+        // Selection handlers (Tree Mode)
+        function selectSize(size) {
+            selectedSize = size;
+            document.querySelectorAll('.option-card').forEach(el => el.classList.remove('selected'));
+            event.target.closest('.option-card').classList.add('selected');
+            document.getElementById('nextButton').disabled = false;
+        }
+
+        function selectColor(color) {
+            selectedColor = color;
+            document.querySelectorAll('.option-card').forEach(el => el.classList.remove('selected'));
+            event.target.closest('.option-card').classList.add('selected');
+            document.getElementById('nextButton').disabled = false;
+        }
+
+        function selectSpecies(code) {
+            selectedSpecies = code;
+            document.querySelectorAll('.option-card').forEach(el => el.classList.remove('selected'));
+            event.target.closest('.option-card').classList.add('selected');
+
+            // Change button to "Save Classification"
+            const nextBtn = document.getElementById('nextButton');
+            nextBtn.textContent = 'Save Classification ✓';
+            nextBtn.disabled = false;
+        }
+
+        // Navigation
+        function goNext() {
+            if (classificationMode === 'search') {
+                // Quick search mode - save directly
+                if (selectedSpecies) {
+                    saveClassification();
+                }
+            } else {
+                // Tree mode - navigate through steps
+                if (currentStep === 1 && selectedSize) {
+                    currentStep = 2;
+                    renderStep2();
+                } else if (currentStep === 2 && selectedColor) {
+                    currentStep = 3;
+                    renderStep3();
+                } else if (currentStep === 3 && selectedSpecies) {
+                    saveClassification();
+                }
+            }
+        }
+
+        function goBack() {
+            if (currentStep === 2) {
+                currentStep = 1;
+                selectedColor = null;
+                renderStep1();
+                document.querySelector('.btn-back').style.display = 'block';
+            } else if (currentStep === 3) {
+                currentStep = 2;
+                selectedSpecies = null;
+                renderStep2();
+                document.querySelector('.btn-back').style.display = 'block';
+            }
+        }
+
+        // Save classification
+        async function saveClassification() {
+            if (!selectedSpecies || !currentBird) return;
+
+            try {
+                const payload = {
+                    species: selectedSpecies,
+                    confidence: 'high',
+                    cluster_id: currentBird.cluster_id,
+                    classification_method: classificationMode === 'search' ? 'quick_search' : 'decision_tree'
+                };
+
+                // Add decision path only for tree mode
+                if (classificationMode === 'tree') {
+                    payload.decision_path = {
+                        size: selectedSize,
+                        color: selectedColor,
+                        species: selectedSpecies
+                    };
+                }
+
+                const response = await fetch(`/api/labeling/bird/${currentBird.bird_id}/label`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+
+                const data = await response.json();
+
+                if (data.status === 'success') {
+                    // Load next bird
+                    await loadNextBird(currentCluster);
+                    await loadClusters(); // Refresh cluster list
+                }
+
+            } catch (error) {
+                console.error('Error saving classification:', error);
+                alert('Error saving classification. Please try again.');
+            }
+        }
+
+        // Skip bird
+        function skipBird() {
+            if (currentCluster) {
+                loadNextBird(currentCluster);
+            }
+        }
+
+        // Update breadcrumbs
+        function updateBreadcrumbs(step) {
+            const breadcrumbs = document.querySelectorAll('.breadcrumb');
+            breadcrumbs.forEach((bc, index) => {
+                bc.classList.remove('active', 'completed');
+                if (index + 1 < step) bc.classList.add('completed');
+                if (index + 1 === step) bc.classList.add('active');
+            });
+        }
+
+        // Zoom controls
+        function zoomIn() {
+            imageZoom = Math.min(imageZoom + 0.25, 3);
+            applyZoom();
+        }
+
+        function zoomOut() {
+            imageZoom = Math.max(imageZoom - 0.25, 0.5);
+            applyZoom();
+        }
+
+        function resetZoom() {
+            imageZoom = 1;
+            applyZoom();
+        }
+
+        function applyZoom() {
+            const img = document.getElementById('fullImage');
+            img.style.transform = `scale(${imageZoom})`;
+            img.style.transformOrigin = 'top left';
+            document.getElementById('zoomLevel').textContent = `${Math.round(imageZoom * 100)}%`;
+        }
+
+        // Image panning
+        function setupImagePanning() {
+            const container = document.getElementById('imageContainer');
+
+            container.addEventListener('mousedown', (e) => {
+                if (e.target.id === 'fullImage') {
+                    isPanning = true;
+                    panStart = { x: e.clientX - container.scrollLeft, y: e.clientY - container.scrollTop };
+                }
+            });
+
+            container.addEventListener('mousemove', (e) => {
+                if (!isPanning) return;
+                e.preventDefault();
+                container.scrollLeft = panStart.x - e.clientX;
+                container.scrollTop = panStart.y - e.clientY;
+            });
+
+            container.addEventListener('mouseup', () => {
+                isPanning = false;
+            });
+
+            container.addEventListener('mouseleave', () => {
+                isPanning = false;
+            });
+        }
+
+        // Keyboard shortcuts
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' && !document.getElementById('nextButton').disabled) {
+                goNext();
+            }
+            if (e.key === 'Backspace' && currentStep > 1) {
+                goBack();
+            }
+            if (e.key === 's' || e.key === 'S') {
+                skipBird();
+            }
+        });
+
+        // Completion message
+        function showCompletionMessage() {
+            const container = document.getElementById('decisionStep');
+            container.innerHTML = `
+                <div style="text-align: center; padding: 3rem;">
+                    <h2 style="font-size: 2rem; margin-bottom: 1rem;">🎉 Cluster Complete!</h2>
+                    <p style="color: #999; margin-bottom: 2rem;">All birds in this cluster have been classified.</p>
+                    <button class="btn btn-primary" onclick="loadClusters()" style="max-width: 300px;">
+                        Continue to Next Cluster
+                    </button>
+                </div>
+            `;
+            document.getElementById('actionButtons').style.display = 'none';
+            document.getElementById('modeSelector').style.display = 'none';
+            document.getElementById('breadcrumbs').style.display = 'none';
+        }
+    </script>
+</body>
+</html>
