@@ -171,6 +171,10 @@ for message in st.session_state.messages:
 
         if "dataframe" in message and message["dataframe"] is not None:
             df = message["dataframe"]
+
+            # CRITICAL FIX: Reset index to avoid Streamlit's "Row index out of range" bug
+            if not df.empty:
+                df = df.reset_index(drop=True)
             show_chart = message.get("show_chart", False)
             chart_type = message.get("chart_type")
             show_map = message.get("show_map", False)
@@ -602,6 +606,11 @@ if prompt:
 
             # Convert results to DataFrame for visualization
             df = pd.DataFrame(results) if results else pd.DataFrame()
+
+            # CRITICAL FIX: Reset index to avoid Streamlit's "Row index out of range" bug
+            # This prevents JavaScript errors when displaying certain dataframe sizes
+            if not df.empty:
+                df = df.reset_index(drop=True)
 
             # Stop if no results are found or there was a query error
             if df.empty:

@@ -779,7 +779,7 @@
             <div class="progress-breadcrumbs" id="breadcrumbs" style="display: none;">
                 <span class="breadcrumb active">Color</span>
                 <span>→</span>
-                <span class="breadcrumb">Bill Shape</span>
+                <span class="breadcrumb">Neck Length</span>
                 <span>→</span>
                 <span class="breadcrumb">Species</span>
             </div>
@@ -808,9 +808,9 @@
         let decisionTree = null;
         let allSpecies = [];
         let classificationMode = 'tree'; // 'tree' or 'search'
-        let currentStep = 1; // 1=Color, 2=Bill, 3=Species
+        let currentStep = 1; // 1=Color, 2=Neck Length, 3=Species
         let selectedPrimaryColor = null;
-        let selectedBill = null;
+        let selectedNeck = null;  // Neck length instead of bill shape
         let selectedSpecies = null;
         let imageZoom = 1;
         let isPanning = false;
@@ -889,7 +889,7 @@
             currentCluster = clusterId;
             currentStep = 1;
             selectedPrimaryColor = null;
-            selectedBill = null;
+            selectedNeck = null;
             selectedSpecies = null;
 
             // Update active cluster
@@ -942,7 +942,7 @@
                 });
                 currentStep = 1;
                 selectedPrimaryColor = null;
-                selectedBill = null;
+                selectedNeck = null;
                 selectedSpecies = null;
                 classificationMode = 'tree'; // Reset to tree mode for new bird
 
@@ -1025,21 +1025,35 @@
             document.querySelector('.btn-back').style.display = 'block';
         }
 
-        // STEP 2: Bill Shape Selection
+        // STEP 2: Neck Length Selection
         function renderStep2() {
             updateBreadcrumbs(2);
-            const billOptions = decisionTree.decision_tree.step_2_bill[selectedPrimaryColor];
+            // Extract base color (e.g., "WHITE/PALE" → "WHITE", "DARK/BLACK" → "DARK")
+            const baseColor = selectedPrimaryColor.split('/')[0];
+            const neckOptions = decisionTree.decision_tree.step_2_neck[baseColor];
+
+            // Debug: Log the lookup to help catch mismatches
+            if (!neckOptions) {
+                console.error('Could not find neck options for:', {
+                    selectedPrimaryColor,
+                    baseColor,
+                    availableKeys: Object.keys(decisionTree.decision_tree.step_2_neck)
+                });
+                alert(`Error: Could not find neck options for "${baseColor}". Please report this bug!`);
+                return;
+            }
+
             const container = document.getElementById('decisionStep');
 
             container.innerHTML = `
                 <div class="step-header">
                     <div class="step-number">Step 2 of 3 · ${selectedPrimaryColor} bird</div>
-                    <div class="step-question">${billOptions.question}</div>
-                    <div class="step-help">${billOptions.help_text}</div>
+                    <div class="step-question">${neckOptions.question}</div>
+                    <div class="step-help">${neckOptions.help_text}</div>
                 </div>
                 <div class="options-grid">
-                    ${billOptions.options.map(option => `
-                        <div class="option-card" onclick="selectBill('${option.label}')">
+                    ${neckOptions.options.map(option => `
+                        <div class="option-card" onclick="selectNeck('${option.label}')">
                             <div class="option-icon">${option.icon}</div>
                             <div class="option-content">
                                 <div class="option-label">${option.label}</div>
@@ -1057,40 +1071,39 @@
         function renderStep3() {
             updateBreadcrumbs(3);
 
-            // Color/bill label to key mapping (handles slashes and special characters)
+            // Color/neck label to key mapping (handles slashes and special characters)
             const featureMappings = {
-                // WHITE birds by bill type
-                'WHITE/PALE_MASSIVE_POUCHED': 'WHITE_MASSIVE',
-                'WHITE/PALE_LONG_STRAIGHT': 'WHITE_LONG',
-                'WHITE/PALE_MEDIUM_POINTED': 'WHITE_MEDIUM',
-                'WHITE/PALE_UPTURNED': 'WHITE_UPTURNED',
-                // DARK birds by bill type
-                'DARK/BLACK_MASSIVE_POUCHED': 'DARK_MASSIVE',
-                'DARK/BLACK_HOOKED': 'DARK_HOOKED',
-                'DARK/BLACK_HUGE_RED': 'DARK_HUGE_RED',
-                'DARK/BLACK_MEDIUM_POINTED': 'DARK_MEDIUM',
-                'DARK/BLACK_VERY_LONG_WINGS': 'DARK_WINGS',
-                // BLUE-GRAY birds by bill length
-                'BLUE-GRAY_VERY_LONG': 'BLUE_VERY_LONG',
-                'BLUE-GRAY_MEDIUM_TO_LONG': 'BLUE_MEDIUM',
-                'BLUE-GRAY_SHORT_HEAVY': 'BLUE_SHORT',
-                // BROWN birds by bill shape
-                'BROWN/REDDISH_LONG_CURVED': 'BROWN_CURVED',
-                'BROWN/REDDISH_LONG_STRAIGHT': 'BROWN_STRAIGHT',
-                'BROWN/REDDISH_HUGE_ORANGE': 'BROWN_ORANGE',
-                'BROWN/REDDISH_VERY_THIN': 'BROWN_THIN',
-                'BROWN/REDDISH_MEDIUM': 'BROWN_MEDIUM',
+                // WHITE birds by neck length
+                'WHITE_VERY_LONG_NECK': 'WHITE_VERY_LONG_NECK',
+                'WHITE_SHORT_NECK': 'WHITE_SHORT_NECK',
+                'WHITE_HUGE_BODY': 'WHITE_HUGE_BODY',
+                // DARK birds by neck/body
+                'DARK_VERY_LONG_NECK': 'DARK_VERY_LONG_NECK',
+                'DARK_SHORT_NECK': 'DARK_SHORT_NECK',
+                'DARK_HUGE_BODY': 'DARK_HUGE_BODY',
+                'DARK_VERY_LONG_WINGS': 'DARK_VERY_LONG_WINGS',
+                // BLUE-GRAY birds by neck length
+                'BLUE-GRAY_VERY_LONG_NECK': 'BLUE-GRAY_VERY_LONG_NECK',
+                'BLUE-GRAY_LONG_NECK': 'BLUE-GRAY_LONG_NECK',
+                'BLUE-GRAY_SHORT_NECK': 'BLUE-GRAY_SHORT_NECK',
+                // BROWN birds by neck length
+                'BROWN_LONG_NECK': 'BROWN_LONG_NECK',
+                'BROWN_MEDIUM_NECK': 'BROWN_MEDIUM_NECK',
+                'BROWN_SHORT_NECK': 'BROWN_SHORT_NECK',
                 // PINK birds (confirmation only)
-                'PINK/RED_YES_-_BRIGHT_PINK': 'PINK_CONFIRMATION'
+                'PINK_YES_BRIGHT_PINK': 'PINK_YES_BRIGHT_PINK'
             };
 
-            // Build the raw key from selections
-            const rawKey = `${selectedPrimaryColor}_${selectedBill}`.replace(/[\s]/g, '_').replace(/\//g, '_').toUpperCase();
+            // Extract base color (same logic as Step 2)
+            const baseColor = selectedPrimaryColor.split('/')[0];
+
+            // Build the raw key from selections using BASE color and neck length
+            const rawKey = `${baseColor}_${selectedNeck}`.replace(/[\s]/g, '_').replace(/\//g, '_').toUpperCase();
 
             // Map to correct key or use raw key if not in mappings
             const categoryKey = featureMappings[rawKey] || rawKey;
 
-            console.log('Color:', selectedPrimaryColor, 'Bill:', selectedBill, 'Raw key:', rawKey, 'Final key:', categoryKey);
+            console.log('Color:', selectedPrimaryColor, 'Neck:', selectedNeck, 'Raw key:', rawKey, 'Final key:', categoryKey);
 
             const speciesData = decisionTree.decision_tree.step_3_features[categoryKey];
 
@@ -1104,7 +1117,7 @@
 
             container.innerHTML = `
                 <div class="step-header">
-                    <div class="step-number">Step 3 of 3 · ${selectedPrimaryColor} bird with ${selectedBill} bill</div>
+                    <div class="step-number">Step 3 of 3 · ${selectedPrimaryColor} bird with ${selectedNeck}</div>
                     <div class="step-question">${speciesData.question}</div>
                     ${speciesData.help_text ? `<div class="step-help">${speciesData.help_text}</div>` : ''}
                 </div>
@@ -1281,7 +1294,7 @@
         function selectQuickSpecies(code) {
             selectedSpecies = code;
             selectedPrimaryColor = null; // Clear tree mode selections
-            selectedBill = null;
+            selectedNeck = null;
 
             // Update UI
             document.querySelectorAll('.quick-species-card').forEach(card => card.classList.remove('selected'));
@@ -1299,8 +1312,8 @@
             document.getElementById('nextButton').disabled = false;
         }
 
-        function selectBill(bill) {
-            selectedBill = bill;
+        function selectNeck(neck) {
+            selectedNeck = neck;
             document.querySelectorAll('.option-card').forEach(el => el.classList.remove('selected'));
             event.target.closest('.option-card').classList.add('selected');
             document.getElementById('nextButton').disabled = false;
@@ -1329,7 +1342,7 @@
                 if (currentStep === 1 && selectedPrimaryColor) {
                     currentStep = 2;
                     renderStep2();
-                } else if (currentStep === 2 && selectedBill) {
+                } else if (currentStep === 2 && selectedNeck) {
                     currentStep = 3;
                     renderStep3();
                 } else if (currentStep === 3 && selectedSpecies) {
@@ -1341,7 +1354,7 @@
         function goBack() {
             if (currentStep === 2) {
                 currentStep = 1;
-                selectedBill = null;
+                selectedNeck = null;
                 renderStep1();
                 document.querySelector('.btn-back').style.display = 'block';
             } else if (currentStep === 3) {
@@ -1368,7 +1381,7 @@
                 if (classificationMode === 'tree') {
                     payload.decision_path = {
                         color: selectedPrimaryColor,
-                        bill: selectedBill,
+                        neck: selectedNeck,
                         species: selectedSpecies
                     };
                 }

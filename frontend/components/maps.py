@@ -16,6 +16,10 @@ def render_map(df: pd.DataFrame):
     Args:
         df: DataFrame containing latitude and longitude columns
     """
+    # CRITICAL FIX: Reset index to avoid Streamlit's "Row index out of range" bug
+    # This bug occurs with certain dataframe sizes (e.g., exactly 445 rows)
+    df = df.reset_index(drop=True)
+
     # Find coordinate columns (case-insensitive)
     # Be specific to avoid matching "ColonyName" (which contains "lon")
     lat_col = None
