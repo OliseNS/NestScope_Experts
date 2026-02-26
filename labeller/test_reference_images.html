@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Test Reference Images</title>
+    <style>
+        body { font-family: sans-serif; padding: 20px; background: #1a1a1a; color: #e0e0e0; }
+        .test-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; margin-top: 20px; }
+        .test-item { background: #2a2a2a; padding: 15px; border-radius: 8px; border: 1px solid #444; }
+        .test-image { width: 100%; height: 200px; background: #1a1a1a; border-radius: 4px; margin: 10px 0; overflow: hidden; }
+        .test-image img { width: 100%; height: 100%; object-fit: cover; }
+        .status { padding: 5px 10px; border-radius: 4px; margin-top: 10px; font-size: 12px; }
+        .loading { background: #555; }
+        .success { background: #2d5; color: black; }
+        .error { background: #d52; color: white; }
+    </style>
+</head>
+<body>
+    <h1>🧪 Reference Image Loading Test</h1>
+    <p>Testing if bird reference images load correctly through the proxy...</p>
+
+    <div id="testResults">Loading tests...</div>
+
+    <script>
+        const TEST_SPECIES = [
+            { code: 'BRPE', name: 'Brown Pelican', url: 'https://cdn.download.ams.birds.cornell.edu/api/v1/asset/63128991/1800' },
+            { code: 'GREG', name: 'Great Egret', url: 'https://cdn.download.ams.birds.cornell.edu/api/v1/asset/297385091/1800' },
+            { code: 'SNEG', name: 'Snowy Egret', url: 'https://cdn.download.ams.birds.cornell.edu/api/v1/asset/302513691/1800' },
+            { code: 'DCCO', name: 'Double-crested Cormorant', url: 'https://cdn.download.ams.birds.cornell.edu/api/v1/asset/297288661/1800' },
+            { code: 'LAGU', name: 'Laughing Gull', url: 'https://cdn.download.ams.birds.cornell.edu/api/v1/asset/306206101/1800' },
+            { code: 'ROYT', name: 'Royal Tern', url: 'https://cdn.download.ams.birds.cornell.edu/api/v1/asset/243484551/1800' },
+        ];
+
+        function testImages() {
+            const container = document.getElementById('testResults');
+
+            container.innerHTML = `
+                <div class="test-grid">
+                    ${TEST_SPECIES.map(species => {
+                        const proxyUrl = `/api/reference_image_proxy?url=${encodeURIComponent(species.url)}`;
+                        return `
+                            <div class="test-item">
+                                <h3>${species.code}</h3>
+                                <p>${species.name}</p>
+                                <div class="test-image">
+                                    <img
+                                        src="${proxyUrl}"
+                                        alt="${species.name}"
+                                        onload="updateStatus('${species.code}', true)"
+                                        onerror="updateStatus('${species.code}', false, this)">
+                                </div>
+                                <div id="status-${species.code}" class="status loading">Loading...</div>
+                                <div style="font-size: 10px; color: #888; margin-top: 5px; word-break: break-all;">
+                                    ${proxyUrl.substring(0, 50)}...
+                                </div>
+                            </div>
+                        `;
+                    }).join('')}
+                </div>
+            `;
+        }
+
+        function updateStatus(code, success, imgElement) {
+            const statusDiv = document.getElementById(`status-${code}`);
+            if (success) {
+                statusDiv.className = 'status success';
+                statusDiv.textContent = '✓ Loaded successfully';
+            } else {
+                statusDiv.className = 'status error';
+                statusDiv.textContent = '✗ Failed to load';
+                console.error(`Failed to load ${code}:`, imgElement?.src);
+            }
+        }
+
+        // Run tests on load
+        testImages();
+    </script>
+</body>
+</html>

@@ -10,7 +10,7 @@ import cv2
 import torch
 import threading
 import time
-from flask import Flask, render_template, request, jsonify, send_from_directory, redirect, url_for
+from flask import Flask, render_template, request, jsonify, send_from_directory, redirect, url_for, Response
 
 # Add project root to path so we can import labeller.services modules
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -125,6 +125,25 @@ def get_species_list():
     """
     service = get_species_service()
     return service.get_all_species()
+
+# Singleton labeling service instance
+_labeling_service_instance = None
+
+def get_labeling_service():
+    """
+    Get singleton labeling service instance.
+
+    This ensures we only create one LabelingService for the entire app,
+    which keeps label data and metadata in memory for fast access.
+
+    Returns:
+        LabelingService: The singleton instance
+    """
+    global _labeling_service_instance
+    if _labeling_service_instance is None:
+        from labeller.services.labeling_service import LabelingService
+        _labeling_service_instance = LabelingService(Config.DATASET_PATH)
+    return _labeling_service_instance
 
 @app.route('/')
 def index():
@@ -451,6 +470,36 @@ def get_species():
             "message": str(e),
             "species": [],
             "count": 0
+        }), 500
+
+@app.route('/api/species/<species_code>/references', methods=['GET'])
+def get_species_references(species_code):
+    """
+    Get reference images and links for a specific species.
+
+    Returns:
+        JSON with reference photos URLs, eBird link, and field guide link:
+        {
+            "name": "Brown Pelican",
+            "photos": ["url1", "url2", "url3"],
+            "ebird": "https://ebird.org/species/brnpel",
+            "guide": "https://www.allaboutbirds.org/guide/Brown_Pelican"
+        }
+    """
+    try:
+        # Use complete reference images database with ALL 41 species
+        from labeller.services.reference_images_complete import get_reference_images
+        references = get_reference_images(species_code.upper())
+        return jsonify(references)
+    except Exception as e:
+        print(f"ERROR in /api/species/{species_code}/references: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({
+            "name": species_code,
+            "photos": [],
+            "ebird": "https://ebird.org/explore",
+            "guide": "https://www.allaboutbirds.org"
         }), 500
 
 # ============================================================================
@@ -1247,14 +1296,10 @@ def run_clustering():
 @app.route('/classify')
 def species_classification_interface():
     """
-    Cluster-Aware Species Classification Interface.
-
-    This is where users identify species for INDIVIDUAL birds within clusters!
-    Clustering groups visually similar birds and filters relevant species options.
-
-    IMPORTANT: Each bird is labeled individually - clusters are NOT uniform!
+    Redirect to tree-based classification interface.
+    Grid view has been removed - tree view is now the only classification method.
     """
-    return render_template('species_classification.html')
+    return redirect(url_for('species_classification_tree'))
 
 @app.route('/classify-tree')
 def species_classification_tree():
@@ -1270,6 +1315,17 @@ def species_classification_tree():
     """
     return render_template('species_classification_tree.html')
 
+@app.route('/classify-akinator')
+def classify_akinator():
+    """
+    Akinator-Style Classification Interface.
+
+    Smart question-based identification using probabilistic feature matching.
+    Shows full images with bounding boxes and asks progressive questions
+    to narrow down species systematically.
+    """
+    return render_template('species_classification_akinator.html')
+
 @app.route('/diagnostic')
 def diagnostic_page():
     """
@@ -1279,6 +1335,22 @@ def diagnostic_page():
     Access at: http://localhost:5000/diagnostic
     """
     return render_template('diagnostic.html')
+
+@app.route('/test-images')
+def test_reference_images():
+    """
+    Test page for reference image loading through proxy.
+    Access at: http://localhost:5000/test-images
+    """
+    return send_from_directory('.', 'test_reference_images.html')
+
+@app.route('/debug-gallery')
+def debug_gallery():
+    """
+    Debug page for gallery image loading - comprehensive test.
+    Access at: http://localhost:5000/debug-gallery
+    """
+    return render_template('debug_gallery.html')
 
 @app.route('/api/original_image/<path:image_name>')
 def get_original_image(image_name):
@@ -1499,6 +1571,343 @@ def list_species():
             'status': 'error',
             'message': str(e)
         }), 500
+
+# ==================== AKINATOR-STYLE IDENTIFICATION ROUTES ====================
+
+# Global Akinator engine instances (one per session)
+# In production, use Redis or session management
+akinator_sessions = {}
+
+@app.route('/api/akinator/start', methods=['POST'])
+def start_akinator_session():
+    """
+    Start a new Akinator-style identification session.
+
+    Request body:
+    {
+        "bird_id": 123,
+        "cluster_id": 5  // optional, for species filtering
+    }
+
+    Returns session_id and first question
+    """
+    try:
+        from labeller.services.akinator_engine import AkinatorEngine
+        import uuid
+
+        data = request.get_json()
+        bird_id = data.get('bird_id')
+        cluster_id = data.get('cluster_id')
+
+        # Create new session
+        session_id = str(uuid.uuid4())
+
+        # Initialize Akinator engine with comprehensive species database
+        species_db_path = os.path.join(Config.DATASET_PATH, "..", "data", "species_feature_profiles_FULL.json")
+        engine = AkinatorEngine(species_db_path)
+
+        # Start session (optionally filter by cluster)
+        available_species = None
+        if cluster_id is not None:
+            # Get suggested species for this cluster
+            labeling_service = get_labeling_service()
+            cluster_info = labeling_service.get_cluster_info(str(cluster_id))
+            suggested = cluster_info.get('suggested_species', [])
+            if suggested:
+                available_species = suggested
+
+        engine.start_session(available_species)
+
+        # Store in memory (use Redis in production)
+        akinator_sessions[session_id] = {
+            'engine': engine,
+            'bird_id': bird_id,
+            'cluster_id': cluster_id,
+            'started_at': time.time()
+        }
+
+        # Get first question
+        question = engine.get_next_question()
+
+        # Include initial candidate gallery
+        initial_candidates = engine.get_top_candidates(n=8)
+
+        return jsonify({
+            'status': 'success',
+            'session_id': session_id,
+            'question': question,
+            'candidates': initial_candidates  # For live gallery
+        })
+
+    except Exception as e:
+        return jsonify({
+            'status': 'error',
+            'message': str(e)
+        }), 500
+
+
+@app.route('/api/akinator/answer', methods=['POST'])
+def answer_akinator_question():
+    """
+    Answer a question and get the next one.
+
+    Request body:
+    {
+        "session_id": "uuid",
+        "feature": "color_white",
+        "value": 0.9,
+        "additional_features": {"color_black": 0.1}  // optional
+    }
+
+    Returns next question or final candidates
+    """
+    try:
+        data = request.get_json()
+        session_id = data.get('session_id')
+        feature = data.get('feature')
+        value = data.get('value')
+        additional_features = data.get('additional_features', {})
+
+        # Get session
+        if session_id not in akinator_sessions:
+            return jsonify({
+                'status': 'error',
+                'message': 'Session not found or expired'
+            }), 404
+
+        session = akinator_sessions[session_id]
+        engine = session['engine']
+
+        # Record answer
+        engine.answer_question(feature, value, additional_features)
+
+        # Check if we should show results
+        if engine.should_show_results():
+            candidates = engine.get_top_candidates(n=5)
+            return jsonify({
+                'status': 'success',
+                'show_results': True,
+                'candidates': candidates,
+                'questions_asked': len(engine.session_state['questions_asked'])
+            })
+
+        # Get next question
+        question = engine.get_next_question()
+
+        if question is None:
+            # No more questions, show results
+            candidates = engine.get_top_candidates(n=5)
+            return jsonify({
+                'status': 'success',
+                'show_results': True,
+                'candidates': candidates,
+                'questions_asked': len(engine.session_state['questions_asked'])
+            })
+
+        # ALWAYS include top candidates for live gallery (even during questioning)
+        top_candidates = engine.get_top_candidates(n=8)
+
+        return jsonify({
+            'status': 'success',
+            'show_results': False,
+            'question': question,
+            'questions_asked': len(engine.session_state['questions_asked']),
+            'candidates': top_candidates  # Live gallery data
+        })
+
+    except Exception as e:
+        return jsonify({
+            'status': 'error',
+            'message': str(e)
+        }), 500
+
+
+@app.route('/api/akinator/finalize', methods=['POST'])
+def finalize_akinator_identification():
+    """
+    Finalize identification and save the label.
+
+    Request body:
+    {
+        "session_id": "uuid",
+        "species_code": "BRPE",
+        "confidence": "high"
+    }
+    """
+    try:
+        data = request.get_json()
+        session_id = data.get('session_id')
+        species_code = data.get('species_code')
+        confidence = data.get('confidence', 'high')
+
+        # Get session
+        if session_id not in akinator_sessions:
+            return jsonify({
+                'status': 'error',
+                'message': 'Session not found'
+            }), 404
+
+        session = akinator_sessions[session_id]
+        bird_id = session['bird_id']
+        cluster_id = session['cluster_id']
+
+        # Save label using labeling service
+        labeling_service = get_labeling_service()
+        label_data = labeling_service.save_label(
+            str(bird_id),
+            species_code,
+            confidence,
+            cluster_id
+        )
+
+        # Get updated progress
+        progress = labeling_service.get_overall_progress()
+
+        # Clean up session
+        del akinator_sessions[session_id]
+
+        return jsonify({
+            'status': 'success',
+            'label': label_data,
+            'progress': progress
+        })
+
+    except Exception as e:
+        return jsonify({
+            'status': 'error',
+            'message': str(e)
+        }), 500
+
+
+@app.route('/api/reference_image_proxy')
+def reference_image_proxy():
+    """
+    Proxy endpoint to fetch reference images from Macaulay Library CDN.
+
+    This avoids CORS issues by fetching images on the backend and serving
+    them through Flask with proper headers.
+
+    Usage: /api/reference_image_proxy?url=<encoded_url>
+    """
+    import requests
+    from urllib.parse import unquote
+
+    try:
+        # Get the image URL from query parameter
+        image_url = request.args.get('url')
+        if not image_url:
+            return jsonify({'error': 'No URL provided'}), 400
+
+        # Decode URL if needed
+        image_url = unquote(image_url)
+
+        # Only allow Macaulay Library CDN URLs for security
+        if not image_url.startswith('https://cdn.download.ams.birds.cornell.edu/'):
+            return jsonify({'error': 'Invalid image source'}), 403
+
+        # Fetch the image from CDN
+        response = requests.get(image_url, timeout=10)
+        response.raise_for_status()
+
+        # Return image with proper headers
+        return Response(
+            response.content,
+            mimetype=response.headers.get('content-type', 'image/jpeg'),
+            headers={
+                'Cache-Control': 'public, max-age=86400',  # Cache for 24 hours
+                'Access-Control-Allow-Origin': '*'
+            }
+        )
+
+    except requests.RequestException as e:
+        return jsonify({'error': f'Failed to fetch image: {str(e)}'}), 502
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/bird/full_image/<bird_id>')
+def get_bird_full_image_with_bbox(bird_id):
+    """
+    Get full image with bounding box overlay for a bird.
+
+    Returns image with highlighted bbox around the specified bird.
+    """
+    try:
+        # Get bird metadata
+        labeling_service = get_labeling_service()
+        metadata = labeling_service.bird_metadata.get(int(bird_id), {})
+
+        if not metadata:
+            return jsonify({'error': 'Bird not found'}), 404
+
+        # Try both 'source_image' (from metadata) and 'image_name' (from labeling service)
+        image_name = metadata.get('source_image') or metadata.get('image_name')
+        bbox_yolo = metadata.get('bbox_yolo')  # [x_center, y_center, width, height] normalized
+
+        if not image_name or not bbox_yolo:
+            print(f"[FULL_IMAGE] ERROR: Missing data for bird {bird_id}")
+            print(f"[FULL_IMAGE] image_name: {image_name}, bbox_yolo: {bbox_yolo}")
+            return jsonify({'error': 'Missing image or bbox data'}), 404
+
+        # Load FULL ORIGINAL image from main dataset (not crops!)
+        images_dir = get_image_dir()  # This gets the actual original images directory
+
+        # Add .jpg extension if not present
+        if not image_name.endswith('.jpg'):
+            image_name = image_name + '.jpg'
+
+        image_path = os.path.join(images_dir, image_name)
+
+        print(f"[FULL_IMAGE] Looking for: {image_name}")
+        print(f"[FULL_IMAGE] Images dir: {images_dir}")
+        print(f"[FULL_IMAGE] Full path: {image_path}")
+        print(f"[FULL_IMAGE] Exists: {os.path.exists(image_path)}")
+
+        if not os.path.exists(image_path):
+            return jsonify({'error': f'Image file not found: {image_name}'}), 404
+
+        # Read image
+        img = cv2.imread(image_path)
+        if img is None:
+            return jsonify({'error': 'Failed to load image'}), 500
+
+        height, width = img.shape[:2]
+        print(f"[FULL_IMAGE] Image size: {width}x{height}")
+
+        # Convert YOLO bbox to pixel coordinates
+        x_center_norm, y_center_norm, w_norm, h_norm = bbox_yolo
+        x_center = int(x_center_norm * width)
+        y_center = int(y_center_norm * height)
+        box_width = int(w_norm * width)
+        box_height = int(h_norm * height)
+
+        # Calculate corner coordinates
+        x1 = int(x_center - box_width / 2)
+        y1 = int(y_center - box_height / 2)
+        x2 = int(x_center + box_width / 2)
+        y2 = int(y_center + box_height / 2)
+
+        print(f"[FULL_IMAGE] Bounding box: ({x1}, {y1}) to ({x2}, {y2})")
+
+        # Draw bounding box (Claude orange color, thin line)
+        color = (87, 119, 217)  # BGR format (Orange)
+        thickness = 2  # Thin, clean line
+        cv2.rectangle(img, (x1, y1), (x2, y2), color, thickness)
+
+        # NO TEXT - just the box!
+
+        # Encode as JPEG
+        _, buffer = cv2.imencode('.jpg', img, [cv2.IMWRITE_JPEG_QUALITY, 92])
+
+        from flask import Response
+        return Response(buffer.tobytes(), mimetype='image/jpeg')
+
+    except Exception as e:
+        print(f"[FULL_IMAGE] ERROR: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
 
 # ==================== END SPECIES LABELING ROUTES ====================
 

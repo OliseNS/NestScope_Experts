@@ -497,6 +497,21 @@
             object-fit: cover;
             border-radius: 4px;
             background: #333;
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+
+        .reference-image:hover {
+            transform: scale(1.05);
+            box-shadow: 0 4px 12px rgba(204, 120, 92, 0.3);
+        }
+
+        .reference-loading {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #666;
+            font-size: 0.9rem;
             border: 1px solid #444;
         }
 
@@ -623,7 +638,7 @@
         </div>
         <div class="navbar-links">
             <a href="/" class="navbar-link">← Back Home</a>
-            <a href="/classify" class="navbar-link">Grid View</a>
+            <a href="/clusters" class="navbar-link">View Clusters</a>
         </div>
     </div>
 
@@ -643,9 +658,6 @@
         <div class="image-viewer">
             <div class="full-image-container" id="imageContainer">
                 <img id="fullImage" class="full-image" alt="Bird aerial view">
-                <div class="bird-highlight" id="birdHighlight" style="display: none;">
-                    <div class="bird-label">Current Bird</div>
-                </div>
             </div>
 
             <!-- Zoom Controls -->
@@ -873,10 +885,9 @@
         async function loadFullImage(bird) {
             const img = document.getElementById('fullImage');
             const container = document.getElementById('imageContainer');
-            const highlight = document.getElementById('birdHighlight');
 
-            // Use direct URL from API response
-            const imagePath = bird.full_image_url || `/api/original_image/${bird.image_name}`;
+            // Use the full_image endpoint which draws the bounding box directly on the image
+            const imagePath = `/api/bird/full_image/${bird.bird_id}`;
 
             console.log(`Loading image for bird ${bird.bird_id}:`, imagePath);
 
@@ -884,45 +895,11 @@
             img.onerror = () => {
                 console.error(`Failed to load full image: ${imagePath}`);
                 console.error(`Bird data:`, bird);
-
-                // Try fallback to crop image
-                console.log('Trying fallback to crop image...');
-                const cropPath = bird.crop_url || `/api/bird_crop/${bird.bird_id}`;
-                img.src = cropPath;
-
-                // If crop also fails, show error
-                img.onerror = () => {
-                    alert(`Error: Could not load image for bird ${bird.bird_id}.\n\nFull image: ${imagePath}\nCrop image: ${cropPath}\n\nCheck server logs for details.`);
-                };
+                alert(`Error: Could not load image for bird ${bird.bird_id}.\n\nEndpoint: ${imagePath}\n\nCheck server logs for details.`);
             };
 
             img.onload = () => {
                 console.log(`Image loaded successfully: ${img.naturalWidth}x${img.naturalHeight}`);
-                // Get bird bounding box from metadata
-                // bbox format: [x_center, y_center, width, height] in normalized coords (0-1)
-                if (bird.bbox) {
-                    const [xCenter, yCenter, width, height] = bird.bbox;
-                    const imgWidth = img.naturalWidth;
-                    const imgHeight = img.naturalHeight;
-
-                    // Convert to pixel coordinates
-                    const xPx = (xCenter - width/2) * imgWidth;
-                    const yPx = (yCenter - height/2) * imgHeight;
-                    const wPx = width * imgWidth;
-                    const hPx = height * imgHeight;
-
-                    // Position highlight box
-                    highlight.style.display = 'block';
-                    highlight.style.left = `${xPx}px`;
-                    highlight.style.top = `${yPx}px`;
-                    highlight.style.width = `${wPx}px`;
-                    highlight.style.height = `${hPx}px`;
-
-                    // Center view on bird
-                    container.scrollLeft = xPx - container.clientWidth / 2 + wPx / 2;
-                    container.scrollTop = yPx - container.clientHeight / 2 + hPx / 2;
-                }
-
                 resetZoom();
             };
         }
@@ -991,11 +968,38 @@
         // STEP 3: Species Selection
         function renderStep3() {
             updateBreadcrumbs(3);
-            const categoryKey = `${selectedSize}_${selectedColor.replace('/', '')}`.replace(/[\s-]/g, '_').toUpperCase();
+
+            // Color label to key mapping (handles slashes and special characters)
+            const colorMappings = {
+                // LARGE birds
+                'LARGE_BROWN/DARK': 'LARGE_BROWN',
+                'LARGE_WHITE/PALE': 'LARGE_WHITE',
+                'LARGE_BLUE-GRAY': 'LARGE_BLUE',
+                'LARGE_BLACK': 'LARGE_BLACK',
+                // MEDIUM birds
+                'MEDIUM_WHITE': 'MEDIUM_WHITE',
+                'MEDIUM_BLUE-GRAY': 'MEDIUM_BLUE',
+                'MEDIUM_DARK/REDDISH': 'MEDIUM_DARK',
+                'MEDIUM_PINK/RED': 'MEDIUM_PINK',
+                // SMALL birds
+                'SMALL_WHITE/PALE': 'SMALL_WHITE',
+                'SMALL_BLACK/DARK': 'SMALL_DARK',
+                'SMALL_GRAY/BROWN': 'SMALL_GRAY'
+            };
+
+            // Build the raw key from selections
+            const rawKey = `${selectedSize}_${selectedColor}`.replace(/[\s]/g, '_').toUpperCase();
+
+            // Map to correct key or use raw key if not in mappings
+            const categoryKey = colorMappings[rawKey] || rawKey;
+
+            console.log('Size:', selectedSize, 'Color:', selectedColor, 'Raw key:', rawKey, 'Final key:', categoryKey);
+
             const speciesData = decisionTree.decision_tree.step_3_features[categoryKey];
 
             if (!speciesData) {
-                console.error('No species data for:', categoryKey);
+                console.error('No species data for key:', categoryKey, 'Available keys:', Object.keys(decisionTree.decision_tree.step_3_features));
+                alert(`Error: Could not find species data for ${categoryKey}. This is a configuration bug - please report it!`);
                 return;
             }
 
@@ -1025,10 +1029,9 @@
                                 <strong>💡 Tip:</strong> ${species.confidence_tips}
                             </div>
                             <div class="reference-section">
-                                <div class="reference-label">📸 Reference Photos (Coming Soon)</div>
-                                <div class="reference-grid">
-                                    <div class="reference-image"></div>
-                                    <div class="reference-image"></div>
+                                <div class="reference-label">📸 Reference Photos</div>
+                                <div class="reference-grid" id="refs-${species.code}">
+                                    <div class="reference-loading">Loading...</div>
                                 </div>
                             </div>
                         </div>
@@ -1037,6 +1040,40 @@
             `;
 
             document.getElementById('nextButton').disabled = true;
+
+            // Load reference photos for all species
+            speciesData.species.forEach(species => {
+                loadReferencePhotos(species.code);
+            });
+        }
+
+        // Load reference photos for a species
+        async function loadReferencePhotos(speciesCode) {
+            try {
+                const response = await fetch(`/api/species/${speciesCode}/references`);
+                const data = await response.json();
+
+                const container = document.getElementById(`refs-${speciesCode}`);
+                if (!container) return;
+
+                if (data.photos && data.photos.length > 0) {
+                    // Display up to 3 reference photos
+                    container.innerHTML = data.photos.slice(0, 3).map(url => `
+                        <a href="${url}" target="_blank" onclick="event.stopPropagation()">
+                            <img src="${url}" class="reference-image" alt="Reference photo"
+                                 onerror="this.style.display='none'">
+                        </a>
+                    `).join('');
+                } else {
+                    container.innerHTML = '<div class="reference-loading">No photos available</div>';
+                }
+            } catch (error) {
+                console.error(`Error loading reference photos for ${speciesCode}:`, error);
+                const container = document.getElementById(`refs-${speciesCode}`);
+                if (container) {
+                    container.innerHTML = '<div class="reference-loading">Failed to load</div>';
+                }
+            }
         }
 
         // QUICK SEARCH MODE

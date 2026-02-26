@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Direct Image Test</title>
+    <style>
+        body { background: #1a1a1a; color: #e0e0e0; padding: 20px; font-family: sans-serif; }
+        .test { margin: 20px 0; padding: 20px; background: #2a2a2a; border-radius: 8px; }
+        img { max-width: 300px; border: 2px solid #444; margin: 10px; }
+        .success { color: #2d5; }
+        .error { color: #d52; }
+    </style>
+</head>
+<body>
+    <h1>🧪 Direct Image Loading Test</h1>
+    <p>Testing if images load directly from Macaulay Library CDN WITHOUT any proxy...</p>
+
+    <div class="test">
+        <h2>Test 1: Direct CDN URL</h2>
+        <p>Brown Pelican from Cornell's Macaulay Library:</p>
+        <img
+            src="https://cdn.download.ams.birds.cornell.edu/api/v1/asset/63128991/1800"
+            alt="Brown Pelican"
+            onload="document.getElementById('test1').innerHTML = '<span class=success>✓ LOADED</span>'"
+            onerror="document.getElementById('test1').innerHTML = '<span class=error>✗ FAILED</span>'">
+        <div id="test1">Loading...</div>
+    </div>
+
+    <div class="test">
+        <h2>Test 2: Multiple Birds</h2>
+        <div id="birds"></div>
+    </div>
+
+    <script>
+        const testBirds = [
+            { name: 'Brown Pelican', url: 'https://cdn.download.ams.birds.cornell.edu/api/v1/asset/63128991/1800' },
+            { name: 'Great Egret', url: 'https://cdn.download.ams.birds.cornell.edu/api/v1/asset/297385091/1800' },
+            { name: 'Snowy Egret', url: 'https://cdn.download.ams.birds.cornell.edu/api/v1/asset/302513691/1800' }
+        ];
+
+        const container = document.getElementById('birds');
+        testBirds.forEach(bird => {
+            const div = document.createElement('div');
+            div.innerHTML = `
+                <h3>${bird.name}</h3>
+                <img src="${bird.url}" alt="${bird.name}"
+                     onload="this.nextSibling.innerHTML = '<span class=success>✓ LOADED</span>'"
+                     onerror="this.nextSibling.innerHTML = '<span class=error>✗ FAILED: ' + this.src + '</span>'">
+                <div>Loading...</div>
+            `;
+            container.appendChild(div);
+        });
+    </script>
+</body>
+</html>
