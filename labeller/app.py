@@ -475,21 +475,38 @@ def get_species():
 @app.route('/api/species/<species_code>/references', methods=['GET'])
 def get_species_references(species_code):
     """
-    Get reference images and links for a specific species.
+    Get reference images and links for a specific species with pagination.
+
+    Query Parameters:
+        offset: Number of images to skip (default: 0)
+        limit: Number of images to return (default: 5)
 
     Returns:
         JSON with reference photos URLs, eBird link, and field guide link:
         {
             "name": "Brown Pelican",
             "photos": ["url1", "url2", "url3"],
+            "offset": 0,
+            "limit": 5,
+            "has_more": true,
             "ebird": "https://ebird.org/species/brnpel",
             "guide": "https://www.allaboutbirds.org/guide/Brown_Pelican"
         }
     """
     try:
+        # Get pagination parameters
+        offset = int(request.args.get('offset', 0))
+        limit = int(request.args.get('limit', 5))
+
         # Use complete reference images database with ALL 41 species
         from labeller.services.reference_images_complete import get_reference_images
-        references = get_reference_images(species_code.upper())
+        references = get_reference_images(species_code.upper(), offset=offset, limit=limit)
+
+        # Add pagination metadata
+        references['offset'] = offset
+        references['limit'] = limit
+        references['has_more'] = len(references.get('photos', [])) >= limit
+
         return jsonify(references)
     except Exception as e:
         print(f"ERROR in /api/species/{species_code}/references: {e}")
@@ -498,6 +515,9 @@ def get_species_references(species_code):
         return jsonify({
             "name": species_code,
             "photos": [],
+            "offset": 0,
+            "limit": limit if 'limit' in locals() else 5,
+            "has_more": False,
             "ebird": "https://ebird.org/explore",
             "guide": "https://www.allaboutbirds.org"
         }), 500
@@ -1782,10 +1802,14 @@ def finalize_akinator_identification():
 @app.route('/api/reference_image_proxy')
 def reference_image_proxy():
     """
-    Proxy endpoint to fetch reference images from Macaulay Library CDN.
+    Proxy endpoint to fetch reference images from trusted sources.
 
-    This avoids CORS issues by fetching images on the backend and serving
+    Avoids CORS issues by fetching images on the backend and serving
     them through Flask with proper headers.
+
+    Supports:
+    - Wikipedia/Wikimedia Commons (primary source)
+    - Macaulay Library CDN (backup source)
 
     Usage: /api/reference_image_proxy?url=<encoded_url>
     """
@@ -1801,8 +1825,14 @@ def reference_image_proxy():
         # Decode URL if needed
         image_url = unquote(image_url)
 
-        # Only allow Macaulay Library CDN URLs for security
-        if not image_url.startswith('https://cdn.download.ams.birds.cornell.edu/'):
+        # Whitelist trusted image sources (security)
+        allowed_sources = [
+            'https://cdn.download.ams.birds.cornell.edu/',  # Macaulay Library
+            'https://commons.wikimedia.org/',                # Wikimedia Commons
+            'https://upload.wikimedia.org/'                  # Wikimedia image server
+        ]
+
+        if not any(image_url.startswith(source) for source in allowed_sources):
             return jsonify({'error': 'Invalid image source'}), 403
 
         # Fetch the image from CDN

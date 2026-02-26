@@ -1,27 +1,43 @@
 """
 Complete Reference Images Database - ALL Gulf Coast Bird Species
 
-This module provides RELIABLE reference image links from Macaulay Library (Cornell Lab)
+This module provides RELIABLE reference images from Wikipedia/Wikimedia Commons
 for ALL 41 species in the Gulf Coast monitoring database.
 
 Educational Note:
 -----------------
-Instead of using individual photo asset IDs (which can break or change), this module
-uses Macaulay Library SEARCH URLs. These dynamically show curated photo galleries
-for each species, sorted by quality rating. This approach is:
+We switched from Macaulay Library to Wikipedia because:
 
-✓ More reliable - URLs never break
-✓ Always current - Shows latest, best-rated photos
-✓ Maintained by Cornell Lab - Professional curation
-✓ Better user experience - Users see multiple angles/plumages
+✓ Direct image URLs that work in <img> tags (no search pages!)
+✓ Free and open - public domain or Creative Commons licensed
+✓ High quality, community-curated photos
+✓ No authentication or API keys required
+✓ Perfect for educational projects
 
 Each species gets:
-- Macaulay Library search URL (photo gallery)
+- Direct Wikipedia/Wikimedia image URLs (actual photos, not search pages)
 - eBird species page URL (identification info + sounds)
 - All About Birds field guide URL (comprehensive species info)
+- Macaulay Library gallery link (for experts wanting more photos)
+
+How it works:
+1. Use Wikipedia API to find species page images
+2. Extract actual photo URLs from Wikimedia Commons
+3. Return direct links that display in <img> tags
+4. Fall back to curated external links if Wikipedia fails
 """
 
 from typing import Dict, List
+import os
+import sys
+
+# Import our Wikipedia image fetcher (V2 - uses Commons search API)
+try:
+    from labeller.services.wikipedia_images_v2 import get_wikipedia_images
+except ImportError:
+    # If running from labeller directory
+    sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
+    from services.wikipedia_images_v2 import get_wikipedia_images
 
 
 # Mapping of our 4-letter codes to eBird taxonomy codes
@@ -204,23 +220,49 @@ def get_all_species_references() -> Dict[str, Dict]:
     return references
 
 
-def get_reference_images(species_code: str) -> Dict[str, any]:
+def get_reference_images(species_code: str, offset: int = 0, limit: int = 5) -> Dict[str, any]:
     """
-    Get reference materials for a species.
+    Get reference materials for a species with ACTUAL displayable images and pagination.
 
-    Returns reliable links to Macaulay Library galleries and field guides.
-    Falls back to generic links if species not in database.
+    Fetches real image URLs from Wikipedia that work in <img> tags!
+    Also provides links to eBird, field guides, and photo galleries.
 
     Args:
         species_code: 4-letter species code (e.g., "BRPE")
+        offset: Number of images to skip (for "Load More" functionality)
+        limit: Number of images to return
 
     Returns:
-        Dict with macaulay_gallery, photos, ebird, and guide links
+        Dict with:
+        - name: Species common name
+        - photos: List of direct Wikipedia image URLs (ready for <img> tags!)
+        - ebird: eBird species page
+        - guide: All About Birds field guide
+        - macaulay_gallery: Macaulay Library photo gallery (for experts)
     """
     all_refs = get_all_species_references()
 
     if species_code in all_refs:
-        return all_refs[species_code]
+        ref = all_refs[species_code]
+        species_name = ref['name']
+
+        # NEW: Fetch actual Wikipedia images (direct URLs!) with pagination
+        try:
+            wikipedia_images = get_wikipedia_images(species_name, max_images=limit, offset=offset)
+
+            # If we got Wikipedia images, use those
+            if wikipedia_images:
+                ref['photos'] = wikipedia_images
+                print(f"✓ Loaded {len(wikipedia_images)} Wikipedia images for {species_name} (offset={offset}, limit={limit})")
+            else:
+                # Fallback: keep Macaulay search URL
+                print(f"⚠️  No Wikipedia images for {species_name}, using Macaulay gallery link")
+
+        except Exception as e:
+            print(f"❌ Error fetching Wikipedia images for {species_name}: {e}")
+            # Keep existing Macaulay search URL as fallback
+
+        return ref
 
     # Fallback for species not in database
     return {

@@ -515,6 +515,94 @@
             border: 1px solid #444;
         }
 
+        .load-more-btn {
+            grid-column: 1 / -1;
+            padding: 0.5rem;
+            background: #2A2A2A;
+            border: 1px solid #444;
+            border-radius: 4px;
+            color: #CC785C;
+            cursor: pointer;
+            font-size: 0.85rem;
+            transition: all 0.2s;
+        }
+
+        .load-more-btn:hover {
+            background: #333;
+            border-color: #CC785C;
+        }
+
+        .load-more-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        /* Image Modal/Lightbox */
+        .image-modal {
+            display: none;
+            position: fixed;
+            z-index: 10000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.95);
+            animation: fadeIn 0.2s;
+        }
+
+        .image-modal.active {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal-content {
+            position: relative;
+            max-width: 90%;
+            max-height: 90%;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .modal-image {
+            max-width: 100%;
+            max-height: 85vh;
+            object-fit: contain;
+            border-radius: 4px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+        }
+
+        .modal-close {
+            position: absolute;
+            top: -40px;
+            right: 0;
+            background: none;
+            border: none;
+            color: white;
+            font-size: 2rem;
+            cursor: pointer;
+            padding: 0.5rem;
+            line-height: 1;
+            transition: color 0.2s;
+        }
+
+        .modal-close:hover {
+            color: #CC785C;
+        }
+
+        .modal-caption {
+            color: #E0E0E0;
+            margin-top: 1rem;
+            text-align: center;
+            font-size: 0.9rem;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
         /* Action Buttons */
         .action-buttons {
             display: flex;
@@ -689,9 +777,9 @@
 
             <!-- Progress Breadcrumbs (Tree Mode Only) -->
             <div class="progress-breadcrumbs" id="breadcrumbs" style="display: none;">
-                <span class="breadcrumb active">Size</span>
+                <span class="breadcrumb active">Color</span>
                 <span>→</span>
-                <span class="breadcrumb">Color</span>
+                <span class="breadcrumb">Bill Shape</span>
                 <span>→</span>
                 <span class="breadcrumb">Species</span>
             </div>
@@ -720,9 +808,9 @@
         let decisionTree = null;
         let allSpecies = [];
         let classificationMode = 'tree'; // 'tree' or 'search'
-        let currentStep = 1; // 1=Size, 2=Color, 3=Species
-        let selectedSize = null;
-        let selectedColor = null;
+        let currentStep = 1; // 1=Color, 2=Bill, 3=Species
+        let selectedPrimaryColor = null;
+        let selectedBill = null;
         let selectedSpecies = null;
         let imageZoom = 1;
         let isPanning = false;
@@ -800,8 +888,8 @@
         async function selectCluster(clusterId) {
             currentCluster = clusterId;
             currentStep = 1;
-            selectedSize = null;
-            selectedColor = null;
+            selectedPrimaryColor = null;
+            selectedBill = null;
             selectedSpecies = null;
 
             // Update active cluster
@@ -853,8 +941,8 @@
                     bbox: data.bbox
                 });
                 currentStep = 1;
-                selectedSize = null;
-                selectedColor = null;
+                selectedPrimaryColor = null;
+                selectedBill = null;
                 selectedSpecies = null;
                 classificationMode = 'tree'; // Reset to tree mode for new bird
 
@@ -904,10 +992,10 @@
             };
         }
 
-        // STEP 1: Size Selection
+        // STEP 1: Color Selection
         function renderStep1() {
             updateBreadcrumbs(1);
-            const step = decisionTree.decision_tree.step_1_size;
+            const step = decisionTree.decision_tree.step_1_color;
             const container = document.getElementById('decisionStep');
 
             container.innerHTML = `
@@ -918,7 +1006,7 @@
                 </div>
                 <div class="options-grid">
                     ${step.options.map(option => `
-                        <div class="option-card" onclick="selectSize('${option.label}')">
+                        <div class="option-card" onclick="selectPrimaryColor('${option.label}')">
                             <div class="option-icon">${option.icon}</div>
                             <div class="option-content">
                                 <div class="option-label">${option.label}</div>
@@ -937,21 +1025,21 @@
             document.querySelector('.btn-back').style.display = 'block';
         }
 
-        // STEP 2: Color Selection
+        // STEP 2: Bill Shape Selection
         function renderStep2() {
             updateBreadcrumbs(2);
-            const colorOptions = decisionTree.decision_tree.step_2_color[selectedSize];
+            const billOptions = decisionTree.decision_tree.step_2_bill[selectedPrimaryColor];
             const container = document.getElementById('decisionStep');
 
             container.innerHTML = `
                 <div class="step-header">
-                    <div class="step-number">Step 2 of 3 · ${selectedSize} bird</div>
-                    <div class="step-question">${colorOptions.question}</div>
-                    <div class="step-help">${colorOptions.help_text}</div>
+                    <div class="step-number">Step 2 of 3 · ${selectedPrimaryColor} bird</div>
+                    <div class="step-question">${billOptions.question}</div>
+                    <div class="step-help">${billOptions.help_text}</div>
                 </div>
                 <div class="options-grid">
-                    ${colorOptions.options.map(option => `
-                        <div class="option-card" onclick="selectColor('${option.label}')">
+                    ${billOptions.options.map(option => `
+                        <div class="option-card" onclick="selectBill('${option.label}')">
                             <div class="option-icon">${option.icon}</div>
                             <div class="option-content">
                                 <div class="option-label">${option.label}</div>
@@ -969,31 +1057,40 @@
         function renderStep3() {
             updateBreadcrumbs(3);
 
-            // Color label to key mapping (handles slashes and special characters)
-            const colorMappings = {
-                // LARGE birds
-                'LARGE_BROWN/DARK': 'LARGE_BROWN',
-                'LARGE_WHITE/PALE': 'LARGE_WHITE',
-                'LARGE_BLUE-GRAY': 'LARGE_BLUE',
-                'LARGE_BLACK': 'LARGE_BLACK',
-                // MEDIUM birds
-                'MEDIUM_WHITE': 'MEDIUM_WHITE',
-                'MEDIUM_BLUE-GRAY': 'MEDIUM_BLUE',
-                'MEDIUM_DARK/REDDISH': 'MEDIUM_DARK',
-                'MEDIUM_PINK/RED': 'MEDIUM_PINK',
-                // SMALL birds
-                'SMALL_WHITE/PALE': 'SMALL_WHITE',
-                'SMALL_BLACK/DARK': 'SMALL_DARK',
-                'SMALL_GRAY/BROWN': 'SMALL_GRAY'
+            // Color/bill label to key mapping (handles slashes and special characters)
+            const featureMappings = {
+                // WHITE birds by bill type
+                'WHITE/PALE_MASSIVE_POUCHED': 'WHITE_MASSIVE',
+                'WHITE/PALE_LONG_STRAIGHT': 'WHITE_LONG',
+                'WHITE/PALE_MEDIUM_POINTED': 'WHITE_MEDIUM',
+                'WHITE/PALE_UPTURNED': 'WHITE_UPTURNED',
+                // DARK birds by bill type
+                'DARK/BLACK_MASSIVE_POUCHED': 'DARK_MASSIVE',
+                'DARK/BLACK_HOOKED': 'DARK_HOOKED',
+                'DARK/BLACK_HUGE_RED': 'DARK_HUGE_RED',
+                'DARK/BLACK_MEDIUM_POINTED': 'DARK_MEDIUM',
+                'DARK/BLACK_VERY_LONG_WINGS': 'DARK_WINGS',
+                // BLUE-GRAY birds by bill length
+                'BLUE-GRAY_VERY_LONG': 'BLUE_VERY_LONG',
+                'BLUE-GRAY_MEDIUM_TO_LONG': 'BLUE_MEDIUM',
+                'BLUE-GRAY_SHORT_HEAVY': 'BLUE_SHORT',
+                // BROWN birds by bill shape
+                'BROWN/REDDISH_LONG_CURVED': 'BROWN_CURVED',
+                'BROWN/REDDISH_LONG_STRAIGHT': 'BROWN_STRAIGHT',
+                'BROWN/REDDISH_HUGE_ORANGE': 'BROWN_ORANGE',
+                'BROWN/REDDISH_VERY_THIN': 'BROWN_THIN',
+                'BROWN/REDDISH_MEDIUM': 'BROWN_MEDIUM',
+                // PINK birds (confirmation only)
+                'PINK/RED_YES_-_BRIGHT_PINK': 'PINK_CONFIRMATION'
             };
 
             // Build the raw key from selections
-            const rawKey = `${selectedSize}_${selectedColor}`.replace(/[\s]/g, '_').toUpperCase();
+            const rawKey = `${selectedPrimaryColor}_${selectedBill}`.replace(/[\s]/g, '_').replace(/\//g, '_').toUpperCase();
 
             // Map to correct key or use raw key if not in mappings
-            const categoryKey = colorMappings[rawKey] || rawKey;
+            const categoryKey = featureMappings[rawKey] || rawKey;
 
-            console.log('Size:', selectedSize, 'Color:', selectedColor, 'Raw key:', rawKey, 'Final key:', categoryKey);
+            console.log('Color:', selectedPrimaryColor, 'Bill:', selectedBill, 'Raw key:', rawKey, 'Final key:', categoryKey);
 
             const speciesData = decisionTree.decision_tree.step_3_features[categoryKey];
 
@@ -1007,7 +1104,7 @@
 
             container.innerHTML = `
                 <div class="step-header">
-                    <div class="step-number">Step 3 of 3 · ${selectedSize} ${selectedColor} bird</div>
+                    <div class="step-number">Step 3 of 3 · ${selectedPrimaryColor} bird with ${selectedBill} bill</div>
                     <div class="step-question">${speciesData.question}</div>
                     ${speciesData.help_text ? `<div class="step-help">${speciesData.help_text}</div>` : ''}
                 </div>
@@ -1047,30 +1144,82 @@
             });
         }
 
-        // Load reference photos for a species
-        async function loadReferencePhotos(speciesCode) {
+        // Track loaded images per species for pagination
+        const loadedImagesState = {};
+
+        // Load reference photos for a species with pagination support
+        async function loadReferencePhotos(speciesCode, append = false) {
             try {
-                const response = await fetch(`/api/species/${speciesCode}/references`);
+                // Initialize state if first load
+                if (!loadedImagesState[speciesCode]) {
+                    loadedImagesState[speciesCode] = {
+                        offset: 0,
+                        limit: 5,
+                        hasMore: true,
+                        speciesName: ''
+                    };
+                }
+
+                const state = loadedImagesState[speciesCode];
+                const offset = append ? state.offset : 0;
+
+                const response = await fetch(`/api/species/${speciesCode}/references?offset=${offset}&limit=${state.limit}`);
                 const data = await response.json();
 
                 const container = document.getElementById(`refs-${speciesCode}`);
                 if (!container) return;
 
+                // Store species name for modal
+                state.speciesName = data.name || speciesCode;
+
                 if (data.photos && data.photos.length > 0) {
-                    // Display up to 3 reference photos
-                    container.innerHTML = data.photos.slice(0, 3).map(url => `
-                        <a href="${url}" target="_blank" onclick="event.stopPropagation()">
-                            <img src="${url}" class="reference-image" alt="Reference photo"
-                                 onerror="this.style.display='none'">
-                        </a>
+                    // Generate image HTML
+                    const imagesHTML = data.photos.map(url => `
+                        <img src="${url}"
+                             class="reference-image"
+                             alt="Reference photo"
+                             onclick="openImageModal('${url}', '${state.speciesName}')"
+                             onerror="this.style.display='none'">
                     `).join('');
+
+                    // Append or replace content
+                    if (append) {
+                        // Remove old load more button
+                        const oldBtn = container.querySelector('.load-more-btn');
+                        if (oldBtn) oldBtn.remove();
+
+                        // Append new images
+                        container.insertAdjacentHTML('beforeend', imagesHTML);
+                    } else {
+                        container.innerHTML = imagesHTML;
+                    }
+
+                    // Update state
+                    state.offset += data.photos.length;
+                    state.hasMore = data.has_more;
+
+                    // Add "Load More" button if there are more images
+                    if (state.hasMore) {
+                        const loadMoreBtn = document.createElement('button');
+                        loadMoreBtn.className = 'load-more-btn';
+                        loadMoreBtn.textContent = 'Load More Images';
+                        loadMoreBtn.onclick = (e) => {
+                            e.stopPropagation();
+                            loadMoreBtn.disabled = true;
+                            loadMoreBtn.textContent = 'Loading...';
+                            loadReferencePhotos(speciesCode, true);
+                        };
+                        container.appendChild(loadMoreBtn);
+                    }
                 } else {
-                    container.innerHTML = '<div class="reference-loading">No photos available</div>';
+                    if (!append) {
+                        container.innerHTML = '<div class="reference-loading">No photos available</div>';
+                    }
                 }
             } catch (error) {
                 console.error(`Error loading reference photos for ${speciesCode}:`, error);
                 const container = document.getElementById(`refs-${speciesCode}`);
-                if (container) {
+                if (container && !append) {
                     container.innerHTML = '<div class="reference-loading">Failed to load</div>';
                 }
             }
@@ -1131,8 +1280,8 @@
 
         function selectQuickSpecies(code) {
             selectedSpecies = code;
-            selectedSize = null; // Clear tree mode selections
-            selectedColor = null;
+            selectedPrimaryColor = null; // Clear tree mode selections
+            selectedBill = null;
 
             // Update UI
             document.querySelectorAll('.quick-species-card').forEach(card => card.classList.remove('selected'));
@@ -1143,15 +1292,15 @@
         }
 
         // Selection handlers (Tree Mode)
-        function selectSize(size) {
-            selectedSize = size;
+        function selectPrimaryColor(color) {
+            selectedPrimaryColor = color;
             document.querySelectorAll('.option-card').forEach(el => el.classList.remove('selected'));
             event.target.closest('.option-card').classList.add('selected');
             document.getElementById('nextButton').disabled = false;
         }
 
-        function selectColor(color) {
-            selectedColor = color;
+        function selectBill(bill) {
+            selectedBill = bill;
             document.querySelectorAll('.option-card').forEach(el => el.classList.remove('selected'));
             event.target.closest('.option-card').classList.add('selected');
             document.getElementById('nextButton').disabled = false;
@@ -1177,10 +1326,10 @@
                 }
             } else {
                 // Tree mode - navigate through steps
-                if (currentStep === 1 && selectedSize) {
+                if (currentStep === 1 && selectedPrimaryColor) {
                     currentStep = 2;
                     renderStep2();
-                } else if (currentStep === 2 && selectedColor) {
+                } else if (currentStep === 2 && selectedBill) {
                     currentStep = 3;
                     renderStep3();
                 } else if (currentStep === 3 && selectedSpecies) {
@@ -1192,7 +1341,7 @@
         function goBack() {
             if (currentStep === 2) {
                 currentStep = 1;
-                selectedColor = null;
+                selectedBill = null;
                 renderStep1();
                 document.querySelector('.btn-back').style.display = 'block';
             } else if (currentStep === 3) {
@@ -1218,8 +1367,8 @@
                 // Add decision path only for tree mode
                 if (classificationMode === 'tree') {
                     payload.decision_path = {
-                        size: selectedSize,
-                        color: selectedColor,
+                        color: selectedPrimaryColor,
+                        bill: selectedBill,
                         species: selectedSpecies
                     };
                 }
@@ -1340,6 +1489,56 @@
             document.getElementById('modeSelector').style.display = 'none';
             document.getElementById('breadcrumbs').style.display = 'none';
         }
+
+        // ==================== IMAGE MODAL FUNCTIONS ====================
+
+        function openImageModal(imageUrl, speciesName) {
+            const modal = document.getElementById('imageModal');
+            const modalImg = document.getElementById('modalImage');
+            const caption = document.getElementById('modalCaption');
+
+            modal.classList.add('active');
+            modalImg.src = imageUrl;
+            caption.textContent = speciesName || 'Reference Image';
+
+            // Prevent body scroll when modal is open
+            document.body.style.overflow = 'hidden';
+        }
+
+        function closeImageModal() {
+            const modal = document.getElementById('imageModal');
+            modal.classList.remove('active');
+
+            // Restore body scroll
+            document.body.style.overflow = 'auto';
+        }
+
+        // Close modal on background click
+        document.addEventListener('DOMContentLoaded', () => {
+            const modal = document.getElementById('imageModal');
+            modal.addEventListener('click', (e) => {
+                if (e.target === modal) {
+                    closeImageModal();
+                }
+            });
+
+            // Close modal on Escape key
+            document.addEventListener('keydown', (e) => {
+                if (e.key === 'Escape') {
+                    closeImageModal();
+                }
+            });
+        });
     </script>
+
+    <!-- Image Modal -->
+    <div id="imageModal" class="image-modal">
+        <div class="modal-content">
+            <button class="modal-close" onclick="closeImageModal()">&times;</button>
+            <img id="modalImage" class="modal-image" alt="Reference Image">
+            <div id="modalCaption" class="modal-caption"></div>
+        </div>
+    </div>
+
 </body>
 </html>

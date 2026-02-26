@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Image Modal Demo - NestScope</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #0F0F0F;
+            color: #E0E0E0;
+            padding: 2rem;
+        }
+
+        h1 {
+            color: #CC785C;
+            margin-bottom: 1rem;
+        }
+
+        .info-box {
+            background: #1A1A1A;
+            border-left: 4px solid #CC785C;
+            padding: 1rem;
+            margin-bottom: 2rem;
+            border-radius: 4px;
+        }
+
+        .test-section {
+            background: #1E1E1E;
+            padding: 2rem;
+            border-radius: 8px;
+            margin-bottom: 2rem;
+        }
+
+        .reference-photos {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 0.5rem;
+            margin-top: 1rem;
+        }
+
+        .reference-image {
+            width: 100%;
+            height: 150px;
+            object-fit: cover;
+            border-radius: 4px;
+            background: #333;
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+
+        .reference-image:hover {
+            transform: scale(1.05);
+            box-shadow: 0 4px 12px rgba(204, 120, 92, 0.3);
+        }
+
+        .load-more-btn {
+            grid-column: 1 / -1;
+            padding: 0.75rem;
+            background: #2A2A2A;
+            border: 1px solid #444;
+            border-radius: 4px;
+            color: #CC785C;
+            cursor: pointer;
+            font-size: 0.9rem;
+            transition: all 0.2s;
+        }
+
+        .load-more-btn:hover {
+            background: #333;
+            border-color: #CC785C;
+        }
+
+        /* Image Modal/Lightbox */
+        .image-modal {
+            display: none;
+            position: fixed;
+            z-index: 10000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.95);
+            animation: fadeIn 0.2s;
+        }
+
+        .image-modal.active {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal-content {
+            position: relative;
+            max-width: 90%;
+            max-height: 90%;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .modal-image {
+            max-width: 100%;
+            max-height: 85vh;
+            object-fit: contain;
+            border-radius: 4px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+        }
+
+        .modal-close {
+            position: absolute;
+            top: -40px;
+            right: 0;
+            background: none;
+            border: none;
+            color: white;
+            font-size: 2rem;
+            cursor: pointer;
+            padding: 0.5rem;
+            line-height: 1;
+            transition: color 0.2s;
+        }
+
+        .modal-close:hover {
+            color: #CC785C;
+        }
+
+        .modal-caption {
+            color: #E0E0E0;
+            margin-top: 1rem;
+            text-align: center;
+            font-size: 0.9rem;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
+        .status {
+            margin-top: 1rem;
+            padding: 0.75rem;
+            background: #2A2A2A;
+            border-radius: 4px;
+            font-size: 0.85rem;
+            color: #999;
+        }
+    </style>
+</head>
+<body>
+    <h1>🖼️ Image Modal & Load More Demo</h1>
+
+    <div class="info-box">
+        <strong>Test Instructions:</strong>
+        <ul style="margin-left: 1.5rem; margin-top: 0.5rem;">
+            <li>Click any image to open the modal</li>
+            <li>Click × button, press ESC, or click background to close</li>
+            <li>Click "Load More Images" to add 5 more images</li>
+        </ul>
+    </div>
+
+    <div class="test-section">
+        <h2 style="margin-bottom: 0.5rem;">Brown Pelican Reference Images</h2>
+        <p style="color: #999; font-size: 0.9rem; margin-bottom: 1rem;">
+            Loaded: <span id="imageCount">5</span> images
+        </p>
+
+        <div class="reference-photos" id="imageContainer">
+            <!-- Images will be inserted here -->
+        </div>
+
+        <div class="status" id="status">
+            Ready to load images from Wikipedia Commons...
+        </div>
+    </div>
+
+    <!-- Image Modal -->
+    <div id="imageModal" class="image-modal">
+        <div class="modal-content">
+            <button class="modal-close" onclick="closeImageModal()">&times;</button>
+            <img id="modalImage" class="modal-image" alt="Reference Image">
+            <div id="modalCaption" class="modal-caption"></div>
+        </div>
+    </div>
+
+    <script>
+        let loadedImages = 0;
+        const IMAGES_PER_LOAD = 5;
+        const MAX_IMAGES = 15; // Limit for demo
+
+        // Sample bird images from Wikipedia Commons
+        const SAMPLE_IMAGES = [
+            "https://upload.wikimedia.org/wikipedia/commons/thumb/d/db/Brown_Pelican%2C_Pelagic_Boat_Trip.jpg/800px-Brown_Pelican%2C_Pelagic_Boat_Trip.jpg",
+            "https://upload.wikimedia.org/wikipedia/commons/thumb/2/2f/Pelecanus_occidentalis_in_ensenada.jpg/800px-Pelecanus_occidentalis_in_ensenada.jpg",
+            "https://upload.wikimedia.org/wikipedia/commons/thumb/1/1e/Pelecanus_occidentalis_at_Bodega_Harbor.jpg/800px-Pelecanus_occidentalis_at_Bodega_Harbor.jpg",
+            "https://upload.wikimedia.org/wikipedia/commons/thumb/b/b6/Ardea_alba4.jpg/800px-Ardea_alba4.jpg",
+            "https://upload.wikimedia.org/wikipedia/commons/thumb/0/07/Ardea_alba%3B_3_chicks%2C_Morro_Bay_Heron_Rookery_-_California_-_USA_1.jpg/800px-Ardea_alba%3B_3_chicks%2C_Morro_Bay_Heron_Rookery_-_California_-_USA_1.jpg",
+            "https://upload.wikimedia.org/wikipedia/commons/thumb/e/e6/Rosa_L%C3%B6ffler_%28Platalea_ajaja%29-8.jpg/800px-Rosa_L%C3%B6ffler_%28Platalea_ajaja%29-8.jpg",
+            "https://upload.wikimedia.org/wikipedia/commons/thumb/2/21/Roseate_spoonbills_at_Smith_Oaks_Sanctuary%2C_Texas.jpg/800px-Roseate_spoonbills_at_Smith_Oaks_Sanctuary%2C_Texas.jpg",
+            "https://upload.wikimedia.org/wikipedia/commons/thumb/5/5e/Roseate_Spoonbill._Platalea_ajaja_-_Flickr_-_gailhampshire.jpg/800px-Roseate_Spoonbill._Platalea_ajaja_-_Flickr_-_gailhampshire.jpg",
+            "https://upload.wikimedia.org/wikipedia/commons/thumb/e/e4/Fregata_magnificens_-Galapagos%2C_Ecuador_-female-8.jpg/800px-Fregata_magnificens_-Galapagos%2C_Ecuador_-female-8.jpg",
+            "https://upload.wikimedia.org/wikipedia/commons/thumb/a/ad/Magnificent_frigatebird_%28female%29_01.jpg/800px-Magnificent_frigatebird_%28female%29_01.jpg"
+        ];
+
+        function openImageModal(imageUrl, caption) {
+            const modal = document.getElementById('imageModal');
+            const modalImg = document.getElementById('modalImage');
+            const captionText = document.getElementById('modalCaption');
+
+            modal.classList.add('active');
+            modalImg.src = imageUrl;
+            captionText.textContent = caption;
+
+            // Prevent body scroll
+            document.body.style.overflow = 'hidden';
+        }
+
+        function closeImageModal() {
+            const modal = document.getElementById('imageModal');
+            modal.classList.remove('active');
+
+            // Restore body scroll
+            document.body.style.overflow = 'auto';
+        }
+
+        function loadMoreImages() {
+            const container = document.getElementById('imageContainer');
+            const status = document.getElementById('status');
+
+            // Remove existing load more button
+            const oldBtn = container.querySelector('.load-more-btn');
+            if (oldBtn) oldBtn.remove();
+
+            // Simulate loading
+            status.textContent = 'Loading more images from Wikipedia Commons...';
+            status.style.color = '#FFA500';
+
+            setTimeout(() => {
+                // Add 5 more images
+                const endIndex = Math.min(loadedImages + IMAGES_PER_LOAD, MAX_IMAGES);
+
+                for (let i = loadedImages; i < endIndex; i++) {
+                    const img = document.createElement('img');
+                    img.src = SAMPLE_IMAGES[i % SAMPLE_IMAGES.length];
+                    img.className = 'reference-image';
+                    img.alt = `Reference photo ${i + 1}`;
+                    img.onclick = () => openImageModal(img.src, `Brown Pelican - Image ${i + 1}`);
+                    container.appendChild(img);
+                }
+
+                loadedImages = endIndex;
+
+                // Update count
+                document.getElementById('imageCount').textContent = loadedImages;
+
+                // Update status
+                status.textContent = `✓ Loaded ${loadedImages} images`;
+                status.style.color = '#2ECC71';
+
+                // Add load more button if more images available
+                if (loadedImages < MAX_IMAGES) {
+                    const loadMoreBtn = document.createElement('button');
+                    loadMoreBtn.className = 'load-more-btn';
+                    loadMoreBtn.textContent = `Load More Images (${MAX_IMAGES - loadedImages} remaining)`;
+                    loadMoreBtn.onclick = loadMoreImages;
+                    container.appendChild(loadMoreBtn);
+                } else {
+                    status.textContent = `✓ All ${loadedImages} images loaded`;
+                }
+            }, 500); // Simulate network delay
+        }
+
+        // Close modal on background click
+        document.getElementById('imageModal').addEventListener('click', (e) => {
+            if (e.target.id === 'imageModal') {
+                closeImageModal();
+            }
+        });
+
+        // Close modal on Escape key
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                closeImageModal();
+            }
+        });
+
+        // Load initial images
+        window.addEventListener('load', loadMoreImages);
+    </script>
+</body>
+</html>

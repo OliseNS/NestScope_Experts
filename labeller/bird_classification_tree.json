@@ -1,410 +1,418 @@
 {
   "decision_tree": {
-    "step_1_size": {
-      "question": "What is the bird's SIZE from aerial view?",
-      "help_text": "Compare to nearby birds if available. Use body length as reference.",
+    "step_1_color": {
+      "question": "What is the bird's PRIMARY COLOR from aerial view?",
+      "help_text": "Look at the dominant body color. This is visible even from high altitude.",
       "options": [
         {
-          "label": "LARGE",
-          "description": "Pelicans, Cormorants, Great Blue Heron, Wood Stork (>70cm)",
-          "icon": "🦅",
-          "species_codes": ["BRPE", "AWPE", "DCCO", "NECO", "ANHI", "GBHE", "WOST", "MAFR", "UNCO"]
+          "label": "WHITE/PALE",
+          "description": "Pure white or very pale gray plumage (Pelicans, Egrets, Terns)",
+          "icon": "⚪",
+          "species_codes": ["AWPE", "GREG", "SNEG", "CAEG", "REEG WM", "WHEG", "UNEG", "ROYT", "SATE", "CATE", "COTE", "FOTE", "LETE", "GBTE", "ROST", "WOST", "AMAV", "CARO", "FOCO", "ROSA", "USTE", "ULTE", "UNTE"]
         },
         {
-          "label": "MEDIUM",
-          "description": "Egrets, Herons, Ibis, Spoonbills (30-70cm)",
-          "icon": "🐦",
-          "species_codes": ["GREG", "SNEG", "CAEG", "LTBH", "TRHE", "REEG", "REEG DM", "REEG WM", "BCNH", "YCNH", "ROSP", "WHIB", "WFIB", "DAIB", "SDHE", "WHEG", "UNEG", "UNNH", "UNIB", "UNHG", "WADE"]
+          "label": "DARK/BLACK",
+          "description": "Black, very dark brown, or dark gray (Cormorants, Anhingas, Skimmers, Noddies)",
+          "icon": "⚫",
+          "species_codes": ["BRPE", "DCCO", "NECO", "ANHI", "MAFR", "UNCO", "BLSK", "BLTE", "SOTE", "BRNO", "LAGU", "SONO"]
         },
         {
-          "label": "SMALL",
-          "description": "Terns, Gulls, Skimmers, Shorebirds (<30cm)",
-          "icon": "🕊️",
-          "species_codes": ["LETE", "COTE", "FOTE", "GBTE", "BLSK", "ROST", "ROYT", "SATE", "CATE", "BLTE", "SOTE", "LAGU", "HERG", "AMAV", "AMOY", "BNST", "RUTU", "BRNO", "CARO", "FOCO", "ROSA", "SONO", "USTE", "ULTE", "ULGU", "UNGU", "UNGT", "UNTE", "UNSB"]
+          "label": "BLUE-GRAY",
+          "description": "Blue-gray, slate, or ash colored (Herons, Night-Herons)",
+          "icon": "🔵",
+          "species_codes": ["GBHE", "LTBH", "TRHE", "BCNH", "YCNH", "SDHE", "UNHG"]
+        },
+        {
+          "label": "BROWN/REDDISH",
+          "description": "Brown, reddish-brown, or mixed dark colors (Reddish Egret, Ibis)",
+          "icon": "🟤",
+          "species_codes": ["REEG", "REEG DM", "WHIB", "WFIB", "DAIB", "UNIB", "HERG", "AMOY", "BNST", "RUTU", "ULGU", "UNGU", "UNGT", "UNSB"]
+        },
+        {
+          "label": "PINK/RED",
+          "description": "Bright pink or reddish overall (Spoonbill - unmistakable!)",
+          "icon": "🔴",
+          "species_codes": ["ROSP"]
         }
       ]
     },
-    "step_2_color": {
-      "LARGE": {
-        "question": "What is the PRIMARY COLOR?",
-        "help_text": "Look at the dominant body color from above.",
+    "step_2_bill": {
+      "WHITE": {
+        "question": "What is the BILL SHAPE and LENGTH?",
+        "help_text": "Look at the bill carefully - shape is diagnostic even from aerial view.",
         "options": [
           {
-            "label": "BROWN/DARK",
-            "description": "Brown, dark gray, or black plumage",
-            "icon": "🟤",
-            "species_codes": ["BRPE", "DCCO", "NECO", "ANHI", "UNCO"]
+            "label": "MASSIVE POUCHED",
+            "description": "Huge bill with visible pouch (Pelicans)",
+            "icon": "🦩",
+            "species_codes": ["AWPE"]
           },
           {
-            "label": "WHITE/PALE",
-            "description": "White or very pale plumage",
-            "icon": "⚪",
-            "species_codes": ["AWPE", "WOST"]
+            "label": "LONG STRAIGHT",
+            "description": "Long, straight, needle-like bill (Egrets, Herons, Stork)",
+            "icon": "📍",
+            "species_codes": ["GREG", "SNEG", "CAEG", "REEG WM", "WHEG", "UNEG", "WOST"]
           },
           {
-            "label": "BLUE-GRAY",
-            "description": "Blue-gray or slate colored",
-            "icon": "🔵",
+            "label": "MEDIUM POINTED",
+            "description": "Medium length, pointed bill (Terns)",
+            "icon": "▶️",
+            "species_codes": ["ROYT", "SATE", "CATE", "COTE", "FOTE", "LETE", "GBTE", "ROST", "CARO", "FOCO", "ROSA", "USTE", "ULTE", "UNTE"]
+          },
+          {
+            "label": "UPTURNED",
+            "description": "Upturned bill (Avocet)",
+            "icon": "⤴️",
+            "species_codes": ["AMAV"]
+          }
+        ]
+      },
+      "DARK": {
+        "question": "What is the BILL SHAPE and LENGTH?",
+        "help_text": "Bill shape helps separate cormorants from pelicans and skimmers.",
+        "options": [
+          {
+            "label": "MASSIVE POUCHED",
+            "description": "Huge bill with pouch (Brown Pelican)",
+            "icon": "🦩",
+            "species_codes": ["BRPE"]
+          },
+          {
+            "label": "HOOKED",
+            "description": "Medium length with hooked tip (Cormorants, Anhingas)",
+            "icon": "🪝",
+            "species_codes": ["DCCO", "NECO", "ANHI", "UNCO"]
+          },
+          {
+            "label": "HUGE RED",
+            "description": "Massive red bill with longer lower mandible (Black Skimmer)",
+            "icon": "🔴",
+            "species_codes": ["BLSK"]
+          },
+          {
+            "label": "MEDIUM POINTED",
+            "description": "Medium length, pointed (Terns, Gulls, Noddies)",
+            "icon": "▶️",
+            "species_codes": ["BLTE", "SOTE", "BRNO", "LAGU", "SONO"]
+          },
+          {
+            "label": "VERY LONG WINGS",
+            "description": "Extremely long wings, forked tail (Frigatebird)",
+            "icon": "🦅",
+            "species_codes": ["MAFR"]
+          }
+        ]
+      },
+      "BLUE": {
+        "question": "What is the BILL SHAPE and LENGTH?",
+        "help_text": "Bill length helps separate large herons from smaller ones.",
+        "options": [
+          {
+            "label": "VERY LONG",
+            "description": "Very long, straight bill (Great Blue Heron)",
+            "icon": "📏",
             "species_codes": ["GBHE"]
           },
           {
-            "label": "BLACK",
-            "description": "Pure black or very dark",
-            "icon": "⚫",
-            "species_codes": ["MAFR", "ANHI"]
+            "label": "MEDIUM TO LONG",
+            "description": "Medium-long straight bill (Smaller herons)",
+            "icon": "📍",
+            "species_codes": ["LTBH", "TRHE", "SDHE", "UNHG"]
+          },
+          {
+            "label": "SHORT HEAVY",
+            "description": "Short, heavy bill (Night-Herons)",
+            "icon": "🔨",
+            "species_codes": ["BCNH", "YCNH"]
           }
         ]
       },
-      "MEDIUM": {
-        "question": "What is the PRIMARY COLOR?",
-        "help_text": "Look at the dominant body color from above.",
+      "BROWN": {
+        "question": "What is the BILL SHAPE and LENGTH?",
+        "help_text": "Curved bills indicate ibis/spoonbill. Straight bills indicate herons or shorebirds.",
         "options": [
           {
-            "label": "WHITE",
-            "description": "Pure white or very pale",
-            "icon": "⚪",
-            "species_codes": ["GREG", "SNEG", "CAEG", "REEG WM", "WHEG", "UNEG"]
+            "label": "LONG CURVED",
+            "description": "Long, downward-curved bill (Ibis)",
+            "icon": "🌙",
+            "species_codes": ["WHIB", "WFIB", "DAIB", "UNIB"]
           },
           {
-            "label": "BLUE-GRAY",
-            "description": "Blue-gray, slate, or ash colored",
-            "icon": "🔵",
-            "species_codes": ["LTBH", "TRHE", "BCNH", "YCNH", "SDHE", "UNHG"]
+            "label": "LONG STRAIGHT",
+            "description": "Long, straight bill (Reddish Egret)",
+            "icon": "📍",
+            "species_codes": ["REEG", "REEG DM"]
           },
           {
-            "label": "DARK/REDDISH",
-            "description": "Dark brown, reddish, or mixed dark plumage",
-            "icon": "🟤",
-            "species_codes": ["REEG", "REEG DM", "SDHE", "WHIB", "WFIB", "DAIB", "UNIB"]
+            "label": "HUGE ORANGE",
+            "description": "Massive bright orange bill (American Oystercatcher)",
+            "icon": "🟠",
+            "species_codes": ["AMOY"]
           },
           {
-            "label": "PINK/RED",
-            "description": "Pink or reddish overall",
-            "icon": "🔴",
+            "label": "VERY THIN",
+            "description": "Very thin, needle-like bill (Black-necked Stilt)",
+            "icon": "📌",
+            "species_codes": ["BNST"]
+          },
+          {
+            "label": "MEDIUM",
+            "description": "Medium length bill (Gulls, Turnstones)",
+            "icon": "▶️",
+            "species_codes": ["HERG", "RUTU", "ULGU", "UNGU", "UNGT", "UNSB"]
+          }
+        ]
+      },
+      "PINK": {
+        "question": "CONFIRMATION - Roseate Spoonbill?",
+        "help_text": "If it's pink, it's a Roseate Spoonbill. No other pink birds in this region!",
+        "options": [
+          {
+            "label": "YES - BRIGHT PINK",
+            "description": "Bright pink with spatulate (spoon-shaped) bill - UNMISTAKABLE!",
+            "icon": "🦩",
             "species_codes": ["ROSP"]
-          }
-        ]
-      },
-      "SMALL": {
-        "question": "What is the PRIMARY COLOR?",
-        "help_text": "Look at the dominant body color from above.",
-        "options": [
-          {
-            "label": "WHITE/PALE",
-            "description": "White, pale gray, or light colored",
-            "icon": "⚪",
-            "species_codes": ["ROYT", "SATE", "CATE", "COTE", "FOTE", "LETE", "GBTE", "ROST", "AMAV", "CARO", "FOCO", "ROSA", "USTE", "ULTE", "UNTE"]
-          },
-          {
-            "label": "BLACK/DARK",
-            "description": "Black, dark brown, or very dark",
-            "icon": "⚫",
-            "species_codes": ["BLSK", "BLTE", "SOTE", "BRNO", "LAGU", "SONO"]
-          },
-          {
-            "label": "GRAY/BROWN",
-            "description": "Gray, brown, or mixed colors",
-            "icon": "🟤",
-            "species_codes": ["HERG", "LAGU", "AMOY", "BNST", "RUTU", "ULGU", "UNGU", "UNGT", "UNSB"]
           }
         ]
       }
     },
     "step_3_features": {
-      "LARGE_BROWN": {
-        "question": "KEY FEATURES for large brown birds:",
-        "help_text": "Look carefully at body shape and bill structure.",
-        "species": [
-          {
-            "code": "BRPE",
-            "name": "Brown Pelican",
-            "key_features": ["Stocky body", "Large pouched bill", "Often diving", "Coastal colonies"],
-            "size": "120-137cm",
-            "confidence_tips": "Distinctive pelican shape, pouched bill visible even from above"
-          },
-          {
-            "code": "DCCO",
-            "name": "Double-crested Cormorant",
-            "key_features": ["Slender body", "Long neck", "Hooked bill", "Often spreads wings"],
-            "size": "70-90cm",
-            "confidence_tips": "Thin neck, often perched with wings spread to dry"
-          },
-          {
-            "code": "NECO",
-            "name": "Neotropic Cormorant",
-            "key_features": ["Smaller than DCCO", "Slender build", "Longer tail", "More southern range"],
-            "size": "58-73cm",
-            "confidence_tips": "Smaller, more slender than DCCO. Hard to distinguish from aerial view - use location"
-          },
-          {
-            "code": "ANHI",
-            "name": "Anhinga",
-            "key_features": ["Very long snake-like neck", "Straight pointed bill", "Long tail", "Freshwater"],
-            "size": "75-95cm",
-            "confidence_tips": "Distinctive snake-like neck, often swimming with only neck above water"
-          },
-          {
-            "code": "UNCO",
-            "name": "Neotropic or Double-crested Cormorant",
-            "key_features": ["Use when DCCO vs NECO uncertain"],
-            "size": "60-90cm",
-            "confidence_tips": "Use when cormorant species cannot be determined"
-          }
-        ]
-      },
-      "LARGE_WHITE": {
-        "question": "KEY FEATURES for large white birds:",
+      "WHITE_MASSIVE": {
+        "question": "CONFIRMATION - American White Pelican?",
+        "help_text": "Huge white bird with massive pouched bill.",
         "species": [
           {
             "code": "AWPE",
             "name": "American White Pelican",
-            "key_features": ["Pure white", "Very large", "Orange bill", "Black wing tips", "Interior freshwater"],
+            "key_features": ["Pure white", "Enormous size", "Orange bill", "Black wing tips", "Inland/freshwater"],
             "size": "127-178cm",
-            "confidence_tips": "Huge size, pure white body, distinctive pelican shape"
-          },
-          {
-            "code": "WOST",
-            "name": "Wood Stork",
-            "key_features": ["White body", "Black flight feathers", "Bare head (dark)", "Long legs"],
-            "size": "83-115cm",
-            "confidence_tips": "Black flight feathers visible from above, bare dark head"
+            "bill": "Very large, pouched, orange",
+            "confidence_tips": "Huge size and pure white body with massive bill is diagnostic"
           }
         ]
       },
-      "LARGE_BLUE": {
-        "question": "KEY FEATURES for large blue-gray birds:",
-        "species": [
-          {
-            "code": "GBHE",
-            "name": "Great Blue Heron",
-            "key_features": ["Blue-gray overall", "Very long neck", "Long legs", "Slender build"],
-            "size": "97-137cm",
-            "confidence_tips": "Distinctive blue-gray color, largest heron species"
-          }
-        ]
-      },
-      "LARGE_BLACK": {
-        "question": "KEY FEATURES for large black birds:",
-        "species": [
-          {
-            "code": "MAFR",
-            "name": "Magnificent Frigatebird",
-            "key_features": ["All black", "Very long wings", "Forked tail", "Soaring flight"],
-            "size": "100-114cm (wingspan 215-229cm)",
-            "confidence_tips": "Distinctive soaring silhouette with very long wings"
-          },
-          {
-            "code": "ANHI",
-            "name": "Anhinga",
-            "key_features": ["Snake-like neck", "Black with white markings", "Freshwater"],
-            "size": "75-95cm",
-            "confidence_tips": "Long snake-like neck is diagnostic"
-          }
-        ]
-      },
-      "MEDIUM_WHITE": {
-        "question": "KEY FEATURES for medium white birds:",
-        "help_text": "Egrets are difficult! Look at size, bill color (if visible), and leg color.",
+      "WHITE_LONG": {
+        "question": "KEY FEATURES for white birds with long straight bills:",
+        "help_text": "Egrets and storks - look at size and bill color if visible.",
         "species": [
           {
             "code": "GREG",
             "name": "Great Egret",
             "key_features": ["Largest white egret", "Yellow bill", "Black legs", "S-curved neck"],
             "size": "94-104cm",
-            "confidence_tips": "Largest egret, noticeably bigger than SNEG"
+            "bill": "Long, straight, yellow",
+            "confidence_tips": "Largest egret - noticeably bigger than SNEG"
           },
           {
             "code": "SNEG",
             "name": "Snowy Egret",
             "key_features": ["Medium-small", "Black bill", "Black legs with yellow feet", "Active hunter"],
             "size": "56-66cm",
-            "confidence_tips": "Smaller than GREG, active hunting behavior"
+            "bill": "Long, straight, black",
+            "confidence_tips": "Smaller than GREG, very active hunting behavior"
           },
           {
             "code": "CAEG",
             "name": "Cattle Egret",
-            "key_features": ["Stocky build", "Short neck", "Short yellow/orange bill", "Often in fields"],
+            "key_features": ["Stocky build", "Short neck", "Yellow/orange bill", "Often in fields"],
             "size": "46-56cm",
-            "confidence_tips": "Stockier, shorter neck than other egrets"
+            "bill": "Short, thick, yellow-orange",
+            "confidence_tips": "Stockiest egret with short neck"
           },
           {
             "code": "REEG WM",
             "name": "Reddish Egret White Morph",
-            "key_features": ["Rare white morph", "Active hunting", "Shaggy neck feathers", "Pink bill with black tip"],
+            "key_features": ["Rare white morph", "Active hunting", "Shaggy neck", "Pink bill with black tip"],
             "size": "68-82cm",
-            "confidence_tips": "Rare! Active hunting style, shaggy appearance"
+            "bill": "Long, straight, pink with black tip",
+            "confidence_tips": "RARE! Active hunting style, shaggy appearance"
+          },
+          {
+            "code": "WOST",
+            "name": "Wood Stork",
+            "key_features": ["White body", "Black flight feathers", "Bare dark head", "Long legs"],
+            "size": "83-115cm",
+            "bill": "Long, thick, decurved",
+            "confidence_tips": "Black flight feathers visible from above, bare head"
           },
           {
             "code": "WHEG",
-            "name": "Great/Snowy Egret",
+            "name": "Great/Snowy Egret (uncertain)",
             "key_features": ["Use when GREG vs SNEG uncertain"],
             "size": "56-104cm",
+            "bill": "Long, straight",
             "confidence_tips": "Use when white egret species cannot be determined"
           }
         ]
       },
-      "MEDIUM_BLUE": {
-        "question": "KEY FEATURES for medium blue-gray birds:",
-        "species": [
-          {
-            "code": "LTBH",
-            "name": "Little Blue Heron",
-            "key_features": ["Dark blue-gray overall", "Maroon neck (breeding)", "Straight bluish bill"],
-            "size": "56-74cm",
-            "confidence_tips": "Overall dark blue color, medium size"
-          },
-          {
-            "code": "TRHE",
-            "name": "Tricolored Heron",
-            "key_features": ["Blue-gray above", "White belly (visible when perched)", "Long slender neck"],
-            "size": "56-76cm",
-            "confidence_tips": "Slenderer than LTBH, white belly stripe"
-          },
-          {
-            "code": "BCNH",
-            "name": "Black-crowned Night Heron",
-            "key_features": ["Stocky build", "Black back", "Gray wings", "Short neck", "Nocturnal"],
-            "size": "58-65cm",
-            "confidence_tips": "Stocky shape, black back contrasts with gray wings"
-          },
-          {
-            "code": "YCNH",
-            "name": "Yellow-crowned Night Heron",
-            "key_features": ["Gray overall", "Heavier bill than BCNH", "Longer legs", "Black and white head"],
-            "size": "55-70cm",
-            "confidence_tips": "Overall grayer than BCNH, heavier bill"
-          }
-        ]
-      },
-      "MEDIUM_DARK": {
-        "question": "KEY FEATURES for medium dark/reddish birds:",
-        "species": [
-          {
-            "code": "REEG",
-            "name": "Reddish Egret",
-            "key_features": ["Reddish-brown neck and body", "Gray wings", "Active hunting", "Coastal"],
-            "size": "68-82cm",
-            "confidence_tips": "Distinctive reddish color, very active hunting style"
-          },
-          {
-            "code": "REEG DM",
-            "name": "Reddish Egret Dark Morph",
-            "key_features": ["Dark reddish-brown", "Pink bill with black tip", "Active hunter"],
-            "size": "68-82cm",
-            "confidence_tips": "Dark morph of REEG, same active behavior"
-          },
-          {
-            "code": "WHIB",
-            "name": "White Ibis",
-            "key_features": ["White body", "Red curved bill", "Red legs", "Black wing tips"],
-            "size": "56-71cm",
-            "confidence_tips": "Distinctive curved red bill, white with black wingtips"
-          },
-          {
-            "code": "WFIB",
-            "name": "White-faced Ibis",
-            "key_features": ["Dark overall", "Curved bill", "White face (breeding)", "Glossy bronze-green"],
-            "size": "46-56cm",
-            "confidence_tips": "Dark ibis, glossy greenish sheen"
-          }
-        ]
-      },
-      "MEDIUM_PINK": {
-        "question": "KEY FEATURES for pink birds:",
-        "species": [
-          {
-            "code": "ROSP",
-            "name": "Roseate Spoonbill",
-            "key_features": ["PINK!", "Spatulate bill", "Orange tail", "White neck", "UNMISTAKABLE"],
-            "size": "71-86cm",
-            "confidence_tips": "BRIGHT PINK! Cannot be confused with anything else!"
-          }
-        ]
-      },
-      "SMALL_WHITE": {
-        "question": "KEY FEATURES for small white terns:",
-        "help_text": "Tern identification is HARD from aerial photos. Use size, location, and colony context.",
+      "WHITE_MEDIUM": {
+        "question": "KEY FEATURES for white terns:",
+        "help_text": "Tern ID is HARD from aerial photos. Use bill color and size if visible.",
         "species": [
           {
             "code": "ROYT",
             "name": "Royal Tern",
-            "key_features": ["Large tern", "Orange bill", "Black cap", "Coastal", "Often in large colonies"],
+            "key_features": ["Large tern", "Orange bill", "Black cap", "Often in large colonies"],
             "size": "45-50cm",
+            "bill": "Medium, pointed, orange",
             "confidence_tips": "Largest tern, orange bill distinctive"
           },
           {
             "code": "SATE",
             "name": "Sandwich Tern",
-            "key_features": ["Medium tern", "Black bill with yellow tip", "Black cap", "Coastal"],
+            "key_features": ["Medium tern", "Black bill with yellow tip", "Black cap"],
             "size": "37-43cm",
-            "confidence_tips": "Yellow-tipped black bill is diagnostic (if visible)"
+            "bill": "Medium, pointed, black with yellow tip",
+            "confidence_tips": "Yellow-tipped black bill (if visible)"
           },
           {
             "code": "CATE",
             "name": "Caspian Tern",
-            "key_features": ["Largest tern", "Heavy red bill", "Black cap", "Deeper calls"],
+            "key_features": ["Largest tern", "Heavy red bill", "Black cap"],
             "size": "48-56cm",
-            "confidence_tips": "Largest tern, heavy red bill"
+            "bill": "Large, heavy, red",
+            "confidence_tips": "Largest tern with heavy red bill"
           },
           {
             "code": "COTE",
             "name": "Common Tern",
             "key_features": ["Small tern", "Red-orange bill with black tip", "Forked tail"],
             "size": "31-35cm",
+            "bill": "Medium, pointed, red with black tip",
             "confidence_tips": "Small size, red bill with black tip"
           },
           {
             "code": "FOTE",
             "name": "Forster's Tern",
-            "key_features": ["Small tern", "Orange bill with dark tip", "Shorter tail than COTE"],
+            "key_features": ["Small tern", "Orange bill with dark tip", "Similar to COTE"],
             "size": "33-36cm",
+            "bill": "Medium, pointed, orange with dark tip",
             "confidence_tips": "Very similar to COTE, slightly paler"
           },
           {
             "code": "LETE",
             "name": "Least Tern",
-            "key_features": ["SMALLEST tern", "Yellow bill", "White forehead", "Often on beaches"],
+            "key_features": ["SMALLEST tern", "Yellow bill", "White forehead"],
             "size": "22-24cm",
+            "bill": "Small, pointed, yellow",
             "confidence_tips": "Tiny! Much smaller than other terns"
           },
           {
             "code": "GBTE",
             "name": "Gull-billed Tern",
-            "key_features": ["Thick black bill", "Stocky build", "Less forked tail", "Pale overall"],
+            "key_features": ["Thick black bill", "Stocky build", "Pale overall"],
             "size": "33-38cm",
-            "confidence_tips": "Thick bill (gull-like), stockier than other terns"
+            "bill": "Short, thick, black",
+            "confidence_tips": "Thick gull-like bill, stockier build"
           },
           {
             "code": "ROST",
             "name": "Roseate Tern",
-            "key_features": ["Slender", "Black bill", "Very long tail streamers", "Rare"],
+            "key_features": ["Slender", "Black bill", "Very long tail streamers"],
             "size": "33-38cm",
-            "confidence_tips": "Long tail streamers, overall pale with pink wash"
+            "bill": "Medium, pointed, black",
+            "confidence_tips": "Long tail streamers, overall pale"
           }
         ]
       },
-      "SMALL_DARK": {
-        "question": "KEY FEATURES for small dark birds:",
+      "WHITE_UPTURNED": {
+        "question": "CONFIRMATION - American Avocet?",
+        "help_text": "Upturned bill is diagnostic.",
+        "species": [
+          {
+            "code": "AMAV",
+            "name": "American Avocet",
+            "key_features": ["Black and white pattern", "Upturned bill", "Long blue-gray legs"],
+            "size": "43-47cm",
+            "bill": "Medium, upturned",
+            "confidence_tips": "Upturned bill is absolutely diagnostic!"
+          }
+        ]
+      },
+      "DARK_MASSIVE": {
+        "question": "CONFIRMATION - Brown Pelican?",
+        "help_text": "Massive dark bird with huge pouched bill.",
+        "species": [
+          {
+            "code": "BRPE",
+            "name": "Brown Pelican",
+            "key_features": ["Stocky body", "Huge pouched bill", "Often diving", "Coastal"],
+            "size": "120-137cm",
+            "bill": "Very large, pouched",
+            "confidence_tips": "Distinctive pelican shape with pouched bill"
+          }
+        ]
+      },
+      "DARK_HOOKED": {
+        "question": "KEY FEATURES for dark birds with hooked bills:",
+        "help_text": "Cormorants vs Anhinga - neck length is key.",
+        "species": [
+          {
+            "code": "DCCO",
+            "name": "Double-crested Cormorant",
+            "key_features": ["Slender body", "Long neck", "Hooked bill", "Often spreads wings"],
+            "size": "70-90cm",
+            "bill": "Medium, hooked",
+            "confidence_tips": "Often perched with wings spread to dry"
+          },
+          {
+            "code": "NECO",
+            "name": "Neotropic Cormorant",
+            "key_features": ["Smaller than DCCO", "Slender", "Longer tail", "Southern range"],
+            "size": "58-73cm",
+            "bill": "Medium, hooked",
+            "confidence_tips": "Smaller, more slender than DCCO - use location"
+          },
+          {
+            "code": "ANHI",
+            "name": "Anhinga",
+            "key_features": ["VERY long snake-like neck", "Straight pointed bill", "Long tail"],
+            "size": "75-95cm",
+            "bill": "Long, straight, pointed",
+            "confidence_tips": "Distinctive snake-like neck is diagnostic"
+          },
+          {
+            "code": "UNCO",
+            "name": "Cormorant (species uncertain)",
+            "key_features": ["Use when DCCO vs NECO uncertain"],
+            "size": "60-90cm",
+            "bill": "Medium, hooked",
+            "confidence_tips": "Use when cormorant species cannot be determined"
+          }
+        ]
+      },
+      "DARK_HUGE_RED": {
+        "question": "CONFIRMATION - Black Skimmer?",
+        "help_text": "Huge red bill with longer lower mandible is unmistakable.",
         "species": [
           {
             "code": "BLSK",
             "name": "Black Skimmer",
-            "key_features": ["Black above, white below", "HUGE red bill", "Lower mandible longer", "Low flight"],
+            "key_features": ["Black above, white below", "HUGE red bill", "Lower mandible longer"],
             "size": "40-50cm",
-            "confidence_tips": "Huge red bill with longer lower mandible - DIAGNOSTIC"
-          },
+            "bill": "Very large, red, asymmetric",
+            "confidence_tips": "Huge red bill with longer lower mandible - DIAGNOSTIC!"
+          }
+        ]
+      },
+      "DARK_MEDIUM": {
+        "question": "KEY FEATURES for dark birds with medium bills:",
+        "help_text": "Terns, gulls, and noddies.",
+        "species": [
           {
             "code": "BLTE",
             "name": "Black Tern",
-            "key_features": ["Dark gray-black breeding", "White non-breeding", "Small", "Inland marshes"],
+            "key_features": ["Dark gray-black breeding", "Small", "Inland marshes"],
             "size": "23-26cm",
-            "confidence_tips": "Dark overall in breeding plumage, inland wetlands"
+            "bill": "Small, pointed",
+            "confidence_tips": "Dark overall in breeding plumage"
           },
           {
             "code": "SOTE",
             "name": "Sooty Tern",
-            "key_features": ["Black above, white below", "White forehead", "Tropical", "Pelagic"],
+            "key_features": ["Black above, white below", "White forehead", "Tropical"],
             "size": "43-45cm",
+            "bill": "Medium, pointed",
             "confidence_tips": "Black back, white belly, tropical waters"
           },
           {
@@ -412,75 +420,293 @@
             "name": "Brown Noddy",
             "key_features": ["Dark brown overall", "Pale cap", "Wedge tail", "Tropical"],
             "size": "38-43cm",
-            "confidence_tips": "Overall brown, pale forehead, tropical"
+            "bill": "Medium, pointed",
+            "confidence_tips": "Overall brown with pale forehead"
           },
           {
             "code": "LAGU",
             "name": "Laughing Gull",
-            "key_features": ["Black head (breeding)", "Dark gray back", "White crescents above/below eye"],
+            "key_features": ["Black head (breeding)", "Dark gray back", "White crescents"],
             "size": "36-43cm",
+            "bill": "Medium, pointed",
             "confidence_tips": "Black head in breeding, common coastal gull"
+          },
+          {
+            "code": "SONO",
+            "name": "Sooty Noddy",
+            "key_features": ["Very dark overall", "Whitish forehead", "Rare"],
+            "size": "38-43cm",
+            "bill": "Medium, pointed",
+            "confidence_tips": "Darker than Brown Noddy"
           }
         ]
       },
-      "SMALL_GRAY": {
-        "question": "KEY FEATURES for small gray/brown birds:",
+      "DARK_WINGS": {
+        "question": "CONFIRMATION - Magnificent Frigatebird?",
+        "help_text": "Extremely long wings and forked tail visible even from below.",
         "species": [
           {
-            "code": "HERG",
-            "name": "Herring Gull",
-            "key_features": ["Large gull", "Gray back", "Pink legs", "Yellow bill with red spot"],
-            "size": "56-66cm",
-            "confidence_tips": "Large gull, gray back, pink legs"
+            "code": "MAFR",
+            "name": "Magnificent Frigatebird",
+            "key_features": ["All black", "VERY long wings", "Forked tail", "Soaring"],
+            "size": "100-114cm (wingspan 215-229cm)",
+            "bill": "Medium, hooked",
+            "confidence_tips": "Distinctive soaring silhouette with very long wings"
+          }
+        ]
+      },
+      "BLUE_VERY_LONG": {
+        "question": "CONFIRMATION - Great Blue Heron?",
+        "help_text": "Large blue-gray bird with very long bill and legs.",
+        "species": [
+          {
+            "code": "GBHE",
+            "name": "Great Blue Heron",
+            "key_features": ["Blue-gray overall", "Very long neck", "Long legs", "Slender"],
+            "size": "97-137cm",
+            "bill": "Very long, straight, yellow",
+            "confidence_tips": "Largest heron, distinctive blue-gray color"
+          }
+        ]
+      },
+      "BLUE_MEDIUM": {
+        "question": "KEY FEATURES for blue-gray birds with medium bills:",
+        "help_text": "Smaller herons - look at belly color and build.",
+        "species": [
+          {
+            "code": "LTBH",
+            "name": "Little Blue Heron",
+            "key_features": ["Dark blue-gray overall", "Maroon neck (breeding)", "Straight bluish bill"],
+            "size": "56-74cm",
+            "bill": "Medium-long, straight, bluish",
+            "confidence_tips": "Overall dark blue, medium size"
           },
+          {
+            "code": "TRHE",
+            "name": "Tricolored Heron",
+            "key_features": ["Blue-gray above", "White belly visible", "Slender"],
+            "size": "56-76cm",
+            "bill": "Long, straight, yellow",
+            "confidence_tips": "Slenderer than LTBH, white belly stripe"
+          },
+          {
+            "code": "SDHE",
+            "name": "Small Dark Heron",
+            "key_features": ["Use when LTBH vs TRHE uncertain"],
+            "size": "56-76cm",
+            "bill": "Medium-long, straight",
+            "confidence_tips": "Use when small dark heron species uncertain"
+          },
+          {
+            "code": "UNHG",
+            "name": "Unidentified Heron/Egret",
+            "key_features": ["Use when heron/egret ID not possible"],
+            "size": "Variable",
+            "bill": "Medium-long, straight",
+            "confidence_tips": "Use when species cannot be determined"
+          }
+        ]
+      },
+      "BLUE_SHORT": {
+        "question": "KEY FEATURES for blue-gray birds with short heavy bills:",
+        "help_text": "Night-Herons are stocky with short bills.",
+        "species": [
+          {
+            "code": "BCNH",
+            "name": "Black-crowned Night Heron",
+            "key_features": ["Stocky", "Black back", "Gray wings", "Short neck"],
+            "size": "58-65cm",
+            "bill": "Short, heavy, black",
+            "confidence_tips": "Black back contrasts with gray wings"
+          },
+          {
+            "code": "YCNH",
+            "name": "Yellow-crowned Night Heron",
+            "key_features": ["Gray overall", "Heavier bill than BCNH", "Longer legs"],
+            "size": "55-70cm",
+            "bill": "Short, very heavy, black",
+            "confidence_tips": "Overall grayer than BCNH, heavier bill"
+          }
+        ]
+      },
+      "BROWN_CURVED": {
+        "question": "KEY FEATURES for birds with curved bills:",
+        "help_text": "Ibis species - look at color if visible.",
+        "species": [
+          {
+            "code": "WHIB",
+            "name": "White Ibis",
+            "key_features": ["White body", "Red curved bill", "Red legs", "Black wing tips"],
+            "size": "56-71cm",
+            "bill": "Long, decurved, red",
+            "confidence_tips": "White with distinctive curved red bill"
+          },
+          {
+            "code": "WFIB",
+            "name": "White-faced Ibis",
+            "key_features": ["Dark overall", "Curved bill", "White face (breeding)", "Glossy"],
+            "size": "46-56cm",
+            "bill": "Long, decurved, dark",
+            "confidence_tips": "Dark ibis with glossy greenish sheen"
+          },
+          {
+            "code": "DAIB",
+            "name": "Dark Ibis (Glossy/White-faced uncertain)",
+            "key_features": ["Use when dark ibis species uncertain"],
+            "size": "46-56cm",
+            "bill": "Long, decurved",
+            "confidence_tips": "Use when cannot distinguish WFIB/GLIB"
+          },
+          {
+            "code": "UNIB",
+            "name": "Unidentified Ibis",
+            "key_features": ["Use when ibis species uncertain"],
+            "size": "46-71cm",
+            "bill": "Long, decurved",
+            "confidence_tips": "Use when ibis species cannot be determined"
+          }
+        ]
+      },
+      "BROWN_STRAIGHT": {
+        "question": "CONFIRMATION - Reddish Egret?",
+        "help_text": "Reddish-brown with very active hunting behavior.",
+        "species": [
+          {
+            "code": "REEG",
+            "name": "Reddish Egret",
+            "key_features": ["Reddish-brown neck", "Gray wings", "Active hunting", "Coastal"],
+            "size": "68-82cm",
+            "bill": "Long, straight, pink with black tip",
+            "confidence_tips": "Distinctive reddish color, very active hunting"
+          },
+          {
+            "code": "REEG DM",
+            "name": "Reddish Egret Dark Morph",
+            "key_features": ["Dark reddish-brown", "Pink bill with black tip", "Active"],
+            "size": "68-82cm",
+            "bill": "Long, straight, pink with black tip",
+            "confidence_tips": "Dark morph of REEG, same behavior"
+          }
+        ]
+      },
+      "BROWN_ORANGE": {
+        "question": "CONFIRMATION - American Oystercatcher?",
+        "help_text": "Huge bright orange bill is unmistakable.",
+        "species": [
           {
             "code": "AMOY",
             "name": "American Oystercatcher",
-            "key_features": ["Brown back", "White belly", "HUGE orange bill", "Pink legs", "Beaches"],
+            "key_features": ["Brown back", "White belly", "HUGE orange bill", "Pink legs"],
             "size": "40-44cm",
-            "confidence_tips": "Huge bright orange bill - DIAGNOSTIC!"
-          },
+            "bill": "Very large, straight, bright orange",
+            "confidence_tips": "Huge bright orange bill is DIAGNOSTIC!"
+          }
+        ]
+      },
+      "BROWN_THIN": {
+        "question": "CONFIRMATION - Black-necked Stilt?",
+        "help_text": "Incredibly long pink legs and thin bill.",
+        "species": [
           {
             "code": "BNST",
             "name": "Black-necked Stilt",
             "key_features": ["Black back", "White below", "VERY long pink legs", "Thin bill"],
             "size": "33-36cm",
-            "confidence_tips": "Incredibly long pink legs - diagnostic!"
-          },
+            "bill": "Medium, very thin, black",
+            "confidence_tips": "Incredibly long pink legs are diagnostic!"
+          }
+        ]
+      },
+      "BROWN_MEDIUM": {
+        "question": "KEY FEATURES for brown/gray birds with medium bills:",
+        "help_text": "Gulls and shorebirds.",
+        "species": [
           {
-            "code": "AMAV",
-            "name": "American Avocet",
-            "key_features": ["Black and white pattern", "Upturned bill", "Long blue-gray legs"],
-            "size": "43-47cm",
-            "confidence_tips": "Upturned bill is diagnostic"
+            "code": "HERG",
+            "name": "Herring Gull",
+            "key_features": ["Large gull", "Gray back", "Pink legs", "Yellow bill"],
+            "size": "56-66cm",
+            "bill": "Medium, heavy, yellow with red spot",
+            "confidence_tips": "Large gull with gray back and pink legs"
           },
           {
             "code": "RUTU",
             "name": "Ruddy Turnstone",
-            "key_features": ["Rusty/black patchwork pattern", "Short bill", "Orange legs", "Stocky"],
+            "key_features": ["Rusty/black patchwork", "Short bill", "Orange legs", "Stocky"],
             "size": "22-24cm",
-            "confidence_tips": "Distinctive rusty patchwork pattern on back"
+            "bill": "Short, pointed, black",
+            "confidence_tips": "Distinctive rusty patchwork pattern"
+          },
+          {
+            "code": "ULGU",
+            "name": "Unidentified Large Gull",
+            "key_features": ["Use for large gulls when species uncertain"],
+            "size": ">40cm",
+            "bill": "Medium, heavy",
+            "confidence_tips": "Use when large gull ID not possible"
+          },
+          {
+            "code": "UNGU",
+            "name": "Unidentified Gull",
+            "key_features": ["Use when gull species uncertain"],
+            "size": "Variable",
+            "bill": "Medium",
+            "confidence_tips": "Use when gull species cannot be determined"
+          },
+          {
+            "code": "UNGT",
+            "name": "Unidentified Gull/Tern",
+            "key_features": ["Use when cannot distinguish gull vs tern"],
+            "size": "Variable",
+            "bill": "Medium, pointed",
+            "confidence_tips": "Use when gull/tern distinction unclear"
+          },
+          {
+            "code": "UNSB",
+            "name": "Unidentified Shorebird",
+            "key_features": ["Use for unidentified shorebirds"],
+            "size": "Variable",
+            "bill": "Variable",
+            "confidence_tips": "Use when shorebird species uncertain"
+          }
+        ]
+      },
+      "PINK_CONFIRMATION": {
+        "question": "ROSEATE SPOONBILL - Final Confirmation",
+        "help_text": "If you see pink, it's a Roseate Spoonbill. Period.",
+        "species": [
+          {
+            "code": "ROSP",
+            "name": "Roseate Spoonbill",
+            "key_features": ["BRIGHT PINK!", "Spatulate (spoon) bill", "Orange tail", "White neck"],
+            "size": "71-86cm",
+            "bill": "Medium, spatulate (spoon-shaped), gray",
+            "confidence_tips": "BRIGHT PINK! Cannot be confused with anything else!"
           }
         ]
       }
     }
   },
   "notes": {
+    "version": "2.0 - Bill Shape Decision Tree",
+    "changes": "Replaced size-based Step 1 with COLOR (more reliable for aerial view). Added BILL SHAPE as Step 2 (highly diagnostic for aerial imagery).",
     "source": "Based on Cornell Lab of Ornithology, Audubon Society, and Gulf Coast avian monitoring protocols",
     "accuracy_tips": [
+      "COLOR is most reliable from aerial view - always start here",
+      "BILL SHAPE is diagnostic even at distance - curved vs straight is obvious",
       "Use colony context - species often segregate by habitat",
-      "Use relative size - compare to neighboring birds",
+      "Use relative comparison - if multiple birds visible, compare sizes",
       "Use historical data - colonies often have same dominant species year to year",
       "Use location - some species are restricted to specific regions",
-      "Use behavior - hunting style, flight pattern, perching habits",
-      "When uncertain, use combination codes (WHEG, CARO, etc.)"
+      "When uncertain, use combination codes (WHEG, CARO, UNIB, etc.)"
     ],
     "common_mistakes": [
-      "GREG vs SNEG - size difference is key, GREG is noticeably larger",
-      "ROYT vs SATE - bill color (orange vs black with yellow tip)",
-      "DCCO vs NECO - size and range, often cannot distinguish from aerial view",
-      "LTBH vs TRHE - TRHE has white belly stripe, LTBH is overall dark",
-      "Tern species - often impossible without bill color/size details"
+      "Confusing size from different camera heights - use COLOR first instead",
+      "GREG vs SNEG - GREG is noticeably larger, but also look at bill color (yellow vs black)",
+      "ROYT vs SATE - bill color (orange vs black with yellow tip) is diagnostic",
+      "DCCO vs NECO - size and range, often cannot distinguish from aerial view (use UNCO)",
+      "LTBH vs TRHE - TRHE has white belly stripe visible when perched",
+      "Tern species - often impossible without bill color/size details (use UNTE if uncertain)"
     ]
   }
 }
