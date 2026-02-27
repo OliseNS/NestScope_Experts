@@ -16,11 +16,16 @@ database:
   default_path: data/bird_data_complete.db
 
 cv:
-
-  model_path: models/nano.onnx  
+  # Model paths for different inference modes
+  # Swift: Fast inference model (9.7MB, optimized for speed)
+  # Apex: Maximum accuracy model (37MB, optimized for precision)
+  model_fast: models/nano.onnx
+  model_pro: models/small.onnx
+  model_fast_name: "Swift"
+  model_pro_name: "Apex"
   default_confidence: 0.25
   image_size: 1024
-  default_fast_mode: true
+  default_fast_mode: true  # Start in fast mode by default
 
 api:
   host: 0.0.0.0

@@ -57,9 +57,6 @@ st.markdown("""
             Powered by AI computer vision, NestVision automatically detects and counts birds in your images.
             Upload a photo or try our example images to see the model in action.
         </p>
-        <p style="font-size: 0.8rem; color: #888; margin-top: 0.5rem;">
-            ⚡ Powered by <code style="background: #2d2d2d; padding: 2px 6px; border-radius: 3px; color: #D97757;">YOLOv8 (ONNX)</code>
-        </p>
     </div>
 """, unsafe_allow_html=True)
 
@@ -69,29 +66,33 @@ st.markdown("""
 
 with st.expander("ℹ️ About the Model", expanded=False):
     st.markdown("""
-    ### Current Model
-    **YOLOv26m-based** bird detection trained on avian monitoring data
+    ### Detection Models
+    NestVision uses advanced AI models trained on Gulf Coast avian monitoring data:
+    - **🚀 Swift**: Optimized for speed - perfect for quick previews and real-time processing
+    - **🎯 Apex**: Optimized for precision - ideal for final analysis and detecting small/distant birds
 
     ### Important Notes
-    - 🔧 This model is currently in **development** and may not be highly accurate
-    - 📊 The team is actively **annotating more training data** to improve performance
-    - 🚀 A more **robust model** is being developed with improved accuracy
+    - 🔧 Models are actively being improved with more training data
+    - 📊 The team is continuously annotating high-quality examples
+    - 🚀 Performance improvements are released regularly
 
-    ### Processing Modes
-    - **⚡ Fast Mode**: Quick inference using downsampling for large images. Best for real-time previews.
-    - **🎯 Zoom Mode**: Uses intelligent image slicing with optimal overlap. Better for detecting small or distant birds, but slower.
+    ### Processing Technology
+    All detection modes use **SAHI (Slicing Aided Hyper Inference)** with intelligent image slicing:
+    - Automatically slices large images into overlapping tiles
+    - Detects birds across the entire image with 20% overlap
+    - Merges results intelligently to avoid duplicate detections
+    - Works best for images with multiple birds or distant subjects
 
     ### Species Identification
     - For **expert species identification and training**, use the **Nestperts** platform
-    - Nestperts allows experts to assign species to detected birds
-    - Expert-labeled data is used to train future species classification models
+    - Experts can assign species to detected birds
+    - Expert-labeled data improves future model versions
 
     ### Technical Details
-    - **Input image size**: 1024x1024 pixels
-    - **Confidence threshold**: Adjustable (default 0.25)
-    - **Model architecture**: YOLO-based object detection (ONNX format)
-    - **Smart slicing**: 20% overlap for Zoom mode
-    - **Model file**: `server/seconditer.onnx`
+    - **Input resolution**: 1024×1024 pixels
+    - **Confidence threshold**: Adjustable (default 25%)
+    - **Smart slicing**: 20% overlap for large images
+    - **NMS threshold**: 50% IoU for duplicate removal
     """)
 
 st.markdown("---")
@@ -127,9 +128,9 @@ st.markdown("**Processing Mode**")
 fast_mode = st.radio(
     "Choose detection mode:",
     options=[True, False],
-    format_func=lambda x: "⚡ Fast Mode (Recommended)" if x else "🎯 Zoom Mode",
+    format_func=lambda x: "🚀 Swift" if x else "🎯 Apex",
     index=0,
-    help="Fast Mode: Quick inference with downsampling, best for previews.\nZoom Mode: Smart slicing with optimal overlap for detecting small or distant birds, but slower.",
+    help="Swift: Optimized for speed, perfect for quick previews.\nApex: Optimized for accuracy, ideal for final analysis.\nBoth modes use SAHI slicing for large images.",
     label_visibility="collapsed"
 )
 

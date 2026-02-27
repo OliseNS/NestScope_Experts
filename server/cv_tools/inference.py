@@ -15,49 +15,75 @@ from sahi import AutoDetectionModel
 from sahi.predict import get_sliced_prediction
 from sahi.utils.cv import read_image_as_pil
 
-# Load model path from config.yaml
-def _load_model_path():
-    """Load model path from server configuration"""
+# Load model paths from config.yaml
+def _load_model_paths():
+    """Load model paths from server configuration"""
     config_path = Path(__file__).parent.parent / "config.yaml"
     try:
         with open(config_path, 'r') as f:
             config = yaml.safe_load(f)
-        model_path = config['cv']['model_path']
 
-        # Convert relative path to absolute (relative to project root)
-        if not os.path.isabs(model_path):
-            project_root = Path(__file__).parent.parent.parent
-            model_path = str(project_root / model_path)
+        model_fast = config['cv']['model_fast']
+        model_pro = config['cv']['model_pro']
 
-        return model_path
+        # Convert relative paths to absolute (relative to project root)
+        project_root = Path(__file__).parent.parent.parent
+
+        if not os.path.isabs(model_fast):
+            model_fast = str(project_root / model_fast)
+        if not os.path.isabs(model_pro):
+            model_pro = str(project_root / model_pro)
+
+        return model_fast, model_pro
     except Exception as e:
-        print(f"Warning: Could not load model path from config: {e}")
-        # Fallback to default model
-        return os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "models", "seconditer.onnx")
+        print(f"Warning: Could not load model paths from config: {e}")
+        # Fallback to default models
+        models_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "models")
+        return (
+            os.path.join(models_dir, "nano.onnx"),
+            os.path.join(models_dir, "small.onnx")
+        )
 
-MODEL_PATH = _load_model_path()
-print(f"✓ CV Model configured: {MODEL_PATH}")
+MODEL_FAST, MODEL_PRO = _load_model_paths()
+print(f"✓ CV Models configured:")
+print(f"  Fast mode: {MODEL_FAST}")
+print(f"  Pro mode: {MODEL_PRO}")
 
 class BirdDetector:
-    """YOLO-based bird detection and counting"""
+    """YOLO-based bird detection and counting with dynamic model loading"""
 
-    def __init__(self, model_path=MODEL_PATH, imgsz=1024):
+    def __init__(self, model_fast=MODEL_FAST, model_pro=MODEL_PRO, imgsz=1024):
         """
-        Initialize the bird detector
+        Initialize the bird detector with support for multiple models
 
         Args:
-            model_path: Path to the YOLO model weights
+            model_fast: Path to the fast YOLO model (nano)
+            model_pro: Path to the pro YOLO model (small)
             imgsz: Image size for inference (default: 1024)
         """
-        self.model_path = model_path
+        self.model_fast_path = model_fast
+        self.model_pro_path = model_pro
         self.imgsz = imgsz
+        self.current_model_path = None
         self.model = None
-        self._load_model()
+        # Start with fast model loaded by default
+        self._load_model(self.model_fast_path)
 
-    def _load_model(self):
-        """Load the ONNX model and detect its output format"""
-        if not os.path.exists(self.model_path):
-            raise FileNotFoundError(f"Model not found at {self.model_path}")
+    def _load_model(self, model_path):
+        """
+        Load the ONNX model and detect its output format
+
+        Args:
+            model_path: Path to the ONNX model file
+        """
+        if not os.path.exists(model_path):
+            raise FileNotFoundError(f"Model not found at {model_path}")
+
+        # Skip reloading if this model is already loaded
+        if self.current_model_path == model_path and self.model is not None:
+            return
+
+        self.current_model_path = model_path
 
         try:
             # Configure ONNX Runtime session options for better performance
@@ -68,7 +94,7 @@ class BirdDetector:
             providers = ['CUDAExecutionProvider', 'CPUExecutionProvider']
 
             self.model = ort.InferenceSession(
-                self.model_path,
+                model_path,
                 sess_options=sess_options,
                 providers=providers
             )
@@ -91,8 +117,8 @@ class BirdDetector:
                 self.coord_format = 'xywh'  # Standard format always uses xywh
                 print(f"✓ Detected standard YOLO format: {output_shape}")
 
-            print(f"ONNX model loaded successfully from {self.model_path}")
-            print(f"Using provider: {self.model.get_providers()[0]}")
+            print(f"✓ ONNX model loaded successfully from {model_path}")
+            print(f"  Using provider: {self.model.get_providers()[0]}")
         except Exception as e:
             raise RuntimeError(f"Failed to load ONNX model: {str(e)}")
 
@@ -687,18 +713,16 @@ class BirdDetector:
 
     def predict(self, image_path, conf_threshold=0.25, use_sliding_window=True, fast_mode=True):
         """
-        Run inference on an image with two modes: Fast or SAHI
+        Run inference on an image with SAHI and model selection
 
         Args:
             image_path: Path to the input image
             conf_threshold: Confidence threshold for detections (default: 0.25)
             use_sliding_window: Whether to use smart slicing for large images (default: True)
-            fast_mode: Processing mode (default: True)
-                - True (Fast Mode): Quick inference using downsampling for large images.
-                                    Best for fast previews and real-time processing.
-                - False (SAHI Mode): Uses SAHI (Slicing Aided Hyper Inference) for intelligent
-                                     image slicing with optimal overlap and merging. More accurate
-                                     but slower, especially for detecting small objects.
+            fast_mode: Model selection mode (default: True)
+                - True (Fast): Swift model - optimized for speed, good for quick previews
+                - False (Max): Apex model - optimized for accuracy, better for final results
+                Both modes use SAHI (Slicing Aided Hyper Inference) for large images
 
         Returns:
             dict: Results containing:
@@ -710,6 +734,11 @@ class BirdDetector:
         if not os.path.exists(image_path):
             raise FileNotFoundError(f"Image not found at {image_path}")
 
+        # Load the appropriate model based on mode
+        target_model = self.model_fast_path if fast_mode else self.model_pro_path
+        mode_name = "Swift" if fast_mode else "Apex"
+        self._load_model(target_model)
+
         # Start timing
         start_time = time.perf_counter()
 
@@ -717,27 +746,16 @@ class BirdDetector:
         original_img = cv2.imread(image_path)
         height, width = original_img.shape[:2]
 
-        # Choose processing mode
-        if fast_mode:
-            # FAST MODE: Quick inference with downsampling for large images
-            if height > self.imgsz or width > self.imgsz:
-                print(f"[Fast Mode] Processing {width}x{height} image with downsampling...")
-                detections = self._downsample_and_predict(original_img, conf_threshold)
-            else:
-                # Small image: use standard inference
-                preprocessed, scale, pad = self._preprocess_image(original_img)
-                output = self.model.run(self.output_names, {self.input_name: preprocessed})
-                detections = self._postprocess(output[0], scale, pad, conf_threshold)
+        # ALWAYS use SAHI for large images, standard inference for small images
+        if use_sliding_window and (height > self.imgsz or width > self.imgsz):
+            print(f"[{mode_name} Mode] Processing {width}x{height} image with SAHI slicing...")
+            detections = self._predict_with_sahi(image_path, conf_threshold)
         else:
-            # SAHI MODE: Smart slicing with SAHI for accurate detection
-            if use_sliding_window and (height > self.imgsz or width > self.imgsz):
-                print(f"[SAHI Mode] Processing {width}x{height} image with smart slicing...")
-                detections = self._predict_with_sahi(image_path, conf_threshold)
-            else:
-                # Small image: use standard inference
-                preprocessed, scale, pad = self._preprocess_image(original_img)
-                output = self.model.run(self.output_names, {self.input_name: preprocessed})
-                detections = self._postprocess(output[0], scale, pad, conf_threshold)
+            # Small image: use standard inference
+            print(f"[{mode_name} Mode] Processing {width}x{height} image with standard inference...")
+            preprocessed, scale, pad = self._preprocess_image(original_img)
+            output = self.model.run(self.output_names, {self.input_name: preprocessed})
+            detections = self._postprocess(output[0], scale, pad, conf_threshold)
 
         # Calculate inference time (before drawing annotations)
         inference_time = time.perf_counter() - start_time
@@ -811,22 +829,25 @@ class BirdDetector:
 
     def predict_from_bytes(self, image_bytes, conf_threshold=0.25, use_sliding_window=True, fast_mode=True):
         """
-        Run inference on image bytes (from uploaded file) with two modes: Fast or SAHI
+        Run inference on image bytes (from uploaded file) with SAHI and model selection
 
         Args:
             image_bytes: Image data as bytes
             conf_threshold: Confidence threshold for detections
             use_sliding_window: Whether to use smart slicing for large images (default: True)
-            fast_mode: Processing mode (default: True)
-                - True (Fast Mode): Quick inference using downsampling for large images.
-                                    Best for fast previews and real-time processing.
-                - False (SAHI Mode): Uses SAHI (Slicing Aided Hyper Inference) for intelligent
-                                     image slicing with optimal overlap and merging. More accurate
-                                     but slower, especially for detecting small objects.
+            fast_mode: Model selection mode (default: True)
+                - True (Fast): Swift model - optimized for speed, good for quick previews
+                - False (Max): Apex model - optimized for accuracy, better for final results
+                Both modes use SAHI (Slicing Aided Hyper Inference) for large images
 
         Returns:
             dict: Same as predict()
         """
+        # Load the appropriate model based on mode
+        target_model = self.model_fast_path if fast_mode else self.model_pro_path
+        mode_name = "Swift" if fast_mode else "Apex"
+        self._load_model(target_model)
+
         # Start timing
         start_time = time.perf_counter()
 
@@ -835,38 +856,27 @@ class BirdDetector:
         img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
         height, width = img.shape[:2]
 
-        # Choose processing mode
-        if fast_mode:
-            # FAST MODE: Quick inference with downsampling for large images
-            if height > self.imgsz or width > self.imgsz:
-                print(f"[Fast Mode] Processing {width}x{height} image with downsampling...")
-                detections = self._downsample_and_predict(img, conf_threshold)
-            else:
-                # Small image: use standard inference
-                preprocessed, scale, pad = self._preprocess_image(img)
-                output = self.model.run(self.output_names, {self.input_name: preprocessed})
-                detections = self._postprocess(output[0], scale, pad, conf_threshold)
-        else:
-            # SAHI MODE: Smart slicing with SAHI for accurate detection
-            if use_sliding_window and (height > self.imgsz or width > self.imgsz):
-                print(f"[SAHI Mode] Processing {width}x{height} image with smart slicing...")
-                # Save image temporarily for SAHI
-                import tempfile
-                with tempfile.NamedTemporaryFile(suffix='.jpg', delete=False) as tmp_file:
-                    tmp_path = tmp_file.name
-                    cv2.imwrite(tmp_path, img)
+        # ALWAYS use SAHI for large images, standard inference for small images
+        if use_sliding_window and (height > self.imgsz or width > self.imgsz):
+            print(f"[{mode_name} Mode] Processing {width}x{height} image with SAHI slicing...")
+            # Save image temporarily for SAHI
+            import tempfile
+            with tempfile.NamedTemporaryFile(suffix='.jpg', delete=False) as tmp_file:
+                tmp_path = tmp_file.name
+                cv2.imwrite(tmp_path, img)
 
-                try:
-                    detections = self._predict_with_sahi(tmp_path, conf_threshold)
-                finally:
-                    # Clean up temp file
-                    if os.path.exists(tmp_path):
-                        os.remove(tmp_path)
-            else:
-                # Small image: use standard inference
-                preprocessed, scale, pad = self._preprocess_image(img)
-                output = self.model.run(self.output_names, {self.input_name: preprocessed})
-                detections = self._postprocess(output[0], scale, pad, conf_threshold)
+            try:
+                detections = self._predict_with_sahi(tmp_path, conf_threshold)
+            finally:
+                # Clean up temp file
+                if os.path.exists(tmp_path):
+                    os.remove(tmp_path)
+        else:
+            # Small image: use standard inference
+            print(f"[{mode_name} Mode] Processing {width}x{height} image with standard inference...")
+            preprocessed, scale, pad = self._preprocess_image(img)
+            output = self.model.run(self.output_names, {self.input_name: preprocessed})
+            detections = self._postprocess(output[0], scale, pad, conf_threshold)
 
         # Calculate inference time (before drawing annotations)
         inference_time = time.perf_counter() - start_time
