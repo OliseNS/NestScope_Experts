@@ -1,0 +1,597 @@
+{
+  "decision_tree": {
+    "step_1_color": {
+      "question": "What is the bird's PRIMARY COLOR from aerial view?",
+      "help_text": "Look at the dominant body color. This is the most reliable feature from high altitude.",
+      "options": [
+        {
+          "label": "WHITE/PALE",
+          "description": "Pure white or very pale gray plumage (Pelicans, Egrets, Terns)",
+          "icon": "⚪",
+          "species_codes": ["AWPE", "GREG", "SNEG", "CAEG", "REEG WM", "WHEG", "UNEG", "ROYT", "SATE", "CATE", "COTE", "FOTE", "LETE", "GBTE", "ROST", "WOST", "AMAV", "CARO", "FOCO", "ROSA", "USTE", "ULTE", "UNTE"]
+        },
+        {
+          "label": "DARK/BLACK",
+          "description": "Black, very dark brown, or dark gray (Cormorants, Anhingas, Skimmers, Noddies)",
+          "icon": "⚫",
+          "species_codes": ["BRPE", "DCCO", "NECO", "ANHI", "MAFR", "UNCO", "BLSK", "BLTE", "SOTE", "BRNO", "LAGU", "SONO"]
+        },
+        {
+          "label": "BLUE-GRAY",
+          "description": "Blue-gray, slate, or ash colored (Herons, Night-Herons)",
+          "icon": "🔵",
+          "species_codes": ["GBHE", "LTBH", "TRHE", "BCNH", "YCNH", "SDHE", "UNHG"]
+        },
+        {
+          "label": "BROWN/REDDISH",
+          "description": "Brown, reddish-brown, or mixed dark colors (Reddish Egret, Ibis, Gulls)",
+          "icon": "🟤",
+          "species_codes": ["REEG", "REEG DM", "WHIB", "WFIB", "DAIB", "UNIB", "HERG", "AMOY", "BNST", "RUTU", "ULGU", "UNGU", "UNGT", "UNSB"]
+        },
+        {
+          "label": "PINK/RED",
+          "description": "Bright pink or reddish overall (Spoonbill - unmistakable!)",
+          "icon": "🔴",
+          "species_codes": ["ROSP"]
+        }
+      ]
+    },
+    "step_2_neck": {
+      "WHITE": {
+        "question": "What is the NECK LENGTH and BODY SIZE?",
+        "help_text": "Neck length is highly visible from aerial view - much more reliable than bill details!",
+        "options": [
+          {
+            "label": "VERY LONG NECK",
+            "description": "Long elegant neck visible (Egrets, Herons, Stork)",
+            "icon": "🦢",
+            "species_codes": ["GREG", "SNEG", "CAEG", "REEG WM", "WHEG", "UNEG", "WOST"]
+          },
+          {
+            "label": "SHORT NECK",
+            "description": "Compact body with short neck (Terns, Avocet)",
+            "icon": "🐦",
+            "species_codes": ["ROYT", "SATE", "CATE", "COTE", "FOTE", "LETE", "GBTE", "ROST", "AMAV", "CARO", "FOCO", "ROSA", "USTE", "ULTE", "UNTE"]
+          },
+          {
+            "label": "HUGE BODY",
+            "description": "Massive body size, much larger than other birds (Pelican)",
+            "icon": "🦤",
+            "species_codes": ["AWPE"]
+          }
+        ]
+      },
+      "DARK": {
+        "question": "What is the NECK LENGTH and BODY SHAPE?",
+        "help_text": "Neck is the key diagnostic feature - much easier to see than bill from above!",
+        "options": [
+          {
+            "label": "VERY LONG NECK",
+            "description": "Long snake-like or S-curved neck (Cormorants, Anhinga)",
+            "icon": "🐍",
+            "species_codes": ["DCCO", "NECO", "ANHI", "UNCO"]
+          },
+          {
+            "label": "SHORT NECK",
+            "description": "Compact body, short neck (Terns, Skimmers, Gulls, Noddies)",
+            "icon": "🐦",
+            "species_codes": ["BLTE", "SOTE", "BRNO", "LAGU", "SONO", "BLSK"]
+          },
+          {
+            "label": "HUGE BODY",
+            "description": "Massive pelican body size",
+            "icon": "🦤",
+            "species_codes": ["BRPE"]
+          },
+          {
+            "label": "VERY LONG WINGS",
+            "description": "Extremely long pointed wings, forked tail (Frigatebird)",
+            "icon": "🦅",
+            "species_codes": ["MAFR"]
+          }
+        ]
+      },
+      "BLUE-GRAY": {
+        "question": "What is the NECK LENGTH?",
+        "help_text": "Blue-gray herons separate cleanly by neck length from aerial view.",
+        "options": [
+          {
+            "label": "VERY LONG NECK",
+            "description": "Extra-long neck, largest heron (Great Blue Heron)",
+            "icon": "🦢",
+            "species_codes": ["GBHE"]
+          },
+          {
+            "label": "LONG NECK",
+            "description": "Long neck but smaller overall (Little Blue, Tricolored)",
+            "icon": "🐦",
+            "species_codes": ["LTBH", "TRHE", "SDHE", "UNHG"]
+          },
+          {
+            "label": "SHORT NECK",
+            "description": "Stocky with short thick neck (Night-Herons)",
+            "icon": "🦉",
+            "species_codes": ["BCNH", "YCNH"]
+          }
+        ]
+      },
+      "BROWN": {
+        "question": "What is the NECK LENGTH and BODY SHAPE?",
+        "help_text": "Brown birds separate well by neck length and body proportions.",
+        "options": [
+          {
+            "label": "LONG NECK",
+            "description": "Long slender neck (Reddish Egret)",
+            "icon": "🦢",
+            "species_codes": ["REEG", "REEG DM"]
+          },
+          {
+            "label": "MEDIUM NECK",
+            "description": "Medium neck, wading bird shape (Ibis, Oystercatcher, Stilt)",
+            "icon": "🦆",
+            "species_codes": ["WHIB", "WFIB", "DAIB", "UNIB", "AMOY", "BNST"]
+          },
+          {
+            "label": "SHORT NECK",
+            "description": "Short neck, compact body (Gulls, Shorebirds)",
+            "icon": "🐦",
+            "species_codes": ["HERG", "RUTU", "ULGU", "UNGU", "UNGT", "UNSB"]
+          }
+        ]
+      },
+      "PINK": {
+        "question": "CONFIRMATION - Roseate Spoonbill?",
+        "help_text": "If it's pink, it's a Roseate Spoonbill. No other pink birds in this region!",
+        "options": [
+          {
+            "label": "YES - BRIGHT PINK",
+            "description": "Bright pink with medium neck - UNMISTAKABLE!",
+            "icon": "🦩",
+            "species_codes": ["ROSP"]
+          }
+        ]
+      }
+    },
+    "step_3_features": {
+      "WHITE_VERY_LONG_NECK": {
+        "question": "Additional features for white long-necked birds:",
+        "help_text": "Look at relative size, leg color, and behavior if visible.",
+        "species": [
+          {
+            "code": "GREG",
+            "name": "Great Egret",
+            "key_features": ["Largest white egret", "S-curved neck", "Black legs", "Solitary or small groups"],
+            "size": "94-104cm",
+            "neck": "Very long, S-curved",
+            "confidence_tips": "Largest egret - noticeably bigger than SNEG, yellow bill if visible"
+          },
+          {
+            "code": "SNEG",
+            "name": "Snowy Egret",
+            "key_features": ["Medium-small egret", "Active hunting", "Yellow feet", "Gregarious"],
+            "size": "56-66cm",
+            "neck": "Long, slender",
+            "confidence_tips": "Smaller than GREG, very active hunting behavior"
+          },
+          {
+            "code": "CAEG",
+            "name": "Cattle Egret",
+            "key_features": ["Stocky build", "Shorter neck than other egrets", "Often in fields"],
+            "size": "46-56cm",
+            "neck": "Medium-long, stocky",
+            "confidence_tips": "Stockiest egret, shortest neck of the white egrets"
+          },
+          {
+            "code": "WOST",
+            "name": "Wood Stork",
+            "key_features": ["White body", "Black flight feathers visible", "Bare dark head", "Very long legs"],
+            "size": "83-115cm",
+            "neck": "Long, extended in flight",
+            "confidence_tips": "Black wing tips highly visible from above, larger than egrets"
+          },
+          {
+            "code": "WHEG",
+            "name": "White Egret (uncertain species)",
+            "key_features": ["Use when GREG vs SNEG vs CAEG uncertain"],
+            "size": "46-104cm",
+            "neck": "Long",
+            "confidence_tips": "Use when white egret species cannot be determined"
+          }
+        ]
+      },
+      "WHITE_SHORT_NECK": {
+        "question": "Additional features for white short-necked birds:",
+        "help_text": "Tern ID is challenging - use size and wing patterns. Avocet has distinctive posture.",
+        "species": [
+          {
+            "code": "ROYT",
+            "name": "Royal Tern",
+            "key_features": ["Large tern", "Black cap", "Often in large colonies", "Coastal"],
+            "size": "45-50cm",
+            "neck": "Short, compact",
+            "confidence_tips": "Largest tern, orange bill if visible"
+          },
+          {
+            "code": "SATE",
+            "name": "Sandwich Tern",
+            "key_features": ["Medium tern", "Black cap", "Slender build"],
+            "size": "37-43cm",
+            "neck": "Short",
+            "confidence_tips": "Medium-sized tern with slender profile"
+          },
+          {
+            "code": "CATE",
+            "name": "Caspian Tern",
+            "key_features": ["Largest tern", "Heavy build", "Black cap", "Red bill if visible"],
+            "size": "48-56cm",
+            "neck": "Short, thick",
+            "confidence_tips": "Heaviest tern, larger than ROYT"
+          },
+          {
+            "code": "LETE",
+            "name": "Least Tern",
+            "key_features": ["SMALLEST tern", "Tiny", "White forehead", "Quick flight"],
+            "size": "22-24cm",
+            "neck": "Very short",
+            "confidence_tips": "Much smaller than all other terns - size is diagnostic"
+          },
+          {
+            "code": "AMAV",
+            "name": "American Avocet",
+            "key_features": ["Black and white wing pattern", "Long blue-gray legs", "Elegant wading posture"],
+            "size": "43-47cm",
+            "neck": "Medium, graceful",
+            "confidence_tips": "Distinctive black/white wing pattern, elegant wader"
+          },
+          {
+            "code": "UNTE",
+            "name": "Unidentified Tern",
+            "key_features": ["Use when tern species uncertain"],
+            "size": "22-56cm",
+            "neck": "Short",
+            "confidence_tips": "Terns are very difficult to ID from aerial views"
+          }
+        ]
+      },
+      "WHITE_HUGE_BODY": {
+        "question": "CONFIRMATION - American White Pelican?",
+        "help_text": "Huge white bird - much larger than all other species.",
+        "species": [
+          {
+            "code": "AWPE",
+            "name": "American White Pelican",
+            "key_features": ["Pure white", "ENORMOUS size", "Black wing tips", "Gregarious"],
+            "size": "127-178cm (wingspan 244-290cm)",
+            "neck": "Medium, thick",
+            "confidence_tips": "Massive size is diagnostic - far larger than any egret"
+          }
+        ]
+      },
+      "DARK_VERY_LONG_NECK": {
+        "question": "Key features for dark long-necked birds:",
+        "help_text": "Anhinga has extremely long snake-like neck. Cormorants have S-curved necks.",
+        "species": [
+          {
+            "code": "DCCO",
+            "name": "Double-crested Cormorant",
+            "key_features": ["Long S-curved neck", "Often perched with wings spread", "Slender body"],
+            "size": "70-90cm",
+            "neck": "Long, S-curved",
+            "confidence_tips": "Wing-spreading behavior is distinctive. Most common cormorant."
+          },
+          {
+            "code": "NECO",
+            "name": "Neotropic Cormorant",
+            "key_features": ["Smaller than DCCO", "More slender", "Longer tail", "Southern range"],
+            "size": "58-73cm",
+            "neck": "Long, slender",
+            "confidence_tips": "Smaller and more slender than DCCO - use location"
+          },
+          {
+            "code": "ANHI",
+            "name": "Anhinga",
+            "key_features": ["VERY long snake-like neck", "Long pointed tail", "Distinctive silhouette"],
+            "size": "75-95cm",
+            "neck": "EXTREMELY long, snake-like",
+            "confidence_tips": "Snake-like neck is diagnostic - much longer than cormorants"
+          },
+          {
+            "code": "UNCO",
+            "name": "Cormorant (species uncertain)",
+            "key_features": ["Use when DCCO vs NECO uncertain"],
+            "size": "60-90cm",
+            "neck": "Long",
+            "confidence_tips": "Use when cormorant species cannot be distinguished"
+          }
+        ]
+      },
+      "DARK_SHORT_NECK": {
+        "question": "Key features for dark short-necked birds:",
+        "help_text": "Look at size, wing shape, and bill if visible. Skimmer has unique profile.",
+        "species": [
+          {
+            "code": "BLSK",
+            "name": "Black Skimmer",
+            "key_features": ["Black above, white below", "Unique long bill profile", "Flies low over water"],
+            "size": "40-50cm",
+            "neck": "Short",
+            "confidence_tips": "Unique profile with bill often in water while flying"
+          },
+          {
+            "code": "BLTE",
+            "name": "Black Tern",
+            "key_features": ["Small", "Dark gray-black in breeding", "Inland marshes"],
+            "size": "23-26cm",
+            "neck": "Short",
+            "confidence_tips": "Small dark tern, often over freshwater"
+          },
+          {
+            "code": "SOTE",
+            "name": "Sooty Tern",
+            "key_features": ["Black above, white below", "White forehead", "Tropical waters"],
+            "size": "43-45cm",
+            "neck": "Short",
+            "confidence_tips": "Contrasting black/white pattern, tropical"
+          },
+          {
+            "code": "BRNO",
+            "name": "Brown Noddy",
+            "key_features": ["Overall brown", "Pale cap visible", "Wedge-shaped tail"],
+            "size": "38-43cm",
+            "neck": "Short",
+            "confidence_tips": "Brown overall with pale forehead patch"
+          },
+          {
+            "code": "LAGU",
+            "name": "Laughing Gull",
+            "key_features": ["Black head in breeding", "Dark gray back", "Common coastal gull"],
+            "size": "36-43cm",
+            "neck": "Short",
+            "confidence_tips": "Most common small dark-hooded gull on coast"
+          }
+        ]
+      },
+      "DARK_HUGE_BODY": {
+        "question": "CONFIRMATION - Brown Pelican?",
+        "help_text": "Massive dark bird - much larger than cormorants.",
+        "species": [
+          {
+            "code": "BRPE",
+            "name": "Brown Pelican",
+            "key_features": ["Stocky body", "HUGE size", "Often diving", "Coastal"],
+            "size": "120-137cm",
+            "neck": "Medium, thick",
+            "confidence_tips": "Distinctive pelican size and shape - plunge dives"
+          }
+        ]
+      },
+      "DARK_VERY_LONG_WINGS": {
+        "question": "CONFIRMATION - Magnificent Frigatebird?",
+        "help_text": "Extremely long wings and forked tail - unmistakable soaring silhouette.",
+        "species": [
+          {
+            "code": "MAFR",
+            "name": "Magnificent Frigatebird",
+            "key_features": ["All black", "VERY long angular wings", "Deeply forked tail", "Soars effortlessly"],
+            "size": "100-114cm (wingspan 215-229cm)",
+            "neck": "Medium",
+            "confidence_tips": "Distinctive soaring silhouette with extremely long wings - often high altitude"
+          }
+        ]
+      },
+      "BLUE-GRAY_VERY_LONG_NECK": {
+        "question": "CONFIRMATION - Great Blue Heron?",
+        "help_text": "Largest blue-gray heron with extra-long neck.",
+        "species": [
+          {
+            "code": "GBHE",
+            "name": "Great Blue Heron",
+            "key_features": ["Largest heron", "Blue-gray overall", "Very long neck and legs", "Solitary"],
+            "size": "97-137cm",
+            "neck": "VERY long, thick",
+            "confidence_tips": "Largest heron species - size and blue-gray color diagnostic"
+          }
+        ]
+      },
+      "BLUE-GRAY_LONG_NECK": {
+        "question": "Key features for smaller blue-gray herons:",
+        "help_text": "Look at belly color if visible - TRHE has white belly stripe.",
+        "species": [
+          {
+            "code": "LTBH",
+            "name": "Little Blue Heron",
+            "key_features": ["Dark blue-gray overall", "Medium size", "Maroon neck in breeding"],
+            "size": "56-74cm",
+            "neck": "Long, slender",
+            "confidence_tips": "Overall dark blue-gray, smaller than GBHE"
+          },
+          {
+            "code": "TRHE",
+            "name": "Tricolored Heron",
+            "key_features": ["Blue-gray above", "White belly visible", "Most slender heron"],
+            "size": "56-76cm",
+            "neck": "Long, very slender",
+            "confidence_tips": "Slenderer than LTBH, white belly stripe when visible"
+          },
+          {
+            "code": "UNHG",
+            "name": "Unidentified Heron/Egret",
+            "key_features": ["Use when heron species uncertain"],
+            "size": "Variable",
+            "neck": "Long",
+            "confidence_tips": "Use when species cannot be determined from aerial view"
+          }
+        ]
+      },
+      "BLUE-GRAY_SHORT_NECK": {
+        "question": "Key features for stocky blue-gray birds:",
+        "help_text": "Night-herons are stocky with short necks. Look at back color if visible.",
+        "species": [
+          {
+            "code": "BCNH",
+            "name": "Black-crowned Night Heron",
+            "key_features": ["Stocky", "Black back", "Gray wings", "Hunched posture"],
+            "size": "58-65cm",
+            "neck": "Short, thick",
+            "confidence_tips": "Black back contrasting with gray wings from above"
+          },
+          {
+            "code": "YCNH",
+            "name": "Yellow-crowned Night Heron",
+            "key_features": ["Gray overall", "Less contrasting than BCNH", "Longer legs"],
+            "size": "55-70cm",
+            "neck": "Short, thick",
+            "confidence_tips": "Overall grayer than BCNH, less back/wing contrast"
+          }
+        ]
+      },
+      "BROWN_LONG_NECK": {
+        "question": "CONFIRMATION - Reddish Egret?",
+        "help_text": "Reddish-brown egret with distinctive active hunting behavior.",
+        "species": [
+          {
+            "code": "REEG",
+            "name": "Reddish Egret",
+            "key_features": ["Reddish-brown neck", "Gray body", "VERY active hunting", "Coastal"],
+            "size": "68-82cm",
+            "neck": "Long, reddish",
+            "confidence_tips": "Distinctive reddish color and very active hunting style"
+          },
+          {
+            "code": "REEG DM",
+            "name": "Reddish Egret Dark Morph",
+            "key_features": ["Overall dark reddish-brown", "Active hunting", "Same behavior as REEG"],
+            "size": "68-82cm",
+            "neck": "Long, dark reddish",
+            "confidence_tips": "Dark morph of REEG, same distinctive hunting behavior"
+          }
+        ]
+      },
+      "BROWN_MEDIUM_NECK": {
+        "question": "Key features for brown wading birds:",
+        "help_text": "Look for distinctive bill shapes - curved (ibis), huge orange (oystercatcher), or very long pink legs (stilt).",
+        "species": [
+          {
+            "code": "WHIB",
+            "name": "White Ibis",
+            "key_features": ["White body but often in brown category", "Red curved bill", "Black wing tips", "Flocks"],
+            "size": "56-71cm",
+            "neck": "Medium, curved when feeding",
+            "confidence_tips": "Curved bill profile visible, gregarious"
+          },
+          {
+            "code": "WFIB",
+            "name": "White-faced Ibis",
+            "key_features": ["Dark overall", "Glossy greenish sheen", "Curved bill profile"],
+            "size": "46-56cm",
+            "neck": "Medium",
+            "confidence_tips": "Dark ibis with curved bill, glossy appearance"
+          },
+          {
+            "code": "AMOY",
+            "name": "American Oystercatcher",
+            "key_features": ["Brown back", "White belly", "HUGE orange bill visible", "Coastal"],
+            "size": "40-44cm",
+            "neck": "Short-medium",
+            "confidence_tips": "Huge bright orange bill is diagnostic if visible"
+          },
+          {
+            "code": "BNST",
+            "name": "Black-necked Stilt",
+            "key_features": ["Black back", "White below", "VERY long pink legs", "Elegant build"],
+            "size": "33-36cm",
+            "neck": "Medium-long, thin",
+            "confidence_tips": "Incredibly long pink legs are diagnostic!"
+          },
+          {
+            "code": "UNIB",
+            "name": "Unidentified Ibis",
+            "key_features": ["Use when ibis species uncertain"],
+            "size": "46-71cm",
+            "neck": "Medium",
+            "confidence_tips": "Use when ibis ID not possible"
+          }
+        ]
+      },
+      "BROWN_SHORT_NECK": {
+        "question": "Key features for brown/gray short-necked birds:",
+        "help_text": "Gulls and shorebirds - look at size and body shape.",
+        "species": [
+          {
+            "code": "HERG",
+            "name": "Herring Gull",
+            "key_features": ["Large gull", "Gray back", "Pink legs", "Heavy build"],
+            "size": "56-66cm",
+            "neck": "Short",
+            "confidence_tips": "Large gull with gray back, common"
+          },
+          {
+            "code": "RUTU",
+            "name": "Ruddy Turnstone",
+            "key_features": ["Rusty/black patchwork pattern", "Small", "Orange legs", "Stocky"],
+            "size": "22-24cm",
+            "neck": "Very short",
+            "confidence_tips": "Distinctive rusty patchwork pattern from above"
+          },
+          {
+            "code": "UNGU",
+            "name": "Unidentified Gull",
+            "key_features": ["Use when gull species uncertain"],
+            "size": "Variable",
+            "neck": "Short",
+            "confidence_tips": "Gulls are difficult to ID from aerial views"
+          },
+          {
+            "code": "UNSB",
+            "name": "Unidentified Shorebird",
+            "key_features": ["Use for small unidentified shorebirds"],
+            "size": "Variable",
+            "neck": "Short",
+            "confidence_tips": "Use when shorebird species cannot be determined"
+          }
+        ]
+      },
+      "PINK_YES_BRIGHT_PINK": {
+        "question": "ROSEATE SPOONBILL - Final Confirmation",
+        "help_text": "If you see pink, it's a Roseate Spoonbill. Period.",
+        "species": [
+          {
+            "code": "ROSP",
+            "name": "Roseate Spoonbill",
+            "key_features": ["BRIGHT PINK!", "Spatulate bill if visible", "Orange tail", "White neck"],
+            "size": "71-86cm",
+            "neck": "Medium",
+            "confidence_tips": "BRIGHT PINK! Cannot be confused with anything else in this region!"
+          }
+        ]
+      }
+    }
+  },
+  "notes": {
+    "version": "3.0 - NECK LENGTH Decision Tree (Aerial-Optimized)",
+    "major_change": "Replaced BILL SHAPE with NECK LENGTH for Step 2. Bill details are too small to see reliably from aerial photographs, but neck length is highly visible and diagnostic.",
+    "rationale": [
+      "Neck length is visible from high altitude aerial photography",
+      "Bill shape requires close-up views that aerial photos don't provide",
+      "This matches actual field identification practices for aerial surveys",
+      "Neck proportions are used by ornithologists for distant bird ID"
+    ],
+    "source": "Based on Cornell Lab of Ornithology, Audubon Society, Gulf Coast avian monitoring protocols, and aerial survey methodology",
+    "accuracy_tips": [
+      "COLOR is most reliable from aerial view - always start here",
+      "NECK LENGTH is the second-most visible feature from above",
+      "Long-necked birds (herons, egrets) are obvious even at distance",
+      "Short-necked birds (terns, gulls) have compact body profiles",
+      "Use colony context - species often segregate by habitat",
+      "Use relative comparison - if multiple birds visible, compare sizes and neck lengths",
+      "When uncertain, use combination codes (WHEG, UNCO, UNIB, etc.)"
+    ],
+    "common_mistakes": [
+      "Trying to identify bill details from aerial photos - use neck instead!",
+      "GREG vs SNEG - look at overall size and neck thickness",
+      "Cormorants vs Anhinga - Anhinga has distinctively longer snake-like neck",
+      "Night-herons vs other herons - night-herons have stocky bodies with short thick necks",
+      "Terns are very difficult from aerial view - use UNTE when uncertain"
+    ]
+  }
+}

@@ -10,12 +10,33 @@ from pathlib import Path
 import numpy as np
 from typing import List, Tuple
 import time
+import yaml
 from sahi import AutoDetectionModel
 from sahi.predict import get_sliced_prediction
 from sahi.utils.cv import read_image_as_pil
 
-# Model path - relative to project root directory (using ONNX model from models/ folder)
-MODEL_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "models", "seconditer.onnx")
+# Load model path from config.yaml
+def _load_model_path():
+    """Load model path from server configuration"""
+    config_path = Path(__file__).parent.parent / "config.yaml"
+    try:
+        with open(config_path, 'r') as f:
+            config = yaml.safe_load(f)
+        model_path = config['cv']['model_path']
+
+        # Convert relative path to absolute (relative to project root)
+        if not os.path.isabs(model_path):
+            project_root = Path(__file__).parent.parent.parent
+            model_path = str(project_root / model_path)
+
+        return model_path
+    except Exception as e:
+        print(f"Warning: Could not load model path from config: {e}")
+        # Fallback to default model
+        return os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "models", "seconditer.onnx")
+
+MODEL_PATH = _load_model_path()
+print(f"✓ CV Model configured: {MODEL_PATH}")
 
 class BirdDetector:
     """YOLO-based bird detection and counting"""
@@ -34,7 +55,7 @@ class BirdDetector:
         self._load_model()
 
     def _load_model(self):
-        """Load the ONNX model"""
+        """Load the ONNX model and detect its output format"""
         if not os.path.exists(self.model_path):
             raise FileNotFoundError(f"Model not found at {self.model_path}")
 
@@ -56,10 +77,75 @@ class BirdDetector:
             self.input_name = self.model.get_inputs()[0].name
             self.output_names = [output.name for output in self.model.get_outputs()]
 
+            # Detect output format by checking shape
+            output_shape = self.model.get_outputs()[0].shape
+            if len(output_shape) == 3 and output_shape[2] == 6:
+                self.output_format = 'max_det'  # Format: [batch, num_detections, 6]
+
+                # Detect coordinate format (xyxy vs xywh) using test inference
+                self.coord_format = self._detect_coordinate_format()
+                print(f"✓ Detected YOLOv8/v11 max_det format: {output_shape}")
+                print(f"✓ Coordinate format: {self.coord_format}")
+            else:
+                self.output_format = 'standard'  # Format: [batch, classes, anchors]
+                self.coord_format = 'xywh'  # Standard format always uses xywh
+                print(f"✓ Detected standard YOLO format: {output_shape}")
+
             print(f"ONNX model loaded successfully from {self.model_path}")
             print(f"Using provider: {self.model.get_providers()[0]}")
         except Exception as e:
             raise RuntimeError(f"Failed to load ONNX model: {str(e)}")
+
+    def _detect_coordinate_format(self) -> str:
+        """
+        Detect if model outputs xyxy or xywh coordinates using test inference
+
+        YOLO11n exports to ONNX with xyxy format: [x1, y1, x2, y2, conf, class]
+        YOLOv8 exports to ONNX with xywh format: [x_center, y_center, width, height, conf, class]
+
+        Returns:
+            'xyxy' or 'xywh'
+        """
+        try:
+            # Run test inference with dummy input
+            dummy_input = np.random.rand(1, 3, self.imgsz, self.imgsz).astype(np.float32)
+            output = self.model.run(self.output_names, {self.input_name: dummy_input})
+
+            # Get first few detections to analyze
+            detections = output[0][0][:10]  # First 10 detections
+
+            # For each detection, check if coordinates make sense as xyxy
+            xyxy_score = 0
+            xywh_score = 0
+
+            for det in detections:
+                c1, c2, c3, c4 = det[:4]
+
+                # Test 1: In xyxy format, x2 > x1 and y2 > y1
+                if c3 > c1 and c4 > c2:
+                    xyxy_score += 1
+
+                    # Additional check: box size should be reasonable (not entire image)
+                    width = c3 - c1
+                    height = c4 - c2
+                    if 0 < width < self.imgsz * 0.8 and 0 < height < self.imgsz * 0.8:
+                        xyxy_score += 1
+
+                # Test 2: In xywh format, center coords should be < image size, w/h reasonable
+                if 0 <= c1 <= self.imgsz and 0 <= c2 <= self.imgsz:
+                    if 0 < c3 < self.imgsz and 0 < c4 < self.imgsz:
+                        xywh_score += 1
+
+            # Decide based on scores
+            if xyxy_score > xywh_score:
+                return 'xyxy'
+            else:
+                return 'xywh'
+
+        except Exception as e:
+            print(f"Warning: Could not detect coordinate format: {e}")
+            print("Defaulting to xywh format")
+            return 'xywh'
 
     def _preprocess_image(self, image: np.ndarray) -> Tuple[np.ndarray, float, Tuple[int, int]]:
         """
@@ -99,10 +185,150 @@ class BirdDetector:
 
         return image_batch, scale, (pad_w, pad_h)
 
-    def _postprocess_onnx_output(self, output: np.ndarray, scale: float, pad: Tuple[int, int],
-                                  conf_threshold: float = 0.25) -> List[dict]:
+    def _postprocess_max_det_format(self, output: np.ndarray, scale: float, pad: Tuple[int, int],
+                                      conf_threshold: float = 0.25) -> List[dict]:
         """
-        Postprocess ONNX model output to extract detections
+        Postprocess YOLOv8/v11 max_det format output: [1, num_detections, 6]
+
+        This format is already filtered to max detections (e.g., 300) by the model.
+        Coordinate format depends on model version:
+        - YOLOv8: [x_center, y_center, width, height, confidence, class_id]
+        - YOLO11n: [x1, y1, x2, y2, confidence, class_id]
+
+        Args:
+            output: Raw ONNX model output [1, num_detections, 6]
+            scale: Scale factor used during preprocessing
+            pad: Padding (pad_w, pad_h) used during preprocessing
+            conf_threshold: Confidence threshold for detections
+
+        Returns:
+            List of detection dictionaries
+        """
+        # Route to appropriate handler based on coordinate format
+        if self.coord_format == 'xyxy':
+            return self._postprocess_max_det_xyxy(output, scale, pad, conf_threshold)
+        else:
+            return self._postprocess_max_det_xywh(output, scale, pad, conf_threshold)
+
+    def _postprocess_max_det_xyxy(self, output: np.ndarray, scale: float, pad: Tuple[int, int],
+                                    conf_threshold: float = 0.25) -> List[dict]:
+        """
+        Postprocess max_det format with xyxy coordinates (YOLO11n format)
+        Format: [x1, y1, x2, y2, confidence, class_id]
+
+        Coordinates are already in corner format - no conversion needed!
+        """
+        pad_w, pad_h = pad
+
+        detections_raw = output[0]  # Remove batch dimension -> [num_detections, 6]
+
+        # Extract components - coordinates already in xyxy format!
+        boxes_xyxy = detections_raw[:, :4]  # x1, y1, x2, y2
+        confidences = detections_raw[:, 4]   # confidence scores
+        class_ids = detections_raw[:, 5].astype(int)  # class IDs
+
+        # Filter by confidence threshold
+        mask = confidences >= conf_threshold
+        boxes_xyxy = boxes_xyxy[mask]
+        confidences = confidences[mask]
+        class_ids = class_ids[mask]
+
+        if len(boxes_xyxy) == 0:
+            return []
+
+        # Adjust coordinates back to original image space (removing padding and scaling)
+        boxes_xyxy[:, [0, 2]] = (boxes_xyxy[:, [0, 2]] - pad_w) / scale
+        boxes_xyxy[:, [1, 3]] = (boxes_xyxy[:, [1, 3]] - pad_h) / scale
+
+        # Apply NMS to remove duplicate detections
+        indices = self._nms_boxes(boxes_xyxy, confidences, iou_threshold=0.45)
+
+        # Create detection dictionaries
+        detections = []
+        for idx in indices:
+            detections.append({
+                'bbox': boxes_xyxy[idx].tolist(),
+                'confidence': float(confidences[idx]),
+                'class_id': int(class_ids[idx])
+            })
+
+        return detections
+
+    def _postprocess_max_det_xywh(self, output: np.ndarray, scale: float, pad: Tuple[int, int],
+                                    conf_threshold: float = 0.25) -> List[dict]:
+        """
+        Postprocess max_det format with xywh coordinates (YOLOv8 format)
+        Format: [x_center, y_center, width, height, confidence, class_id]
+
+        Need to convert from center format to corner format.
+        """
+        pad_w, pad_h = pad
+
+        detections_raw = output[0]  # Remove batch dimension -> [num_detections, 6]
+
+        # Extract components
+        boxes_xywh = detections_raw[:, :4]  # x_center, y_center, width, height
+        confidences = detections_raw[:, 4]   # confidence scores
+        class_ids = detections_raw[:, 5].astype(int)  # class IDs
+
+        # Filter by confidence threshold
+        mask = confidences >= conf_threshold
+        boxes_xywh = boxes_xywh[mask]
+        confidences = confidences[mask]
+        class_ids = class_ids[mask]
+
+        if len(boxes_xywh) == 0:
+            return []
+
+        # Convert from xywh (center format) to xyxy (corner format)
+        boxes_xyxy = np.zeros_like(boxes_xywh)
+        boxes_xyxy[:, 0] = boxes_xywh[:, 0] - boxes_xywh[:, 2] / 2  # x1 = x_center - width/2
+        boxes_xyxy[:, 1] = boxes_xywh[:, 1] - boxes_xywh[:, 3] / 2  # y1 = y_center - height/2
+        boxes_xyxy[:, 2] = boxes_xywh[:, 0] + boxes_xywh[:, 2] / 2  # x2 = x_center + width/2
+        boxes_xyxy[:, 3] = boxes_xywh[:, 1] + boxes_xywh[:, 3] / 2  # y2 = y_center + height/2
+
+        # Adjust coordinates back to original image space
+        boxes_xyxy[:, [0, 2]] = (boxes_xyxy[:, [0, 2]] - pad_w) / scale
+        boxes_xyxy[:, [1, 3]] = (boxes_xyxy[:, [1, 3]] - pad_h) / scale
+
+        # Apply NMS to remove duplicate detections
+        indices = self._nms_boxes(boxes_xyxy, confidences, iou_threshold=0.45)
+
+        # Create detection dictionaries
+        detections = []
+        for idx in indices:
+            detections.append({
+                'bbox': boxes_xyxy[idx].tolist(),
+                'confidence': float(confidences[idx]),
+                'class_id': int(class_ids[idx])
+            })
+
+        return detections
+
+    def _postprocess(self, output: np.ndarray, scale: float, pad: Tuple[int, int],
+                     conf_threshold: float = 0.25) -> List[dict]:
+        """
+        Route to the correct postprocessing function based on model output format
+
+        Args:
+            output: Raw ONNX model output
+            scale: Scale factor used during preprocessing
+            pad: Padding (pad_w, pad_h) used during preprocessing
+            conf_threshold: Confidence threshold for detections
+
+        Returns:
+            List of detection dictionaries
+        """
+        if self.output_format == 'max_det':
+            return self._postprocess_max_det_format(output, scale, pad, conf_threshold)
+        else:
+            return self._postprocess_standard_format(output, scale, pad, conf_threshold)
+
+    def _postprocess_standard_format(self, output: np.ndarray, scale: float, pad: Tuple[int, int],
+                                      conf_threshold: float = 0.25) -> List[dict]:
+        """
+        Postprocess ONNX model output (standard format) to extract detections
+        Standard format: [1, num_classes, num_boxes]
 
         Args:
             output: Raw ONNX model output [1, num_classes, num_boxes]
@@ -324,7 +550,7 @@ class BirdDetector:
         output = self.model.run(self.output_names, {self.input_name: preprocessed})
 
         # Postprocess output
-        detections = self._postprocess_onnx_output(output[0], preprocess_scale, pad, conf_threshold)
+        detections = self._postprocess(output[0], preprocess_scale, pad, conf_threshold)
 
         # Scale coordinates back to original image size
         for det in detections:
@@ -405,7 +631,7 @@ class BirdDetector:
                 output = self.model.run(self.output_names, {self.input_name: preprocessed})
 
                 # Postprocess
-                slice_detections = self._postprocess_onnx_output(output[0], scale, pad, conf_threshold)
+                slice_detections = self._postprocess(output[0], scale, pad, conf_threshold)
 
                 # Adjust coordinates to original image space
                 x_offset, y_offset = slice_coords
@@ -430,7 +656,7 @@ class BirdDetector:
             # Fallback to standard inference
             preprocessed, scale, pad = self._preprocess_image(cv2.imread(image_path))
             output = self.model.run(self.output_names, {self.input_name: preprocessed})
-            return self._postprocess_onnx_output(output[0], scale, pad, conf_threshold)
+            return self._postprocess(output[0], scale, pad, conf_threshold)
 
     def _draw_custom_annotations_from_detections(self, image, detections: List[dict]):
         """
@@ -501,7 +727,7 @@ class BirdDetector:
                 # Small image: use standard inference
                 preprocessed, scale, pad = self._preprocess_image(original_img)
                 output = self.model.run(self.output_names, {self.input_name: preprocessed})
-                detections = self._postprocess_onnx_output(output[0], scale, pad, conf_threshold)
+                detections = self._postprocess(output[0], scale, pad, conf_threshold)
         else:
             # SAHI MODE: Smart slicing with SAHI for accurate detection
             if use_sliding_window and (height > self.imgsz or width > self.imgsz):
@@ -511,7 +737,7 @@ class BirdDetector:
                 # Small image: use standard inference
                 preprocessed, scale, pad = self._preprocess_image(original_img)
                 output = self.model.run(self.output_names, {self.input_name: preprocessed})
-                detections = self._postprocess_onnx_output(output[0], scale, pad, conf_threshold)
+                detections = self._postprocess(output[0], scale, pad, conf_threshold)
 
         # Calculate inference time (before drawing annotations)
         inference_time = time.perf_counter() - start_time
@@ -564,7 +790,7 @@ class BirdDetector:
             output = self.model.run(self.output_names, {self.input_name: preprocessed})
 
             # Postprocess output
-            window_detections = self._postprocess_onnx_output(output[0], scale, pad, conf_threshold)
+            window_detections = self._postprocess(output[0], scale, pad, conf_threshold)
 
             # Adjust coordinates back to original image space
             for det in window_detections:
@@ -619,7 +845,7 @@ class BirdDetector:
                 # Small image: use standard inference
                 preprocessed, scale, pad = self._preprocess_image(img)
                 output = self.model.run(self.output_names, {self.input_name: preprocessed})
-                detections = self._postprocess_onnx_output(output[0], scale, pad, conf_threshold)
+                detections = self._postprocess(output[0], scale, pad, conf_threshold)
         else:
             # SAHI MODE: Smart slicing with SAHI for accurate detection
             if use_sliding_window and (height > self.imgsz or width > self.imgsz):
@@ -640,7 +866,7 @@ class BirdDetector:
                 # Small image: use standard inference
                 preprocessed, scale, pad = self._preprocess_image(img)
                 output = self.model.run(self.output_names, {self.input_name: preprocessed})
-                detections = self._postprocess_onnx_output(output[0], scale, pad, conf_threshold)
+                detections = self._postprocess(output[0], scale, pad, conf_threshold)
 
         # Calculate inference time (before drawing annotations)
         inference_time = time.perf_counter() - start_time

@@ -1,30 +1,141 @@
-# Core Data Layer
-duckdb>=0.10.0              # Fast analytical database
-pandas>=2.0.0               # Data manipulation and CSV processing
+# NestScope - AI-Powered Gulf Coast Avian Monitoring Platform
+# Main requirements file for the entire project
+# Version pinning is handled by uv.lock - this file specifies dependencies only
 
-# AI/LLM Layer
-openai>=1.0.0               # OpenAI SDK for OpenRouter API access
-onnxruntime>=1.16.0         # ONNX Runtime for fast model inference
+# ============================================================================
+# CORE WEB FRAMEWORKS
+# ============================================================================
+# FastAPI backend with async support
+fastapi
+uvicorn[standard]
 
-# Backend Layer
-httpx>=0.25.0               # Async HTTP client for service status checks
+# Flask for Nestperts labelling app
+Flask
+Werkzeug
 
-# Frontend Layer
-streamlit>=1.28.0           # Web application framework
-plotly>=5.18.0              # Interactive data visualizations
-folium>=0.15.0              # Map visualizations (optional)
-streamlit-folium>=0.15.0    # Streamlit integration for maps (optional)
-Pillow>=10.0.0              # Image processing for computer vision tab
+# Streamlit frontend
+streamlit
+streamlit-folium
 
-# Environment Management
-python-dotenv>=1.0.0        # Environment variable management
-PyYAML>=6.0.0               # YAML configuration file parsing
+# ============================================================================
+# DATABASE & DATA PROCESSING
+# ============================================================================
+# Database and data manipulation
+pandas
+numpy
 
-# Optional: Caching (if time permits)
-# redis>=5.0.0              # Query result caching
+# SQLite (included in Python standard library, no package needed)
+# For database migrations and schema analysis
+pyodbc  # For Access database migrations (optional)
 
-# Development Tools (Optional)
-pytest>=7.4.0               # Testing framework
-ruff>=0.1.0                 # Fast Python linter
-jupyter>=1.0.0              # Notebook environment for exploration
+# ============================================================================
+# AI/ML - LANGUAGE MODELS
+# ============================================================================
+# OpenAI SDK (used for OpenRouter API compatibility)
+# Note: Requires httpx<0.27 for compatibility
+openai
+httpx<0.27  # Required for OpenAI SDK compatibility
+
+# ============================================================================
+# COMPUTER VISION - DETECTION & SEGMENTATION
+# ============================================================================
+# YOLO and object detection (includes PyTorch)
+ultralytics
+
+# Computer vision utilities
+opencv-python
+Pillow
+
+# Advanced detection utilities
+supervision
+sahi
+
+# Deep learning framework (required by ultralytics)
+torch
+torchvision
+
+# ONNX Runtime for optimized inference (>=1.17 for IR version 10 support)
+onnxruntime>=1.17.0
+# Use onnxruntime-gpu if you have CUDA GPU support:
+# onnxruntime-gpu>=1.17.0
+
+# ============================================================================
+# MACHINE LEARNING - CLUSTERING & EMBEDDINGS
+# ============================================================================
+# Scikit-learn for clustering (K-means, DBSCAN) and t-SNE
+scikit-learn
+
+# Timm for pre-trained vision models (EfficientNet, ResNet, etc.)
+timm
+
+# ============================================================================
+# VISUALIZATION & UI
+# ============================================================================
+# Plotting and visualization
+plotly
+matplotlib
+
+# Interactive maps
+folium>=0.15.0,<0.16.0
+streamlit-folium>=0.15.0,<0.16.0
+pydeck  # High-performance map visualization with deck.gl
+
+# Progress bars
+tqdm
+
+# ============================================================================
+# UTILITIES
+# ============================================================================
+# Environment variables
+python-dotenv
+
+# Data validation
+pydantic
+
+# HTTP requests
+requests
+
+# File uploads and multipart forms
 python-multipart
+
+# YAML configuration
+pyyaml
+
+# ============================================================================
+# OPTIONAL: CLOUD & DEPLOYMENT
+# ============================================================================
+# AWS S3 access (for training data downloads)
+boto3
+botocore
+
+# ============================================================================
+# OPTIONAL: ADVANCED ML FEATURES
+# ============================================================================
+# UMAP for 2D dimensionality reduction (RECOMMENDED for better clustering viz)
+# If not installed, system automatically falls back to t-SNE
+# Install with: uv pip install umap-learn
+# umap-learn
+
+# Transformers for embedding models (optional - for NestID features)
+# transformers
+# usearch
+
+# ============================================================================
+# DEVELOPMENT & TESTING (uncomment if needed)
+# ============================================================================
+# pytest
+# pytest-asyncio
+# black
+# ruff
+
+# ============================================================================
+# PLATFORM NOTES
+# ============================================================================
+# - On macOS with M1/M2: Use `pip install --pre torch torchvision` for Apple Silicon
+# - On Windows: Ensure Visual C++ Redistributable is installed for opencv-python
+# - For CUDA GPU support: Install pytorch with CUDA toolkit first
+#   Visit: https://pytorch.org/get-started/locally/
+# - Minimum Python version: 3.9
+# - Recommended Python version: 3.10 or 3.11
+# - Use `uv pip compile requirements.txt` to generate a locked requirements file
+# - Use `uv pip sync requirements.txt` to install exact versions from lock file

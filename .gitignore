@@ -106,6 +106,15 @@ labeller/nestvision/crops/
 labeller/nestvision/*.csv
 labeller/project_state.json
 
+# Bird clustering outputs (embeddings, crops, visualizations)
+labeller/nestvision/bird_crops/
+**/bird_crops/
+*.npy  # NumPy embeddings
+**/clusters/
+clustering_results.pkl
+clusters_for_labeling.json
+cluster_visualization_*.png
+
 # Model files (all formats) - Global exclusion
 *.pt
 *.pth
@@ -128,3 +137,136 @@ labeller/project_state.json
 *.tgz
 *.7z
 *.rar
+
+# ============================================================================
+# IMAGES AND HEAVY FILES (to keep repository size manageable)
+# ============================================================================
+
+# Image files (common formats)
+# Note: Both lowercase and uppercase extensions for cross-platform compatibility
+*.jpg
+*.jpeg
+*.png
+*.gif
+*.bmp
+*.tiff
+*.tif
+*.svg
+*.ico
+*.webp
+*.heic
+*.heif
+*.raw
+*.cr2
+*.nef
+*.orf
+*.sr2
+# Uppercase variants (Linux is case-sensitive)
+*.JPG
+*.JPEG
+*.PNG
+*.GIF
+*.BMP
+*.TIFF
+*.TIF
+*.SVG
+*.ICO
+*.WEBP
+*.HEIC
+*.HEIF
+*.RAW
+*.CR2
+*.NEF
+*.ORF
+*.SR2
+
+# Video files (large and binary)
+*.mp4
+*.avi
+*.mov
+*.mkv
+*.flv
+*.wmv
+*.webm
+*.m4v
+*.mpg
+*.mpeg
+*.3gp
+*.ogv
+# Uppercase variants
+*.MP4
+*.AVI
+*.MOV
+*.MKV
+*.FLV
+*.WMV
+*.WEBM
+*.M4V
+*.MPG
+*.MPEG
+*.3GP
+*.OGV
+
+# Audio files
+*.mp3
+*.wav
+*.flac
+*.aac
+*.ogg
+*.wma
+*.m4a
+*.opus
+
+# Large data files
+*.csv.gz
+*.parquet
+*.feather
+*.arrow
+*.hdf
+*.h5
+*.nc
+*.zarr
+
+# Database files (already covered above, but being explicit)
+*.db
+*.sqlite
+*.sqlite3
+*.db-shm
+*.db-wal
+
+# Scientific data formats
+*.mat  # MATLAB
+*.npy  # NumPy (already listed but reinforcing)
+*.npz
+*.fits  # Astronomy
+*.root  # ROOT (particle physics)
+
+# Geospatial data (can be large)
+*.shp
+*.shx
+*.dbf
+*.prj
+*.geojson
+*.kml
+*.kmz
+
+# Document files (can be large with embedded images)
+*.pdf
+*.docx
+*.pptx
+*.xlsx
+
+# Backup and temporary files
+*.bak
+*.backup
+*.old
+*.orig
+*~
+*.swp
+*.swo
+
+# Exception: Keep small reference images in docs if needed
+!docs/reference/*.png
+!docs/reference/*.jpg
+!frontend/assets/logo.png
+!frontend/assets/favicon.ico

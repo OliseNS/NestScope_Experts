@@ -1,0 +1,453 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Nestperts - AI-Assisted Avian Data Platform</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background: #0F0F0F;
+            color: #E0E0E0;
+        }
+
+        /* Navbar */
+        .navbar {
+            background: #1E1E1E;
+            border-bottom: 1px solid #333;
+            padding: 1rem 2rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .navbar-brand {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+
+        .navbar-brand-icon {
+            font-size: 1.5rem;
+            filter: sepia(1) saturate(3) hue-rotate(340deg) brightness(1.1);
+        }
+        .navbar-brand-text { font-size: 1.25rem; font-weight: 600; color: #E5E5E5; }
+
+        .navbar-links {
+            display: flex;
+            gap: 1rem;
+            align-items: center;
+        }
+
+        .navbar-link {
+            color: #A0A0A0;
+            text-decoration: none;
+            padding: 0.5rem 1rem;
+            border-radius: 6px;
+            transition: all 0.2s;
+            font-size: 0.875rem;
+        }
+
+        .navbar-link:hover {
+            color: #CC785C;
+            background: rgba(204, 120, 92, 0.1);
+        }
+
+        /* Hero Section */
+        .hero {
+            text-align: center;
+            padding: 4rem 2rem 2rem;
+            max-width: 1000px;
+            margin: 0 auto;
+        }
+
+        .hero h1 {
+            font-size: 3rem;
+            margin-bottom: 1rem;
+            background: linear-gradient(135deg, #CC785C 0%, #E5A080 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .hero-subtitle {
+            font-size: 1.25rem;
+            color: #999;
+            margin-bottom: 3rem;
+        }
+
+        /* Job Selection */
+        .job-section {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 2rem;
+        }
+
+        .section-title {
+            text-align: center;
+            font-size: 1.75rem;
+            margin-bottom: 3rem;
+            color: #E0E0E0;
+        }
+
+        .job-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 2rem;
+            margin-bottom: 3rem;
+        }
+
+        .job-card {
+            background: #1A1A1A;
+            border: 2px solid #333;
+            border-radius: 12px;
+            padding: 2.5rem;
+            transition: all 0.3s;
+            cursor: pointer;
+        }
+
+        .job-card:hover {
+            border-color: #CC785C;
+            transform: translateY(-4px);
+            box-shadow: 0 8px 24px rgba(204, 120, 92, 0.2);
+        }
+
+        .job-icon {
+            font-size: 3rem;
+            margin-bottom: 1rem;
+        }
+
+        .job-title {
+            font-size: 1.5rem;
+            font-weight: 700;
+            margin-bottom: 0.75rem;
+            color: #FFF;
+        }
+
+        .job-description {
+            font-size: 1rem;
+            color: #AAA;
+            margin-bottom: 2rem;
+            line-height: 1.6;
+        }
+
+        .job-details {
+            background: #252525;
+            border-radius: 8px;
+            padding: 1.25rem;
+            margin-bottom: 2rem;
+            font-size: 0.9rem;
+        }
+
+        .detail-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 0.5rem 0;
+            border-bottom: 1px solid #333;
+        }
+
+        .detail-row:last-child {
+            border-bottom: none;
+        }
+
+        .detail-label {
+            color: #888;
+            font-weight: 600;
+        }
+
+        .detail-value {
+            color: #CC785C;
+            font-weight: 600;
+        }
+
+        .job-tools {
+            margin-bottom: 2rem;
+        }
+
+        .job-tools h4 {
+            font-size: 0.9rem;
+            color: #888;
+            margin-bottom: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .tools-list {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+        }
+
+        .tool-tag {
+            background: #2A2A2A;
+            color: #CC785C;
+            padding: 0.4rem 0.8rem;
+            border-radius: 6px;
+            font-size: 0.85rem;
+            border: 1px solid #333;
+        }
+
+        .btn-start {
+            display: block;
+            width: 100%;
+            padding: 1rem;
+            background: #CC785C;
+            color: white;
+            text-align: center;
+            text-decoration: none;
+            border-radius: 8px;
+            font-weight: 700;
+            font-size: 1rem;
+            transition: all 0.2s;
+        }
+
+        .btn-start:hover {
+            background: #B86A4F;
+            transform: translateX(4px);
+        }
+
+        .btn-start::after {
+            content: " →";
+        }
+
+        /* Info Section */
+        .info-section {
+            max-width: 900px;
+            margin: 4rem auto;
+            padding: 2rem;
+            background: #1A1A1A;
+            border: 1px solid #333;
+            border-radius: 12px;
+        }
+
+        .info-section h3 {
+            font-size: 1.25rem;
+            margin-bottom: 1.5rem;
+            color: #CC785C;
+        }
+
+        .info-section ul {
+            list-style: none;
+        }
+
+        .info-section li {
+            padding: 0.75rem 0;
+            padding-left: 2rem;
+            position: relative;
+            line-height: 1.6;
+            color: #AAA;
+        }
+
+        .info-section li::before {
+            content: "→";
+            position: absolute;
+            left: 0;
+            color: #CC785C;
+            font-weight: 700;
+        }
+
+        .footer {
+            text-align: center;
+            padding: 3rem 2rem;
+            color: #666;
+            font-size: 0.9rem;
+        }
+
+        @media (max-width: 768px) {
+            .job-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .hero h1 {
+                font-size: 2rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Navbar -->
+    <nav class="navbar">
+        <div class="navbar-brand">
+            <span class="navbar-brand-icon">🦅</span>
+            <span class="navbar-brand-text">Nestperts</span>
+        </div>
+        <div class="navbar-links">
+            <a href="/clustering" class="navbar-link">Clustering</a>
+            <a href="/clusters" class="navbar-link">Explore</a>
+            <a href="http://localhost:8501" target="_blank" class="navbar-link">← NestScope</a>
+        </div>
+    </nav>
+
+    <!-- Hero -->
+    <section class="hero">
+        <h1>Nestperts</h1>
+        <p class="hero-subtitle">AI-Assisted Avian Data Labeling Platform</p>
+    </section>
+
+    <!-- Job Selection -->
+    <section class="job-section">
+        <h2 class="section-title">What would you like to do?</h2>
+
+        <div class="job-grid">
+            <!-- Labeling Job -->
+            <div class="job-card" onclick="selectJob('labeling')">
+                <div class="job-icon">✏️</div>
+                <h3 class="job-title">LABELING JOB</h3>
+                <p class="job-description">
+                    Draw bounding boxes around birds in aerial survey images. No bird knowledge required - AI helps with detection!
+                </p>
+
+                <div class="job-details">
+                    <div class="detail-row">
+                        <span class="detail-label">👤 For:</span>
+                        <span class="detail-value">Anyone (Easy!)</span>
+                    </div>
+                    <div class="detail-row">
+                        <span class="detail-label">⏱️ Time:</span>
+                        <span class="detail-value">5-15 min/image</span>
+                    </div>
+                    <div class="detail-row">
+                        <span class="detail-label">📊 Output:</span>
+                        <span class="detail-value">YOLO bounding boxes</span>
+                    </div>
+                </div>
+
+                <div class="job-tools">
+                    <h4>Tools Available:</h4>
+                    <div class="tools-list">
+                        <span class="tool-tag">Draw</span>
+                        <span class="tool-tag">AI Detect</span>
+                        <span class="tool-tag">Edit</span>
+                        <span class="tool-tag">Pan</span>
+                    </div>
+                </div>
+
+                <a href="#" class="btn-start" onclick="event.stopPropagation(); selectJob('labeling')">
+                    START LABELING
+                </a>
+            </div>
+
+            <!-- Classification Job -->
+            <div class="job-card" onclick="window.location.href='/classify-tree'">
+                <div class="job-icon">🏷️</div>
+                <h3 class="job-title">CLASSIFICATION JOB</h3>
+                <p class="job-description">
+                    Identify bird species (72 species). Requires ornithology expertise. Uses decision tree and full images for high accuracy.
+                </p>
+
+                <div class="job-details">
+                    <div class="detail-row">
+                        <span class="detail-label">👤 For:</span>
+                        <span class="detail-value">Experts ONLY</span>
+                    </div>
+                    <div class="detail-row">
+                        <span class="detail-label">⏱️ Time:</span>
+                        <span class="detail-value">10 sec/bird</span>
+                    </div>
+                    <div class="detail-row">
+                        <span class="detail-label">📊 Output:</span>
+                        <span class="detail-value">Species-labeled dataset</span>
+                    </div>
+                </div>
+
+                <div class="job-tools">
+                    <h4>Tools Available:</h4>
+                    <div class="tools-list">
+                        <span class="tool-tag">Decision Tree</span>
+                        <span class="tool-tag">Full Images</span>
+                        <span class="tool-tag">Pan & Zoom</span>
+                        <span class="tool-tag">Go Back</span>
+                    </div>
+                </div>
+
+                <a href="/classify-tree" class="btn-start" onclick="event.stopPropagation()">
+                    START CLASSIFYING (Decision Tree)
+                </a>
+            </div>
+        </div>
+    </section>
+
+    <!-- Info Section -->
+    <section class="info-section">
+        <h3>New to Nestperts?</h3>
+        <ul>
+            <li><strong>Labeling (Easy for anyone):</strong> Just draw boxes around birds! AI helps with detection. No bird knowledge needed.</li>
+            <li><strong>Classification (Experts only):</strong> Identify species from 72 options. Requires ornithology knowledge. Clustering helps by filtering to 5-10 relevant species.</li>
+            <li><strong>Why two separate jobs?</strong> Labeling (where are birds?) is much easier than classification (what species?). This lets non-experts help with labeling!</li>
+        </ul>
+    </section>
+
+    <!-- Footer -->
+    <div class="footer">
+        <p>Nestperts - Part of the NestScope Avian Monitoring Platform</p>
+        <p style="margin-top: 0.5rem; font-size: 0.8rem;">
+            Addresses judge feedback: Clear user workflows and role-based interfaces
+        </p>
+    </div>
+
+    <script>
+        function selectJob(job) {
+            if (job === 'labeling') {
+                // Show user selection (existing workflow)
+                {% if setup_needed %}
+                    alert('Please complete project setup first.');
+                    return;
+                {% else %}
+                    // Existing multi-user workflow - show selection
+                    showUserSelection();
+                {% endif %}
+            }
+        }
+
+        function showUserSelection() {
+            // Create modal to select user
+            const users = {{ users | tojson }};
+
+            if (users.length === 0) {
+                alert('No users configured. Please set up the project first.');
+                return;
+            }
+
+            const modal = document.createElement('div');
+            modal.style.cssText = 'position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.8); display: flex; align-items: center; justify-content: center; z-index: 1000;';
+
+            const content = document.createElement('div');
+            content.style.cssText = 'background: #1A1A1A; padding: 2rem; border-radius: 12px; max-width: 500px; width: 90%;';
+
+            content.innerHTML = `
+                <h2 style="margin-bottom: 1rem; color: #FFF;">Select Your Profile</h2>
+                <p style="color: #AAA; margin-bottom: 2rem;">Choose your assigned user to continue labeling.</p>
+                <div style="display: grid; gap: 1rem;">
+                    ${users.map(user => `
+                        <a href="/editor/${user.name}"
+                           style="display: block; padding: 1rem; background: #252525; border: 1px solid #333; border-radius: 8px; text-decoration: none; color: #FFF; transition: all 0.2s;"
+                           onmouseover="this.style.borderColor='#CC785C'"
+                           onmouseout="this.style.borderColor='#333'">
+                            <div style="font-weight: 700; margin-bottom: 0.5rem;">${user.name}</div>
+                            <div style="font-size: 0.9rem; color: #888;">${user.completed} / ${user.total} images</div>
+                            <div style="height: 4px; background: #333; border-radius: 2px; margin-top: 0.5rem; overflow: hidden;">
+                                <div style="height: 100%; background: #CC785C; width: ${user.percent}%;"></div>
+                            </div>
+                        </a>
+                    `).join('')}
+                </div>
+                <button onclick="this.closest('[style*=fixed]').remove()"
+                        style="margin-top: 1.5rem; padding: 0.75rem; background: #333; color: #FFF; border: none; border-radius: 6px; cursor: pointer; width: 100%;">
+                    Cancel
+                </button>
+            `;
+
+            modal.appendChild(content);
+            document.body.appendChild(modal);
+
+            // Close on background click
+            modal.addEventListener('click', (e) => {
+                if (e.target === modal) {
+                    modal.remove();
+                }
+            });
+        }
+    </script>
+</body>
+</html>

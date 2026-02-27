@@ -241,10 +241,13 @@ def fetch_example_image(example_name: str) -> Optional[bytes]:
         Image bytes or None if fetch fails
     """
     from .config import API_BASE_URL
+    from urllib.parse import quote
 
     try:
+        # URL-encode the filename to handle spaces and special characters
+        encoded_name = quote(example_name)
         response = requests.get(
-            f"{API_BASE_URL}/cv/example/{example_name}",
+            f"{API_BASE_URL}/cv/example/{encoded_name}",
             timeout=10
         )
         if response.status_code == 200:

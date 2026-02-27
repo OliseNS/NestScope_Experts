@@ -1,4 +1,5 @@
 import os
+import sys
 import json
 import glob
 import math
@@ -9,7 +10,15 @@ import cv2
 import torch
 import threading
 import time
-from flask import Flask, render_template, request, jsonify, send_from_directory, redirect, url_for
+from flask import Flask, render_template, request, jsonify, send_from_directory, redirect, url_for, Response
+
+# Add project root to path so we can import labeller.services modules
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if PROJECT_ROOT not in sys.path:
+    sys.path.insert(0, PROJECT_ROOT)
+
+# Import species service for database access
+from services.species_service import get_species_service
 
 app = Flask(__name__)
 
@@ -103,36 +112,52 @@ def get_classes():
     return []
 
 def get_species_list():
-    """Load species codes and names from CSV file for expert identification"""
-    species_csv = os.path.join("..", "CSV_Files", "tblSpeciesCodes.csv")
-    species_list = []
+    """
+    Load species codes and names from database for expert identification.
 
-    if os.path.exists(species_csv):
-        try:
-            with open(species_csv, 'r') as f:
-                # Skip header
-                next(f)
-                for line in f:
-                    # Parse CSV line (handle quoted strings)
-                    parts = line.strip().split(',')
-                    if len(parts) >= 2:
-                        code = parts[0].strip('"')
-                        name = parts[1].strip('"')
-                        if code and name:
-                            species_list.append({"code": code, "name": name})
-        except Exception as e:
-            print(f"Warning: Could not load species list: {e}")
-    else:
-        print(f"Warning: Species CSV not found at {species_csv}")
+    This function now uses the SpeciesService to load species from the
+    SQLite database instead of a CSV file. Species are cached in memory
+    for fast access.
 
-    return species_list
+    Returns:
+        list: List of dicts with 'code' and 'name' keys
+              Example: [{"code": "AMAV", "name": "American Avocet"}, ...]
+    """
+    service = get_species_service()
+    return service.get_all_species()
+
+# Singleton labeling service instance
+_labeling_service_instance = None
+
+def get_labeling_service():
+    """
+    Get singleton labeling service instance.
+
+    This ensures we only create one LabelingService for the entire app,
+    which keeps label data and metadata in memory for fast access.
+
+    Returns:
+        LabelingService: The singleton instance
+    """
+    global _labeling_service_instance
+    if _labeling_service_instance is None:
+        from labeller.services.labeling_service import LabelingService
+        _labeling_service_instance = LabelingService(Config.DATASET_PATH)
+    return _labeling_service_instance
 
 @app.route('/')
 def index():
+    """
+    New role-based homepage with clear separation of:
+    - LABELING JOB (draw bounding boxes)
+    - CLASSIFICATION JOB (identify species)
+
+    Addresses judge feedback about clear user workflows.
+    """
     state = load_state()
     if not state:
-        return render_template('index.html', setup_needed=True)
-    
+        return render_template('index_new.html', setup_needed=True, users=[])
+
     users_progress = []
     for user, data in state['assignments'].items():
         total = len(data['images'])
@@ -144,8 +169,8 @@ def index():
             'completed': completed,
             'percent': percent
         })
-    
-    return render_template('index.html', setup_needed=False, users=users_progress)
+
+    return render_template('index_new.html', setup_needed=False, users=users_progress)
 
 @app.route('/setup', methods=['POST'])
 def setup():
@@ -406,6 +431,96 @@ def add_class():
 
         return jsonify({"status": "success", "id": len(state['classes'])-1})
     return jsonify({"status": "exists"})
+
+@app.route('/api/species', methods=['GET'])
+def get_species():
+    """
+    Get all bird species from database.
+
+    This endpoint returns the complete list of bird species loaded from
+    the tblSpeciesCodes table. Species are cached in memory on startup,
+    so this endpoint is very fast.
+
+    Returns:
+        JSON response with species list and count:
+        {
+            "species": [
+                {"code": "AMAV", "name": "American Avocet"},
+                {"code": "AMOY", "name": "American Oystercatcher"},
+                ...
+            ],
+            "count": 73
+        }
+    """
+    try:
+        service = get_species_service()
+        species_list = service.get_all_species()
+
+        return jsonify({
+            "species": species_list,
+            "count": len(species_list)
+        })
+
+    except Exception as e:
+        print(f"ERROR in /api/species: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({
+            "status": "error",
+            "message": str(e),
+            "species": [],
+            "count": 0
+        }), 500
+
+@app.route('/api/species/<species_code>/references', methods=['GET'])
+def get_species_references(species_code):
+    """
+    Get reference images and links for a specific species with pagination.
+
+    Query Parameters:
+        offset: Number of images to skip (default: 0)
+        limit: Number of images to return (default: 5)
+
+    Returns:
+        JSON with reference photos URLs, eBird link, and field guide link:
+        {
+            "name": "Brown Pelican",
+            "photos": ["url1", "url2", "url3"],
+            "offset": 0,
+            "limit": 5,
+            "has_more": true,
+            "ebird": "https://ebird.org/species/brnpel",
+            "guide": "https://www.allaboutbirds.org/guide/Brown_Pelican"
+        }
+    """
+    try:
+        # Get pagination parameters
+        offset = int(request.args.get('offset', 0))
+        limit = int(request.args.get('limit', 5))
+
+        # Use complete reference images database with ALL 41 species
+        from labeller.services.reference_images_complete import get_reference_images
+        references = get_reference_images(species_code.upper(), offset=offset, limit=limit)
+
+        # Add pagination metadata
+        references['offset'] = offset
+        references['limit'] = limit
+        references['has_more'] = len(references.get('photos', [])) >= limit
+
+        return jsonify(references)
+    except Exception as e:
+        print(f"ERROR in /api/species/{species_code}/references: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({
+            "name": species_code,
+            "photos": [],
+            "offset": 0,
+            "limit": limit if 'limit' in locals() else 5,
+            "has_more": False,
+            "ebird": "https://ebird.org/explore",
+            "guide": "https://www.allaboutbirds.org"
+        }), 500
 
 # ============================================================================
 # NESTVISION CORRECTION ENDPOINTS
@@ -895,6 +1010,674 @@ def sam_auto_detect():
         "boxes": [],
         "count": 0
     })
+
+# ==================== CLUSTER EXPLORER ROUTES ====================
+
+@app.route('/clusters')
+def cluster_explorer():
+    """
+    3D Cluster Explorer: Aerial view of bird clusters with actual images.
+
+    View clusters from above like looking at mountain ranges.
+    All bird images are loaded and visible.
+    """
+    return render_template('cluster_explorer_aerial.html')
+
+@app.route('/api/cluster_data')
+def get_cluster_data():
+    """
+    API endpoint to serve cluster data for visualization.
+
+    Returns:
+        JSON with cluster assignments, t-SNE positions, and metadata
+    """
+    clusters_file = os.path.join(Config.DATASET_PATH, "bird_crops", "clusters", "clusters_for_labeling.json")
+    results_file = os.path.join(Config.DATASET_PATH, "bird_crops", "clusters", "clustering_results.pkl")
+
+    # Check if clustering has been run
+    if not os.path.exists(clusters_file):
+        return jsonify({
+            "error": "No cluster data found",
+            "message": "Run clustering first: python scripts/cluster_birds.py --data labeller/nestvision --clusters 30"
+        }), 404
+
+    # Load cluster data
+    with open(clusters_file, 'r') as f:
+        cluster_data = json.load(f)
+
+    # Load t-SNE positions if available
+    positions = []
+    if os.path.exists(results_file):
+        import pickle
+        with open(results_file, 'rb') as f:
+            results = pickle.load(f)
+
+        # Extract t-SNE positions (prefer t-SNE over PCA for visualization)
+        X_proj = results.get('X_tsne', results.get('X_pca'))
+        labels = results.get('labels', [])
+        metadata = results.get('metadata', [])
+
+        if X_proj and labels:
+            # Detect if 2D or 3D coordinates
+            is_3d = len(X_proj[0]) == 3 if len(X_proj) > 0 else False
+
+            for i, (pos, label) in enumerate(zip(X_proj, labels)):
+                meta = metadata[i] if i < len(metadata) else {}
+                position = {
+                    'x': float(pos[0]),
+                    'y': float(pos[1]),
+                    'cluster': int(label),
+                    'bird_id': i,
+                    'image_name': meta.get('source_image', meta.get('image_name', 'unknown')),
+                    'crop_path': f'/api/bird_crop/{i}'
+                }
+
+                # Add z coordinate if 3D
+                if is_3d:
+                    position['z'] = float(pos[2])
+
+                positions.append(position)
+
+    return jsonify({
+        'total_birds': cluster_data['total_birds'],
+        'n_clusters': cluster_data['n_clusters'],
+        'clusters': cluster_data['clusters'],
+        'positions': positions
+    })
+
+@app.route('/api/bird_crop/<int:crop_id>')
+def get_bird_crop(crop_id):
+    """
+    Serve individual bird crop images for visualization.
+
+    Args:
+        crop_id: Index of the bird crop to retrieve
+    """
+    # Use absolute path to avoid working directory issues
+    crops_dir = os.path.abspath(os.path.join(Config.DATASET_PATH, "bird_crops", "images"))
+
+    # Try to find the crop file
+    crop_filename = f"bird_{crop_id:06d}.jpg"
+    crop_path = os.path.join(crops_dir, crop_filename)
+
+    print(f"[DEBUG] Looking for bird crop {crop_id}")
+    print(f"[DEBUG] Crops dir: {crops_dir}")
+    print(f"[DEBUG] Crop path: {crop_path}")
+    print(f"[DEBUG] Exists: {os.path.exists(crop_path)}")
+
+    if os.path.exists(crop_path):
+        return send_from_directory(crops_dir, crop_filename)
+
+    # If not found, return placeholder
+    from flask import send_file
+    from io import BytesIO
+
+    # Generate a placeholder image
+    placeholder = np.ones((100, 100, 3), dtype=np.uint8) * 50
+    cv2.putText(placeholder, 'N/A', (20, 60), cv2.FONT_HERSHEY_SIMPLEX, 1, (200, 200, 200), 2)
+
+    _, buffer = cv2.imencode('.jpg', placeholder)
+    return send_file(BytesIO(buffer.tobytes()), mimetype='image/jpeg')
+
+# ==================== END CLUSTER EXPLORER ROUTES ====================
+
+# ==================== CLUSTERING PIPELINE ROUTES ====================
+
+@app.route('/clustering')
+def clustering_dashboard():
+    """
+    Clustering Dashboard: Integrated UI for running the complete pipeline.
+
+    Provides a step-by-step interface to:
+    1. Extract bird crops
+    2. Generate deep learning embeddings
+    3. Run clustering and t-SNE
+    """
+    return render_template('clustering_dashboard.html')
+
+@app.route('/api/clustering/status')
+def clustering_status():
+    """Check status of clustering pipeline"""
+    crops_dir = os.path.join(Config.DATASET_PATH, "bird_crops")
+    clusters_dir = os.path.join(crops_dir, "clusters")
+
+    status = {
+        'crops_extracted': False,
+        'embeddings_generated': False,
+        'clustering_done': False
+    }
+
+    # Check crops
+    if os.path.exists(os.path.join(crops_dir, "metadata.json")):
+        status['crops_extracted'] = True
+        with open(os.path.join(crops_dir, "metadata.json"), 'r') as f:
+            meta = json.load(f)
+            status['num_crops'] = meta.get('total_crops', 0)
+
+    # Check embeddings
+    if os.path.exists(os.path.join(crops_dir, "embeddings.npy")):
+        status['embeddings_generated'] = True
+        with open(os.path.join(crops_dir, "config.json"), 'r') as f:
+            config = json.load(f)
+            status['embedding_dim'] = config.get('embedding_dim', 0)
+
+    # Check clustering
+    if os.path.exists(os.path.join(clusters_dir, "clusters_for_labeling.json")):
+        status['clustering_done'] = True
+        with open(os.path.join(clusters_dir, "clusters_for_labeling.json"), 'r') as f:
+            cluster_data = json.load(f)
+            status['n_clusters'] = cluster_data.get('n_clusters', 0)
+            status['total_birds'] = cluster_data.get('total_birds', 0)
+
+    return jsonify(status)
+
+@app.route('/api/clustering/extract_crops', methods=['POST'])
+def extract_crops():
+    """Extract bird crops from YOLO dataset (can take 5-10 seconds)"""
+    try:
+        from labeller.services.embedding_service import BirdCropManager
+
+        crops_dir = os.path.join(Config.DATASET_PATH, "bird_crops")
+        print(f"[Clustering] Starting crop extraction from {Config.DATASET_PATH}")
+        print(f"[Clustering] Output directory: {crops_dir}")
+
+        manager = BirdCropManager(crops_dir)
+
+        # Extract crops (no resizing for better quality, with padding for context)
+        # Note: This can take 5-10 seconds for ~500 images
+        manager.extract_and_save_crops(
+            dataset_dir=Config.DATASET_PATH,
+            resize=None,  # Preserve original resolution
+            min_size=20,
+            max_size=10000,
+            padding_percent=0.15  # Add 15% padding around birds for full context
+        )
+
+        # Load metadata to get count
+        metadata_path = os.path.join(crops_dir, "metadata.json")
+        print(f"[Clustering] Reading metadata from {metadata_path}")
+
+        if not os.path.exists(metadata_path):
+            raise Exception(f"Metadata file not found at {metadata_path}")
+
+        with open(metadata_path, 'r') as f:
+            meta = json.load(f)
+
+        total_crops = meta.get('total_crops', 0)
+        print(f"[Clustering] ✓ Extracted {total_crops} crops successfully")
+
+        return jsonify({
+            'status': 'success',
+            'total_crops': total_crops
+        })
+
+    except Exception as e:
+        import traceback
+        print(f"[Clustering] ✗ Error during extraction:")
+        traceback.print_exc()
+        return jsonify({
+            'status': 'error',
+            'message': str(e)
+        }), 500
+
+@app.route('/api/clustering/generate_embeddings', methods=['POST'])
+def generate_embeddings():
+    """Generate deep learning embeddings from bird crops"""
+    try:
+        from labeller.services.embedding_service import BirdCropManager
+
+        data = request.json or {}
+        model_name = data.get('model_name', 'efficientnet')  # Default to EfficientNet for speed
+
+        crops_dir = os.path.join(Config.DATASET_PATH, "bird_crops")
+        manager = BirdCropManager(crops_dir)
+
+        # Generate embeddings
+        manager.generate_embeddings(model_name=model_name, batch_size=32)
+
+        # Load config to get info
+        with open(os.path.join(crops_dir, "config.json"), 'r') as f:
+            config = json.load(f)
+
+        return jsonify({
+            'status': 'success',
+            'embedding_dim': config['embedding_dim'],
+            'num_crops': config['num_crops'],
+            'model_name': config['model_name']
+        })
+
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({
+            'status': 'error',
+            'message': str(e)
+        }), 500
+
+@app.route('/api/clustering/run_clustering', methods=['POST'])
+def run_clustering():
+    """Run clustering on embeddings and generate 3D visualization"""
+    try:
+        from labeller.services.clustering_service import ClusteringService
+
+        data = request.json or {}
+        method = data.get('method', 'kmeans')
+        n_clusters = data.get('n_clusters', 30)
+
+        print(f"[Clustering] Running clustering with method={method}, n_clusters={n_clusters}")
+
+        crops_dir = os.path.join(Config.DATASET_PATH, "bird_crops")
+        service = ClusteringService(crops_dir)
+
+        # Run clustering with 3D visualization
+        # DBSCAN determines n_clusters automatically, K-means uses the provided value
+        results = service.run_clustering(n_clusters=n_clusters, method=method)
+
+        print(f"[Clustering] ✓ Clustering complete: {results['n_clusters']} clusters found")
+
+        return jsonify({
+            'status': 'success',
+            **results
+        })
+
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({
+            'status': 'error',
+            'message': str(e)
+        }), 500
+
+# ==================== END CLUSTERING PIPELINE ROUTES ====================
+
+# ==================== SPECIES LABELING ROUTES ====================
+
+@app.route('/classify')
+def species_classification_interface():
+    """
+    Redirect to tree-based classification interface.
+    Grid view has been removed - tree view is now the only classification method.
+    """
+    return redirect(url_for('species_classification_tree'))
+
+@app.route('/classify-tree')
+def species_classification_tree():
+    """
+    Decision Tree-Based Species Classification Interface.
+
+    Uses hierarchical decision tree (Size → Color → Species) for accurate
+    bird identification. Shows full original aerial images instead of crops,
+    with birds highlighted by bounding boxes.
+
+    This method addresses the low-resolution crop problem and provides
+    systematic identification workflow based on ornithological research.
+    """
+    return render_template('species_classification_tree.html')
+
+@app.route('/api/original_image/<path:image_name>')
+def get_original_image(image_name):
+    """
+    Serve full original aerial images for classification.
+
+    Instead of serving low-res crops, this serves the full high-res image
+    so experts can see bird details clearly. The frontend highlights the
+    bird's bounding box on the full image.
+
+    Args:
+        image_name: Name of the image file (e.g., "29May2012Cam1Card3 227_x1024_y0")
+                   Extension (.jpg) is added automatically if not present
+
+    Returns:
+        Full resolution image file
+    """
+    image_dir = get_image_dir()
+
+    # Add .jpg extension if not present
+    if not image_name.endswith('.jpg'):
+        image_name = image_name + '.jpg'
+
+    # Security: ensure the path doesn't escape the image directory
+    safe_path = os.path.join(image_dir, os.path.basename(image_name))
+
+    if not os.path.exists(safe_path):
+        return jsonify({
+            'status': 'error',
+            'message': f'Image not found: {image_name}'
+        }), 404
+
+    return send_from_directory(image_dir, os.path.basename(image_name))
+
+@app.route('/static/bird_classification_tree.json')
+def get_decision_tree():
+    """
+    Serve the ornithological decision tree JSON.
+
+    Returns the hierarchical classification tree with species data,
+    key features, confidence tips, and identification guidance.
+    """
+    tree_path = os.path.join(os.path.dirname(__file__), 'bird_classification_tree.json')
+
+    if not os.path.exists(tree_path):
+        return jsonify({
+            'status': 'error',
+            'message': 'Decision tree file not found'
+        }), 404
+
+    with open(tree_path, 'r') as f:
+        tree_data = json.load(f)
+
+    return jsonify(tree_data)
+
+@app.route('/api/labeling/progress')
+def get_labeling_progress():
+    """Get overall labeling progress across all clusters"""
+    try:
+        from labeller.services.labeling_service import LabelingService
+
+        service = LabelingService(Config.DATASET_PATH)
+        progress = service.get_overall_progress()
+
+        return jsonify({
+            'status': 'success',
+            **progress
+        })
+
+    except FileNotFoundError as e:
+        return jsonify({
+            'status': 'error',
+            'message': str(e)
+        }), 404
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({
+            'status': 'error',
+            'message': str(e)
+        }), 500
+
+@app.route('/api/labeling/cluster/<int:cluster_id>/info')
+def get_cluster_labeling_info(cluster_id):
+    """Get detailed info about a cluster for labeling"""
+    try:
+        from labeller.services.labeling_service import LabelingService
+
+        service = LabelingService(Config.DATASET_PATH)
+        info = service.get_cluster_info(str(cluster_id))
+
+        if info is None:
+            return jsonify({
+                'status': 'error',
+                'message': f'Cluster {cluster_id} not found'
+            }), 404
+
+        return jsonify({
+            'status': 'success',
+            **info
+        })
+
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({
+            'status': 'error',
+            'message': str(e)
+        }), 500
+
+@app.route('/api/labeling/cluster/<int:cluster_id>/next')
+def get_next_bird_to_label(cluster_id):
+    """Get next unlabeled bird in a cluster"""
+    try:
+        from labeller.services.labeling_service import LabelingService
+
+        service = LabelingService(Config.DATASET_PATH)
+        bird_data = service.get_next_unlabeled_bird(str(cluster_id))
+
+        if bird_data is None:
+            return jsonify({
+                'status': 'success',
+                'completed': True,
+                'message': 'All birds in this cluster are labeled!'
+            })
+
+        return jsonify({
+            'status': 'success',
+            'completed': False,
+            **bird_data
+        })
+
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({
+            'status': 'error',
+            'message': str(e)
+        }), 500
+
+@app.route('/api/labeling/bird/<bird_id>/label', methods=['POST'])
+def save_bird_label(bird_id):
+    """Save species label for a bird"""
+    try:
+        from labeller.services.labeling_service import LabelingService
+
+        data = request.json or {}
+        species = data.get('species')
+        confidence = data.get('confidence', 'high')
+        cluster_id = data.get('cluster_id')
+
+        if not species:
+            return jsonify({
+                'status': 'error',
+                'message': 'Species code is required'
+            }), 400
+
+        service = LabelingService(Config.DATASET_PATH)
+        label_data = service.save_label(bird_id, species, confidence, cluster_id)
+
+        # Get updated progress
+        progress = service.get_overall_progress()
+
+        return jsonify({
+            'status': 'success',
+            'label': label_data,
+            'progress': progress
+        })
+
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({
+            'status': 'error',
+            'message': str(e)
+        }), 500
+
+@app.route('/api/labeling/cluster/<int:cluster_id>/outliers')
+def get_cluster_outliers(cluster_id):
+    """Detect potentially mislabeled birds in a cluster"""
+    try:
+        from labeller.services.labeling_service import LabelingService
+
+        service = LabelingService(Config.DATASET_PATH)
+        outliers = service.detect_outliers(str(cluster_id))
+
+        return jsonify({
+            'status': 'success',
+            'outliers': outliers,
+            'count': len(outliers)
+        })
+
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({
+            'status': 'error',
+            'message': str(e)
+        }), 500
+
+@app.route('/api/species/list')
+def list_species():
+    """Get all species with codes and names"""
+    try:
+        species_service = get_species_service()
+        species_list = species_service.get_all_species()
+
+        return jsonify({
+            'status': 'success',
+            'species': species_list,
+            'count': len(species_list)
+        })
+
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({
+            'status': 'error',
+            'message': str(e)
+        }), 500
+
+# ==================== AKINATOR-STYLE IDENTIFICATION ROUTES ====================
+
+# Global Akinator engine instances (one per session)
+@app.route('/api/reference_image_proxy')
+def reference_image_proxy():
+    """
+    Proxy endpoint to fetch reference images from trusted sources.
+
+    Avoids CORS issues by fetching images on the backend and serving
+    them through Flask with proper headers.
+
+    Supports:
+    - Wikipedia/Wikimedia Commons (primary source)
+    - Macaulay Library CDN (backup source)
+
+    Usage: /api/reference_image_proxy?url=<encoded_url>
+    """
+    import requests
+    from urllib.parse import unquote
+
+    try:
+        # Get the image URL from query parameter
+        image_url = request.args.get('url')
+        if not image_url:
+            return jsonify({'error': 'No URL provided'}), 400
+
+        # Decode URL if needed
+        image_url = unquote(image_url)
+
+        # Whitelist trusted image sources (security)
+        allowed_sources = [
+            'https://cdn.download.ams.birds.cornell.edu/',  # Macaulay Library
+            'https://commons.wikimedia.org/',                # Wikimedia Commons
+            'https://upload.wikimedia.org/'                  # Wikimedia image server
+        ]
+
+        if not any(image_url.startswith(source) for source in allowed_sources):
+            return jsonify({'error': 'Invalid image source'}), 403
+
+        # Fetch the image from CDN
+        response = requests.get(image_url, timeout=10)
+        response.raise_for_status()
+
+        # Return image with proper headers
+        return Response(
+            response.content,
+            mimetype=response.headers.get('content-type', 'image/jpeg'),
+            headers={
+                'Cache-Control': 'public, max-age=86400',  # Cache for 24 hours
+                'Access-Control-Allow-Origin': '*'
+            }
+        )
+
+    except requests.RequestException as e:
+        return jsonify({'error': f'Failed to fetch image: {str(e)}'}), 502
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/bird/full_image/<bird_id>')
+def get_bird_full_image_with_bbox(bird_id):
+    """
+    Get full image with bounding box overlay for a bird.
+
+    Returns image with highlighted bbox around the specified bird.
+    """
+    try:
+        # Get bird metadata
+        labeling_service = get_labeling_service()
+        metadata = labeling_service.bird_metadata.get(int(bird_id), {})
+
+        if not metadata:
+            return jsonify({'error': 'Bird not found'}), 404
+
+        # Try both 'source_image' (from metadata) and 'image_name' (from labeling service)
+        image_name = metadata.get('source_image') or metadata.get('image_name')
+        bbox_yolo = metadata.get('bbox_yolo')  # [x_center, y_center, width, height] normalized
+
+        if not image_name or not bbox_yolo:
+            print(f"[FULL_IMAGE] ERROR: Missing data for bird {bird_id}")
+            print(f"[FULL_IMAGE] image_name: {image_name}, bbox_yolo: {bbox_yolo}")
+            return jsonify({'error': 'Missing image or bbox data'}), 404
+
+        # Load FULL ORIGINAL image from main dataset (not crops!)
+        images_dir = get_image_dir()  # This gets the actual original images directory
+
+        # Add .jpg extension if not present
+        if not image_name.endswith('.jpg'):
+            image_name = image_name + '.jpg'
+
+        image_path = os.path.join(images_dir, image_name)
+
+        print(f"[FULL_IMAGE] Looking for: {image_name}")
+        print(f"[FULL_IMAGE] Images dir: {images_dir}")
+        print(f"[FULL_IMAGE] Full path: {image_path}")
+        print(f"[FULL_IMAGE] Exists: {os.path.exists(image_path)}")
+
+        if not os.path.exists(image_path):
+            return jsonify({'error': f'Image file not found: {image_name}'}), 404
+
+        # Read image
+        img = cv2.imread(image_path)
+        if img is None:
+            return jsonify({'error': 'Failed to load image'}), 500
+
+        height, width = img.shape[:2]
+        print(f"[FULL_IMAGE] Image size: {width}x{height}")
+
+        # Convert YOLO bbox to pixel coordinates
+        x_center_norm, y_center_norm, w_norm, h_norm = bbox_yolo
+        x_center = int(x_center_norm * width)
+        y_center = int(y_center_norm * height)
+        box_width = int(w_norm * width)
+        box_height = int(h_norm * height)
+
+        # Calculate corner coordinates
+        x1 = int(x_center - box_width / 2)
+        y1 = int(y_center - box_height / 2)
+        x2 = int(x_center + box_width / 2)
+        y2 = int(y_center + box_height / 2)
+
+        print(f"[FULL_IMAGE] Bounding box: ({x1}, {y1}) to ({x2}, {y2})")
+
+        # Draw bounding box (Claude orange color, thin line)
+        color = (87, 119, 217)  # BGR format (Orange)
+        thickness = 2  # Thin, clean line
+        cv2.rectangle(img, (x1, y1), (x2, y2), color, thickness)
+
+        # NO TEXT - just the box!
+
+        # Encode as JPEG
+        _, buffer = cv2.imencode('.jpg', img, [cv2.IMWRITE_JPEG_QUALITY, 92])
+
+        from flask import Response
+        return Response(buffer.tobytes(), mimetype='image/jpeg')
+
+    except Exception as e:
+        print(f"[FULL_IMAGE] ERROR: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
+
+# ==================== END SPECIES LABELING ROUTES ====================
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
