@@ -16,6 +16,8 @@ database:
   default_path: data/bird_data_complete.db
 
 cv:
+
+  model_path: models/nano.onnx  
   default_confidence: 0.25
   image_size: 1024
   default_fast_mode: true

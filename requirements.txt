@@ -104,9 +104,9 @@ pyyaml
 # ============================================================================
 # OPTIONAL: CLOUD & DEPLOYMENT
 # ============================================================================
-# AWS S3 access (for training data downloads - optional)
-# boto3
-# botocore
+# AWS S3 access (for training data downloads)
+boto3
+botocore
 
 # ============================================================================
 # OPTIONAL: ADVANCED ML FEATURES
