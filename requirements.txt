@@ -1,129 +1,132 @@
 # NestScope - AI-Powered Gulf Coast Avian Monitoring Platform
 # Main requirements file for the entire project
+# Version pinning is handled by uv.lock - this file specifies dependencies only
 
 # ============================================================================
 # CORE WEB FRAMEWORKS
 # ============================================================================
 # FastAPI backend with async support
-fastapi==0.109.0
-uvicorn[standard]==0.27.0
+fastapi
+uvicorn[standard]
 
 # Flask for Nestperts labelling app
-Flask==3.0.0
-Werkzeug==3.0.1
+Flask
+Werkzeug
 
 # Streamlit frontend
-streamlit==1.31.0
+streamlit
+streamlit-folium
 
 # ============================================================================
 # DATABASE & DATA PROCESSING
 # ============================================================================
 # Database and data manipulation
-pandas==2.1.4
-numpy==1.26.3
+pandas
+numpy
 
 # SQLite (included in Python standard library, no package needed)
 # For database migrations and schema analysis
-pyodbc==5.0.1  # For Access database migrations (optional)
+pyodbc  # For Access database migrations (optional)
 
 # ============================================================================
 # AI/ML - LANGUAGE MODELS
 # ============================================================================
 # OpenAI SDK (used for OpenRouter API compatibility)
 # Note: Requires httpx<0.27 for compatibility
-openai>=1.30.0,<1.40.0
+openai
+httpx<0.27  # Required for OpenAI SDK compatibility
 
 # ============================================================================
 # COMPUTER VISION - DETECTION & SEGMENTATION
 # ============================================================================
 # YOLO and object detection (includes PyTorch)
-ultralytics==8.1.18
+ultralytics
 
 # Computer vision utilities
-opencv-python==4.9.0.80
-Pillow==10.2.0
+opencv-python
+Pillow
 
 # Advanced detection utilities
-supervision==0.18.0
-sahi==0.11.14
+supervision
+sahi
 
 # Deep learning framework (required by ultralytics)
-torch>=2.1.0
-torchvision>=0.16.0
+torch
+torchvision
 
-# ONNX Runtime for optimized inference
-onnxruntime==1.16.3
+# ONNX Runtime for optimized inference (>=1.17 for IR version 10 support)
+onnxruntime>=1.17.0
 # Use onnxruntime-gpu if you have CUDA GPU support:
-# onnxruntime-gpu==1.16.3
+# onnxruntime-gpu>=1.17.0
 
 # ============================================================================
 # MACHINE LEARNING - CLUSTERING & EMBEDDINGS
 # ============================================================================
 # Scikit-learn for clustering (K-means, DBSCAN) and t-SNE
-scikit-learn==1.4.0
+scikit-learn
 
 # Timm for pre-trained vision models (EfficientNet, ResNet, etc.)
-timm==0.9.12
+timm
 
 # ============================================================================
 # VISUALIZATION & UI
 # ============================================================================
 # Plotting and visualization
-plotly==5.18.0
-matplotlib==3.8.2
+plotly
+matplotlib
 
 # Interactive maps
-folium==0.15.1
-streamlit-folium==0.15.1
+folium>=0.15.0,<0.16.0
+streamlit-folium>=0.15.0,<0.16.0
+pydeck  # High-performance map visualization with deck.gl
 
 # Progress bars
-tqdm==4.66.1
+tqdm
 
 # ============================================================================
 # UTILITIES
 # ============================================================================
 # Environment variables
-python-dotenv==1.0.0
+python-dotenv
 
 # Data validation
-pydantic==2.5.3
+pydantic
 
 # HTTP requests
-requests==2.31.0
-httpx<0.27  # Required for OpenAI SDK compatibility
+requests
 
 # File uploads and multipart forms
-python-multipart==0.0.6
+python-multipart
 
 # YAML configuration
-pyyaml==6.0.1
+pyyaml
 
 # ============================================================================
 # OPTIONAL: CLOUD & DEPLOYMENT
 # ============================================================================
 # AWS S3 access (for training data downloads - optional)
-# boto3==1.34.34
-# botocore==1.34.34
+# boto3
+# botocore
 
 # ============================================================================
 # OPTIONAL: ADVANCED ML FEATURES
 # ============================================================================
-# UMAP for 3D dimensionality reduction (RECOMMENDED for better 3D clustering viz)
+# UMAP for 2D dimensionality reduction (RECOMMENDED for better clustering viz)
 # If not installed, system automatically falls back to t-SNE
-# Install with: pip install umap-learn
-# umap-learn==0.5.5
+# Install with: uv pip install umap-learn
+# umap-learn
 
 # Transformers for embedding models (optional - for NestID features)
-# transformers==4.37.0
-# usearch==2.9.2
+# transformers
+# usearch
 
 # ============================================================================
 # DEVELOPMENT & TESTING (uncomment if needed)
 # ============================================================================
-# pytest==7.4.4
-# pytest-asyncio==0.23.3
-# black==23.12.1
-# ruff==0.1.11
+# pytest
+# pytest-asyncio
+# black
+# ruff
 
 # ============================================================================
 # PLATFORM NOTES
@@ -134,3 +137,5 @@ pyyaml==6.0.1
 #   Visit: https://pytorch.org/get-started/locally/
 # - Minimum Python version: 3.9
 # - Recommended Python version: 3.10 or 3.11
+# - Use `uv pip compile requirements.txt` to generate a locked requirements file
+# - Use `uv pip sync requirements.txt` to install exact versions from lock file

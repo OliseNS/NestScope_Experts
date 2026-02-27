@@ -6,7 +6,7 @@ Runs the complete clustering pipeline:
 1. Extract bird crops from YOLO dataset
 2. Generate embeddings using DINOv2 (or other models)
 3. Cluster birds using K-means or DBSCAN
-4. Generate 3D interactive visualization
+4. Generate 2D interactive visualization with clear cluster separation
 
 Usage:
     python scripts/cluster_birds.py --data labeller/nestvision --model dinov2 --clusters 30
@@ -25,7 +25,7 @@ from labeller.services.clustering_service import run_full_pipeline
 
 def main():
     parser = argparse.ArgumentParser(
-        description='Cluster birds using deep learning embeddings and visualize in 3D',
+        description='Cluster birds using deep learning embeddings and visualize in 2D',
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
@@ -176,7 +176,7 @@ Clustering methods:
         print("\n🎯 Next steps:")
         print("   1. Start Nestperts: python labeller/app.py --data labeller/nestvision")
         print("   2. Open browser: http://localhost:5000/clusters")
-        print("   3. Explore clusters in 3D!")
+        print("   3. Explore clusters in 2D!")
         print("=" * 70 + "\n")
 
     except KeyboardInterrupt:

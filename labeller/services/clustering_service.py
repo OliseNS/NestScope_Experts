@@ -148,26 +148,29 @@ class ClusteringService:
 
         print(f"✓ Created {n_clusters} clusters")
 
-        # Step 4: Dimensionality reduction to 3D (for interactive visualization)
-        print("\n[4/5] Generating 3D visualizations...")
+        # Step 4: Dimensionality reduction to 2D (for interactive visualization)
+        print("\n[4/5] Generating 2D visualizations...")
 
         # PCA (fast, for comparison)
-        print("  • Running 3D PCA...")
-        pca = PCA(n_components=3)
+        print("  • Running 2D PCA...")
+        pca = PCA(n_components=2)
         X_pca = pca.fit_transform(X_scaled)
 
-        # Try UMAP first (faster and often better for 3D), fallback to t-SNE
-        print("  • Running 3D dimensionality reduction...")
+        # Try UMAP first (faster and often better for 2D), fallback to t-SNE
+        print("  • Running 2D dimensionality reduction...")
         try:
             from umap import UMAP
-            print("    Using UMAP (faster, better for 3D)...")
-            reducer = UMAP(n_components=3, random_state=42, n_neighbors=15, min_dist=0.1)
+            print("    Using UMAP (better cluster separation)...")
+            # Increased min_dist for more separation between clusters
+            # n_neighbors=30 for more global structure preservation
+            reducer = UMAP(n_components=2, random_state=42, n_neighbors=30, min_dist=0.5)
             X_tsne = reducer.fit_transform(X_scaled)
             reduction_method = 'umap'
             print("  ✓ UMAP complete")
         except ImportError:
             print("    UMAP not available, using t-SNE...")
-            tsne = TSNE(n_components=3, random_state=42, perplexity=30, max_iter=1000, verbose=0)
+            # Increased perplexity for better cluster separation
+            tsne = TSNE(n_components=2, random_state=42, perplexity=50, max_iter=1000, verbose=0)
             X_tsne = tsne.fit_transform(X_scaled)
             reduction_method = 'tsne'
             print("  ✓ t-SNE complete")
@@ -205,10 +208,10 @@ class ClusteringService:
 
         print("\n✅ CLUSTERING COMPLETE!")
         print(f"📁 Results: {self.clusters_dir}")
-        print(f"📊 3D plot: {self.clusters_dir / 'cluster_visualization_3d.png'}")
-        print(f"📊 2D projections: {self.clusters_dir / 'cluster_visualization_2d_projections.png'}")
-        print(f"🌐 3D web viz data: {self.clusters_dir / 'clusters_for_labeling.json'}")
-        print("\n🎯 Next: Open http://localhost:5000/clusters to explore in 3D!")
+        print(f"📊 2D PCA plot: {self.clusters_dir / 'cluster_visualization_pca_2d.png'}")
+        print(f"📊 2D main plot: {self.clusters_dir / 'cluster_visualization_2d.png'}")
+        print(f"🌐 2D web viz data: {self.clusters_dir / 'clusters_for_labeling.json'}")
+        print("\n🎯 Next: Open http://localhost:5000/clusters to explore in 2D!")
 
         return {
             'n_clusters': int(n_clusters),
@@ -241,7 +244,7 @@ class ClusteringService:
 
     def _export_for_viz(self, labels: np.ndarray, X_tsne: np.ndarray,
                        metadata: Dict):
-        """Export cluster data for 3D web visualization"""
+        """Export cluster data for 2D web visualization"""
 
         # Group birds by cluster
         cluster_data = defaultdict(list)
@@ -256,8 +259,7 @@ class ClusteringService:
                 'image_name': meta['source_image'],
                 'crop_filename': meta['crop_filename'],
                 'x': float(pos[0]),
-                'y': float(pos[1]),
-                'z': float(pos[2])  # 3D coordinate
+                'y': float(pos[1])
             })
 
         # Build export data
@@ -277,12 +279,11 @@ class ClusteringService:
                 'confidence': None
             }
 
-            # Add 3D positions for interactive plot
+            # Add 2D positions for interactive plot
             for bird in birds:
                 export_data['positions'].append({
                     'x': bird['x'],
                     'y': bird['y'],
-                    'z': bird['z'],  # 3D coordinate
                     'cluster': cluster_id,
                     'bird_id': bird['bird_id'],
                     'image_name': bird['image_name'],
@@ -298,68 +299,43 @@ class ClusteringService:
 
     def _generate_plots(self, X_pca: np.ndarray, X_tsne: np.ndarray,
                        labels: np.ndarray, n_clusters: int):
-        """Generate 3D and 2D projection visualization plots"""
-        from mpl_toolkits.mplot3d import Axes3D
+        """Generate 2D visualization plots with clear cluster separation"""
 
-        # 3D PCA plot
-        fig = plt.figure(figsize=(12, 8))
-        ax = fig.add_subplot(111, projection='3d')
-        scatter = ax.scatter(X_pca[:, 0], X_pca[:, 1], X_pca[:, 2], c=labels,
-                            cmap='tab20', alpha=0.6, s=10)
-        ax.set_xlabel('PC1')
-        ax.set_ylabel('PC2')
-        ax.set_zlabel('PC3')
-        ax.set_title(f'Bird Clusters using 3D PCA (n={n_clusters})')
-        plt.colorbar(scatter, label='Cluster ID', shrink=0.5)
-        plt.savefig(self.clusters_dir / 'cluster_visualization_pca_3d.png',
-                   dpi=150, bbox_inches='tight')
+        # 2D PCA plot
+        fig, ax = plt.subplots(figsize=(14, 10))
+        scatter = ax.scatter(X_pca[:, 0], X_pca[:, 1], c=labels,
+                            cmap='tab20', alpha=0.7, s=30, edgecolors='black', linewidth=0.5)
+        ax.set_xlabel('PC1', fontsize=12)
+        ax.set_ylabel('PC2', fontsize=12)
+        ax.set_title(f'Bird Clusters using 2D PCA (n={n_clusters})', fontsize=14, fontweight='bold')
+        ax.grid(alpha=0.3, linestyle='--')
+        plt.colorbar(scatter, label='Cluster ID', shrink=0.8)
+        plt.savefig(self.clusters_dir / 'cluster_visualization_pca_2d.png',
+                   dpi=200, bbox_inches='tight')
         plt.close()
 
-        # 3D t-SNE/UMAP plot
-        fig = plt.figure(figsize=(12, 8))
-        ax = fig.add_subplot(111, projection='3d')
-        scatter = ax.scatter(X_tsne[:, 0], X_tsne[:, 1], X_tsne[:, 2], c=labels,
-                            cmap='tab20', alpha=0.6, s=10)
-        ax.set_xlabel('Dimension 1')
-        ax.set_ylabel('Dimension 2')
-        ax.set_zlabel('Dimension 3')
-        ax.set_title(f'Bird Clusters using 3D Reduction (n={n_clusters})')
-        plt.colorbar(scatter, label='Cluster ID', shrink=0.5)
-        plt.savefig(self.clusters_dir / 'cluster_visualization_3d.png',
-                   dpi=150, bbox_inches='tight')
+        # 2D t-SNE/UMAP plot (main visualization)
+        fig, ax = plt.subplots(figsize=(14, 10))
+        scatter = ax.scatter(X_tsne[:, 0], X_tsne[:, 1], c=labels,
+                            cmap='tab20', alpha=0.7, s=30, edgecolors='black', linewidth=0.5)
+        ax.set_xlabel('Dimension 1', fontsize=12)
+        ax.set_ylabel('Dimension 2', fontsize=12)
+
+        # Determine method name for title
+        method_name = 'UMAP' if hasattr(self, '_used_umap') else 't-SNE'
+        ax.set_title(f'Bird Clusters using 2D {method_name} (n={n_clusters})',
+                    fontsize=14, fontweight='bold')
+        ax.grid(alpha=0.3, linestyle='--')
+
+        # Add colorbar with better positioning
+        cbar = plt.colorbar(scatter, label='Cluster ID', shrink=0.8)
+        cbar.set_label('Cluster ID', fontsize=11)
+
+        plt.savefig(self.clusters_dir / 'cluster_visualization_2d.png',
+                   dpi=200, bbox_inches='tight')
         plt.close()
 
-        # Also generate 2D projections (XY, XZ, YZ planes) for reference
-        fig, axes = plt.subplots(1, 3, figsize=(18, 5))
-
-        # XY plane
-        axes[0].scatter(X_tsne[:, 0], X_tsne[:, 1], c=labels, cmap='tab20', alpha=0.6, s=10)
-        axes[0].set_xlabel('Dimension 1')
-        axes[0].set_ylabel('Dimension 2')
-        axes[0].set_title('XY Plane')
-        axes[0].grid(alpha=0.3)
-
-        # XZ plane
-        axes[1].scatter(X_tsne[:, 0], X_tsne[:, 2], c=labels, cmap='tab20', alpha=0.6, s=10)
-        axes[1].set_xlabel('Dimension 1')
-        axes[1].set_ylabel('Dimension 3')
-        axes[1].set_title('XZ Plane')
-        axes[1].grid(alpha=0.3)
-
-        # YZ plane
-        scatter = axes[2].scatter(X_tsne[:, 1], X_tsne[:, 2], c=labels, cmap='tab20', alpha=0.6, s=10)
-        axes[2].set_xlabel('Dimension 2')
-        axes[2].set_ylabel('Dimension 3')
-        axes[2].set_title('YZ Plane')
-        axes[2].grid(alpha=0.3)
-
-        plt.colorbar(scatter, ax=axes[2], label='Cluster ID')
-        plt.tight_layout()
-        plt.savefig(self.clusters_dir / 'cluster_visualization_2d_projections.png',
-                   dpi=150, bbox_inches='tight')
-        plt.close()
-
-        print(f"  ✓ Generated 3D visualization plots")
+        print(f"  ✓ Generated 2D visualization plots")
 
     def _generate_cluster_previews(self, labels: np.ndarray, metadata: Dict):
         """Generate preview images for each cluster"""
@@ -433,7 +409,7 @@ def run_full_pipeline(dataset_dir: str, output_dir: str,
                      force_crops: bool = False,
                      force_embeddings: bool = False):
     """
-    Run complete pipeline: extract crops → embeddings → 3D clustering.
+    Run complete pipeline: extract crops → embeddings → 2D clustering with separation.
 
     Args:
         dataset_dir: YOLO dataset path
@@ -519,7 +495,7 @@ def run_full_pipeline(dataset_dir: str, output_dir: str,
     print("=" * 60)
     print(f"📊 {results['total_birds']} birds clustered into {results['n_clusters']} groups")
     print(f"📁 Results: {results['clusters_dir']}")
-    print(f"\n🎯 Open http://localhost:5000/clusters to explore!")
+    print(f"\n🎯 Open http://localhost:5000/clusters to explore in 2D!")
     print("=" * 60)
 
     return results

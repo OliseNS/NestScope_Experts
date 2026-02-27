@@ -184,11 +184,11 @@ for message in st.session_state.messages:
             if is_single_location:
                 st.markdown("---")
                 st.markdown("### 📍 Location Map")
-                render_map(df)
+                render_map(df, key=f"map_single_{id(message)}")
                 st.markdown("---")
 
             # Render tabs for multi-result visualizations (respect backend directives)
-            if show_chart or (show_map and len(df) > 1):
+            if show_chart or show_map:
                 tab_labels = []
 
                 if show_chart:
@@ -196,7 +196,7 @@ for message in st.session_state.messages:
                 else:
                     tab_labels.append("📋 Data Table")
 
-                if show_map and len(df) > 1:
+                if show_map:
                     tab_labels.append("🗺️ Map View")
 
                 tabs = st.tabs(tab_labels)
@@ -218,9 +218,9 @@ for message in st.session_state.messages:
                         render_chart(df, chart_type, key_suffix=f"history_{id(message)}")
 
                 # Map Tab
-                if show_map and len(tabs) > 1 and len(df) > 1:
+                if show_map and len(tabs) > 1:
                     with tabs[1]:
-                        render_map(df)
+                        render_map(df, key=f"map_history_{id(message)}")
 
             else:
                 # Simple data table in expander (no visualization directive from backend)
@@ -644,7 +644,7 @@ if prompt:
             if is_single_location:
                 st.markdown("---")
                 st.markdown("### 📍 Location Map")
-                render_map(df)
+                render_map(df, key=f"map_single_current_{id(response_data)}")
                 st.markdown("---")
 
             # Render visualizations based on BACKEND directives
@@ -657,7 +657,7 @@ if prompt:
                 else:
                     tab_labels.append("📋 Data Table")
 
-                if show_map and len(df) > 1:
+                if show_map:
                     tab_labels.append("🗺️ Map View")
 
                 tabs = st.tabs(tab_labels)
@@ -678,9 +678,9 @@ if prompt:
                         render_chart(df, chart_type, key_suffix=f"current_{id(response_data)}")
 
                 # Map Tab
-                if show_map and len(tabs) > 1 and len(df) > 1:
+                if show_map and len(tabs) > 1:
                     with tabs[1]:
-                        render_map(df)
+                        render_map(df, key=f"map_current_{id(response_data)}")
 
             else:
                 # Simple data table (no visualization directive from backend)
