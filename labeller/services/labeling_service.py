@@ -154,9 +154,11 @@ class LabelingService:
             return None
 
         # Count labeled birds in this cluster
+        # Support both numeric and string (species code) cluster IDs
+        cluster_id_str = str(cluster_id)
         labeled_in_cluster = sum(
             1 for bird_id, label_data in self.labels['birds'].items()
-            if label_data.get('cluster_id') == int(cluster_id)
+            if str(label_data.get('cluster_id')) == cluster_id_str
         )
 
         total_in_cluster = cluster_data['total_birds']
@@ -165,14 +167,14 @@ class LabelingService:
         # Get species distribution for this cluster
         species_counts = Counter()
         for bird_id, label_data in self.labels['birds'].items():
-            if label_data.get('cluster_id') == int(cluster_id):
+            if str(label_data.get('cluster_id')) == cluster_id_str:
                 species_counts[label_data['species']] += 1
 
         # Get suggested species (from mapping + current labels)
         suggested_species = self._get_suggested_species(cluster_id)
 
         return {
-            'cluster_id': int(cluster_id),
+            'cluster_id': cluster_id_str,
             'total_birds': total_in_cluster,
             'labeled_count': labeled_in_cluster,
             'unlabeled_count': total_in_cluster - labeled_in_cluster,
@@ -191,10 +193,11 @@ class LabelingService:
         This is the SMART FILTERING that reduces 72 options to ~5-10!
         """
         suggested = set()
+        cluster_id_str = str(cluster_id)
 
         # Method 1: Species already found in this cluster
         for bird_id, label_data in self.labels['birds'].items():
-            if label_data.get('cluster_id') == int(cluster_id):
+            if str(label_data.get('cluster_id')) == cluster_id_str:
                 suggested.add(label_data['species'])
 
         # Method 2: Cluster mapping (if available)
@@ -236,7 +239,7 @@ class LabelingService:
                     'crop_id': crop_id,
                     'crop_filename': bird['crop_filename'],
                     'image_name': bird['image_name'],
-                    'cluster_id': int(cluster_id),
+                    'cluster_id': str(cluster_id),  # Support string cluster IDs (species codes)
                     'bbox': bbox_yolo,  # Add bbox for full image highlighting
                     # Direct URLs for frontend (no URL construction needed)
                     'crop_url': f"/api/bird_crop/{bird_id}",
@@ -256,9 +259,10 @@ class LabelingService:
         "Oh, the other birds in this cluster are BRPE, so this is probably BRPE too"
         """
         context = []
+        cluster_id_str = str(cluster_id)
 
         for bird_id, label_data in self.labels['birds'].items():
-            if label_data.get('cluster_id') == int(cluster_id) and bird_id != current_bird_id:
+            if str(label_data.get('cluster_id')) == cluster_id_str and bird_id != current_bird_id:
                 context.append({
                     'bird_id': bird_id,
                     'species': label_data['species'],
@@ -366,7 +370,7 @@ class LabelingService:
         for cluster_id in self.clusters_data['clusters'].keys():
             info = self.get_cluster_info(cluster_id)
             cluster_progress.append({
-                'cluster_id': int(cluster_id),
+                'cluster_id': str(cluster_id),  # Support string cluster IDs (species codes)
                 'total': info['total_birds'],
                 'labeled': info['labeled_count'],
                 'progress': info['progress']
@@ -420,9 +424,10 @@ class LabelingService:
         # Get species distribution
         species_counts = Counter()
         cluster_labels = {}
+        cluster_id_str = str(cluster_id)
 
         for bird_id, label_data in self.labels['birds'].items():
-            if label_data.get('cluster_id') == int(cluster_id):
+            if str(label_data.get('cluster_id')) == cluster_id_str:
                 species = label_data['species']
                 species_counts[species] += 1
                 cluster_labels[bird_id] = label_data

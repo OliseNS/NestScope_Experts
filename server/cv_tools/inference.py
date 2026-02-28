@@ -587,13 +587,14 @@ class BirdDetector:
 
         return detections
 
-    def _predict_with_sahi(self, image_path: str, conf_threshold: float = 0.25) -> List[dict]:
+    def _predict_with_sahi(self, image_path: str, conf_threshold: float = 0.25, verbose: bool = True) -> List[dict]:
         """
         Use SAHI (Slicing Aided Hyper Inference) for smart sliced prediction
 
         Args:
             image_path: Path to the input image
             conf_threshold: Confidence threshold for detections
+            verbose: Whether to print progress messages (default: True)
 
         Returns:
             List of detection dictionaries
@@ -604,7 +605,8 @@ class BirdDetector:
             from sahi.slicing import slice_image
             import tempfile
 
-            print(f"[SAHI Mode] Using intelligent slicing for accurate detection...")
+            if verbose:
+                print(f"[SAHI Mode] Using intelligent slicing for accurate detection...")
 
             # Read image
             image = cv2.imread(image_path)
@@ -620,8 +622,9 @@ class BirdDetector:
             overlap_height = int(slice_height * overlap_height_ratio)
             overlap_width = int(slice_width * overlap_width_ratio)
 
-            print(f"  Slice size: {slice_width}x{slice_height}")
-            print(f"  Overlap: {overlap_width}x{overlap_height} pixels ({overlap_width_ratio*100:.0f}%)")
+            if verbose:
+                print(f"  Slice size: {slice_width}x{slice_height}")
+                print(f"  Overlap: {overlap_width}x{overlap_height} pixels ({overlap_width_ratio*100:.0f}%)")
 
             # Generate slices
             slice_image_result = slice_image(
@@ -638,12 +641,13 @@ class BirdDetector:
 
             all_detections = []
             num_slices = len(slice_image_result.images)
-            print(f"  Processing {num_slices} slices...")
+            if verbose:
+                print(f"  Processing {num_slices} slices...")
 
             # Process each slice
             for idx, (slice_img, slice_coords) in enumerate(zip(slice_image_result.images, slice_image_result.starting_pixels), 1):
                 # Show progress
-                if idx % 10 == 0 or idx == num_slices:
+                if verbose and (idx % 10 == 0 or idx == num_slices):
                     print(f"  Processing slice {idx}/{num_slices}...")
 
                 # Convert PIL to numpy array for ONNX
@@ -668,17 +672,20 @@ class BirdDetector:
                     det['bbox'][3] += y_offset  # y2
                     all_detections.append(det)
 
-            print(f"  Found {len(all_detections)} raw detections, applying NMS...")
+            if verbose:
+                print(f"  Found {len(all_detections)} raw detections, applying NMS...")
 
             # Apply NMS to merge overlapping detections
             filtered_detections = self._non_max_suppression_custom(all_detections, iou_threshold=0.5)
 
-            print(f"  Final count after NMS: {len(filtered_detections)} birds")
+            if verbose:
+                print(f"  Final count after NMS: {len(filtered_detections)} birds")
 
             return filtered_detections
 
         except Exception as e:
-            print(f"SAHI prediction failed: {str(e)}, falling back to standard inference")
+            if verbose:
+                print(f"SAHI prediction failed: {str(e)}, falling back to standard inference")
             # Fallback to standard inference
             preprocessed, scale, pad = self._preprocess_image(cv2.imread(image_path))
             output = self.model.run(self.output_names, {self.input_name: preprocessed})
@@ -711,7 +718,7 @@ class BirdDetector:
 
         return annotated_img
 
-    def predict(self, image_path, conf_threshold=0.25, use_sliding_window=True, fast_mode=True):
+    def predict(self, image_path, conf_threshold=0.25, use_sliding_window=True, fast_mode=True, verbose=True):
         """
         Run inference on an image with SAHI and model selection
 
@@ -723,6 +730,7 @@ class BirdDetector:
                 - True (Fast): Swift model - optimized for speed, good for quick previews
                 - False (Max): Apex model - optimized for accuracy, better for final results
                 Both modes use SAHI (Slicing Aided Hyper Inference) for large images
+            verbose: Whether to print progress messages (default: True)
 
         Returns:
             dict: Results containing:
@@ -748,11 +756,13 @@ class BirdDetector:
 
         # ALWAYS use SAHI for large images, standard inference for small images
         if use_sliding_window and (height > self.imgsz or width > self.imgsz):
-            print(f"[{mode_name} Mode] Processing {width}x{height} image with SAHI slicing...")
-            detections = self._predict_with_sahi(image_path, conf_threshold)
+            if verbose:
+                print(f"[{mode_name} Mode] Processing {width}x{height} image with SAHI slicing...")
+            detections = self._predict_with_sahi(image_path, conf_threshold, verbose=verbose)
         else:
             # Small image: use standard inference
-            print(f"[{mode_name} Mode] Processing {width}x{height} image with standard inference...")
+            if verbose:
+                print(f"[{mode_name} Mode] Processing {width}x{height} image with standard inference...")
             preprocessed, scale, pad = self._preprocess_image(original_img)
             output = self.model.run(self.output_names, {self.input_name: preprocessed})
             detections = self._postprocess(output[0], scale, pad, conf_threshold)
@@ -771,7 +781,7 @@ class BirdDetector:
             'inference_time': inference_time
         }
 
-    def _predict_with_sliding_window(self, image: np.ndarray, conf_threshold: float = 0.45, overlap: int = 64) -> List[dict]:
+    def _predict_with_sliding_window(self, image: np.ndarray, conf_threshold: float = 0.45, overlap: int = 64, verbose: bool = True) -> List[dict]:
         """
         Run inference using sliding window approach
 
@@ -781,6 +791,7 @@ class BirdDetector:
             overlap: Overlap between windows in pixels
                 - 64: Fast mode (minimal overlap)
                 - 128-512: Standard mode (adaptive overlap for ~10 windows, improved accuracy)
+            verbose: Whether to print progress messages (default: True)
 
         Returns:
             List of detection dictionaries
@@ -791,11 +802,12 @@ class BirdDetector:
         all_detections = []
 
         mode_name = f"Standard ({overlap}px overlap)" if overlap >= 128 else f"Fast ({overlap}px overlap)"
-        print(f"[Sliding Window Mode] Processing {len(windows)} windows for {width}x{height} image using {mode_name}...")
+        if verbose:
+            print(f"[Sliding Window Mode] Processing {len(windows)} windows for {width}x{height} image using {mode_name}...")
 
         for idx, (x1, y1, x2, y2) in enumerate(windows, 1):
             # Show progress every 10 windows
-            if idx % 10 == 0 or idx == len(windows):
+            if verbose and (idx % 10 == 0 or idx == len(windows)):
                 print(f"  Processing window {idx}/{len(windows)}...")
 
             # Extract window

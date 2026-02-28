@@ -1014,14 +1014,10 @@ def sam_auto_detect():
 # ==================== CLUSTER EXPLORER ROUTES ====================
 
 @app.route('/clusters')
+@app.route('/clusters/tsne')
 def cluster_explorer():
-    """
-    3D Cluster Explorer: Aerial view of bird clusters with actual images.
-
-    View clusters from above like looking at mountain ranges.
-    All bird images are loaded and visible.
-    """
-    return render_template('cluster_explorer_aerial.html')
+    """Canvas 2D cluster explorer with lazy image loading and HUD."""
+    return render_template('cluster_explorer_tsne.html')
 
 @app.route('/api/cluster_data')
 def get_cluster_data():
@@ -1045,9 +1041,11 @@ def get_cluster_data():
     with open(clusters_file, 'r') as f:
         cluster_data = json.load(f)
 
-    # Load t-SNE positions if available
-    positions = []
-    if os.path.exists(results_file):
+    # Check if positions are already in the JSON (new format from weak supervision pipeline)
+    positions = cluster_data.get('positions', [])
+
+    # If no positions in JSON, try loading from pickle file (old format)
+    if not positions and os.path.exists(results_file):
         import pickle
         with open(results_file, 'rb') as f:
             results = pickle.load(f)
@@ -1084,6 +1082,96 @@ def get_cluster_data():
         'clusters': cluster_data['clusters'],
         'positions': positions
     })
+
+
+# In-memory cache so we parse the 43 MB JSON only once per server lifetime
+_cluster_positions_cache = None
+
+@app.route('/api/cluster_positions')
+def get_cluster_positions():
+    """
+    Compact positions endpoint for the Google t-SNE visualisation.
+
+    Instead of returning the full 43 MB cluster JSON, this endpoint strips
+    every field that the visualisation does not need and returns a lean payload:
+
+        {
+          "cluster_names": ["BRPE", "LAGU", ...],   // sorted largest→smallest
+          "cluster_sizes":  [26543, 31924, ...],
+          "centroids":      [[cx, cy], ...],          // one per cluster
+          "positions":      [[x, y, ci, bird_id], ...], // ci = cluster index
+          "total":          100026
+        }
+
+    Typical size: ~5–8 MB (vs 43 MB for /api/cluster_data).
+    The response is cached in memory after the first request.
+    """
+    global _cluster_positions_cache
+    if _cluster_positions_cache is not None:
+        return _cluster_positions_cache
+
+    clusters_file = os.path.join(
+        Config.DATASET_PATH, "bird_crops", "clusters", "clusters_for_labeling.json"
+    )
+    if not os.path.exists(clusters_file):
+        return jsonify({
+            "error": "No cluster data found",
+            "message": "Run clustering first via the /clustering dashboard"
+        }), 404
+
+    with open(clusters_file, 'r') as f:
+        cluster_data = json.load(f)
+
+    positions_raw = cluster_data.get('positions', [])
+    clusters_dict = cluster_data.get('clusters', {})
+
+    if not positions_raw:
+        return jsonify({"error": "No position data in cluster file"}), 404
+
+    # ── Build cluster name list, sorted largest cluster first ──────────────
+    cluster_names = sorted(
+        clusters_dict.keys(),
+        key=lambda n: clusters_dict[n].get('size', 0),
+        reverse=True
+    )
+    cluster_sizes  = [clusters_dict[n].get('size', 0) for n in cluster_names]
+    name_to_idx    = {name: i for i, name in enumerate(cluster_names)}
+
+    # ── Compute centroids (mean x, mean y per cluster) ─────────────────────
+    acc = {n: [0.0, 0.0, 0] for n in cluster_names}
+    for pos in positions_raw:
+        c = pos.get('cluster', '')
+        if c in acc:
+            acc[c][0] += pos['x']
+            acc[c][1] += pos['y']
+            acc[c][2] += 1
+
+    centroids = []
+    for name in cluster_names:
+        s = acc[name]
+        count = s[2] or 1
+        centroids.append([round(s[0] / count, 4), round(s[1] / count, 4)])
+
+    # ── Compact positions: [[x, y, cluster_idx, bird_id], ...] ────────────
+    compact = []
+    for pos in positions_raw:
+        ci = name_to_idx.get(pos.get('cluster', ''), 0)
+        compact.append([
+            round(pos['x'], 3),
+            round(pos['y'], 3),
+            ci,
+            pos['bird_id']
+        ])
+
+    _cluster_positions_cache = jsonify({
+        'cluster_names': cluster_names,
+        'cluster_sizes':  cluster_sizes,
+        'centroids':      centroids,
+        'positions':      compact,
+        'total':          len(compact)
+    })
+    return _cluster_positions_cache
+
 
 @app.route('/api/bird_crop/<int:crop_id>')
 def get_bird_crop(crop_id):
