@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>NestScope — Cluster Explorer</title>
+  <title>NestScope — Cluster Explorer 3D</title>
   <style>
     *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
 
@@ -15,14 +15,13 @@
       -webkit-user-select: none;
     }
 
-    /* ── Full-viewport canvas ── */
+    /* ── Full-viewport canvas (injected by Three.js renderer) ── */
     #c {
       display: block;
       position: fixed;
       inset: 0;
       cursor: grab;
     }
-    #c.panning { cursor: grabbing; }
 
     /* ────────────────────────────────────────
        HUD: TOP BAR
@@ -340,7 +339,7 @@
 </head>
 <body>
 
-<canvas id="c"></canvas>
+<!-- Three.js injects its canvas before these elements -->
 
 <!-- HUD: top bar -->
 <div id="hud-top">
@@ -348,7 +347,7 @@
     <div class="logo-mark">N</div>
     <div>
       <div class="logo-text">NestScope</div>
-      <div class="logo-sub">Cluster Explorer</div>
+      <div class="logo-sub">Cluster Explorer 3D</div>
     </div>
   </div>
   <div class="hud-sep"></div>
@@ -361,7 +360,7 @@
     <span class="hud-stat-l">Birds</span>
   </div>
   <div class="hud-spacer"></div>
-  <span id="hud-zoom">zoom ×—</span>
+  <span id="hud-zoom">dist —</span>
   <div class="hud-sep"></div>
   <div id="btn-panel" onclick="togglePanel()">
     <svg width="12" height="10" viewBox="0 0 12 10" fill="currentColor">
@@ -397,7 +396,7 @@
     <span id="dc-species">—</span>
   </div>
   <div id="dc-id">—</div>
-  <div id="dc-hint">Click · center &nbsp; F · fit all</div>
+  <div id="dc-hint">Click · fly to bird &nbsp; F · fit all</div>
 </div>
 
 <!-- Hover tooltip -->
@@ -408,7 +407,7 @@
 </div>
 
 <!-- Hint bar -->
-<div id="hint">Scroll · zoom &nbsp;·&nbsp; Drag · pan &nbsp;·&nbsp; Click · travel to bird &nbsp;·&nbsp; F · fit all</div>
+<div id="hint">Left drag · orbit &nbsp;·&nbsp; Right drag · pan &nbsp;·&nbsp; Scroll · zoom &nbsp;·&nbsp; Click · select bird &nbsp;·&nbsp; F · fit all</div>
 
 <!-- Loading screen -->
 <div id="loading">
@@ -418,133 +417,155 @@
   <div id="ld-s">Initialising…</div>
 </div>
 
-<script>
+<!-- Three.js via importmap (ES module, works in all modern browsers) -->
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.169.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.169.0/examples/jsm/"
+  }
+}
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
 /* ==============================================================
-   NestScope Cluster Explorer — Canvas 2D  (no WebGL / Three.js)
+   NestScope Cluster Explorer — Three.js 3D
    --------------------------------------------------------------
-   OFFSCREEN LAYER  (built once at startup, ~40ms)
-     ▸ Dark background
-     ▸ Per-cluster convex-hull fill (8% opacity)  → territory
-     ▸ Per-cluster convex-hull stroke (30% opacity) → boundary
-     ▸ All 100K colored dots as placeholders for unloaded images
+   ARCHITECTURE:
+     THREE.Points  (1 draw call)     → all 100 K birds as colored dots
+     THREE.Sprite pool (≤800)        → lazy-loaded image thumbnails
+     Flat hull meshes at Z = 0       → cluster territory regions
+     Overlay <canvas> for labels     → cluster name text
 
-   This layer is displayed with a single ctx.drawImage() per frame.
-   Panning and zooming cost exactly one GPU blit.
+   LOADING (identical pipeline to the 2D canvas version):
+     imgCache  LRU Map     (birdId → { texture, seq } | 'loading' | 'error')
+     imgQueue  priority Map (birdId → screenDist²)
+     MAX_LOADS parallel TextureLoader requests
 
-   DYNAMIC LAYER  (rendered only when dirty)
-     ▸ Bird image thumbnails — always shown at ALL zoom levels
-       10px tiles at overview → up to 90px at high zoom
-       Lazy-loaded, LRU cache, priority-queued by screen distance
-       Dots remain visible as placeholders until images load in
-     ▸ Cluster name labels (fade in with zoom)
-     ▸ Selected-bird dashed ring
-     ▸ Hover ring
+   3D DEPTH:
+     Each bird gets a deterministic Z based on its ID:
+       Z = sin(id * large_prime) * Z_AMPLITUDE
+     This spreads birds within each cluster into depth so that
+     orbiting sideways reveals images that are hidden from above.
    ============================================================== */
 
 // ── Config ────────────────────────────────────────────────────────
 const C = {
-  OFF_PX:            2400,   // offscreen canvas resolution (px)
-  DOT_PX:            2,      // dot size on offscreen canvas (placeholder until image loads)
+  Z_SPREAD:       0.18,    // Z amplitude as fraction of max(dataW, dataH)
+  SPRITE_INIT_PX: 14,      // target sprite screen size (px) at fit-all zoom
+  IMG_PX_MAX:     100,     // max sprite visual size on screen (soft cap)
 
-  // World-space image sizing
-  // Images are sized as: imgPx = cam.zoom * WORLD_IMG_SIZE
-  // WORLD_IMG_SIZE is computed at startup so images are exactly
-  // WORLD_IMG_INIT_PX screen pixels at the initial fit-all zoom level.
-  // This guarantees images NEVER overlap more than the data points do,
-  // and scale continuously with zoom — no mode-switch jarring.
-  WORLD_IMG_INIT_PX: 8,     // target screen size (px) at fit-all overview zoom
-  IMG_ROUND_PX:      20,    // use rounded corners when imgPx > this
-  IMG_PX_MAX:        110,   // max image screen size (px)
+  MAX_SPRITES:    800,     // sprite pool size (= max images drawn at once)
+  MAX_QUEUE:      600,     // max pending load requests queued
+  MAX_IMG_CACHE:  2500,    // LRU texture cache size
+  MAX_LOADS:      20,      // parallel HTTP requests
 
-  MAX_DRAWS:         1200,  // max images drawn per frame
-  MAX_QUEUE:         600,   // max pending HTTP load requests
-  MAX_IMG_CACHE:     2500,  // LRU cache size
-  MAX_LOADS:         20,    // parallel HTTP requests
+  GRID:           50,      // spatial grid cells per axis (XY)
+  FLY_MS:         500,     // fly-to animation duration ms
 
-  GRID:              50,    // spatial grid cells per axis
-  ZOOM_MIN:          2,
-  ZOOM_MAX:          700,
-  WHEEL_K:           0.0020, // wheel zoom sensitivity (higher = faster)
-
-  FLY_MS:            480,   // fly-to animation duration (ms)
-  SEL_ZOOM:          55,    // target zoom when flying to a selected bird
-
-  HULL_ALPHA_FILL:   0.08,  // cluster territory fill opacity
-  HULL_ALPHA_LINE:   0.30,  // cluster territory border opacity
-
-  // Inertia / momentum scrolling
-  INERTIA_DECAY:     0.88,  // velocity multiplied by this per 16ms
-  INERTIA_STOP:      0.0005,// stop inertia below this speed (world-units/ms)
+  HULL_ALPHA_FILL: 0.07,
+  HULL_ALPHA_LINE: 0.28,
 };
 
-// ── Canvas ────────────────────────────────────────────────────────
-const canvas = document.getElementById('c');
-const ctx    = canvas.getContext('2d', { alpha: false });
+// ── Scene ─────────────────────────────────────────────────────────
+const scene    = new THREE.Scene();
+scene.background = new THREE.Color(0x07070f);
+
+const camera   = new THREE.PerspectiveCamera(55, innerWidth / innerHeight, 0.01, 5000);
+
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setSize(innerWidth, innerHeight);
+
+// Insert canvas as first child so HUD elements sit on top
+const canvasEl = renderer.domElement;
+canvasEl.id = 'c';
+document.body.insertBefore(canvasEl, document.body.firstChild);
+
+// ── Orbit Controls ────────────────────────────────────────────────
+const controls = new OrbitControls(camera, canvasEl);
+controls.enableDamping  = true;
+controls.dampingFactor  = 0.07;
+controls.rotateSpeed    = 0.7;
+controls.zoomSpeed      = 1.2;
+controls.panSpeed       = 0.8;
+controls.minDistance    = 0.5;
+controls.maxDistance    = 1000;
+controls.mouseButtons   = { LEFT: THREE.MOUSE.ROTATE, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.PAN };
+
+// ── Label overlay canvas (for cluster name text drawn over scene) ─
+const lblCanvas = document.createElement('canvas');
+lblCanvas.style.cssText = 'position:fixed;inset:0;pointer-events:none;z-index:4;';
+lblCanvas.width = innerWidth; lblCanvas.height = innerHeight;
+// Insert after the Three.js canvas, before HUD
+canvasEl.insertAdjacentElement('afterend', lblCanvas);
+const lctx = lblCanvas.getContext('2d');
 
 // ── Data ──────────────────────────────────────────────────────────
 let allPos       = null;   // Float32Array stride-4: [x, y, ci, id, ...]
-let clusterXY    = [];     // Float32Array[] per cluster: [x0,y0, x1,y1, ...]
+let allZ         = null;   // Float32Array: Z per bird  (index = posIdx >> 2)
+let clusterXY    = [];
 let clusterNames = [];
 let clusterSizes = [];
-let centroids    = [];     // [[tx,ty], ...]
+let centroids    = [];
 let colorsHex    = [];
-let hulls        = [];     // [[x,y], ...] per cluster (convex hull)
+let hulls        = [];
 let total        = 0;
-
-// ── Offscreen layer ───────────────────────────────────────────────
-let offDots  = null;
 let dataMinX = 0, dataMinY = 0, dataW = 1, dataH = 1;
 
-// ── World-space image size (set after fitAll) ─────────────────────
-// imgPx = cam.zoom * WORLD_IMG_SIZE  →  images scale with zoom, never overlap
-let WORLD_IMG_SIZE = 1;
+// ── Three.js objects ──────────────────────────────────────────────
+let pointsObj = null;                 // THREE.Points for all birds
 
-// ── Inertia state ────────────────────────────────────────────────
-let vel       = { x: 0, y: 0 };  // world-units per ms
-let inertiaId = null;
-let lastPanT  = 0;
-let lastPanX  = 0, lastPanY = 0;
+// Sprite pool — pre-created and reused to avoid GC pressure
+const pool       = [];                // THREE.Sprite[]
+const birdSprite = new Map();         // birdId → sprite (currently visible)
+let   spriteSeq  = 0;                 // LRU counter for pool eviction
 
-// ── Spatial grid ──────────────────────────────────────────────────
+// ── Image loading (same pipeline as the 2D canvas version) ────────
+const texLoader  = new THREE.TextureLoader();
+let imgCache = new Map();  // birdId → { texture, seq } | 'loading' | 'error'
+let imgQueue = new Map();  // birdId → dist² (priority — smaller = load first)
+let imgLoads = 0, lruSeq = 0;
+
+// ── World-space sprite size (calibrated after fitAll) ─────────────
+let SPRITE_WORLD = 1;
+
+// ── Spatial grid (XY plane) ───────────────────────────────────────
 let grid = [], gMinX = 0, gMinY = 0, gCellW = 1, gCellH = 1;
 const G = C.GRID;
 
-// ── Camera ────────────────────────────────────────────────────────
-let cam = { x: 0, y: 0, zoom: 40 };
-
-// ── Pan ───────────────────────────────────────────────────────────
-let panning = false, panRef = null;
-
-// ── Image loading ─────────────────────────────────────────────────
-let imgCache = new Map();  // birdId → { img, seq } | 'loading' | 'error'
-let imgQueue = new Map();  // birdId → dist²
-let imgLoads = 0, lruSeq  = 0;
-
-// ── RAF / dirty ───────────────────────────────────────────────────
-let dirty = false, rafId = null;
-
-// ── Hover ─────────────────────────────────────────────────────────
+// ── Selection / hover ─────────────────────────────────────────────
+let selId = -1, selPosIdx = -1;
 let hovId = -1, hovPosIdx = -1, hovTimer = null;
 
-// ── Selection ─────────────────────────────────────────────────────
-let selId = -1, selPosIdx = -1;
-
 // ── Fly animation ─────────────────────────────────────────────────
-let fly = null;  // { x0,y0,z0, x1,y1,z1, t0 }
+let fly = null; // { pos0, pos1, tgt0, tgt1, t0 }
 
-// ── Panel visibility ─────────────────────────────────────────────
+// ── Panel state ───────────────────────────────────────────────────
 let panelOpen = true;
 
-// ── Startup ───────────────────────────────────────────────────────
-resizeCanvas();
-window.addEventListener('resize', () => { resizeCanvas(); requestPaint(); });
+// ── Click vs drag discrimination ──────────────────────────────────
+const raycaster = new THREE.Raycaster();
+let mouseDownXY = null, wasDrag = false;
+
+// ── Init ──────────────────────────────────────────────────────────
+window.addEventListener('resize', onResize);
 bindEvents();
 loadData();
 
-function resizeCanvas() {
-  canvas.width  = window.innerWidth;
-  canvas.height = window.innerHeight;
+function onResize() {
+  camera.aspect = innerWidth / innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+  lblCanvas.width = innerWidth; lblCanvas.height = innerHeight;
 }
+
+// Expose to HTML onclick attributes (modules don't auto-expose globals)
+window.togglePanel  = togglePanel;
+window.deselectBird = deselectBird;
 
 
 // ── Data loading ──────────────────────────────────────────────────
@@ -576,21 +597,21 @@ async function loadData() {
     await yld();
     computeHulls();
 
-    prog(56, 'Building spatial grid…');
+    prog(58, 'Building spatial grid…');
     await yld();
     buildGrid();
 
-    prog(70, 'Pre-rendering dot layer…');
+    prog(66, 'Assigning depth…');
     await yld();
-    buildOffscreen();
+    assignZ();
 
-    prog(86, 'Building UI…');
+    prog(74, 'Building 3D scene…');
+    await yld();
+    buildScene();
+
+    prog(88, 'Building UI…');
     buildSidebar();
     fitAll();
-    // Set world-space image size so images are WORLD_IMG_INIT_PX pixels at this zoom.
-    // As the user zooms in, images grow proportionally — they will never overlap
-    // more than the underlying data points do.
-    WORLD_IMG_SIZE = C.WORLD_IMG_INIT_PX / cam.zoom;
 
     document.getElementById('stat-clusters').textContent = clusterNames.length;
     document.getElementById('stat-birds').textContent    = total.toLocaleString();
@@ -599,7 +620,7 @@ async function loadData() {
 
     prog(100, 'Ready');
     document.getElementById('loading').classList.add('gone');
-    requestPaint();
+    animate();
 
   } catch (e) {
     console.error(e);
@@ -627,32 +648,15 @@ function buildArrays(raw) {
 }
 
 
-// ── Cluster separation ────────────────────────────────────────────
+// ── Cluster separation (identical to 2D version) ──────────────────
 //
-// Problem: raw t-SNE positions can scatter the same cluster across
-// the whole map.  E.g. "LAGU" might appear on the left AND right
-// side because k-means labels two separate visual groups the same
-// species code.
-//
-// Fix (runs once at load, ~10 ms for 100K points):
-//   1. Compute each cluster's actual centroid from data
-//   2. Spread centroids outward 4× from the global center
-//      → large inter-cluster gaps
-//   3. For each cluster compute "allowed radius" =
-//      44% of nearest-neighbor centroid distance
-//      → guarantees a 12% gap ring around every cluster
-//   4. Scale each cluster's points to fit within allowed radius
-//      → any scatter / outlier points are pulled inward
-//   5. Update centroids[] so labels are placed correctly
-//
-// Result: every cluster is a single tight island, physically
-// separated from all neighbours, with clear dark space between them.
+// Spreads cluster centroids outward and compresses each cluster so
+// they form tight, well-separated islands in the XY plane.
 //
 function separateClusters() {
   const NC = clusterNames.length;
   if (NC < 2) return;
 
-  // Step 1: compute actual centroid of each cluster
   const ctrX = new Float64Array(NC);
   const ctrY = new Float64Array(NC);
   const cnt  = new Int32Array(NC);
@@ -666,12 +670,11 @@ function separateClusters() {
     if (cnt[ci] > 0) { ctrX[ci] /= cnt[ci]; ctrY[ci] /= cnt[ci]; }
   }
 
-  // Step 2: spread centroids outward from their global centre
   let gcx = 0, gcy = 0;
   for (let ci = 0; ci < NC; ci++) { gcx += ctrX[ci]; gcy += ctrY[ci]; }
   gcx /= NC; gcy /= NC;
 
-  const SPREAD = 4.2;   // push clusters further apart
+  const SPREAD = 4.2;
   const sCtrX = new Float64Array(NC);
   const sCtrY = new Float64Array(NC);
   for (let ci = 0; ci < NC; ci++) {
@@ -679,8 +682,6 @@ function separateClusters() {
     sCtrY[ci] = gcy + (ctrY[ci] - gcy) * SPREAD;
   }
 
-  // Step 3: allowed radius = 44% of nearest-centroid distance
-  //         (leaves a 12% gap ring between every pair of clusters)
   const allowedR = new Float64Array(NC).fill(1e9);
   for (let ci = 0; ci < NC; ci++) {
     for (let cj = 0; cj < NC; cj++) {
@@ -693,7 +694,6 @@ function separateClusters() {
     if (allowedR[ci] === 1e9) allowedR[ci] = 10;
   }
 
-  // Step 4: current maximum radius (point furthest from centroid)
   const actualR = new Float64Array(NC);
   for (let i = 0; i < allPos.length; i += 4) {
     const ci = allPos[i+2] | 0;
@@ -703,7 +703,6 @@ function separateClusters() {
     if (r > actualR[ci]) actualR[ci] = r;
   }
 
-  // Step 5: remap all bird positions to new separated layout
   for (let i = 0; i < allPos.length; i += 4) {
     const ci    = allPos[i+2] | 0;
     const scale = actualR[ci] > 0.001 ? allowedR[ci] / actualR[ci] : 1;
@@ -711,7 +710,6 @@ function separateClusters() {
     allPos[i+1] = sCtrY[ci] + (allPos[i+1] - ctrY[ci]) * scale;
   }
 
-  // Step 6: remap clusterXY (used for hull drawing and offscreen rendering)
   for (let ci = 0; ci < NC; ci++) {
     const pts   = clusterXY[ci];
     const scale = actualR[ci] > 0.001 ? allowedR[ci] / actualR[ci] : 1;
@@ -721,7 +719,6 @@ function separateClusters() {
     }
   }
 
-  // Step 7: update centroids for label placement
   for (let ci = 0; ci < NC; ci++) {
     centroids[ci] = [sCtrX[ci], sCtrY[ci]];
   }
@@ -729,11 +726,6 @@ function separateClusters() {
 
 
 // ── Convex hull (Andrew's monotone chain) ─────────────────────────
-//
-// We compute one hull per cluster so we can draw "territory" regions
-// on the offscreen canvas.  For each cluster of ~2800 points this
-// runs in < 1 ms.
-//
 function convexHull(flatXY) {
   const n = flatXY.length >> 1;
   if (n < 3) {
@@ -741,8 +733,6 @@ function convexHull(flatXY) {
     for (let i = 0; i < n; i++) r.push([flatXY[i*2], flatXY[i*2+1]]);
     return r;
   }
-
-  // Build [x,y] pairs and sort lexicographically
   const pts = [];
   for (let i = 0; i < flatXY.length; i += 2) pts.push([flatXY[i], flatXY[i+1]]);
   pts.sort((a, b) => a[0] - b[0] || a[1] - b[1]);
@@ -772,7 +762,7 @@ function computeHulls() {
 }
 
 
-// ── Spatial grid ──────────────────────────────────────────────────
+// ── Spatial grid (XY plane) ───────────────────────────────────────
 function buildGrid() {
   let mnX=Infinity,mxX=-Infinity,mnY=Infinity,mxY=-Infinity;
   for (let i = 0; i < allPos.length; i += 4) {
@@ -802,43 +792,37 @@ function buildGrid() {
   }
 }
 
-// Returns allPos indices for points in the current viewport (with pixel expand)
-function* visibleGrid(expandPx = 0) {
-  const tl = s2w(-expandPx,              -expandPx);
-  const br = s2w(canvas.width + expandPx, canvas.height + expandPx);
-  const c0 = clamp(((tl.x - gMinX) / gCellW) | 0, 0, G-1);
-  const c1 = clamp(((br.x - gMinX) / gCellW) | 0, 0, G-1);
-  const r0 = clamp(((br.y - gMinY) / gCellH) | 0, 0, G-1); // y-flip
-  const r1 = clamp(((tl.y - gMinY) / gCellH) | 0, 0, G-1);
+// Returns allPos indices for a world-space XY rectangle (+ expandWorld margin)
+function* visibleGridXY(expandWorld = 0) {
+  // Approximate the visible XY extent from the camera's perspective.
+  // We use the camera→target distance and FOV to compute half-extents,
+  // then add expandWorld as a safety margin.
+  const dist = camera.position.distanceTo(controls.target);
+  const vFOV = camera.fov * Math.PI / 180;
+  const halfH = dist * Math.tan(vFOV / 2) + expandWorld;
+  const halfW = halfH * camera.aspect + expandWorld;
+
+  const tx = controls.target.x, ty = controls.target.y;
+
+  const c0 = clamp(((tx - halfW - gMinX) / gCellW) | 0, 0, G-1);
+  const c1 = clamp(((tx + halfW - gMinX) / gCellW) | 0, 0, G-1);
+  const r0 = clamp(((ty - halfH - gMinY) / gCellH) | 0, 0, G-1);
+  const r1 = clamp(((ty + halfH - gMinY) / gCellH) | 0, 0, G-1);
+
   for (let r = r0; r <= r1; r++) for (let c = c0; c <= c1; c++) {
     const cell = grid[r*G + c];
     for (let j = 0; j < cell.length; j++) yield cell[j];
   }
 }
 
-function viewportCells(expandPx = 0) {
-  const tl = s2w(-expandPx,              -expandPx);
-  const br = s2w(canvas.width + expandPx, canvas.height + expandPx);
-  return {
-    c0: clamp(((tl.x - gMinX) / gCellW) | 0, 0, G-1),
-    c1: clamp(((br.x - gMinX) / gCellW) | 0, 0, G-1),
-    r0: clamp(((br.y - gMinY) / gCellH) | 0, 0, G-1),
-    r1: clamp(((tl.y - gMinY) / gCellH) | 0, 0, G-1),
-  };
-}
 
-
-// ── Offscreen canvas ──────────────────────────────────────────────
+// ── Z coordinate assignment ───────────────────────────────────────
 //
-// We render three things here (ONCE, never again):
-//   1. Dark background
-//   2. Cluster territory regions (convex hull fill + stroke)
-//   3. All 100 K bird dots (3×3 px colored squares)
+// Each bird gets a stable, deterministic Z value derived from its ID.
+// This spreads the birds that are stacked at the same XY position into
+// depth, so orbiting sideways reveals images that are hidden from above.
 //
-// Displaying it every frame = 1 drawImage() call on the main canvas.
-//
-function buildOffscreen() {
-  // Compute data bounding box (with padding)
+function assignZ() {
   let mnX=Infinity,mxX=-Infinity,mnY=Infinity,mxY=-Infinity;
   for (let i = 0; i < allPos.length; i += 4) {
     if (allPos[i]   < mnX) mnX = allPos[i];
@@ -846,215 +830,266 @@ function buildOffscreen() {
     if (allPos[i+1] < mnY) mnY = allPos[i+1];
     if (allPos[i+1] > mxY) mxY = allPos[i+1];
   }
-  const pad  = 0.04;
-  dataMinX   = mnX - (mxX - mnX) * pad;
-  dataMinY   = mnY - (mxY - mnY) * pad;
-  dataW      = (mxX - mnX) * (1 + pad * 2);
-  dataH      = (mxY - mnY) * (1 + pad * 2);
+  dataMinX = mnX; dataMinY = mnY;
+  dataW = mxX - mnX; dataH = mxY - mnY;
 
-  const S = C.OFF_PX;
-  offDots = (typeof OffscreenCanvas !== 'undefined')
-    ? new OffscreenCanvas(S, S)
-    : (() => { const cv = document.createElement('canvas'); cv.width = cv.height = S; return cv; })();
-  const oc = offDots.getContext('2d');
+  const ZA = Math.max(dataW, dataH) * C.Z_SPREAD;
+  allZ = new Float32Array(total);
 
-  // World → offscreen pixel helpers
-  const wx2px = wx => ((wx - dataMinX) / dataW) * S;
-  const wy2py = wy => (1 - (wy - dataMinY) / dataH) * S;  // y-flip
+  for (let i = 0; i < allPos.length; i += 4) {
+    const id = allPos[i+3];
+    // Two-step hash → smooth float in (-1, 1)
+    const s  = Math.sin(id * 12345.6789) * 43758.5453;
+    const t  = (s - Math.floor(s)) * 2 - 1;
+    allZ[i >> 2] = t * ZA;
+  }
+}
 
-  // 1. Background
-  oc.fillStyle = '#07070f';
-  oc.fillRect(0, 0, S, S);
 
-  // 2. Cluster territories (hull fill then stroke)
+// ── 3D scene construction ─────────────────────────────────────────
+function buildScene() {
+  buildHullMeshes();
+  buildPointCloud();
+  initSpritePool();
+}
+
+// Cluster territory regions — flat fill + outline at Z ≈ 0
+function buildHullMeshes() {
   for (let ci = 0; ci < hulls.length; ci++) {
     const hull = hulls[ci];
     if (hull.length < 3) continue;
-    oc.beginPath();
-    oc.moveTo(wx2px(hull[0][0]), wy2py(hull[0][1]));
-    for (let j = 1; j < hull.length; j++)
-      oc.lineTo(wx2px(hull[j][0]), wy2py(hull[j][1]));
-    oc.closePath();
-    oc.globalAlpha = C.HULL_ALPHA_FILL;
-    oc.fillStyle   = colorsHex[ci];
-    oc.fill();
-    oc.globalAlpha = C.HULL_ALPHA_LINE;
-    oc.strokeStyle = colorsHex[ci];
-    oc.lineWidth   = 2;
-    oc.stroke();
+
+    const color = new THREE.Color(colorsHex[ci]);
+
+    // Filled territory
+    const shape   = new THREE.Shape(hull.map(p => new THREE.Vector2(p[0], p[1])));
+    const fillGeo = new THREE.ShapeGeometry(shape);
+    const fillMat = new THREE.MeshBasicMaterial({
+      color, transparent: true,
+      opacity: C.HULL_ALPHA_FILL,
+      side: THREE.DoubleSide,
+      depthWrite: false,
+    });
+    const fill = new THREE.Mesh(fillGeo, fillMat);
+    fill.position.z = -0.05;
+    scene.add(fill);
+
+    // Outline
+    const pts3  = hull.map(p => new THREE.Vector3(p[0], p[1], -0.02));
+    pts3.push(pts3[0].clone());
+    const lineGeo = new THREE.BufferGeometry().setFromPoints(pts3);
+    const lineMat = new THREE.LineBasicMaterial({
+      color, transparent: true, opacity: C.HULL_ALPHA_LINE,
+    });
+    scene.add(new THREE.Line(lineGeo, lineMat));
   }
-  oc.globalAlpha = 1;
+}
 
-  // 3. Dots — batched per cluster (one fillStyle change per cluster)
-  const d = C.DOT_PX;
-  for (let ci = 0; ci < clusterNames.length; ci++) {
-    const pts = clusterXY[ci];
-    oc.fillStyle = colorsHex[ci];
-    for (let j = 0; j < pts.length; j += 2) {
-      const ox = wx2px(pts[j]);
-      const oy = wy2py(pts[j+1]);
-      oc.fillRect(ox - d/2, oy - d/2, d, d);
-    }
+// One THREE.Points object for every bird — 1 GPU draw call
+function buildPointCloud() {
+  const positions = new Float32Array(total * 3);
+  const colors    = new Float32Array(total * 3);
+
+  for (let i = 0; i < allPos.length; i += 4) {
+    const bi  = i >> 2;
+    const ci  = allPos[i+2] | 0;
+    const hex = colorsHex[ci];
+    positions[bi*3]   = allPos[i];
+    positions[bi*3+1] = allPos[i+1];
+    positions[bi*3+2] = allZ[bi];
+    colors[bi*3]   = parseInt(hex.slice(1,3), 16) / 255;
+    colors[bi*3+1] = parseInt(hex.slice(3,5), 16) / 255;
+    colors[bi*3+2] = parseInt(hex.slice(5,7), 16) / 255;
+  }
+
+  const geom = new THREE.BufferGeometry();
+  geom.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+  geom.setAttribute('color',    new THREE.BufferAttribute(colors, 3));
+
+  pointsObj = new THREE.Points(geom, new THREE.PointsMaterial({
+    size: 0.12,
+    vertexColors: true,
+    sizeAttenuation: true,
+    transparent: true,
+    opacity: 0.65,
+  }));
+  scene.add(pointsObj);
+}
+
+// Pre-create a fixed pool of Sprites so we never allocate during rendering
+function initSpritePool() {
+  for (let i = 0; i < C.MAX_SPRITES; i++) {
+    const mat = new THREE.SpriteMaterial({
+      transparent: true,
+      depthTest:   true,
+      depthWrite:  false,
+      sizeAttenuation: true,
+    });
+    const s  = new THREE.Sprite(mat);
+    s.visible  = false;
+    s._birdId  = -1;
+    s._seq     = 0;
+    scene.add(s);
+    pool.push(s);
   }
 }
 
 
-// ── Camera helpers ────────────────────────────────────────────────
-// World → screen  (zoom = screen px per world unit)
-function w2s(wx, wy) {
-  return [
-    canvas.width  / 2 + (wx - cam.x) * cam.zoom,
-    canvas.height / 2 - (wy - cam.y) * cam.zoom,
-  ];
-}
-// Screen → world
-function s2w(sx, sy) {
-  return {
-    x: cam.x + (sx - canvas.width  / 2) / cam.zoom,
-    y: cam.y - (sy - canvas.height / 2) / cam.zoom,
-  };
-}
-
+// ── Camera fit ────────────────────────────────────────────────────
 function fitAll() {
-  const sbW    = panelOpen ? 234 : 0;
-  const usableW = canvas.width - sbW;
-  const zx = usableW         * 0.86 / dataW;
-  const zy = canvas.height   * 0.86 / dataH;
-  cam.zoom = Math.min(zx, zy);
-  cam.x    = dataMinX + dataW / 2;
-  cam.y    = dataMinY + dataH / 2;
-  dirty    = true;
+  const cx = dataMinX + dataW / 2;
+  const cy = dataMinY + dataH / 2;
+
+  const vFOV = camera.fov * Math.PI / 180;
+  const hFOV = 2 * Math.atan(Math.tan(vFOV / 2) * camera.aspect);
+  const distY = (dataH / 2) / Math.tan(vFOV  / 2);
+  const distX = (dataW / 2) / Math.tan(hFOV  / 2);
+  const dist  = Math.max(distX, distY) * 1.3;
+
+  fly = {
+    pos0: camera.position.clone(),
+    pos1: new THREE.Vector3(cx, cy, dist),
+    tgt0: controls.target.clone(),
+    tgt1: new THREE.Vector3(cx, cy, 0),
+    t0:   performance.now(),
+  };
+
+  // Calibrate world-space sprite size so they appear SPRITE_INIT_PX pixels
+  // at this view distance — same idea as WORLD_IMG_SIZE in the 2D version.
+  const worldH = 2 * dist * Math.tan(vFOV / 2);
+  SPRITE_WORLD = (C.SPRITE_INIT_PX / innerHeight) * worldH;
 }
 
 
-// ── Render loop ───────────────────────────────────────────────────
-function requestPaint() {
-  if (!dirty) dirty = true;
-  if (!rafId)  rafId = requestAnimationFrame(paint);
-}
+// ── Render / animation loop ───────────────────────────────────────
+function animate() {
+  requestAnimationFrame(animate);
 
-function paint(now) {
-  rafId = null;
-
-  // Advance fly animation
+  // Advance fly-to animation
   if (fly) {
-    const t = Math.min((now - fly.t0) / C.FLY_MS, 1);
-    const e = 1 - (1 - t) ** 3;  // cubic ease-out
-    cam.x    = lerp(fly.x0, fly.x1, e);
-    cam.y    = lerp(fly.y0, fly.y1, e);
-    cam.zoom = lerp(fly.z0, fly.z1, e);
+    const t = Math.min((performance.now() - fly.t0) / C.FLY_MS, 1);
+    const e = 1 - (1 - t) ** 3; // cubic ease-out
+    camera.position.lerpVectors(fly.pos0, fly.pos1, e);
+    controls.target.lerpVectors(fly.tgt0, fly.tgt1, e);
+    controls.update();
     if (t >= 1) fly = null;
-    dirty = true;
+  } else {
+    controls.update(); // needed for damping
   }
 
-  if (!dirty) return;
-  dirty = false;
+  updateSprites();
+  drawLabels();
 
-  const W = canvas.width, H = canvas.height, z = cam.zoom;
+  const dist = camera.position.distanceTo(controls.target);
+  document.getElementById('hud-zoom').textContent = `dist ${Math.round(dist)}`;
 
-  // ── 1. Clear + blit pre-rendered layer ────────────────────────
-  // Clear first (covers area outside the data extent when fully zoomed out)
-  ctx.fillStyle = '#07070f';
-  ctx.fillRect(0, 0, W, H);
-
-  // Map visible world rect → offscreen source rect.
-  // KEY: offscreen y is flipped (y increases downward), world y increases upward.
-  // We must compute top/bottom separately so src_h is always positive.
-  const S      = C.OFF_PX;
-  const tl     = s2w(0, 0), br = s2w(W, H);
-  const ox_l   = ((tl.x - dataMinX) / dataW) * S;
-  const ox_r   = ((br.x - dataMinX) / dataW) * S;
-  const oy_top = (1 - (tl.y - dataMinY) / dataH) * S;  // tl.y larger → smaller canvas y
-  const oy_bot = (1 - (br.y - dataMinY) / dataH) * S;  // br.y smaller → larger canvas y
-  const src_w  = ox_r - ox_l;   // always positive
-  const src_h  = oy_bot - oy_top; // always positive
-  if (src_w > 0 && src_h > 0) {
-    ctx.drawImage(offDots, ox_l, oy_top, src_w, src_h, 0, 0, W, H);
-  }
-
-  // ── 2. Image thumbnails (always draw — dots are placeholders for unloaded images)
-  drawImages(W, H, z);
-
-  // ── 3. Cluster labels ────────────────────────────────────────
-  drawLabels(W, H, z);
-
-  // ── 4. Selection ring ────────────────────────────────────────
-  if (selId >= 0 && selPosIdx >= 0) drawSelRing(z);
-
-  // ── 5. Hover ring ────────────────────────────────────────────
-  if (hovId >= 0 && hovPosIdx >= 0) drawHovRing(z);
-
-  // ── 6. Update zoom display ────────────────────────────────────
-  document.getElementById('hud-zoom').textContent = `zoom ×${Math.round(z)}`;
-
-  // ── 7. Keep fly RAF alive ────────────────────────────────────
-  if (fly) rafId = requestAnimationFrame(paint);
+  renderer.render(scene, camera);
 }
 
 
-// ── Image rendering ───────────────────────────────────────────────
+// ── Sprite management ─────────────────────────────────────────────
 //
-// World-space sizing: imgPx = cam.zoom × WORLD_IMG_SIZE
-// WORLD_IMG_SIZE was calibrated at startup so images are WORLD_IMG_INIT_PX
-// screen pixels at the overview zoom, and scale linearly as you zoom in.
-// This means images NEVER overlap more than the data points do — same
-// behaviour as the Google t-SNE embedding viewer.
+// Each frame:
+//   1. Iterate visible birds via spatial grid
+//   2. For birds whose image is cached → assign a pooled Sprite, position it
+//   3. For uncached birds → queue them for loading (priority by screen distance)
+//   4. Hide sprites for birds that left the viewport
 //
-function drawImages(W, H, z) {
-  const imgPx  = Math.min(z * WORLD_IMG_SIZE, C.IMG_PX_MAX);
-  if (imgPx < 2) return;   // sub-pixel, nothing to draw
-  const half   = imgPx / 2;
-  const doRnd  = imgPx > C.IMG_ROUND_PX;
-  const rad    = doRnd ? Math.max(2, imgPx * 0.12) : 0;
-  const bw     = Math.max(1, imgPx * 0.035);
-
-  const ox  = W / 2 - cam.x * z;
-  const oy  = H / 2 + cam.y * z;
+function updateSprites() {
+  const W = innerWidth, H = innerHeight;
   const cxS = W / 2, cyS = H / 2;
-  let drawn = 0;
 
-  for (const pi of visibleGrid(half)) {
-    const wx = allPos[pi], wy = allPos[pi+1];
-    const ci = allPos[pi+2] | 0, id = allPos[pi+3] | 0;
-    const sx = ox + wx * z, sy = oy - wy * z;
-    if (sx + half < 0 || sx - half > W || sy + half < 0 || sy - half > H) continue;
+  // Current sprite world size — grow slightly as user zooms in, cap at IMG_PX_MAX
+  const dist    = camera.position.distanceTo(controls.target);
+  const vFOV    = camera.fov * Math.PI / 180;
+  const worldH  = 2 * dist * Math.tan(vFOV / 2);
+  const pxPerW  = H / worldH;
+  // Desired screen size in pixels, capped at IMG_PX_MAX
+  const desiredPx   = Math.min(pxPerW * SPRITE_WORLD, C.IMG_PX_MAX);
+  const spriteWorld = desiredPx / pxPerW;
 
-    const x     = sx - half, y = sy - half;
+  const wantedBirds = new Set();
+  let count = 0;
+
+  // Expand the grid search by one sprite-width so sprites at the edge load in
+  for (const pi of visibleGridXY(SPRITE_WORLD * 3)) {
+    if (count >= C.MAX_SPRITES) break;
+
+    const id = allPos[pi+3] | 0;
+    const bi = pi >> 2;
+
+    // Project to screen to get priority distance and frustum-cull
+    const vec = new THREE.Vector3(allPos[pi], allPos[pi+1], allZ[bi]);
+    vec.project(camera);
+    if (vec.z > 1) continue; // behind camera or beyond far plane
+
+    const sx = (vec.x + 1) / 2 * W;
+    const sy = (1 - (vec.y + 1) / 2) * H;
+    if (sx < -60 || sx > W + 60 || sy < -60 || sy > H + 60) continue;
+
     const entry = imgCache.get(id);
 
     if (entry && entry !== 'loading' && entry !== 'error') {
-      if (doRnd) {
-        // Larger images: rounded clip + colored border
-        ctx.save();
-        ctx.beginPath(); rrect(ctx, x, y, imgPx, imgPx, rad); ctx.clip();
-        ctx.drawImage(entry.img, x, y, imgPx, imgPx);
-        ctx.restore();
-        ctx.strokeStyle = colorsHex[ci];
-        ctx.lineWidth   = bw;
-        ctx.beginPath(); rrect(ctx, x, y, imgPx, imgPx, rad); ctx.stroke();
-      } else {
-        // Small tiles: plain rect draw (no clip saves a lot of time)
-        ctx.drawImage(entry.img, x, y, imgPx, imgPx);
-        if (imgPx > 5) {
-          ctx.strokeStyle = colorsHex[ci];
-          ctx.lineWidth   = 1;
-          ctx.strokeRect(x + 0.5, y + 0.5, imgPx - 1, imgPx - 1);
-        }
-      }
       entry.seq = ++lruSeq;
-      drawn++;
-      if (drawn >= C.MAX_DRAWS) break;
-    } else if (!entry || entry === 'error') {
-      // Not loaded yet — queue it (sorted by screen distance in pumpQueue)
-      if (imgQueue.size < C.MAX_QUEUE) {
-        const d2 = (sx - cxS) ** 2 + (sy - cyS) ** 2;
-        if (!imgQueue.has(id)) imgQueue.set(id, d2);
+      wantedBirds.add(id);
+
+      let sp = birdSprite.get(id);
+      if (!sp) {
+        sp = acquireSprite(id);
+        if (!sp) break; // pool exhausted
+        birdSprite.set(id, sp);
       }
+
+      sp.position.set(allPos[pi], allPos[pi+1], allZ[bi]);
+      sp.scale.setScalar(spriteWorld);
+
+      // Only update material when texture changes (avoid unnecessary GPU uploads)
+      if (sp.material.map !== entry.texture) {
+        sp.material.map = entry.texture;
+        sp.material.needsUpdate = true;
+      }
+
+      sp._seq   = ++spriteSeq;
+      sp._birdId = id;
+      sp.visible = true;
+      count++;
+
+    } else if (!entry || entry === 'error') {
+      const d2 = (sx - cxS) ** 2 + (sy - cyS) ** 2;
+      if (imgQueue.size < C.MAX_QUEUE && !imgQueue.has(id)) imgQueue.set(id, d2);
     }
   }
+
+  // Return sprites for birds no longer in view to the pool
+  for (const [id, sp] of birdSprite) {
+    if (!wantedBirds.has(id)) {
+      sp.visible = false;
+      sp._birdId = -1;
+      sp._seq    = 0;
+      birdSprite.delete(id);
+    }
+  }
+
   pumpQueue();
 }
 
+// Grab a free sprite from the pool; if none free, evict the LRU one
+function acquireSprite(birdId) {
+  // Look for an unoccupied sprite first
+  for (const sp of pool) {
+    if (!sp.visible) return sp;
+  }
+  // Evict least-recently-used
+  let lruSp = null, lruVal = Infinity;
+  for (const sp of pool) {
+    if (sp._seq < lruVal) { lruVal = sp._seq; lruSp = sp; }
+  }
+  if (lruSp && lruSp._birdId >= 0) birdSprite.delete(lruSp._birdId);
+  return lruSp;
+}
+
+
+// ── Image / texture loading (same pipeline as 2D canvas version) ──
 function pumpQueue() {
   if (imgQueue.size === 0 || imgLoads >= C.MAX_LOADS) return;
   const sorted = [...imgQueue.entries()].sort((a, b) => a[1] - b[1]);
@@ -1064,16 +1099,17 @@ function pumpQueue() {
     imgQueue.delete(id);
     imgLoads++;
     imgCache.set(id, 'loading');
-    const img = new Image();
-    img.onload = () => {
-      imgCache.set(id, { img, seq: ++lruSeq });
-      imgLoads--;
-      evict();
-      requestPaint();
-      pumpQueue();
-    };
-    img.onerror = () => { imgCache.set(id, 'error'); imgLoads--; pumpQueue(); };
-    img.src = `/api/bird_crop/${id}`;
+    texLoader.load(
+      `/api/bird_crop/${id}`,
+      (texture) => {
+        imgCache.set(id, { texture, seq: ++lruSeq });
+        imgLoads--;
+        evict();
+        pumpQueue();
+      },
+      undefined,
+      () => { imgCache.set(id, 'error'); imgLoads--; pumpQueue(); }
+    );
   }
 }
 
@@ -1083,317 +1119,198 @@ function evict() {
     .filter(([, v]) => v !== 'loading' && v !== 'error')
     .sort((a, b) => a[1].seq - b[1].seq);
   const need = imgCache.size - C.MAX_IMG_CACHE;
-  for (let i = 0; i < need && i < loaded.length; i++)
+  for (let i = 0; i < need && i < loaded.length; i++) {
+    loaded[i][1].texture.dispose(); // free GPU memory
     imgCache.delete(loaded[i][0]);
+  }
 }
 
 
-// ── Cluster labels ────────────────────────────────────────────────
-function drawLabels(W, H, z) {
-  const alpha = smoothstep(4, 12, z);
-  if (alpha < 0.02) return;
-  ctx.globalAlpha = alpha;
+// ── Cluster label overlay ─────────────────────────────────────────
+//
+// We project each cluster centroid into screen space and draw text
+// on a 2D overlay canvas — same fade-in-on-zoom behaviour as the 2D version.
+//
+function drawLabels() {
+  lctx.clearRect(0, 0, lblCanvas.width, lblCanvas.height);
 
-  const fs = clamp(z * 0.85, 9, 15);
-  ctx.font         = `700 ${fs}px -apple-system, sans-serif`;
-  ctx.textAlign    = 'center';
-  ctx.textBaseline = 'middle';
+  // Compute zoom-equivalent (px per world unit) for alpha fade
+  const dist   = camera.position.distanceTo(controls.target);
+  const vFOV   = camera.fov * Math.PI / 180;
+  const worldH = 2 * dist * Math.tan(vFOV / 2);
+  const zoomEq = innerHeight / worldH;
+
+  const alpha = smoothstep(4, 12, zoomEq);
+  if (alpha < 0.02) return;
+
+  const fs = clamp(zoomEq * 0.85, 9, 15);
+  lctx.font = `700 ${fs}px -apple-system, sans-serif`;
 
   for (let ci = 0; ci < centroids.length; ci++) {
-    const [tx, ty] = centroids[ci];
-    const [sx, sy] = w2s(tx, ty);
-    if (sx < -80 || sx > W+80 || sy < -24 || sy > H+24) continue;
+    const [cx, cy] = centroids[ci];
+    const vec = new THREE.Vector3(cx, cy, 0);
+    vec.project(camera);
+
+    if (vec.z > 1 || vec.z < -1) continue; // clipped
+
+    const sx = (vec.x + 1) / 2 * innerWidth;
+    const sy = (1 - (vec.y + 1) / 2) * innerHeight;
+    if (sx < -80 || sx > innerWidth+80 || sy < -24 || sy > innerHeight+24) continue;
 
     const name = clusterNames[ci];
-    const tw   = ctx.measureText(name).width;
+    const tw   = lctx.measureText(name).width;
     const th   = fs * 1.3;
     const pad  = 5;
 
-    ctx.fillStyle = 'rgba(7,7,15,0.82)';
-    ctx.beginPath();
-    rrect(ctx, sx - tw/2 - pad, sy - th/2 - pad/2, tw + pad*2, th + pad, (th + pad) / 2);
-    ctx.fill();
-
-    ctx.fillStyle = colorsHex[ci];
-    ctx.fillText(name, sx, sy);
-  }
-
-  ctx.globalAlpha  = 1;
-  ctx.textAlign    = 'left';
-  ctx.textBaseline = 'alphabetic';
-}
-
-
-// ── Selection ring ────────────────────────────────────────────────
-function drawSelRing(z) {
-  if (selPosIdx < 0) return;
-  const [sx, sy] = w2s(allPos[selPosIdx], allPos[selPosIdx+1]);
-  const ci    = allPos[selPosIdx+2] | 0;
-  const imgPx = Math.min(z * WORLD_IMG_SIZE, C.IMG_PX_MAX);
-  const r     = imgPx / 2 + Math.max(4, imgPx * 0.12);
-
-  ctx.strokeStyle = colorsHex[ci];
-  ctx.lineWidth   = 2;
-  ctx.setLineDash([5, 3]);
-  ctx.beginPath(); ctx.arc(sx, sy, r, 0, Math.PI * 2); ctx.stroke();
-  ctx.setLineDash([]);
-  ctx.strokeStyle = 'rgba(255,255,255,0.25)';
-  ctx.lineWidth   = 1;
-  ctx.beginPath(); ctx.arc(sx, sy, r + 3, 0, Math.PI * 2); ctx.stroke();
-}
-
-
-// ── Hover ring ────────────────────────────────────────────────────
-function drawHovRing(z) {
-  const [sx, sy] = w2s(allPos[hovPosIdx], allPos[hovPosIdx+1]);
-  const imgPx = Math.min(z * WORLD_IMG_SIZE, C.IMG_PX_MAX);
-  const r     = imgPx / 2 + Math.max(3, imgPx * 0.10);
-  ctx.strokeStyle = 'rgba(255,255,255,0.7)';
-  ctx.lineWidth   = 1.5;
-  ctx.beginPath(); ctx.arc(sx, sy, r, 0, Math.PI * 2); ctx.stroke();
-}
-
-
-// ── Events ────────────────────────────────────────────────────────
-function bindEvents() {
-  canvas.addEventListener('mousedown',  onDown);
-  canvas.addEventListener('mousemove',  onMove);
-  canvas.addEventListener('mouseup',    onUp);
-  canvas.addEventListener('mouseleave', onLeave);
-  canvas.addEventListener('wheel',      onWheel, { passive: false });
-  window.addEventListener('keydown',    onKey);
-  document.getElementById('dc-close').addEventListener('click', deselectBird);
-}
-
-function onDown(e) {
-  if (e.button !== 0) return;
-  // Kill any ongoing inertia when the user grabs the canvas
-  if (inertiaId) { cancelAnimationFrame(inertiaId); inertiaId = null; }
-  vel.x = 0; vel.y = 0;
-  panning  = true;
-  canvas.classList.add('panning');
-  panRef   = { mx: e.clientX, my: e.clientY, cx: cam.x, cy: cam.y, moved: false };
-  lastPanT = performance.now();
-  lastPanX = e.clientX; lastPanY = e.clientY;
-  hideTooltip();
-}
-
-function onMove(e) {
-  if (panning) {
-    const dx = e.clientX - panRef.mx, dy = e.clientY - panRef.my;
-    if (Math.abs(dx) > 4 || Math.abs(dy) > 4) panRef.moved = true;
-    cam.x = panRef.cx - dx / cam.zoom;
-    cam.y = panRef.cy + dy / cam.zoom;
-
-    // Track instantaneous velocity for inertia on release
-    const now = performance.now(), dt = now - lastPanT;
-    if (dt > 0) {
-      vel.x = -(e.clientX - lastPanX) / cam.zoom / dt;
-      vel.y =  (e.clientY - lastPanY) / cam.zoom / dt;
-    }
-    lastPanT = now; lastPanX = e.clientX; lastPanY = e.clientY;
-
-    requestPaint();
-    return;
-  }
-  clearTimeout(hovTimer);
-  hovTimer = setTimeout(() => detectHover(e.clientX, e.clientY), 28);
-}
-
-function onUp(e) {
-  if (panning && !panRef.moved) {
-    // Clean click (no drag) → select bird and fly to it
-    selectBird(e.clientX, e.clientY);
-  } else if (panning && panRef.moved) {
-    // Release with velocity → coast with inertia
-    const speed = Math.sqrt(vel.x * vel.x + vel.y * vel.y);
-    if (speed > C.INERTIA_STOP) startInertia();
-  }
-  panning = false;
-  canvas.classList.remove('panning');
-  panRef  = null;
-}
-
-function onLeave() {
-  if (panning && panRef && panRef.moved) {
-    const speed = Math.sqrt(vel.x * vel.x + vel.y * vel.y);
-    if (speed > C.INERTIA_STOP) startInertia();
-  }
-  panning = false;
-  canvas.classList.remove('panning');
-  panRef  = null;
-}
-
-// ── Inertia / momentum scrolling ─────────────────────────────────
-//
-// When the user releases a drag with velocity, the camera coasts and
-// decelerates smoothly — the same "floaty" feel as Google Maps.
-//
-// vel is in world-units per millisecond.
-// Each RAF step applies the velocity then multiplies it by INERTIA_DECAY^(dt/16).
-//
-function startInertia() {
-  if (inertiaId) cancelAnimationFrame(inertiaId);
-  let prevT = performance.now();
-  const step = (now) => {
-    const dt = Math.min(now - prevT, 64); // cap at 64ms (handles tab background)
-    prevT = now;
-    const decay = Math.pow(C.INERTIA_DECAY, dt / 16);
-    vel.x *= decay;
-    vel.y *= decay;
-    cam.x += vel.x * dt;
-    cam.y += vel.y * dt;
-    requestPaint();
-    if (Math.sqrt(vel.x * vel.x + vel.y * vel.y) > C.INERTIA_STOP) {
-      inertiaId = requestAnimationFrame(step);
+    lctx.globalAlpha = alpha;
+    lctx.fillStyle = 'rgba(7,7,15,0.82)';
+    lctx.beginPath();
+    if (lctx.roundRect) {
+      lctx.roundRect(sx - tw/2 - pad, sy - th/2 - pad/2, tw + pad*2, th + pad, (th + pad) / 2);
     } else {
-      inertiaId = null;
+      lctx.rect(sx - tw/2 - pad, sy - th/2 - pad/2, tw + pad*2, th + pad);
     }
-  };
-  inertiaId = requestAnimationFrame(step);
+    lctx.fill();
+
+    lctx.fillStyle    = colorsHex[ci];
+    lctx.textAlign    = 'center';
+    lctx.textBaseline = 'middle';
+    lctx.fillText(name, sx, sy);
+    lctx.globalAlpha = 1;
+  }
+
+  lctx.textAlign    = 'left';
+  lctx.textBaseline = 'alphabetic';
 }
 
-function onWheel(e) {
-  e.preventDefault();
-  const factor  = Math.exp(-e.deltaY * C.WHEEL_K);
-  const newZoom = clamp(cam.zoom * factor, C.ZOOM_MIN, C.ZOOM_MAX);
-  const wx = cam.x + (e.clientX - canvas.width  / 2) / cam.zoom;
-  const wy = cam.y - (e.clientY - canvas.height / 2) / cam.zoom;
-  cam.zoom = newZoom;
-  cam.x    = wx - (e.clientX - canvas.width  / 2) / newZoom;
-  cam.y    = wy + (e.clientY - canvas.height / 2) / newZoom;
-  imgQueue.clear();
-  requestPaint();
-}
 
-function onKey(e) {
-  if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
-  if (e.key === 'f' || e.key === 'F') { fitAll(); requestPaint(); }
-  if (e.key === 'Escape') deselectBird();
+// ── Event binding ─────────────────────────────────────────────────
+function bindEvents() {
+  // Click vs drag: track whether mouse moved between down and up
+  canvasEl.addEventListener('mousedown', e => {
+    if (e.button === 0) { mouseDownXY = { x: e.clientX, y: e.clientY }; wasDrag = false; }
+  });
+  canvasEl.addEventListener('mousemove', e => {
+    if (mouseDownXY) {
+      const dx = e.clientX - mouseDownXY.x, dy = e.clientY - mouseDownXY.y;
+      if (Math.abs(dx) > 4 || Math.abs(dy) > 4) wasDrag = true;
+    }
+    clearTimeout(hovTimer);
+    hovTimer = setTimeout(() => detectHover(e.clientX, e.clientY), 30);
+  });
+  canvasEl.addEventListener('click', e => {
+    if (!wasDrag) selectBird(e.clientX, e.clientY);
+    mouseDownXY = null;
+  });
+  canvasEl.addEventListener('mouseleave', () => {
+    mouseDownXY = null;
+    clearHover();
+  });
+  window.addEventListener('keydown', e => {
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+    if (e.key === 'f' || e.key === 'F') fitAll();
+    if (e.key === 'Escape') deselectBird();
+  });
 }
 
 
 // ── Hover detection ───────────────────────────────────────────────
 function detectHover(mx, my) {
-  if (!allPos) return;
-  const wx = cam.x + (mx - canvas.width  / 2) / cam.zoom;
-  const wy = cam.y - (my - canvas.height / 2) / cam.zoom;
-  const rW  = 14 / cam.zoom, rW2 = rW * rW;
+  if (!pointsObj) return;
+  const mouse = new THREE.Vector2(
+    (mx / innerWidth)  *  2 - 1,
+    (my / innerHeight) * -2 + 1,
+  );
+  const dist = camera.position.distanceTo(controls.target);
+  raycaster.params.Points.threshold = Math.max(0.08, dist * 0.007);
+  raycaster.setFromCamera(mouse, camera);
 
-  const mc = clamp(((wx - gMinX) / gCellW) | 0, 0, G-1);
-  const mr = clamp(((wy - gMinY) / gCellH) | 0, 0, G-1);
-
-  let best2 = rW2, bestId = -1, bestIdx = -1;
-  for (let dr = -1; dr <= 1; dr++) for (let dc = -1; dc <= 1; dc++) {
-    const r = mr + dr, c = mc + dc;
-    if (r < 0 || r >= G || c < 0 || c >= G) continue;
-    const cell = grid[r*G + c];
-    for (let j = 0; j < cell.length; j++) {
-      const i  = cell[j];
-      const dx = allPos[i] - wx, dy = allPos[i+1] - wy;
-      const d2 = dx*dx + dy*dy;
-      if (d2 < best2) { best2 = d2; bestId = allPos[i+3]|0; bestIdx = i; }
+  const hits = raycaster.intersectObject(pointsObj);
+  if (hits.length > 0) {
+    const idx = hits[0].index;
+    const id  = allPos[idx*4+3] | 0;
+    const ci  = allPos[idx*4+2] | 0;
+    if (id !== hovId) {
+      hovId = id; hovPosIdx = idx * 4;
+      showTooltip(mx, my, id, ci);
     }
+  } else if (hovId >= 0) {
+    clearHover();
   }
+}
 
-  if (bestId >= 0 && bestId !== hovId) {
-    hovId = bestId; hovPosIdx = bestIdx;
-    showTooltip(mx, my, bestId, allPos[bestIdx+2]|0);
-    requestPaint();
-  } else if (bestId < 0 && hovId >= 0) {
-    hovId = -1; hovPosIdx = -1;
-    hideTooltip();
-    requestPaint();
-  }
+function clearHover() {
+  hovId = -1; hovPosIdx = -1;
+  document.getElementById('tip').style.display = 'none';
 }
 
 function showTooltip(mx, my, id, ci) {
   const tip = document.getElementById('tip');
-  document.getElementById('tip-img').src             = `/api/bird_crop/${id}`;
-  document.getElementById('tip-name').textContent    = clusterNames[ci] || '?';
-  document.getElementById('tip-id').textContent      = `Bird #${id}`;
+  document.getElementById('tip-img').src          = `/api/bird_crop/${id}`;
+  document.getElementById('tip-name').textContent = clusterNames[ci] || '?';
+  document.getElementById('tip-id').textContent   = `Bird #${id}`;
   const TW = 130, TH = 148;
   let tx = mx + 16, ty = my - 16;
-  if (tx + TW > canvas.width  - (panelOpen ? 244 : 10)) tx = mx - TW - 16;
-  if (ty + TH > canvas.height - 10) ty = my - TH;
+  if (tx + TW > innerWidth  - (panelOpen ? 244 : 10)) tx = mx - TW - 16;
+  if (ty + TH > innerHeight - 10) ty = my - TH;
   tip.style.left    = tx + 'px';
   tip.style.top     = ty + 'px';
   tip.style.display = 'block';
 }
 
-function hideTooltip() {
-  document.getElementById('tip').style.display = 'none';
-}
 
-
-// ── Bird selection + travel ────────────────────────────────────────
-//
-// Click on a bird to:
-//   1. Fly the camera to centre on it (smooth 600ms animation)
-//   2. Show the detail card (bottom-left) with image + species
-//   3. Draw a dashed selection ring on canvas
-//
+// ── Bird selection ────────────────────────────────────────────────
 function selectBird(mx, my) {
-  if (!allPos) return;
-  const wx = cam.x + (mx - canvas.width  / 2) / cam.zoom;
-  const wy = cam.y - (my - canvas.height / 2) / cam.zoom;
-  const rW  = 22 / cam.zoom, rW2 = rW * rW;
+  if (!pointsObj) return;
+  const mouse = new THREE.Vector2(
+    (mx / innerWidth)  *  2 - 1,
+    (my / innerHeight) * -2 + 1,
+  );
+  const dist = camera.position.distanceTo(controls.target);
+  raycaster.params.Points.threshold = Math.max(0.12, dist * 0.009);
+  raycaster.setFromCamera(mouse, camera);
 
-  const mc = clamp(((wx - gMinX) / gCellW) | 0, 0, G-1);
-  const mr = clamp(((wy - gMinY) / gCellH) | 0, 0, G-1);
+  const hits = raycaster.intersectObject(pointsObj);
+  if (hits.length === 0) return;
 
-  let best2 = rW2, bestId = -1, bestIdx = -1;
-  for (let dr = -2; dr <= 2; dr++) for (let dc = -2; dc <= 2; dc++) {
-    const r = mr + dr, c = mc + dc;
-    if (r < 0 || r >= G || c < 0 || c >= G) continue;
-    const cell = grid[r*G + c];
-    for (let j = 0; j < cell.length; j++) {
-      const i  = cell[j];
-      const dx = allPos[i] - wx, dy = allPos[i+1] - wy;
-      const d2 = dx*dx + dy*dy;
-      if (d2 < best2) { best2 = d2; bestId = allPos[i+3]|0; bestIdx = i; }
-    }
-  }
+  const idx    = hits[0].index;
+  const posIdx = idx * 4;
+  const id     = allPos[posIdx+3] | 0;
+  const ci     = allPos[posIdx+2] | 0;
 
-  if (bestId < 0) return;
+  selId = id; selPosIdx = posIdx;
 
-  selId     = bestId;
-  selPosIdx = bestIdx;
-  const ci  = allPos[bestIdx+2] | 0;
-
-  // Fly to it — if already close enough in zoom, keep current zoom
-  const targetZoom = Math.max(cam.zoom, C.SEL_ZOOM);
+  // Fly the camera close to the selected bird
+  const wx = allPos[posIdx], wy = allPos[posIdx+1], wz = allZ[idx];
+  const flyDist = Math.max(dist * 0.12, SPRITE_WORLD * 10);
   fly = {
-    x0: cam.x, y0: cam.y, z0: cam.zoom,
-    x1: allPos[bestIdx], y1: allPos[bestIdx+1], z1: targetZoom,
-    t0: performance.now()
+    pos0: camera.position.clone(),
+    pos1: new THREE.Vector3(wx, wy, wz + flyDist),
+    tgt0: controls.target.clone(),
+    tgt1: new THREE.Vector3(wx, wy, wz),
+    t0:   performance.now(),
   };
 
-  showDetailCard(bestId, ci);
-  requestPaint();
+  showDetailCard(id, ci);
 
-  // Highlight in sidebar
   document.querySelectorAll('.ci').forEach(el => el.classList.remove('active'));
   const el = document.querySelector(`.ci[data-ci="${ci}"]`);
   if (el) { el.classList.add('active'); el.scrollIntoView({ block: 'nearest' }); }
 }
 
 function deselectBird() {
-  if (selId < 0) return;
   selId = -1; selPosIdx = -1;
   document.getElementById('detail-card').classList.remove('visible');
-  requestPaint();
 }
 
 function showDetailCard(id, ci) {
-  const card = document.getElementById('detail-card');
-  document.getElementById('dc-img').src      = `/api/bird_crop/${id}`;
-  document.getElementById('dc-species').textContent = clusterNames[ci] || 'Unknown';
-  document.getElementById('dc-id').textContent      = `Bird ID #${id}`;
+  document.getElementById('dc-img').src                = `/api/bird_crop/${id}`;
+  document.getElementById('dc-species').textContent    = clusterNames[ci] || 'Unknown';
+  document.getElementById('dc-id').textContent         = `Bird ID #${id}`;
   const dot = document.getElementById('dc-dot');
   dot.style.setProperty('--clr', colorsHex[ci]);
   dot.style.background = colorsHex[ci];
-  card.classList.add('visible');
+  document.getElementById('detail-card').classList.add('visible');
 }
 
 
@@ -1421,7 +1338,6 @@ function buildSidebar() {
 
 function flyToCluster(ci) {
   const [tx, ty] = centroids[ci];
-  // Compute zoom to fit the cluster
   const pts = clusterXY[ci];
   let mnX=Infinity,mxX=-Infinity,mnY=Infinity,mxY=-Infinity;
   for (let j = 0; j < pts.length; j += 2) {
@@ -1431,12 +1347,20 @@ function flyToCluster(ci) {
     if (pts[j+1] > mxY) mxY = pts[j+1];
   }
   const dW = Math.max(0.1, mxX - mnX), dH = Math.max(0.1, mxY - mnY);
-  const sbW = panelOpen ? 240 : 0;
-  const zx  = (canvas.width - sbW) * 0.72 / dW;
-  const zy  = canvas.height        * 0.72 / dH;
-  const newZoom = Math.min(zx, zy, 280);
-  fly = { x0: cam.x, y0: cam.y, z0: cam.zoom, x1: tx, y1: ty, z1: newZoom, t0: performance.now() };
-  requestPaint();
+  const vFOV = camera.fov * Math.PI / 180;
+  const hFOV = 2 * Math.atan(Math.tan(vFOV / 2) * camera.aspect);
+  const newDist = Math.min(Math.max(
+    (dH / 2) / Math.tan(vFOV / 2),
+    (dW / 2) / Math.tan(hFOV / 2)
+  ) * 1.5, 280);
+
+  fly = {
+    pos0: camera.position.clone(),
+    pos1: new THREE.Vector3(tx, ty, newDist),
+    tgt0: controls.target.clone(),
+    tgt1: new THREE.Vector3(tx, ty, 0),
+    t0:   performance.now(),
+  };
 }
 
 function togglePanel() {
@@ -1444,40 +1368,26 @@ function togglePanel() {
   const panel = document.getElementById('cluster-panel');
   const btn   = document.getElementById('btn-panel');
   if (panelOpen) {
-    panel.classList.remove('hidden');
-    btn.classList.add('active');
+    panel.classList.remove('hidden'); btn.classList.add('active');
   } else {
-    panel.classList.add('hidden');
-    btn.classList.remove('active');
+    panel.classList.add('hidden');    btn.classList.remove('active');
   }
 }
 
 
 // ── Utilities ─────────────────────────────────────────────────────
 function clamp(v, lo, hi) { return v < lo ? lo : v > hi ? hi : v; }
-function lerp(a, b, t)    { return a + (b - a) * t; }
 function smoothstep(lo, hi, x) {
   const t = clamp((x - lo) / (hi - lo), 0, 1);
   return t * t * (3 - 2 * t);
 }
-function yld() { return new Promise(r => setTimeout(r, 0)); }
+function yld()  { return new Promise(r => setTimeout(r, 0)); }
 function prog(pct, msg) {
   document.getElementById('bar-f').style.width = pct + '%';
   document.getElementById('ld-s').textContent  = msg;
 }
 
-// Rounded rectangle path helper (polyfill for browsers without roundRect)
-function rrect(ctx, x, y, w, h, r) {
-  if (ctx.roundRect) { ctx.roundRect(x, y, w, h, r); return; }
-  ctx.moveTo(x + r, y);
-  ctx.lineTo(x + w - r, y); ctx.arcTo(x + w, y,     x + w, y + r,     r);
-  ctx.lineTo(x + w, y + h - r); ctx.arcTo(x + w, y + h, x + w - r, y + h, r);
-  ctx.lineTo(x + r, y + h); ctx.arcTo(x,     y + h, x,     y + h - r, r);
-  ctx.lineTo(x,     y + r); ctx.arcTo(x,     y,     x + r, y,         r);
-  ctx.closePath();
-}
-
-// Perceptually distinct colour palette
+// Perceptually distinct colour palette (identical to 2D version)
 function makeColors(n) {
   return Array.from({ length: n }, (_, i) => {
     const h = (i * 360 / n + 12) % 360;
