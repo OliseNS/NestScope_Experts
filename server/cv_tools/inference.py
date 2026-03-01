@@ -40,8 +40,8 @@ def _load_model_paths():
         # Fallback to default models
         models_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "models")
         return (
-            os.path.join(models_dir, "nano.onnx"),
-            os.path.join(models_dir, "small.onnx")
+            os.path.join(models_dir, "swift.onnx"),
+            os.path.join(models_dir, "apex.onnx")
         )
 
 MODEL_FAST, MODEL_PRO = _load_model_paths()

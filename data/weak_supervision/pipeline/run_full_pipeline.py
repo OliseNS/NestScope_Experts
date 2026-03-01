@@ -1,7 +1,18 @@
 """
-Master Orchestrator: Run Full Species Assignment Pipeline
+Master Orchestrator: Ground-Truth-Anchored Species Classification Pipeline
 
-Executes all 4 stages in sequence with dependency checking and resume support.
+Pipeline stages:
+  1. Generate Embeddings    — EfficientNet features for all 100K crops
+  2. Ground Truth Prototypes — Build clean species prototypes from single-species images
+  3+4. Classify & Refine     — Hungarian matching + iterative cross-reference refinement
+  5. Export                  — Final labels, quality report, frontend visualization
+
+Key improvements over v1:
+  - Hungarian algorithm for optimal cluster-to-species matching (was random)
+  - Ground truth anchoring from single-species images
+  - Iterative refinement with cascading species coverage
+  - Per-crop outlier rejection at every stage
+  - Accuracy over completeness (excludes ambiguous crops)
 """
 
 import sys
@@ -11,39 +22,57 @@ import argparse
 from datetime import datetime
 import time
 
-# Import stage modules
-from stage1_generate_embeddings import EmbeddingGenerator
-from stage2_per_image_clustering import PerImageClusterer
-from stage3_global_species_assignment import GlobalSpeciesResolver
-from stage4_export_for_frontend import FrontendExporter
+# Add project root to path (handles both direct execution and imports)
+project_root = Path(__file__).parent.parent.parent.parent
+sys.path.insert(0, str(project_root))
+
+from data.weak_supervision.pipeline.stage1_generate_embeddings import EmbeddingGenerator
+from data.weak_supervision.pipeline.stage2_ground_truth_prototypes import GroundTruthBuilder
+from data.weak_supervision.pipeline.stage4_cross_reference import CrossReferenceValidator
+from data.weak_supervision.pipeline.stage5_export import QualityExporter
 
 
 class PipelineOrchestrator:
     """
-    Manages the complete species assignment pipeline.
+    Manages the complete ground-truth-anchored species classification pipeline.
 
     Provides:
     - Stage execution with dependency checking
     - Resume support (skip completed stages)
     - Progress tracking and logging
-    - Error handling
     """
 
-    def __init__(self, crops_dir: str, output_dir: str, model: str = 'efficientnet'):
+    STAGE_NAMES = {
+        1: "Generate Embeddings",
+        2: "Ground Truth Prototypes",
+        3: "Classify & Refine (iterative)",
+        4: "Export & Quality Report",
+    }
+
+    def __init__(self, crops_dir: str, model: str = 'efficientnet',
+                 image_metadata_path: str = None):
         """
         Args:
             crops_dir: Path to bird_crops directory
-            output_dir: Path to output directory (parent of bird_crops)
             model: Embedding model to use
+            image_metadata_path: Path to image_metadata.json
         """
         self.crops_dir = Path(crops_dir)
-        self.output_dir = Path(output_dir)
         self.model = model
 
-        # Define paths
+        # Resolve image_metadata path
+        if image_metadata_path:
+            self.image_metadata_path = str(image_metadata_path)
+        else:
+            self.image_metadata_path = str(
+                self.crops_dir.parent / "image_metadata.json"
+            )
+
+        # Define output paths
         self.embeddings_dir = self.crops_dir / "embeddings"
-        self.species_clusters_dir = self.crops_dir / "species_clusters"
-        self.image_clusters_dir = self.species_clusters_dir / "image_clusters"
+        self.ground_truth_dir = self.crops_dir / "ground_truth"
+        self.assignments_dir = self.crops_dir / "assignments"
+        self.export_dir = self.crops_dir / "export"
 
         # State tracking
         self.state_file = self.crops_dir / "pipeline_state.json"
@@ -57,13 +86,15 @@ class PipelineOrchestrator:
         return {
             "completed_stages": [],
             "last_run": None,
-            "model": None
+            "model": None,
+            "pipeline_version": "v2_ground_truth_anchored"
         }
 
     def _save_state(self):
         """Save pipeline state to file."""
         self.state["last_run"] = datetime.now().isoformat()
         self.state["model"] = self.model
+        self.state["pipeline_version"] = "v2_ground_truth_anchored"
         with open(self.state_file, 'w') as f:
             json.dump(self.state, f, indent=2)
 
@@ -71,71 +102,60 @@ class PipelineOrchestrator:
         """
         Verify that required files exist for a stage.
 
-        Args:
-            stage: Stage number (1-4)
-
         Returns:
-            (ready: bool, missing: list)
+            (ready: bool, missing: list of missing file descriptions)
         """
         if stage == 1:
-            # Stage 1 requires: metadata.json
-            required = [self.crops_dir / "metadata.json"]
-
-        elif stage == 2:
-            # Stage 2 requires: embeddings from Stage 1
             required = [
-                self.embeddings_dir / "embeddings_all.npy",
-                self.embeddings_dir / "embeddings_index.json"
+                (self.crops_dir / "metadata.json", "crop metadata"),
+                (self.crops_dir / "images", "crop images directory"),
             ]
-
+        elif stage == 2:
+            required = [
+                (self.embeddings_dir / "embeddings_all.npy", "embeddings from Stage 1"),
+                (self.embeddings_dir / "embeddings_index.json", "embedding index from Stage 1"),
+                (Path(self.image_metadata_path), "image metadata"),
+            ]
         elif stage == 3:
-            # Stage 3 requires: image_clusters from Stage 2
-            required = [self.image_clusters_dir]
-            if self.image_clusters_dir.exists():
-                cluster_files = list(self.image_clusters_dir.glob("*.json"))
-                if len(cluster_files) == 0:
-                    return False, ["No cluster JSON files in image_clusters/"]
-
+            required = [
+                (self.ground_truth_dir / "prototypes.json", "prototypes from Stage 2"),
+                (self.embeddings_dir / "embeddings_all.npy", "embeddings from Stage 1"),
+            ]
         elif stage == 4:
-            # Stage 4 requires: global_cluster_map from Stage 3
-            required = [self.species_clusters_dir / "global_cluster_map.json"]
-
+            required = [
+                (self.assignments_dir / "final_assignments.json", "assignments from Stage 3"),
+                (self.assignments_dir / "final_prototypes.json", "prototypes from Stage 3"),
+            ]
         else:
             return False, [f"Unknown stage: {stage}"]
 
-        # Check if all required files exist
-        missing = [str(f) for f in required if not f.exists()]
+        missing = []
+        for path, desc in required:
+            if not path.exists():
+                missing.append(f"{desc} ({path})")
+
         return len(missing) == 0, missing
 
     def run_stage(self, stage: int, force: bool = False):
-        """
-        Run a specific stage.
-
-        Args:
-            stage: Stage number (1-4)
-            force: If True, run even if already completed
-        """
-        stage_name = f"Stage {stage}"
+        """Run a specific pipeline stage."""
+        stage_name = self.STAGE_NAMES.get(stage, f"Stage {stage}")
 
         # Check if already completed
         if not force and stage in self.state["completed_stages"]:
-            print(f"\n✓ {stage_name} already completed (use --force-restart to rerun)")
+            print(f"\n  Stage {stage} ({stage_name}) already completed "
+                  f"(use --force-restart to rerun)")
             return
 
         # Check dependencies
         ready, missing = self.check_stage_dependencies(stage)
         if not ready:
-            print(f"\n❌ {stage_name} dependencies not met:")
+            print(f"\n  Stage {stage} ({stage_name}) — dependencies not met:")
             for m in missing:
-                print(f"   Missing: {m}")
-            print(f"   Run previous stages first")
+                print(f"    Missing: {m}")
+            print(f"    Run previous stages first.")
             return
 
-        # Run stage
-        print(f"\n{'=' * 60}")
-        print(f"Running {stage_name}")
-        print(f"{'=' * 60}")
-
+        # Run
         start_time = time.time()
 
         try:
@@ -148,21 +168,20 @@ class PipelineOrchestrator:
             elif stage == 4:
                 self._run_stage4()
 
-            # Mark as completed
+            # Mark completed
             if stage not in self.state["completed_stages"]:
                 self.state["completed_stages"].append(stage)
             self._save_state()
 
             elapsed = time.time() - start_time
-            print(f"\n✅ {stage_name} completed in {elapsed:.1f}s")
+            print(f"\n  Stage {stage} completed in {elapsed:.1f}s")
 
         except Exception as e:
-            print(f"\n❌ {stage_name} failed with error:")
-            print(f"   {str(e)}")
+            print(f"\n  Stage {stage} ({stage_name}) FAILED: {e}")
             raise
 
     def _run_stage1(self):
-        """Run Stage 1: Generate embeddings"""
+        """Stage 1: Generate EfficientNet embeddings for all 100K crops."""
         generator = EmbeddingGenerator(
             crops_dir=str(self.crops_dir),
             output_dir=str(self.crops_dir),
@@ -171,54 +190,54 @@ class PipelineOrchestrator:
         generator.generate_all_embeddings()
 
     def _run_stage2(self):
-        """Run Stage 2: Per-image clustering"""
-        clusterer = PerImageClusterer(
+        """Stage 2: Build ground truth prototypes from single-species images."""
+        builder = GroundTruthBuilder(
             crops_dir=str(self.crops_dir),
             embeddings_dir=str(self.embeddings_dir),
-            output_dir=str(self.crops_dir)
+            image_metadata_path=self.image_metadata_path
         )
-        clusterer.process_all_images()
+        builder.build_prototypes()
 
     def _run_stage3(self):
-        """Run Stage 3: Global species resolution"""
-        resolver = GlobalSpeciesResolver(
-            image_clusters_dir=str(self.image_clusters_dir),
-            output_dir=str(self.species_clusters_dir)
-        )
-        resolver.build_global_cluster_map()
-
-    def _run_stage4(self):
-        """Run Stage 4: Export for frontend"""
-        exporter = FrontendExporter(
+        """Stage 3+4: Classify multi-species images with iterative refinement."""
+        validator = CrossReferenceValidator(
             crops_dir=str(self.crops_dir),
             embeddings_dir=str(self.embeddings_dir),
-            species_clusters_dir=str(self.species_clusters_dir)
+            prototypes_path=str(self.ground_truth_dir / "prototypes.json"),
+            image_metadata_path=self.image_metadata_path
         )
-        exporter.generate_visualization_data()
+        validator.run_iterative_refinement()
+
+    def _run_stage4(self):
+        """Stage 5: Quality control and export."""
+        exporter = QualityExporter(
+            crops_dir=str(self.crops_dir),
+            embeddings_dir=str(self.embeddings_dir),
+            assignments_path=str(self.assignments_dir / "final_assignments.json"),
+            prototypes_path=str(self.assignments_dir / "final_prototypes.json")
+        )
+        exporter.export_all()
 
     def run_all(self, force_restart: bool = False, start_from: int = 1):
-        """
-        Execute all pipeline stages.
-
-        Args:
-            force_restart: If True, restart from scratch
-            start_from: Which stage to start from (1-4)
-        """
+        """Execute all pipeline stages in order."""
         print("\n" + "=" * 60)
-        print("SPECIES ASSIGNMENT PIPELINE")
+        print("GROUND-TRUTH-ANCHORED SPECIES CLASSIFICATION PIPELINE (v2)")
         print("=" * 60)
-        print(f"Crops directory: {self.crops_dir}")
-        print(f"Output directory: {self.output_dir}")
-        print(f"Embedding model: {self.model}")
+        print(f"Crops: {self.crops_dir}")
+        print(f"Model: {self.model}")
+        print(f"Image metadata: {self.image_metadata_path}")
+        print(f"\nStages:")
+        for num, name in self.STAGE_NAMES.items():
+            status = "completed" if num in self.state["completed_stages"] else "pending"
+            marker = "[done]" if status == "completed" else "[    ]"
+            print(f"  {marker} {num}. {name}")
         print("=" * 60)
 
-        # Clear state if force restart
         if force_restart:
-            print("\n🔄 Force restart: clearing previous state")
+            print("\nForce restart: clearing previous state")
             self.state["completed_stages"] = []
             self._save_state()
 
-        # Run stages
         total_start = time.time()
 
         for stage in range(start_from, 5):
@@ -226,75 +245,62 @@ class PipelineOrchestrator:
 
         total_elapsed = time.time() - total_start
 
-        # Final summary
         print("\n" + "=" * 60)
-        print("🎉 PIPELINE COMPLETE!")
+        print("PIPELINE COMPLETE")
         print("=" * 60)
         print(f"Total time: {total_elapsed / 60:.1f} minutes")
-        print(f"\nOutput files:")
-        print(f"  • Embeddings: {self.embeddings_dir}")
-        print(f"  • Image clusters: {self.image_clusters_dir}")
-        print(f"  • Global map: {self.species_clusters_dir / 'global_cluster_map.json'}")
-        print(f"  • Frontend JSON: {self.species_clusters_dir / 'clusters_for_labeling.json'}")
-        print(f"\n🎯 Next step: View results in Nestperts")
-        print(f"   cd labeller/")
-        print(f"   python app.py --data nestvision")
-        print(f"   Open: http://localhost:5000/clusters")
-        print("=" * 60)
+        print(f"\nOutputs:")
+        print(f"  Embeddings:   {self.embeddings_dir}")
+        print(f"  Ground truth: {self.ground_truth_dir}")
+        print(f"  Assignments:  {self.assignments_dir}")
+        print(f"  Export:       {self.export_dir}")
+        print(f"\nNext: View results in Nestperts dashboard")
+        print(f"  python labeller/app.py --data labeller/nestvision")
+        print(f"  Open: http://localhost:5000/clusters")
 
 
 def main():
-    """
-    Main entry point for full pipeline.
-    """
     parser = argparse.ArgumentParser(
-        description='Run full species assignment pipeline',
+        description='Run ground-truth-anchored species classification pipeline',
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
   # Run full pipeline
   python run_full_pipeline.py
 
-  # Resume after crash
-  python run_full_pipeline.py --resume
-
   # Force restart from scratch
   python run_full_pipeline.py --force-restart
 
-  # Start from specific stage
-  python run_full_pipeline.py --start-from 3
+  # Start from specific stage (e.g., skip embeddings if already generated)
+  python run_full_pipeline.py --start-from 2
 
-  # Use different model
-  python run_full_pipeline.py --model siglip
+  # Resume from where it left off
+  python run_full_pipeline.py
         """
     )
 
     parser.add_argument('--crops-dir', type=str,
-                        default='../bird_crops',
+                        default='data/weak_supervision/bird_crops',
                         help='Path to bird_crops directory')
-    parser.add_argument('--output-dir', type=str,
-                        default='..',
-                        help='Path to output directory')
+    parser.add_argument('--image-metadata', type=str,
+                        default='data/weak_supervision/image_metadata.json',
+                        help='Path to image_metadata.json')
     parser.add_argument('--model', type=str, default='efficientnet',
                         choices=['efficientnet', 'resnet50', 'clip', 'dinov2', 'siglip'],
                         help='Embedding model to use')
     parser.add_argument('--force-restart', action='store_true',
-                        help='Force restart from scratch (ignore previous state)')
-    parser.add_argument('--resume', action='store_true',
-                        help='Resume from last checkpoint (default behavior)')
+                        help='Force restart from scratch')
     parser.add_argument('--start-from', type=int, default=1, choices=[1, 2, 3, 4],
                         help='Which stage to start from')
 
     args = parser.parse_args()
 
-    # Create orchestrator
     orchestrator = PipelineOrchestrator(
         crops_dir=args.crops_dir,
-        output_dir=args.output_dir,
-        model=args.model
+        model=args.model,
+        image_metadata_path=args.image_metadata
     )
 
-    # Run pipeline
     orchestrator.run_all(
         force_restart=args.force_restart,
         start_from=args.start_from

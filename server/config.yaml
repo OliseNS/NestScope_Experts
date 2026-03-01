@@ -16,16 +16,21 @@ database:
   default_path: data/bird_data_complete.db
 
 cv:
-  # Model paths for different inference modes
+  # Detection model paths
   # Swift: Fast inference model (9.7MB, optimized for speed)
   # Apex: Maximum accuracy model (37MB, optimized for precision)
-  model_fast: models/nano.onnx
-  model_pro: models/small.onnx
-  model_fast_name: "Swift"
-  model_pro_name: "Apex"
+  model_fast: models/swift.onnx
+  model_pro: models/apex.onnx
   default_confidence: 0.25
   image_size: 1024
   default_fast_mode: true  # Start in fast mode by default
+
+  # Classification model paths
+  # Swift: Fast classifier (YOLOv8n-cls, 3.5MB, ~2x faster inference)
+  # Apex: Accurate classifier (YOLOv8s-cls, 12MB, better accuracy)
+  classifier_swift: models/classifier_swift.pt
+  classifier_apex: models/classifier_apex.pt
+  classifier_species: 25
 
 api:
   host: 0.0.0.0
