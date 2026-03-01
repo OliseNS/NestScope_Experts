@@ -1,0 +1,40 @@
+# NestScope Bird Species Classification Dataset
+# Type: Ground Truth Only
+# Generated: 2026-03-01T10:36:20.181402
+# Total: 57022 images (45609 train, 11413 val)
+# Species: 25
+
+path: /home/olisemeka.dev/Projects/nexus/NestVision/classify
+train: train
+val: val
+
+# Number of classes
+nc: 25
+
+# Class names
+names:
+  0: AMOY  # 50 images
+  1: AWPE  # 528 images
+  2: BCNH  # 24 images
+  3: BLSK  # 3336 images
+  4: BRPE  # 17980 images
+  5: CAEG  # 139 images
+  6: CATE  # 2397 images
+  7: DCCO  # 65 images
+  8: FOTE  # 1171 images
+  9: GBHE  # 131 images
+  10: GBTE  # 1678 images
+  11: GREG  # 1174 images
+  12: GRFL  # 252 images
+  13: LAGU  # 18515 images
+  14: LETE  # 58 images
+  15: NECO  # 155 images
+  16: REEG  # 844 images
+  17: ROSP  # 947 images
+  18: ROYT  # 3943 images
+  19: SATE  # 25 images
+  20: SNEG  # 119 images
+  21: SOTE  # 259 images
+  22: TRHE  # 427 images
+  23: WFIB  # 114 images
+  24: WHIB  # 2691 images

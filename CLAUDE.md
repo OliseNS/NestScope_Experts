@@ -293,38 +293,48 @@ This enables map visualizations. The prompt includes extensive examples of corre
 
 ### 2. Computer Vision Pipeline (NestVision)
 
-**Bird Detection:** YOLOv8-based ONNX model (`models/seconditer.onnx`)
+**Bird Detection:** AI-powered models with SAHI (Slicing Aided Hyper Inference)
 
-**Two Inference Modes:**
+**Model Selection System:**
 
-1. **Fast Mode** (default): Quick inference using downsampling for large images
-   - Best for previews and real-time processing
-   - Uses `_downsample_and_predict()` method
-   - Much faster than SAHI for large images
+NestVision uses **SAHI for all large images** (always slices with 20% overlap for accuracy) and offers two detection models:
 
-2. **SAHI Mode**: Slicing Aided Hyper Inference with intelligent slicing
-   - More accurate for detecting small objects
-   - Uses 20% overlap between slices
-   - NMS applied across all slices to merge detections
-   - Uses `_predict_with_sahi()` method
+1. **Swift** (default): Fast inference model
+   - Optimized for speed (~3x faster)
+   - Perfect for quick previews and real-time processing
+   - Lightweight architecture with excellent accuracy
+
+2. **Apex**: Maximum accuracy model
+   - Optimized for precision
+   - Better at detecting small or distant birds
+   - Ideal for final analysis and expert annotation
+
+**Key Design Decision:** SAHI is ALWAYS used for large images (>1024px) regardless of model. Users control speed/accuracy by choosing the model, while benefiting from SAHI's slicing technique for consistent quality.
 
 **Mode Selection Logic in `server/cv_tools/inference.py`:**
 ```python
-# Fast mode: downsample large images, standard inference for small
-if fast_mode:
-    if height > imgsz or width > imgsz:
-        detections = _downsample_and_predict(image, conf_threshold)
-    else:
-        # Standard inference for small images
+# Load appropriate model based on mode
+target_model = self.model_fast_path if fast_mode else self.model_pro_path
+mode_name = "Swift" if fast_mode else "Apex"
+self._load_model(target_model)
 
-# SAHI mode: smart slicing for large images
+# ALWAYS use SAHI for large images
+if height > imgsz or width > imgsz:
+    print(f"[{mode_name} Mode] Processing {width}x{height} image with SAHI slicing...")
+    detections = _predict_with_sahi(image_path, conf_threshold)
 else:
-    if use_sliding_window and (height > imgsz or width > imgsz):
-        detections = _predict_with_sahi(image_path, conf_threshold)
+    # Standard inference for small images
+    print(f"[{mode_name} Mode] Processing {width}x{height} image with standard inference...")
+    preprocessed, scale, pad = self._preprocess_image(image)
+    output = self.model.run(...)
+    detections = self._postprocess(output, scale, pad, conf_threshold)
 ```
 
 **API Endpoint:** `POST /cv/inference`
-- Parameters: `file` (image), `conf_threshold` (default: 0.25), `fast_mode` (default: True)
+- Parameters:
+  - `file` (image)
+  - `conf_threshold` (default: 0.25)
+  - `fast_mode` (default: True) - Controls model selection: True=Swift, False=Apex
 - Returns: bird count, detections, base64 annotated image, inference time
 
 **Annotation Style:**

@@ -1684,13 +1684,15 @@ async def run_cv_inference(
     fast_mode: bool = True
 ):
     """
-    Run bird detection inference on an uploaded image
+    Run bird detection inference on an uploaded image with SAHI and model selection
 
     Args:
         file: Uploaded image file
         conf_threshold: Confidence threshold for detections (default: 0.25)
-        fast_mode: Enable fast mode for quicker processing of large images (default: True)
-                   Fast mode uses downsampling for very large images or minimal overlap for sliding windows
+        fast_mode: Model selection mode (default: True)
+                   - True (Fast): Swift model - optimized for speed, good for quick previews
+                   - False (Max): Apex model - optimized for accuracy, better for final results
+                   Both modes use SAHI (Slicing Aided Hyper Inference) for large images
 
     Returns:
         CVInferenceResponse: Detection results with annotated image

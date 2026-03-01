@@ -1014,14 +1014,10 @@ def sam_auto_detect():
 # ==================== CLUSTER EXPLORER ROUTES ====================
 
 @app.route('/clusters')
+@app.route('/clusters/tsne')
 def cluster_explorer():
-    """
-    3D Cluster Explorer: Aerial view of bird clusters with actual images.
-
-    View clusters from above like looking at mountain ranges.
-    All bird images are loaded and visible.
-    """
-    return render_template('cluster_explorer_aerial.html')
+    """Canvas 2D cluster explorer with lazy image loading and HUD."""
+    return render_template('cluster_explorer_tsne.html')
 
 @app.route('/api/cluster_data')
 def get_cluster_data():
@@ -1045,9 +1041,11 @@ def get_cluster_data():
     with open(clusters_file, 'r') as f:
         cluster_data = json.load(f)
 
-    # Load t-SNE positions if available
-    positions = []
-    if os.path.exists(results_file):
+    # Check if positions are already in the JSON (new format from weak supervision pipeline)
+    positions = cluster_data.get('positions', [])
+
+    # If no positions in JSON, try loading from pickle file (old format)
+    if not positions and os.path.exists(results_file):
         import pickle
         with open(results_file, 'rb') as f:
             results = pickle.load(f)
@@ -1085,6 +1083,96 @@ def get_cluster_data():
         'positions': positions
     })
 
+
+# In-memory cache so we parse the 43 MB JSON only once per server lifetime
+_cluster_positions_cache = None
+
+@app.route('/api/cluster_positions')
+def get_cluster_positions():
+    """
+    Compact positions endpoint for the Google t-SNE visualisation.
+
+    Instead of returning the full 43 MB cluster JSON, this endpoint strips
+    every field that the visualisation does not need and returns a lean payload:
+
+        {
+          "cluster_names": ["BRPE", "LAGU", ...],   // sorted largest→smallest
+          "cluster_sizes":  [26543, 31924, ...],
+          "centroids":      [[cx, cy], ...],          // one per cluster
+          "positions":      [[x, y, ci, bird_id], ...], // ci = cluster index
+          "total":          100026
+        }
+
+    Typical size: ~5–8 MB (vs 43 MB for /api/cluster_data).
+    The response is cached in memory after the first request.
+    """
+    global _cluster_positions_cache
+    if _cluster_positions_cache is not None:
+        return _cluster_positions_cache
+
+    clusters_file = os.path.join(
+        Config.DATASET_PATH, "bird_crops", "clusters", "clusters_for_labeling.json"
+    )
+    if not os.path.exists(clusters_file):
+        return jsonify({
+            "error": "No cluster data found",
+            "message": "Run clustering first via the /clustering dashboard"
+        }), 404
+
+    with open(clusters_file, 'r') as f:
+        cluster_data = json.load(f)
+
+    positions_raw = cluster_data.get('positions', [])
+    clusters_dict = cluster_data.get('clusters', {})
+
+    if not positions_raw:
+        return jsonify({"error": "No position data in cluster file"}), 404
+
+    # ── Build cluster name list, sorted largest cluster first ──────────────
+    cluster_names = sorted(
+        clusters_dict.keys(),
+        key=lambda n: clusters_dict[n].get('size', 0),
+        reverse=True
+    )
+    cluster_sizes  = [clusters_dict[n].get('size', 0) for n in cluster_names]
+    name_to_idx    = {name: i for i, name in enumerate(cluster_names)}
+
+    # ── Compute centroids (mean x, mean y per cluster) ─────────────────────
+    acc = {n: [0.0, 0.0, 0] for n in cluster_names}
+    for pos in positions_raw:
+        c = pos.get('cluster', '')
+        if c in acc:
+            acc[c][0] += pos['x']
+            acc[c][1] += pos['y']
+            acc[c][2] += 1
+
+    centroids = []
+    for name in cluster_names:
+        s = acc[name]
+        count = s[2] or 1
+        centroids.append([round(s[0] / count, 4), round(s[1] / count, 4)])
+
+    # ── Compact positions: [[x, y, cluster_idx, bird_id], ...] ────────────
+    compact = []
+    for pos in positions_raw:
+        ci = name_to_idx.get(pos.get('cluster', ''), 0)
+        compact.append([
+            round(pos['x'], 3),
+            round(pos['y'], 3),
+            ci,
+            pos['bird_id']
+        ])
+
+    _cluster_positions_cache = jsonify({
+        'cluster_names': cluster_names,
+        'cluster_sizes':  cluster_sizes,
+        'centroids':      centroids,
+        'positions':      compact,
+        'total':          len(compact)
+    })
+    return _cluster_positions_cache
+
+
 @app.route('/api/bird_crop/<int:crop_id>')
 def get_bird_crop(crop_id):
     """
@@ -1121,174 +1209,8 @@ def get_bird_crop(crop_id):
 
 # ==================== END CLUSTER EXPLORER ROUTES ====================
 
-# ==================== CLUSTERING PIPELINE ROUTES ====================
-
-@app.route('/clustering')
-def clustering_dashboard():
-    """
-    Clustering Dashboard: Integrated UI for running the complete pipeline.
-
-    Provides a step-by-step interface to:
-    1. Extract bird crops
-    2. Generate deep learning embeddings
-    3. Run clustering and t-SNE
-    """
-    return render_template('clustering_dashboard.html')
-
-@app.route('/api/clustering/status')
-def clustering_status():
-    """Check status of clustering pipeline"""
-    crops_dir = os.path.join(Config.DATASET_PATH, "bird_crops")
-    clusters_dir = os.path.join(crops_dir, "clusters")
-
-    status = {
-        'crops_extracted': False,
-        'embeddings_generated': False,
-        'clustering_done': False
-    }
-
-    # Check crops
-    if os.path.exists(os.path.join(crops_dir, "metadata.json")):
-        status['crops_extracted'] = True
-        with open(os.path.join(crops_dir, "metadata.json"), 'r') as f:
-            meta = json.load(f)
-            status['num_crops'] = meta.get('total_crops', 0)
-
-    # Check embeddings
-    if os.path.exists(os.path.join(crops_dir, "embeddings.npy")):
-        status['embeddings_generated'] = True
-        with open(os.path.join(crops_dir, "config.json"), 'r') as f:
-            config = json.load(f)
-            status['embedding_dim'] = config.get('embedding_dim', 0)
-
-    # Check clustering
-    if os.path.exists(os.path.join(clusters_dir, "clusters_for_labeling.json")):
-        status['clustering_done'] = True
-        with open(os.path.join(clusters_dir, "clusters_for_labeling.json"), 'r') as f:
-            cluster_data = json.load(f)
-            status['n_clusters'] = cluster_data.get('n_clusters', 0)
-            status['total_birds'] = cluster_data.get('total_birds', 0)
-
-    return jsonify(status)
-
-@app.route('/api/clustering/extract_crops', methods=['POST'])
-def extract_crops():
-    """Extract bird crops from YOLO dataset (can take 5-10 seconds)"""
-    try:
-        from labeller.services.embedding_service import BirdCropManager
-
-        crops_dir = os.path.join(Config.DATASET_PATH, "bird_crops")
-        print(f"[Clustering] Starting crop extraction from {Config.DATASET_PATH}")
-        print(f"[Clustering] Output directory: {crops_dir}")
-
-        manager = BirdCropManager(crops_dir)
-
-        # Extract crops (no resizing for better quality, with padding for context)
-        # Note: This can take 5-10 seconds for ~500 images
-        manager.extract_and_save_crops(
-            dataset_dir=Config.DATASET_PATH,
-            resize=None,  # Preserve original resolution
-            min_size=20,
-            max_size=10000,
-            padding_percent=0.15  # Add 15% padding around birds for full context
-        )
-
-        # Load metadata to get count
-        metadata_path = os.path.join(crops_dir, "metadata.json")
-        print(f"[Clustering] Reading metadata from {metadata_path}")
-
-        if not os.path.exists(metadata_path):
-            raise Exception(f"Metadata file not found at {metadata_path}")
-
-        with open(metadata_path, 'r') as f:
-            meta = json.load(f)
-
-        total_crops = meta.get('total_crops', 0)
-        print(f"[Clustering] ✓ Extracted {total_crops} crops successfully")
-
-        return jsonify({
-            'status': 'success',
-            'total_crops': total_crops
-        })
-
-    except Exception as e:
-        import traceback
-        print(f"[Clustering] ✗ Error during extraction:")
-        traceback.print_exc()
-        return jsonify({
-            'status': 'error',
-            'message': str(e)
-        }), 500
-
-@app.route('/api/clustering/generate_embeddings', methods=['POST'])
-def generate_embeddings():
-    """Generate deep learning embeddings from bird crops"""
-    try:
-        from labeller.services.embedding_service import BirdCropManager
-
-        data = request.json or {}
-        model_name = data.get('model_name', 'efficientnet')  # Default to EfficientNet for speed
-
-        crops_dir = os.path.join(Config.DATASET_PATH, "bird_crops")
-        manager = BirdCropManager(crops_dir)
-
-        # Generate embeddings
-        manager.generate_embeddings(model_name=model_name, batch_size=32)
-
-        # Load config to get info
-        with open(os.path.join(crops_dir, "config.json"), 'r') as f:
-            config = json.load(f)
-
-        return jsonify({
-            'status': 'success',
-            'embedding_dim': config['embedding_dim'],
-            'num_crops': config['num_crops'],
-            'model_name': config['model_name']
-        })
-
-    except Exception as e:
-        import traceback
-        traceback.print_exc()
-        return jsonify({
-            'status': 'error',
-            'message': str(e)
-        }), 500
-
-@app.route('/api/clustering/run_clustering', methods=['POST'])
-def run_clustering():
-    """Run clustering on embeddings and generate 3D visualization"""
-    try:
-        from labeller.services.clustering_service import ClusteringService
-
-        data = request.json or {}
-        method = data.get('method', 'kmeans')
-        n_clusters = data.get('n_clusters', 30)
-
-        print(f"[Clustering] Running clustering with method={method}, n_clusters={n_clusters}")
-
-        crops_dir = os.path.join(Config.DATASET_PATH, "bird_crops")
-        service = ClusteringService(crops_dir)
-
-        # Run clustering with 3D visualization
-        # DBSCAN determines n_clusters automatically, K-means uses the provided value
-        results = service.run_clustering(n_clusters=n_clusters, method=method)
-
-        print(f"[Clustering] ✓ Clustering complete: {results['n_clusters']} clusters found")
-
-        return jsonify({
-            'status': 'success',
-            **results
-        })
-
-    except Exception as e:
-        import traceback
-        traceback.print_exc()
-        return jsonify({
-            'status': 'error',
-            'message': str(e)
-        }), 500
-
-# ==================== END CLUSTERING PIPELINE ROUTES ====================
+# Clustering pipeline routes removed — pipeline now runs via CLI scripts
+# in data/weak_supervision/pipeline/ (see PIPELINE_DOCS.md)
 
 # ==================== SPECIES LABELING ROUTES ====================
 
