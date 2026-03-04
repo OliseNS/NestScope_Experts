@@ -125,6 +125,15 @@ def render_sidebar(active_page: str = "home"):
     ):
         st.switch_page("pages/02_nest_vision.py")
 
+    # NestMap button
+    if st.button(
+        "🗺️ NestMap",
+        use_container_width=True,
+        help="Geospatial colony intelligence",
+        type="primary" if active_page == "nestmap" else "secondary"
+    ):
+        st.switch_page("pages/03_nest_map.py")
+
     # NestDB button
     if st.button(
         "🗄️ NestDB",

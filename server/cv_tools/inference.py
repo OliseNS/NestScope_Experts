@@ -15,6 +15,30 @@ from sahi import AutoDetectionModel
 from sahi.predict import get_sliced_prediction
 from sahi.utils.cv import read_image_as_pil
 
+# Species group classification — the classifier outputs 7 functional groups
+CLASSIFIER_GROUPS = {
+    0: 'COLOR_WADER',   # Roseate Spoonbill, Tricolored Heron, etc.
+    1: 'DARK',          # Cormorant, Anhinga, Dark birds
+    2: 'GULL',          # Laughing Gull, Herring Gull, Black Skimmer
+    3: 'PELICAN',       # Brown Pelican, American White Pelican
+    4: 'SHOREBIRD',     # Oystercatcher, Avocet, small shorebirds
+    5: 'TERN',          # Royal Tern, Sandwich Tern, Gull-billed Tern
+    6: 'WHITE_WADER',   # Great Egret, Snowy Egret, White Ibis
+}
+
+# Per-group annotation colors in BGR format for OpenCV
+CLASSIFIER_COLORS = {
+    'PELICAN':     (87, 119, 217),   # Claude orange #D97757
+    'GULL':        (42, 200, 100),   # Green
+    'TERN':        (42, 180, 220),   # Cyan/teal
+    'WHITE_WADER': (200, 200, 200),  # Light gray
+    'COLOR_WADER': (200, 60, 220),   # Purple
+    'DARK':        (120, 120, 120),  # Dark gray
+    'SHOREBIRD':   (30, 160, 255),   # Orange-yellow
+    'UNKNOWN':     (87, 119, 217),   # Fall back to Claude orange
+}
+
+
 # Load model paths from config.yaml
 def _load_model_paths():
     """Load model paths from server configuration"""
@@ -26,6 +50,12 @@ def _load_model_paths():
         model_fast = config['cv']['model_fast']
         model_pro = config['cv']['model_pro']
 
+        # Classifier paths — fix .pt → .onnx if needed
+        classifier_swift = config['cv'].get('classifier_swift', 'models/classifier_swift.onnx')
+        classifier_apex  = config['cv'].get('classifier_apex',  'models/classifier_apex.onnx')
+        classifier_swift = str(classifier_swift).replace('.pt', '.onnx')
+        classifier_apex  = str(classifier_apex).replace('.pt', '.onnx')
+
         # Convert relative paths to absolute (relative to project root)
         project_root = Path(__file__).parent.parent.parent
 
@@ -33,26 +63,35 @@ def _load_model_paths():
             model_fast = str(project_root / model_fast)
         if not os.path.isabs(model_pro):
             model_pro = str(project_root / model_pro)
+        if not os.path.isabs(classifier_swift):
+            classifier_swift = str(project_root / classifier_swift)
+        if not os.path.isabs(classifier_apex):
+            classifier_apex = str(project_root / classifier_apex)
 
-        return model_fast, model_pro
+        return model_fast, model_pro, classifier_swift, classifier_apex
     except Exception as e:
         print(f"Warning: Could not load model paths from config: {e}")
         # Fallback to default models
         models_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "models")
         return (
             os.path.join(models_dir, "swift.onnx"),
-            os.path.join(models_dir, "apex.onnx")
+            os.path.join(models_dir, "apex.onnx"),
+            os.path.join(models_dir, "classifier_swift.onnx"),
+            os.path.join(models_dir, "classifier_apex.onnx"),
         )
 
-MODEL_FAST, MODEL_PRO = _load_model_paths()
+MODEL_FAST, MODEL_PRO, CLASSIFIER_SWIFT, CLASSIFIER_APEX = _load_model_paths()
 print(f"✓ CV Models configured:")
 print(f"  Fast mode: {MODEL_FAST}")
 print(f"  Pro mode: {MODEL_PRO}")
+print(f"  Classifier (Swift): {CLASSIFIER_SWIFT}")
+print(f"  Classifier (Apex): {CLASSIFIER_APEX}")
 
 class BirdDetector:
     """YOLO-based bird detection and counting with dynamic model loading"""
 
-    def __init__(self, model_fast=MODEL_FAST, model_pro=MODEL_PRO, imgsz=1024):
+    def __init__(self, model_fast=MODEL_FAST, model_pro=MODEL_PRO, imgsz=1024,
+                 classifier_swift=CLASSIFIER_SWIFT, classifier_apex=CLASSIFIER_APEX):
         """
         Initialize the bird detector with support for multiple models
 
@@ -60,12 +99,19 @@ class BirdDetector:
             model_fast: Path to the fast YOLO model (nano)
             model_pro: Path to the pro YOLO model (small)
             imgsz: Image size for inference (default: 1024)
+            classifier_swift: Path to the fast species classifier ONNX
+            classifier_apex: Path to the accurate species classifier ONNX
         """
         self.model_fast_path = model_fast
         self.model_pro_path = model_pro
         self.imgsz = imgsz
         self.current_model_path = None
         self.model = None
+        # Classifier state (lazy-loaded on first use)
+        self.classifier_swift_path = classifier_swift
+        self.classifier_apex_path = classifier_apex
+        self.classifier_session = None
+        self.classifier_path_loaded = None
         # Start with fast model loaded by default
         self._load_model(self.model_fast_path)
 
@@ -691,6 +737,87 @@ class BirdDetector:
             output = self.model.run(self.output_names, {self.input_name: preprocessed})
             return self._postprocess(output[0], scale, pad, conf_threshold)
 
+    def _load_classifier(self, fast_mode: bool):
+        """Lazy-load the species classifier ONNX session."""
+        path = self.classifier_swift_path if fast_mode else self.classifier_apex_path
+        if self.classifier_path_loaded == path and self.classifier_session is not None:
+            return
+        if not os.path.exists(path):
+            self.classifier_session = None
+            return
+        try:
+            self.classifier_session = ort.InferenceSession(
+                path, providers=['CUDAExecutionProvider', 'CPUExecutionProvider']
+            )
+            self.classifier_path_loaded = path
+            print(f"✓ Species classifier loaded: {Path(path).name}")
+        except Exception as e:
+            print(f"Warning: Could not load classifier {path}: {e}")
+            self.classifier_session = None
+
+    def classify_crop(self, crop_bgr: np.ndarray, fast_mode: bool = True) -> tuple:
+        """
+        Classify a bird crop into one of 7 functional groups.
+
+        Args:
+            crop_bgr: Bird crop in BGR format (any size)
+            fast_mode: Use Swift classifier (True) or Apex (False)
+
+        Returns:
+            Tuple of (group_name: str, confidence: float)
+            group_name is one of CLASSIFIER_GROUPS values or 'UNKNOWN'
+        """
+        self._load_classifier(fast_mode)
+        if self.classifier_session is None:
+            return ('UNKNOWN', 0.0)
+
+        try:
+            # Resize to 224x224, BGR→RGB, normalize [0,1], NCHW float32
+            img = cv2.resize(crop_bgr, (224, 224), interpolation=cv2.INTER_LINEAR)
+            img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+            img = img.astype(np.float32) / 255.0
+            img = np.transpose(img, (2, 0, 1))[np.newaxis]  # (1, 3, 224, 224)
+
+            input_name = self.classifier_session.get_inputs()[0].name
+            output = self.classifier_session.run(None, {input_name: img})[0][0]
+
+            # Softmax to get probabilities
+            exp_out = np.exp(output - output.max())
+            probs = exp_out / exp_out.sum()
+            class_idx = int(np.argmax(probs))
+            confidence = float(probs[class_idx])
+
+            return (CLASSIFIER_GROUPS.get(class_idx, 'UNKNOWN'), round(confidence, 3))
+        except Exception as e:
+            return ('UNKNOWN', 0.0)
+
+    def _classify_detections(self, image_bgr: np.ndarray, detections: List[dict], fast_mode: bool = True) -> List[dict]:
+        """
+        Run species classifier on each detected bird crop and add group labels.
+
+        Args:
+            image_bgr: Full original image in BGR format
+            detections: List of detection dicts with 'bbox' key
+            fast_mode: Use Swift (True) or Apex (False) classifier
+
+        Returns:
+            Same detections list with 'species_group' and 'species_confidence' added
+        """
+        h, w = image_bgr.shape[:2]
+        for det in detections:
+            x1, y1, x2, y2 = [int(v) for v in det['bbox']]
+            # Clamp to image bounds
+            x1, y1 = max(0, x1), max(0, y1)
+            x2, y2 = min(w, x2), min(h, y2)
+            crop = image_bgr[y1:y2, x1:x2]
+            if crop.size > 0 and (x2 - x1) >= 5 and (y2 - y1) >= 5:
+                group, conf = self.classify_crop(crop, fast_mode)
+            else:
+                group, conf = 'UNKNOWN', 0.0
+            det['species_group'] = group
+            det['species_confidence'] = conf
+        return detections
+
     def _draw_custom_annotations_from_detections(self, image, detections: List[dict]):
         """
         Draw custom annotations on image from detection dictionaries
@@ -703,18 +830,28 @@ class BirdDetector:
             Annotated image with custom styling
         """
         annotated_img = image.copy()
-
-        # Claude orange color #D97757 in BGR format for OpenCV
-        box_color = (87, 119, 217)  # BGR: (87, 119, 217) = RGB: (217, 119, 87) = #D97757
-        thickness = 3  # Box thickness
+        thickness = 3
 
         for det in detections:
-            # Get bounding box coordinates
             x1, y1, x2, y2 = det['bbox']
             x1, y1, x2, y2 = int(x1), int(y1), int(x2), int(y2)
 
-            # Draw rectangle with no text
+            # Use species-specific color if available, else Claude orange
+            group = det.get('species_group', 'UNKNOWN')
+            box_color = CLASSIFIER_COLORS.get(group, CLASSIFIER_COLORS['UNKNOWN'])
+
             cv2.rectangle(annotated_img, (x1, y1), (x2, y2), box_color, thickness)
+
+            # Draw species group label above box (only if classification ran)
+            if group and group != 'UNKNOWN':
+                label = group.replace('_', ' ')
+                font_scale = 0.45
+                font_thickness = 1
+                (tw, th), _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, font_scale, font_thickness)
+                label_y = max(y1 - 4, th + 4)
+                cv2.rectangle(annotated_img, (x1, label_y - th - 4), (x1 + tw + 4, label_y), box_color, -1)
+                cv2.putText(annotated_img, label, (x1 + 2, label_y - 2),
+                            cv2.FONT_HERSHEY_SIMPLEX, font_scale, (255, 255, 255), font_thickness, cv2.LINE_AA)
 
         return annotated_img
 
@@ -770,12 +907,22 @@ class BirdDetector:
         # Calculate inference time (before drawing annotations)
         inference_time = time.perf_counter() - start_time
 
-        # Draw custom annotations
+        # Classify each detected bird crop into a species group
+        detections = self._classify_detections(original_img, detections, fast_mode)
+
+        # Build species summary: {group: count}
+        species_summary: dict = {}
+        for det in detections:
+            g = det.get('species_group', 'UNKNOWN')
+            species_summary[g] = species_summary.get(g, 0) + 1
+
+        # Draw custom annotations (uses species group colors)
         annotated_img = self._draw_custom_annotations_from_detections(original_img, detections)
 
         return {
             'bird_count': len(detections),
             'detections': detections,
+            'species_summary': species_summary,
             'annotated_image': annotated_img,
             'image_path': image_path,
             'inference_time': inference_time
@@ -893,12 +1040,22 @@ class BirdDetector:
         # Calculate inference time (before drawing annotations)
         inference_time = time.perf_counter() - start_time
 
-        # Draw custom annotations
+        # Classify each detected bird crop into a species group
+        detections = self._classify_detections(img, detections, fast_mode)
+
+        # Build species summary: {group: count}
+        species_summary: dict = {}
+        for det in detections:
+            g = det.get('species_group', 'UNKNOWN')
+            species_summary[g] = species_summary.get(g, 0) + 1
+
+        # Draw custom annotations (uses species group colors)
         annotated_img = self._draw_custom_annotations_from_detections(img, detections)
 
         return {
             'bird_count': len(detections),
             'detections': detections,
+            'species_summary': species_summary,
             'annotated_image': annotated_img,
             'inference_time': inference_time
         }

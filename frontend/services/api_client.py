@@ -459,3 +459,89 @@ def insert_table_row(table_name: str, row_data: Dict[str, Any]) -> Dict[str, Any
         return response.json()
     except requests.exceptions.RequestException as e:
         return {"success": False, "message": None, "error": str(e)}
+
+
+# ============================================================================
+# STAC DATA API — Water Institute avian monitoring catalog
+# ============================================================================
+
+@st.cache_data(ttl=3600)
+def get_stac_summary() -> Dict[str, Any]:
+    """
+    Fetch complete STAC summary: colony metadata + species totals.
+    Cached for 1 hour — data is static (historical survey records).
+    """
+    from .config import API_BASE_URL
+    try:
+        r = requests.get(f"{API_BASE_URL}/stac/summary", timeout=15)
+        r.raise_for_status()
+        return r.json()
+    except Exception as e:
+        return {"error": str(e), "colonies": [], "species_totals": {}}
+
+
+@st.cache_data(ttl=3600)
+def get_stac_species(colony_id: str, year: str) -> Dict[str, Any]:
+    """
+    Fetch species breakdown for a specific colony-year.
+    Returns {colony_id, year, species: [{code, name, color, total_birds, total_nests}]}
+    """
+    from .config import API_BASE_URL
+    try:
+        r = requests.get(f"{API_BASE_URL}/stac/species/{colony_id}/{year}", timeout=10)
+        r.raise_for_status()
+        return r.json()
+    except Exception as e:
+        return {"error": str(e), "species": []}
+
+
+@st.cache_data(ttl=3600)
+def get_stac_dots(colony_id: str, year: str, species_code: str, dot_type: str = "Bird") -> Dict[str, Any]:
+    """
+    Fetch expert-annotated species dot GeoJSON for a colony-year-species.
+    Returns a GeoJSON FeatureCollection.
+    """
+    from .config import API_BASE_URL
+    try:
+        r = requests.get(
+            f"{API_BASE_URL}/stac/dots/{colony_id}/{year}/{species_code}",
+            params={"dot_type": dot_type},
+            timeout=15
+        )
+        r.raise_for_status()
+        return r.json()
+    except Exception as e:
+        return {"type": "FeatureCollection", "features": [], "error": str(e)}
+
+
+@st.cache_data(ttl=3600)
+def get_mosaic_preview(colony_id: str, year: str) -> Optional[str]:
+    """
+    Fetch a 512x512 JPEG preview of a COG mosaic from S3 via the backend.
+    Returns base64-encoded JPEG string, or None if unavailable.
+    """
+    from .config import API_BASE_URL
+    try:
+        r = requests.get(f"{API_BASE_URL}/stac/mosaic_preview/{colony_id}/{year}", timeout=30)
+        r.raise_for_status()
+        return r.json().get("preview_base64")
+    except Exception:
+        return None
+
+
+def run_mosaic_inference(colony_id: str, year: str, conf: float = 0.25, fast_mode: bool = True) -> Dict[str, Any]:
+    """
+    Run NestVision bird detection on a center tile of a colony COG mosaic.
+    Returns detection results with species_summary.
+    """
+    from .config import API_BASE_URL
+    try:
+        r = requests.post(
+            f"{API_BASE_URL}/cv/inference/mosaic",
+            params={"colony_id": colony_id, "year": year, "conf": conf, "fast_mode": fast_mode},
+            timeout=90
+        )
+        r.raise_for_status()
+        return r.json()
+    except Exception as e:
+        return {"error": str(e)}
