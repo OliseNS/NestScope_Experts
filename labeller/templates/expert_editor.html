@@ -149,7 +149,7 @@
         /* Main Layout */
         .main-layout {
             display: grid;
-            grid-template-columns: 280px 1fr 400px;
+            grid-template-columns: 260px 1fr 420px;
             height: calc(100vh - 60px);
         }
 
@@ -177,7 +177,7 @@
 
         .tool-grid {
             display: grid;
-            grid-template-columns: 1fr 1fr;
+            grid-template-columns: 1fr 1fr 1fr;
             gap: 0.75rem;
         }
 
@@ -225,46 +225,73 @@
             color: rgba(255, 255, 255, 0.7);
         }
 
-        /* Box List */
-        .box-list {
-            max-height: 300px;
-            overflow-y: auto;
-        }
-
-        .box-item {
+        /* Live Preview Section */
+        .live-preview {
             background: var(--surface-light);
+            border-radius: 12px;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .preview-header {
+            background: linear-gradient(135deg, var(--orange-dark), var(--orange-primary));
+            color: white;
             padding: 0.75rem;
+            font-size: 0.875rem;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .preview-canvas-container {
+            position: relative;
+            aspect-ratio: 1;
+            background: var(--bg-dark);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+        }
+
+        .preview-canvas {
+            max-width: 100%;
+            max-height: 100%;
+            image-rendering: crisp-edges;
+            display: none;  /* Hidden by default, shown when preview active */
+        }
+
+        .preview-empty {
+            position: absolute;
+            inset: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            padding: 2rem 1rem;
+            color: var(--text-muted);
+        }
+
+        .preview-empty-icon {
+            font-size: 2.5rem;
             margin-bottom: 0.5rem;
-            border-radius: 8px;
-            cursor: pointer;
-            border: 2px solid transparent;
-            transition: all 0.3s;
+            opacity: 0.5;
         }
 
-        .box-item:hover {
-            border-color: var(--orange-primary);
-        }
-
-        .box-item.selected {
-            border-color: var(--orange-primary);
-            background: rgba(217, 119, 87, 0.2);
-        }
-
-        .box-header {
+        .preview-info {
+            padding: 0.75rem;
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+            border-top: 1px solid rgba(217, 119, 87, 0.2);
             display: flex;
             justify-content: space-between;
-            align-items: center;
-            margin-bottom: 0.5rem;
         }
 
-        .box-id {
-            font-weight: 600;
+        .zoom-indicator {
             color: var(--orange-primary);
-        }
-
-        .box-species {
-            font-size: 0.875rem;
-            color: var(--text-secondary);
+            font-weight: 700;
         }
 
         .box-unidentified {
@@ -381,6 +408,10 @@
         .classification-content {
             flex: 1;
             overflow-y: auto;
+            padding: 0;
+        }
+
+        .classification-inner {
             padding: 1.5rem;
         }
 
@@ -658,8 +689,9 @@
     <div class="main-layout">
         <!-- Left Sidebar - Tools -->
         <aside class="left-sidebar">
+            <!-- Tools Section -->
             <div class="sidebar-section">
-                <h3 class="section-title">🛠️ Drawing Tools</h3>
+                <h3 class="section-title">🛠️ Annotation Tools</h3>
                 <div class="tool-grid">
                     <button class="tool-btn active" id="tool-draw" onclick="selectTool('draw')">
                         <div class="tool-icon">✏️</div>
@@ -671,35 +703,42 @@
                         <div class="tool-label">AI Detect</div>
                         <div class="tool-shortcut">(S)</div>
                     </button>
-                    <button class="tool-btn" id="tool-edit" onclick="selectTool('edit')">
+                    <button class="tool-btn" id="tool-edit" onclick="selectTool('edit')" title="Move and resize boxes">
                         <div class="tool-icon">👆</div>
                         <div class="tool-label">Edit</div>
                         <div class="tool-shortcut">(E)</div>
                     </button>
-                    <button class="tool-btn" id="tool-pan" onclick="selectTool('pan')">
-                        <div class="tool-icon">✋</div>
-                        <div class="tool-label">Pan</div>
-                        <div class="tool-shortcut">(H)</div>
-                    </button>
                 </div>
             </div>
 
-            <div class="sidebar-section">
-                <h3 class="section-title">📦 Bounding Boxes (<span id="box-count">0</span>)</h3>
-                <div class="box-list" id="box-list">
-                    <div class="empty-state">
-                        <div class="empty-icon">📦</div>
-                        <div class="empty-text">No boxes yet.<br>Draw or use AI detect to find birds.</div>
+            <!-- Live Preview Section (Always visible) -->
+            <div class="sidebar-section" style="flex: 1; display: flex; flex-direction: column; overflow: hidden;">
+                <h3 class="section-title">
+                    🔍 Live Preview
+                    <span style="color: var(--text-muted); font-weight: 400; margin-left: 0.5rem; font-size: 0.75rem;" id="preview-mode">Idle</span>
+                </h3>
+                <div class="live-preview">
+                    <div class="preview-canvas-container" id="preview-container">
+                        <canvas id="preview-canvas" class="preview-canvas"></canvas>
+                        <div class="preview-empty" id="preview-empty">
+                            <div class="preview-empty-icon">🔎</div>
+                            <div style="font-size: 0.875rem;">Start drawing to see<br>live zoom preview</div>
+                        </div>
+                    </div>
+                    <div class="preview-info">
+                        <span id="preview-info-left">
+                            <span id="box-count">0</span> birds detected
+                        </span>
+                        <span class="zoom-indicator" id="zoom-info">2.0x</span>
                     </div>
                 </div>
             </div>
 
+            <!-- Action Footer -->
             <div class="action-footer">
-                <button class="btn-primary" onclick="saveAndNext()">
-                    Save & Next Image
-                </button>
-                <button class="btn-secondary" onclick="saveOnly()">
-                    Save Only
+                <button class="btn-primary" onclick="saveAndNext()" title="Ctrl+S" style="font-size: 1.125rem;">
+                    Save & Continue
+                    <div style="font-size: 0.75rem; opacity: 0.8; margin-top: 0.25rem;">(Ctrl+S)</div>
                 </button>
             </div>
         </aside>
@@ -711,6 +750,11 @@
             <div class="canvas-overlay">
                 <div><strong>Tool:</strong> <span id="current-tool">Draw</span></div>
                 <div><strong>Zoom:</strong> <span id="zoom-level">100%</span></div>
+                <div style="margin-top: 0.5rem; padding-top: 0.5rem; border-top: 1px solid rgba(217, 119, 87, 0.3); font-size: 0.75rem; color: var(--text-muted);">
+                    <div><strong>Click box</strong> → Auto-identify</div>
+                    <div><strong>Delete</strong> → Remove box</div>
+                    <div><strong>Ctrl+S</strong> → Save & next</div>
+                </div>
             </div>
 
             <div class="zoom-controls">
@@ -725,15 +769,15 @@
             <div class="classification-header">
                 <h2 class="classification-title">
                     <span>🏷️</span>
-                    Species ID
+                    Species Identification
                 </h2>
-                <p class="classification-subtitle">Click a box to identify species</p>
+                <p class="classification-subtitle">Auto-opens when you click a box</p>
             </div>
 
             <div class="classification-content" id="classification-content">
                 <div class="empty-state">
                     <div class="empty-icon">🦅</div>
-                    <div class="empty-text">Select a bounding box<br>to start species identification.</div>
+                    <div class="empty-text">Click a box on the canvas<br>to identify the species</div>
                 </div>
             </div>
         </aside>
@@ -775,7 +819,6 @@ let speciesImages = {};  // Cache for species images
 
 // Drawing state
 let isDrawing = false;
-let isPanning = false;
 let isDragging = false;
 let startX = 0;
 let startY = 0;
@@ -783,18 +826,31 @@ let currentX = 0;
 let currentY = 0;
 let draggedBox = null;
 let dragHandle = null;  // 'move', 'nw', 'ne', 'sw', 'se', 'n', 's', 'e', 'w'
-let panOffsetX = 0;
-let panOffsetY = 0;
-let panStartX = 0;
-let panStartY = 0;
 let zoomLevel = 1;
-let viewOffsetX = 0;
-let viewOffsetY = 0;
+
+// Live preview state
+let previewCanvas, previewCtx;
+let previewUpdateInterval = null;
+const PREVIEW_ZOOM = 2.0;  // 2x zoom for preview
+const PREVIEW_SIZE = 250;  // Preview canvas size in pixels
 
 // Initialize canvas
 function initCanvas() {
     canvas = document.getElementById('annotation-canvas');
     ctx = canvas.getContext('2d');
+
+    // Initialize preview canvas
+    try {
+        previewCanvas = document.getElementById('preview-canvas');
+        if (previewCanvas) {
+            previewCtx = previewCanvas.getContext('2d');
+            previewCanvas.width = PREVIEW_SIZE;
+            previewCanvas.height = PREVIEW_SIZE;
+            console.log('✓ Preview canvas initialized');
+        }
+    } catch (e) {
+        console.error('Preview canvas init error:', e);
+    }
 
     // Load image
     imageObj = new Image();
@@ -813,7 +869,7 @@ function initCanvas() {
             ...box,
             id: box.id || Date.now() + idx
         }));
-        updateBoxList();
+        updateBoxCount();
         redrawCanvas();
 
         // Add canvas event listeners
@@ -822,7 +878,7 @@ function initCanvas() {
         canvas.addEventListener('mouseup', handleCanvasMouseUp);
         canvas.addEventListener('mouseleave', handleCanvasMouseLeave);
 
-        console.log(`✓ Image loaded: ${IMAGE_NAME} (${imageObj.naturalWidth}x${imageObj.naturalHeight})`);
+        console.log(`✓ Image loaded: ${IMAGE_NAME} (${imageObj.naturalWidth}x${imageObj.naturalHeight}), ${boxes.length} boxes loaded`);
     };
 
     imageObj.onerror = function(e) {
@@ -869,27 +925,83 @@ function handleCanvasMouseDown(e) {
     currentX = coords.x;
     currentY = coords.y;
 
+    // Check if clicking on a box (works in all modes for selection)
+    const clickedBox = findBoxAtPoint(coords.x, coords.y);
+    console.log('Canvas mousedown - tool:', currentTool, 'clicked box:', clickedBox ? 'yes' : 'no');
+
     if (currentTool === 'draw') {
+        // Always allow drawing in draw mode (even over existing boxes)
+        // This enables drawing overlapping birds
         isDrawing = true;
     } else if (currentTool === 'ai') {
-        // SAM click-to-detect
-        handleSAMClick(coords.x, coords.y);
-    } else if (currentTool === 'edit') {
-        // Check if clicking on a box
-        const clickedBox = findBoxAtPoint(coords.x, coords.y);
         if (clickedBox) {
+            // Clicking on existing box, select it
             selectedBoxId = clickedBox.id;
-            draggedBox = clickedBox;
-            isDragging = true;
-            dragHandle = 'move';
-            updateBoxList();
+            updateBoxCount();
+            redrawCanvas();
+        } else {
+            // SAM click-to-detect
+            handleSAMClick(coords.x, coords.y);
         }
-    } else if (currentTool === 'pan') {
-        isPanning = true;
-        panStartX = coords.x;
-        panStartY = coords.y;
-        canvas.style.cursor = 'grabbing';
+    } else if (currentTool === 'edit') {
+        // Edit mode: can move/resize boxes
+        if (clickedBox) {
+            // Select the box (opens species ID and updates preview)
+            selectBox(clickedBox.id);
+
+            draggedBox = clickedBox;
+
+            // Check if clicking on a resize handle
+            dragHandle = getResizeHandle(clickedBox, coords.x, coords.y);
+            if (!dragHandle) {
+                dragHandle = 'move';
+            }
+
+            isDragging = true;
+        } else {
+            // Clicked empty space, deselect
+            selectedBoxId = null;
+            updateBoxCount();
+            redrawCanvas();
+            clearPreview();
+
+            // Clear species identification panel
+            const content = document.getElementById('classification-content');
+            content.innerHTML = `
+                <div class="empty-state">
+                    <div class="empty-icon">🦅</div>
+                    <div class="empty-text">Click a bird on the canvas<br>to identify its species</div>
+                </div>
+            `;
+        }
     }
+}
+
+// Get which resize handle (if any) is being clicked
+function getResizeHandle(box, x, y) {
+    const boxX = box.x_center * canvas.width - (box.width * canvas.width) / 2;
+    const boxY = box.y_center * canvas.height - (box.height * canvas.height) / 2;
+    const boxW = box.width * canvas.width;
+    const boxH = box.height * canvas.height;
+    const handleSize = 12;  // Larger hit area for easier clicking
+
+    // Check corners first (priority)
+    if (isNear(x, boxX, handleSize) && isNear(y, boxY, handleSize)) return 'nw';
+    if (isNear(x, boxX + boxW, handleSize) && isNear(y, boxY, handleSize)) return 'ne';
+    if (isNear(x, boxX, handleSize) && isNear(y, boxY + boxH, handleSize)) return 'sw';
+    if (isNear(x, boxX + boxW, handleSize) && isNear(y, boxY + boxH, handleSize)) return 'se';
+
+    // Check edges
+    if (isNear(x, boxX, handleSize) && y >= boxY && y <= boxY + boxH) return 'w';
+    if (isNear(x, boxX + boxW, handleSize) && y >= boxY && y <= boxY + boxH) return 'e';
+    if (isNear(y, boxY, handleSize) && x >= boxX && x <= boxX + boxW) return 'n';
+    if (isNear(y, boxY + boxH, handleSize) && x >= boxX && x <= boxX + boxW) return 's';
+
+    return null;
+}
+
+function isNear(a, b, threshold) {
+    return Math.abs(a - b) <= threshold;
 }
 
 // Handle mouse move
@@ -898,13 +1010,50 @@ function handleCanvasMouseMove(e) {
     currentX = coords.x;
     currentY = coords.y;
 
-    // Update hover highlighting
-    if (!isDrawing && !isDragging && !isPanning) {
-        const foundBox = findBoxAtPoint(coords.x, coords.y);
-        const foundBoxId = foundBox ? foundBox.id : null;
-        if (foundBoxId !== hoveredBoxId) {
-            hoveredBoxId = foundBoxId;
-            redrawCanvas();
+    // Update hover highlighting and cursor (only in edit mode)
+    if (!isDrawing && !isDragging) {
+        if (currentTool === 'edit') {
+            const foundBox = findBoxAtPoint(coords.x, coords.y);
+            const foundBoxId = foundBox ? foundBox.id : null;
+
+            // Update cursor based on what's under mouse in edit mode
+            if (foundBox) {
+                const handle = getResizeHandle(foundBox, coords.x, coords.y);
+                if (handle) {
+                    // Set cursor based on resize direction
+                    const cursorMap = {
+                        'nw': 'nw-resize',
+                        'ne': 'ne-resize',
+                        'sw': 'sw-resize',
+                        'se': 'se-resize',
+                        'n': 'n-resize',
+                        's': 's-resize',
+                        'e': 'e-resize',
+                        'w': 'w-resize'
+                    };
+                    canvas.style.cursor = cursorMap[handle] || 'move';
+                } else {
+                    canvas.style.cursor = 'move';
+                }
+            } else {
+                canvas.style.cursor = 'pointer';
+            }
+
+            if (foundBoxId !== hoveredBoxId) {
+                hoveredBoxId = foundBoxId;
+                redrawCanvas();
+            }
+        } else {
+            // Clear hover in other modes
+            if (hoveredBoxId !== null) {
+                hoveredBoxId = null;
+                redrawCanvas();
+            }
+
+            // Update preview during draw/ai mode
+            if (currentTool === 'draw' || currentTool === 'ai') {
+                updatePreview(coords.x, coords.y, currentTool === 'draw' ? 'Drawing' : 'AI Detection');
+            }
         }
     }
 
@@ -912,29 +1061,92 @@ function handleCanvasMouseMove(e) {
     if (isDrawing) {
         redrawCanvas();
         drawDragRect();
+        // Update preview while drawing
+        updatePreview(coords.x, coords.y, 'Drawing');
     }
 
-    // Handle dragging box
+    // Handle dragging box (move or resize)
     if (isDragging && draggedBox) {
         const dx = (coords.x - startX) / canvas.width;
         const dy = (coords.y - startY) / canvas.height;
 
-        draggedBox.x_center += dx;
-        draggedBox.y_center += dy;
+        if (dragHandle === 'move') {
+            // Move the box
+            draggedBox.x_center += dx;
+            draggedBox.y_center += dy;
 
-        // Keep box within bounds
-        draggedBox.x_center = Math.max(draggedBox.width / 2, Math.min(1 - draggedBox.width / 2, draggedBox.x_center));
-        draggedBox.y_center = Math.max(draggedBox.height / 2, Math.min(1 - draggedBox.height / 2, draggedBox.y_center));
+            // Keep box within bounds
+            draggedBox.x_center = Math.max(draggedBox.width / 2, Math.min(1 - draggedBox.width / 2, draggedBox.x_center));
+            draggedBox.y_center = Math.max(draggedBox.height / 2, Math.min(1 - draggedBox.height / 2, draggedBox.y_center));
+        } else {
+            // Resize the box
+            resizeBox(draggedBox, dragHandle, dx, dy);
+        }
 
         startX = coords.x;
         startY = coords.y;
         redrawCanvas();
+
+        // Update preview while dragging
+        updatePreviewForBox(draggedBox);
+    }
+}
+
+// Resize box based on handle
+function resizeBox(box, handle, dx, dy) {
+    const minSize = 0.02;  // Minimum 2% of image size
+
+    // Calculate current edges in normalized coordinates [0, 1]
+    let left = box.x_center - box.width / 2;
+    let right = box.x_center + box.width / 2;
+    let top = box.y_center - box.height / 2;
+    let bottom = box.y_center + box.height / 2;
+
+    console.log('Resizing:', handle, 'dx:', dx.toFixed(3), 'dy:', dy.toFixed(3));
+
+    // Adjust edges based on which handle is being dragged
+    switch(handle) {
+        case 'nw':  // Top-left corner
+            left += dx;
+            top += dy;
+            break;
+        case 'ne':  // Top-right corner
+            right += dx;
+            top += dy;
+            break;
+        case 'sw':  // Bottom-left corner
+            left += dx;
+            bottom += dy;
+            break;
+        case 'se':  // Bottom-right corner
+            right += dx;
+            bottom += dy;
+            break;
+        case 'n':   // Top edge
+            top += dy;
+            break;
+        case 's':   // Bottom edge
+            bottom += dy;
+            break;
+        case 'w':   // Left edge
+            left += dx;
+            break;
+        case 'e':   // Right edge
+            right += dx;
+            break;
     }
 
-    // Handle panning
-    if (isPanning) {
-        // Panning would adjust view offset, but for simplicity we'll skip this for now
-        // Just show visual feedback
+    // Calculate new dimensions
+    const newWidth = right - left;
+    const newHeight = bottom - top;
+
+    // Only apply if size is valid and within bounds
+    if (newWidth >= minSize && newHeight >= minSize &&
+        left >= 0 && right <= 1 && top >= 0 && bottom <= 1) {
+        box.width = newWidth;
+        box.height = newHeight;
+        box.x_center = (left + right) / 2;
+        box.y_center = (top + bottom) / 2;
     }
 }
 
@@ -956,8 +1168,23 @@ function handleCanvasMouseUp(e) {
             const norm_width = width / canvas.width;
             const norm_height = height / canvas.height;
 
-            addBox(x_center, y_center, norm_width, norm_height);
+            const newBox = addBox(x_center, y_center, norm_width, norm_height);
             showToast('✓ Box created');
+
+            // Show preview of newly created box briefly
+            const centerX = x_center * canvas.width;
+            const centerY = y_center * canvas.height;
+            updatePreview(centerX, centerY, 'Created!');
+
+            // Clear preview after 1 second
+            setTimeout(() => {
+                if (currentTool === 'draw') {
+                    clearPreview();
+                }
+            }, 1000);
+        } else {
+            // Clear preview if box was too small
+            clearPreview();
         }
 
         isDrawing = false;
@@ -965,14 +1192,14 @@ function handleCanvasMouseUp(e) {
     }
 
     if (isDragging) {
+        // Update preview for edited box before clearing
+        if (draggedBox) {
+            updatePreviewForBox(draggedBox);
+        }
+
         isDragging = false;
         draggedBox = null;
         dragHandle = null;
-    }
-
-    if (isPanning) {
-        isPanning = false;
-        canvas.style.cursor = 'grab';
     }
 }
 
@@ -985,10 +1212,12 @@ function handleCanvasMouseLeave(e) {
     if (isDragging) {
         isDragging = false;
         draggedBox = null;
+        dragHandle = null;
     }
-    if (isPanning) {
-        isPanning = false;
-        canvas.style.cursor = 'grab';
+
+    // Clear preview when leaving canvas in draw/ai modes
+    if (currentTool === 'draw' || currentTool === 'ai') {
+        clearPreview();
     }
 }
 
@@ -1023,6 +1252,9 @@ function findBoxAtPoint(x, y) {
 async function handleSAMClick(x, y) {
     showToast('🤖 Running AI detection...');
 
+    // Show preview at clicked location
+    updatePreview(x, y, 'AI Detecting...');
+
     try {
         const response = await fetch('/api/sam_segment', {
             method: 'POST',
@@ -1045,6 +1277,14 @@ async function handleSAMClick(x, y) {
                 addBox(box.x_center, box.y_center, box.width, box.height);
             });
             showToast(`✓ Detected ${result.boxes.length} bird(s)`);
+
+            // Update preview to show first detected box
+            if (result.boxes.length > 0) {
+                const firstBox = boxes[boxes.length - 1];  // Last added box
+                const centerX = firstBox.x_center * canvas.width;
+                const centerY = firstBox.y_center * canvas.height;
+                updatePreview(centerX, centerY, 'Detected!');
+            }
         } else {
             showToast('⚠️ No birds detected at this location');
         }
@@ -1063,21 +1303,21 @@ function redrawCanvas() {
 
     // Draw all boxes
     boxes.forEach(box => {
-        const isSelected = selectedBoxId === box.id;
-        const isHovered = hoveredBoxId === box.id;
+        const isSelected = (currentTool === 'edit') && (selectedBoxId === box.id);
+        const isHovered = (currentTool === 'edit') && (hoveredBoxId === box.id);
 
         const x = box.x_center * canvas.width - (box.width * canvas.width) / 2;
         const y = box.y_center * canvas.height - (box.height * canvas.height) / 2;
         const w = box.width * canvas.width;
         const h = box.height * canvas.height;
 
-        // Draw box
+        // Draw box (highlight only in edit mode)
         ctx.setLineDash([]);
         if (isSelected) {
-            ctx.strokeStyle = '#7cb342';  // Green for selected
+            ctx.strokeStyle = '#7cb342';  // Green for selected (edit mode only)
             ctx.lineWidth = 4;
         } else if (isHovered) {
-            ctx.strokeStyle = '#FFA500';  // Orange for hovered
+            ctx.strokeStyle = '#FFA500';  // Orange for hovered (edit mode only)
             ctx.lineWidth = 4;
         } else {
             ctx.strokeStyle = '#D97757';  // Default orange
@@ -1097,15 +1337,38 @@ function redrawCanvas() {
             ctx.fillText(text, x + 6, y - 6);
         }
 
-        // Draw corner handles for selected box in edit mode
+        // Draw resize handles for selected box in edit mode
         if (isSelected && currentTool === 'edit') {
-            const handleSize = 8;
-            ctx.fillStyle = '#7cb342';
-            // Draw corner handles
-            ctx.fillRect(x - handleSize/2, y - handleSize/2, handleSize, handleSize);  // NW
-            ctx.fillRect(x + w - handleSize/2, y - handleSize/2, handleSize, handleSize);  // NE
-            ctx.fillRect(x - handleSize/2, y + h - handleSize/2, handleSize, handleSize);  // SW
-            ctx.fillRect(x + w - handleSize/2, y + h - handleSize/2, handleSize, handleSize);  // SE
+            const handleSize = 10;
+            ctx.fillStyle = '#fff';
+            ctx.strokeStyle = '#7cb342';
+            ctx.lineWidth = 2;
+
+            // Draw corner handles (larger and more visible)
+            const corners = [
+                [x, y],                 // NW
+                [x + w, y],            // NE
+                [x, y + h],            // SW
+                [x + w, y + h]         // SE
+            ];
+
+            corners.forEach(([cx, cy]) => {
+                ctx.fillRect(cx - handleSize/2, cy - handleSize/2, handleSize, handleSize);
+                ctx.strokeRect(cx - handleSize/2, cy - handleSize/2, handleSize, handleSize);
+            });
+
+            // Draw edge handles (midpoints)
+            const edges = [
+                [x + w/2, y],          // N
+                [x + w/2, y + h],      // S
+                [x, y + h/2],          // W
+                [x + w, y + h/2]       // E
+            ];
+
+            edges.forEach(([ex, ey]) => {
+                ctx.fillRect(ex - handleSize/2, ey - handleSize/2, handleSize, handleSize);
+                ctx.strokeRect(ex - handleSize/2, ey - handleSize/2, handleSize, handleSize);
+            });
         }
     });
 
@@ -1122,12 +1385,24 @@ function selectTool(tool) {
     document.getElementById('tool-' + tool).classList.add('active');
     document.getElementById('current-tool').textContent = tool.charAt(0).toUpperCase() + tool.slice(1);
 
-    if (tool === 'draw' || tool === 'ai') {
-        canvas.style.cursor = 'crosshair';
-    } else if (tool === 'edit') {
+    if (tool === 'edit') {
         canvas.style.cursor = 'pointer';
     } else {
-        canvas.style.cursor = 'grab';
+        canvas.style.cursor = 'crosshair';
+
+        // Clear selection when leaving edit mode
+        selectedBoxId = null;
+        redrawCanvas();
+        clearPreview();
+
+        // Reset right sidebar
+        const content = document.getElementById('classification-content');
+        content.innerHTML = `
+            <div class="empty-state">
+                <div class="empty-icon">🦅</div>
+                <div class="empty-text">Switch to Edit mode and<br>click a bird to identify</div>
+            </div>
+        `;
     }
 }
 
@@ -1143,64 +1418,211 @@ function addBox(xCenter, yCenter, width, height) {
         confidence: null
     };
     boxes.push(box);
-    updateBoxList();
+    updateBoxCount();
     redrawCanvas();
     return box;
 }
 
-// Update box list with hover support
-function updateBoxList() {
-    const boxList = document.getElementById('box-list');
-    const boxCount = document.getElementById('box-count');
-    boxCount.textContent = boxes.length;
+// Update box count display
+function updateBoxCount() {
+    try {
+        const boxCount = document.getElementById('box-count');
+        if (boxCount) {
+            boxCount.textContent = boxes.length;
+        }
 
-    if (boxes.length === 0) {
-        boxList.innerHTML = `
-            <div class="empty-state">
-                <div class="empty-icon">📦</div>
-                <div class="empty-text">No boxes yet.<br>Draw or use AI detect to find birds.</div>
-            </div>
-        `;
-        return;
+        const previewInfoLeft = document.getElementById('preview-info-left');
+        if (previewInfoLeft) {
+            previewInfoLeft.innerHTML = `<span>${boxes.length}</span> birds detected`;
+        }
+
+        console.log(`Box count updated: ${boxes.length} birds`);
+    } catch (e) {
+        console.error('Update box count error:', e);
     }
-
-    boxList.innerHTML = boxes.map((box, idx) => `
-        <div class="box-item ${selectedBoxId === box.id ? 'selected' : ''}"
-             onclick="selectBox(${box.id})"
-             onmouseenter="hoveredBoxId = ${box.id}; redrawCanvas()"
-             onmouseleave="hoveredBoxId = null; redrawCanvas()">
-            <div class="box-header">
-                <span class="box-id">Bird #${idx + 1}</span>
-            </div>
-            ${box.species ?
-                `<div class="box-species" style="margin-bottom: 0.5rem; color: var(--success); font-weight: 600;">${box.species}</div>
-                 <div style="display: flex; gap: 0.5rem;">
-                    <button class="identify-btn" style="flex: 1; background: var(--surface-light); color: var(--text-primary);" onclick="event.stopPropagation(); selectAndIdentify(${box.id})">
-                        Edit Species
-                    </button>
-                    <button class="identify-btn" style="width: 36px; padding: 0; background: rgba(231, 76, 60, 0.2); color: #e74c3c;" onclick="event.stopPropagation(); deleteBox(${box.id})" title="Delete box">
-                        ×
-                    </button>
-                 </div>` :
-                `<div class="box-species box-unidentified">Not identified</div>
-                 <div style="display: flex; gap: 0.5rem;">
-                    <button class="identify-btn" style="flex: 1;" onclick="event.stopPropagation(); selectAndIdentify(${box.id})">
-                        Identify Species
-                    </button>
-                    <button class="identify-btn" style="width: 36px; padding: 0; background: rgba(231, 76, 60, 0.2); color: #e74c3c;" onclick="event.stopPropagation(); deleteBox(${box.id})" title="Delete box">
-                        ×
-                    </button>
-                 </div>`
-            }
-        </div>
-    `).join('');
 }
 
-// Select box
+// Update live preview with current work area
+function updatePreview(centerX, centerY, label = 'Drawing') {
+    if (!imageObj || !imageObj.complete || !previewCanvas || !previewCtx) return;
+
+    try {
+        const previewEmpty = document.getElementById('preview-empty');
+        const previewModeEl = document.getElementById('preview-mode');
+
+        if (!previewEmpty || !previewModeEl) return;
+
+        // Hide empty state
+        previewEmpty.style.display = 'none';
+        previewCanvas.style.display = 'block';
+
+        // Update mode label
+        previewModeEl.textContent = label;
+
+        // Calculate crop region (centered on current point)
+        const cropSize = PREVIEW_SIZE / PREVIEW_ZOOM;
+        const cropX = Math.max(0, Math.min(canvas.width - cropSize, centerX - cropSize / 2));
+        const cropY = Math.max(0, Math.min(canvas.height - cropSize, centerY - cropSize / 2));
+        const cropW = Math.min(cropSize, canvas.width - cropX);
+        const cropH = Math.min(cropSize, canvas.height - cropY);
+
+        // Clear and draw zoomed preview
+        previewCtx.fillStyle = '#1a1614';
+        previewCtx.fillRect(0, 0, PREVIEW_SIZE, PREVIEW_SIZE);
+
+        const scale = PREVIEW_ZOOM;
+        const offsetX = (PREVIEW_SIZE - cropW * scale) / 2;
+        const offsetY = (PREVIEW_SIZE - cropH * scale) / 2;
+
+        previewCtx.drawImage(
+            imageObj,
+            cropX, cropY, cropW, cropH,
+            offsetX, offsetY, cropW * scale, cropH * scale
+        );
+
+        // Draw crosshair at center
+        const centerPreviewX = PREVIEW_SIZE / 2;
+        const centerPreviewY = PREVIEW_SIZE / 2;
+
+        previewCtx.strokeStyle = '#D97757';
+        previewCtx.lineWidth = 2;
+        previewCtx.setLineDash([4, 4]);
+
+        // Horizontal line
+        previewCtx.beginPath();
+        previewCtx.moveTo(centerPreviewX - 15, centerPreviewY);
+        previewCtx.lineTo(centerPreviewX + 15, centerPreviewY);
+        previewCtx.stroke();
+
+        // Vertical line
+        previewCtx.beginPath();
+        previewCtx.moveTo(centerPreviewX, centerPreviewY - 15);
+        previewCtx.lineTo(centerPreviewX, centerPreviewY + 15);
+        previewCtx.stroke();
+
+        previewCtx.setLineDash([]);
+    } catch (e) {
+        console.error('Preview update error:', e);
+    }
+}
+
+// Update preview for selected box
+function updatePreviewForBox(box) {
+    if (!box || !imageObj || !imageObj.complete || !previewCanvas || !previewCtx) return;
+
+    try {
+        const previewEmpty = document.getElementById('preview-empty');
+        const previewModeEl = document.getElementById('preview-mode');
+
+        if (!previewEmpty || !previewModeEl) return;
+
+        previewEmpty.style.display = 'none';
+        previewCanvas.style.display = 'block';
+
+        const boxIndex = boxes.indexOf(box) + 1;
+        previewModeEl.textContent = `Bird #${boxIndex}`;
+
+        // Calculate box center in canvas coordinates
+        const centerX = box.x_center * canvas.width;
+        const centerY = box.y_center * canvas.height;
+
+        // Calculate crop region
+        const cropSize = PREVIEW_SIZE / PREVIEW_ZOOM;
+        const cropX = Math.max(0, Math.min(canvas.width - cropSize, centerX - cropSize / 2));
+        const cropY = Math.max(0, Math.min(canvas.height - cropSize, centerY - cropSize / 2));
+        const cropW = Math.min(cropSize, canvas.width - cropX);
+        const cropH = Math.min(cropSize, canvas.height - cropY);
+
+        // Clear and draw
+        previewCtx.fillStyle = '#1a1614';
+        previewCtx.fillRect(0, 0, PREVIEW_SIZE, PREVIEW_SIZE);
+
+        const scale = PREVIEW_ZOOM;
+        const offsetX = (PREVIEW_SIZE - cropW * scale) / 2;
+        const offsetY = (PREVIEW_SIZE - cropH * scale) / 2;
+
+        previewCtx.drawImage(
+            imageObj,
+            cropX, cropY, cropW, cropH,
+            offsetX, offsetY, cropW * scale, cropH * scale
+        );
+
+        // Draw box outline on preview
+        const boxX = ((box.x_center * canvas.width - (box.width * canvas.width) / 2) - cropX) * scale + offsetX;
+        const boxY = ((box.y_center * canvas.height - (box.height * canvas.height) / 2) - cropY) * scale + offsetY;
+        const boxW = (box.width * canvas.width) * scale;
+        const boxH = (box.height * canvas.height) * scale;
+
+        previewCtx.strokeStyle = '#7cb342';
+        previewCtx.lineWidth = 3;
+        previewCtx.strokeRect(boxX, boxY, boxW, boxH);
+    } catch (e) {
+        console.error('Preview box update error:', e);
+    }
+}
+
+// Clear preview
+function clearPreview() {
+    try {
+        const previewEmpty = document.getElementById('preview-empty');
+        const previewModeEl = document.getElementById('preview-mode');
+
+        if (!previewEmpty || !previewModeEl || !previewCanvas) return;
+
+        previewCanvas.style.display = 'none';
+        previewEmpty.style.display = 'flex';
+        previewModeEl.textContent = 'Idle';
+    } catch (e) {
+        console.error('Clear preview error:', e);
+    }
+}
+
+// Select box - automatically opens species identification (only in edit mode)
 function selectBox(boxId) {
+    console.log('selectBox called:', boxId, 'currentTool:', currentTool);
+
     selectedBoxId = boxId;
-    updateBoxList();
+    updateBoxCount();
     redrawCanvas();
+    updateOverlay();
+
+    const selectedBox = boxes.find(b => b.id === boxId);
+
+    // Update preview and show identification in edit mode
+    if (boxId && currentTool === 'edit' && selectedBox) {
+        console.log('Opening species ID for bird:', boxes.indexOf(selectedBox) + 1);
+        updatePreviewForBox(selectedBox);
+        showIdentificationChoice();
+    }
+}
+
+// Update overlay with current selection info
+function updateOverlay() {
+    const selectedBox = boxes.find(b => b.id === selectedBoxId);
+    const overlay = document.querySelector('.canvas-overlay');
+
+    if (selectedBox) {
+        const boxIndex = boxes.indexOf(selectedBox) + 1;
+        const statusText = selectedBox.species
+            ? `Bird #${boxIndex} (${selectedBox.species})`
+            : `Bird #${boxIndex} - Not identified`;
+
+        // Update or create status line
+        let statusDiv = overlay.querySelector('.box-status');
+        if (!statusDiv) {
+            statusDiv = document.createElement('div');
+            statusDiv.className = 'box-status';
+            statusDiv.style.cssText = 'margin-top: 0.5rem; padding-top: 0.5rem; border-top: 1px solid rgba(217, 119, 87, 0.3); font-weight: 600; color: var(--orange-primary);';
+            overlay.insertBefore(statusDiv, overlay.children[2]);  // Insert before shortcuts
+        }
+        statusDiv.textContent = `Selected: ${statusText}`;
+    } else {
+        // Remove status if nothing selected
+        const statusDiv = overlay.querySelector('.box-status');
+        if (statusDiv) {
+            statusDiv.remove();
+        }
+    }
 }
 
 // Select and start identification
@@ -1211,27 +1633,98 @@ function selectAndIdentify(boxId) {
 
 // Show identification choice (Decision Tree or Search)
 function showIdentificationChoice() {
-    if (!selectedBoxId) return;
+    console.log('showIdentificationChoice called');
+    if (!selectedBoxId) {
+        console.log('No selected box ID');
+        return;
+    }
+
+    const selectedBox = boxes.find(b => b.id === selectedBoxId);
+    if (!selectedBox) {
+        console.log('Selected box not found in array');
+        return;
+    }
+
+    const boxNumber = boxes.indexOf(selectedBox) + 1;
+    console.log('Showing species ID for bird #', boxNumber);
+
+    // Create bird crop canvas
+    const cropCanvas = document.createElement('canvas');
+    const cropSize = 300;
+    cropCanvas.width = cropSize;
+    cropCanvas.height = cropSize;
+    const cropCtx = cropCanvas.getContext('2d');
+
+    if (imageObj && imageObj.complete) {
+        // Calculate box coordinates
+        const boxX = selectedBox.x_center * canvas.width - (selectedBox.width * canvas.width) / 2;
+        const boxY = selectedBox.y_center * canvas.height - (selectedBox.height * canvas.height) / 2;
+        const boxW = selectedBox.width * canvas.width;
+        const boxH = selectedBox.height * canvas.height;
+
+        // Add padding around crop
+        const padding = 0.2; // 20% padding
+        const cropX = Math.max(0, boxX - boxW * padding);
+        const cropY = Math.max(0, boxY - boxH * padding);
+        const cropW = Math.min(canvas.width - cropX, boxW * (1 + 2 * padding));
+        const cropH = Math.min(canvas.height - cropY, boxH * (1 + 2 * padding));
+
+        // Draw cropped and scaled image
+        const scale = Math.min(cropSize / cropW, cropSize / cropH);
+        const offsetX = (cropSize - cropW * scale) / 2;
+        const offsetY = (cropSize - cropH * scale) / 2;
+
+        cropCtx.fillStyle = '#1a1614';
+        cropCtx.fillRect(0, 0, cropSize, cropSize);
+        cropCtx.drawImage(imageObj, cropX, cropY, cropW, cropH, offsetX, offsetY, cropW * scale, cropH * scale);
+
+        // Draw box outline on crop
+        const relBoxX = (boxX - cropX) * scale + offsetX;
+        const relBoxY = (boxY - cropY) * scale + offsetY;
+        const relBoxW = boxW * scale;
+        const relBoxH = boxH * scale;
+
+        cropCtx.strokeStyle = '#7cb342';
+        cropCtx.lineWidth = 3;
+        cropCtx.strokeRect(relBoxX, relBoxY, relBoxW, relBoxH);
+    }
 
     const content = document.getElementById('classification-content');
     content.innerHTML = `
-        <div style="padding: 2rem; text-align: center;">
-            <h3 style="font-size: 1.5rem; margin-bottom: 1rem; color: var(--text-primary);">
-                How would you like to identify this bird?
+        <div style="background: var(--surface-light); border-bottom: 1px solid rgba(217, 119, 87, 0.2);">
+            <div style="aspect-ratio: 1; display: flex; align-items: center; justify-content: center; overflow: hidden;">
+                <canvas id="bird-crop-canvas" style="max-width: 100%; max-height: 100%;"></canvas>
+            </div>
+            <div style="padding: 0.75rem; text-align: center; background: rgba(217, 119, 87, 0.1);">
+                <div style="font-size: 0.875rem; color: var(--text-muted);">Identifying</div>
+                <div style="font-size: 1.125rem; font-weight: 700; color: var(--orange-primary);">Bird #${boxNumber}</div>
+            </div>
+        </div>
+
+        <div class="classification-inner" style="text-align: center; padding: 1.5rem;">
+            <h3 style="font-size: 1.125rem; margin-bottom: 0.75rem; color: var(--text-primary);">
+                How would you like to identify?
             </h3>
-            <p style="color: var(--text-secondary); margin-bottom: 2rem;">
-                Use the guided questions or search directly
+            <p style="color: var(--text-secondary); margin-bottom: 1.25rem; font-size: 0.875rem;">
+                Use guided questions or search directly
             </p>
 
-            <button class="btn-primary" style="width: 100%; margin-bottom: 1rem;" onclick="startQuestionTree()">
-                Use Decision Tree
+            <button class="btn-primary" style="width: 100%; margin-bottom: 0.75rem;" onclick="startQuestionTree()">
+                🌳 Use Decision Tree
             </button>
 
-            <button class="btn-secondary" style="width: 100%; margin-top: 0;" onclick="showSearchUI()">
-                Search Species
+            <button class="btn-secondary" style="width: 100%;" onclick="showSearchUI()">
+                🔍 Search Species
             </button>
         </div>
     `;
+
+    // Insert the crop canvas
+    const insertedCanvas = document.getElementById('bird-crop-canvas');
+    const insertedCtx = insertedCanvas.getContext('2d');
+    insertedCanvas.width = cropSize;
+    insertedCanvas.height = cropSize;
+    insertedCtx.drawImage(cropCanvas, 0, 0);
 }
 
 // Start decision tree
@@ -1247,21 +1740,23 @@ function showQuestionUI() {
     const question = QUESTION_TREE[currentQuestion];
 
     content.innerHTML = `
-        <div class="question-section">
-            <div class="question-number">Question ${currentQuestion + 1} of ${QUESTION_TREE.length}</div>
-            <div class="question-text">${question.question}</div>
-            <div class="answer-grid">
-                ${question.options.map(option => `
-                    <div class="answer-option" onclick="answerQuestion('${option}')">
-                        <span>${option}</span>
-                    </div>
-                `).join('')}
+        <div class="classification-inner">
+            <div class="question-section">
+                <div class="question-number">Question ${currentQuestion + 1} of ${QUESTION_TREE.length}</div>
+                <div class="question-text">${question.question}</div>
+                <div class="answer-grid">
+                    ${question.options.map(option => `
+                        <div class="answer-option" onclick="answerQuestion('${option}')">
+                            <span>${option}</span>
+                        </div>
+                    `).join('')}
+                </div>
             </div>
-        </div>
 
-        <button class="btn-secondary" style="margin-top: 1rem;" onclick="showIdentificationChoice()">
-            ← Back to Options
-        </button>
+            <button class="btn-secondary" style="margin-top: 1rem; width: 100%;" onclick="showIdentificationChoice()">
+                ← Back to Options
+            </button>
+        </div>
     `;
 }
 
@@ -1284,9 +1779,9 @@ function answerQuestion(answer) {
 function showSearchUI() {
     const content = document.getElementById('classification-content');
     content.innerHTML = `
-        <div style="padding: 1.5rem;">
+        <div class="classification-inner">
             <h3 style="font-size: 1.25rem; margin-bottom: 1rem; color: var(--text-primary);">
-                Search Species
+                🔍 Search Species
             </h3>
 
             <input
@@ -1512,7 +2007,7 @@ async function selectSpecies(code, commonName) {
 
     // User confirmed, save the species
     box.species = code;
-    updateBoxList();
+    updateBoxCount();
     redrawCanvas();
 
     // Show success message
@@ -1530,36 +2025,9 @@ async function selectSpecies(code, commonName) {
 }
 
 // Delete box
+// This is an alias for deleteBoxQuick - both do the same thing now
 function deleteBox(boxId) {
-    const box = boxes.find(b => b.id === boxId);
-    if (!box) return;
-
-    const boxIndex = boxes.indexOf(box) + 1;
-    const message = box.species
-        ? `Delete Bird #${boxIndex} (${box.species})?`
-        : `Delete Bird #${boxIndex}?`;
-
-    if (!confirm(message)) {
-        return; // User cancelled
-    }
-
-    // Remove box
-    boxes = boxes.filter(b => b.id !== boxId);
-
-    // Clear selection if this was selected
-    if (selectedBoxId === boxId) {
-        selectedBoxId = null;
-        document.getElementById('classification-content').innerHTML = `
-            <div class="empty-state">
-                <div class="empty-icon">🦅</div>
-                <div class="empty-text">Select a bounding box<br>to start species identification.</div>
-            </div>
-        `;
-    }
-
-    updateBoxList();
-    redrawCanvas();
-    showToast('✓ Box deleted');
+    deleteBoxQuick(boxId);
 }
 
 // Show toast notification
@@ -1720,8 +2188,6 @@ function zoomOut() {
 
 function resetZoom() {
     zoomLevel = 1;
-    viewOffsetX = 0;
-    viewOffsetY = 0;
     applyZoom();
 }
 
@@ -1740,23 +2206,68 @@ function applyZoom() {
 
 // Keyboard shortcuts
 document.addEventListener('keydown', (e) => {
-    if (e.target.tagName === 'INPUT') return;
+    // Don't trigger shortcuts when typing in input fields
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
 
-    if (e.key === 'd') selectTool('draw');
-    if (e.key === 's') selectTool('ai');
-    if (e.key === 'e') selectTool('edit');
-    if (e.key === 'h') selectTool('pan');
-    if (e.key === 'r') resetZoom();
+    // Tool shortcuts
+    if (e.key === 'd' && !e.shiftKey && !e.ctrlKey) selectTool('draw');
+    if (e.key === 's' && !e.shiftKey && !e.ctrlKey) selectTool('ai');
+    if (e.key === 'e' && !e.shiftKey && !e.ctrlKey) selectTool('edit');
+    if (e.key === 'r' && !e.shiftKey && !e.ctrlKey) resetZoom();
 
-    if (e.key === 'ArrowLeft') {
+    // Save and continue: Ctrl+S (standard save shortcut)
+    if (e.key === 's' && e.ctrlKey) {
+        e.preventDefault();
+        saveAndNext();
+    }
+
+    // Delete selected box: Delete or Backspace
+    if ((e.key === 'Delete' || e.key === 'Backspace') && selectedBoxId) {
+        e.preventDefault();
+        deleteBoxQuick(selectedBoxId);
+    }
+
+    // Deselect: Escape
+    if (e.key === 'Escape') {
+        selectedBoxId = null;
+        updateBoxCount();
+        redrawCanvas();
+        updateOverlay();
+    }
+
+    // Navigation
+    if (e.key === 'ArrowLeft' && !e.shiftKey) {
         e.preventDefault();
         navigateToPrev();
     }
-    if (e.key === 'ArrowRight') {
+    if (e.key === 'ArrowRight' && !e.shiftKey) {
         e.preventDefault();
         navigateToNext();
     }
 });
+
+// Quick delete (instant, no confirmation)
+function deleteBoxQuick(boxId) {
+    const box = boxes.find(b => b.id === boxId);
+    if (!box) return;
+
+    const boxIndex = boxes.indexOf(box) + 1;
+
+    // Remove box instantly
+    boxes = boxes.filter(b => b.id !== boxId);
+
+    // Clear selection
+    if (selectedBoxId === boxId) {
+        selectedBoxId = null;
+    }
+
+    updateBoxCount();
+    redrawCanvas();
+    updateOverlay();
+
+    const species = box.species ? ` (${box.species})` : '';
+    showToast(`✓ Bird #${boxIndex}${species} deleted`);
+}
 
 // Handle window resize
 window.addEventListener('resize', () => {
@@ -1768,7 +2279,7 @@ window.addEventListener('resize', () => {
 // Initialize on load
 document.addEventListener('DOMContentLoaded', () => {
     initCanvas();
-    updateBoxList();
+    updateBoxCount();
 });
     </script>
 </body>
