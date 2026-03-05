@@ -25,11 +25,12 @@ cv:
   image_size: 1024
   default_fast_mode: true  # Start in fast mode by default
 
-  # Classification model paths
-  # Swift: Fast classifier (YOLOv8n-cls, 3.5MB, ~2x faster inference)
-  # Apex: Accurate classifier (YOLOv8s-cls, 12MB, better accuracy)
-  classifier_swift: models/classifier_swift.pt
-  classifier_apex: models/classifier_apex.pt
+  # Classification model paths (ONNX format)
+  # Swift: Fast classifier (6MB, ~2x faster inference)
+  # Apex: Accurate classifier (21MB, better accuracy)
+  # Outputs 25 Gulf Coast colonial waterbird species
+  classifier_swift: models/classifier_swift.onnx
+  classifier_apex: models/classifier_apex.onnx
   classifier_species: 25
 
 api:

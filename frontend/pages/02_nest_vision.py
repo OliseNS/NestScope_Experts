@@ -85,11 +85,10 @@ with st.expander("ℹ️ About the Model", expanded=False):
     - Works best for images with multiple birds or distant subjects
 
     ### Species Classification
-    - Detections are automatically grouped into **7 functional categories**:
-      Pelican, Gull, Tern, White Wader, Color Wader, Dark, Shorebird
-    - Each box is **color-coded** by group for quick visual identification
-    - For **expert species identification and training**, use the **Nestperts** platform
-    - Experts can assign precise species codes (e.g., BRPE, LAGU) to each detection
+    - Detections are automatically classified into **25 Gulf Coast waterbird species**
+    - Species are shown as **4-letter codes** (e.g., BRPE=Brown Pelican, LAGU=Laughing Gull)
+    - Boxes are **color-coded** by functional group for quick visual identification
+    - For **expert review and training**, use the **Nestperts** platform to refine predictions
 
     ### Technical Details
     - **Input resolution**: 1024×1024 pixels
@@ -402,14 +401,17 @@ if image_to_process:
                     detection_data = []
                     for i, det in enumerate(detections, 1):
                         bbox = det.get('bbox', [])
+                        species_code = det.get('species_code', '')
+                        species_name = det.get('species_name', '')
                         group = det.get('species_group', '')
                         cls_conf = det.get('species_confidence', 0.0)
                         detection_data.append({
                             "Detection #": i,
-                            "Confidence": f"{det.get('confidence', 0):.2%}",
-                            "Species Group": group.replace("_", " ").title() if group else "—",
-                            "Group Conf": f"{cls_conf:.0%}" if cls_conf else "—",
-                            "Bounding Box": f"[{bbox[0]:.0f}, {bbox[1]:.0f}, {bbox[2]:.0f}, {bbox[3]:.0f}]",
+                            "Detection Conf": f"{det.get('confidence', 0):.2%}",
+                            "Species": f"{species_code}" if species_code != 'UNKNOWN' else "—",
+                            "Common Name": species_name if species_name != 'Unknown' else "—",
+                            "Classification Conf": f"{cls_conf:.0%}" if cls_conf else "—",
+                            "Group": group.replace("_", " ").title() if group and group != 'UNKNOWN' else "—",
                         })
 
                     st.dataframe(pd.DataFrame(detection_data), use_container_width=True)

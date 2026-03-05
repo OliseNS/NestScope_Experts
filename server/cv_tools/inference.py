@@ -15,28 +15,17 @@ from sahi import AutoDetectionModel
 from sahi.predict import get_sliced_prediction
 from sahi.utils.cv import read_image_as_pil
 
-# Species group classification — the classifier outputs 7 functional groups
-CLASSIFIER_GROUPS = {
-    0: 'COLOR_WADER',   # Roseate Spoonbill, Tricolored Heron, etc.
-    1: 'DARK',          # Cormorant, Anhinga, Dark birds
-    2: 'GULL',          # Laughing Gull, Herring Gull, Black Skimmer
-    3: 'PELICAN',       # Brown Pelican, American White Pelican
-    4: 'SHOREBIRD',     # Oystercatcher, Avocet, small shorebirds
-    5: 'TERN',          # Royal Tern, Sandwich Tern, Gull-billed Tern
-    6: 'WHITE_WADER',   # Great Egret, Snowy Egret, White Ibis
-}
-
-# Per-group annotation colors in BGR format for OpenCV
-CLASSIFIER_COLORS = {
-    'PELICAN':     (87, 119, 217),   # Claude orange #D97757
-    'GULL':        (42, 200, 100),   # Green
-    'TERN':        (42, 180, 220),   # Cyan/teal
-    'WHITE_WADER': (200, 200, 200),  # Light gray
-    'COLOR_WADER': (200, 60, 220),   # Purple
-    'DARK':        (120, 120, 120),  # Dark gray
-    'SHOREBIRD':   (30, 160, 255),   # Orange-yellow
-    'UNKNOWN':     (87, 119, 217),   # Fall back to Claude orange
-}
+# Import species classifier mapping (25 species, grouped for visualization)
+from server.cv_tools.classifier_species import (
+    CLASSIFIER_SPECIES,
+    SPECIES_COMMON_NAMES,
+    SPECIES_TO_GROUP,
+    GROUP_COLORS,
+    get_species_code,
+    get_species_name,
+    get_species_group,
+    get_group_color,
+)
 
 
 # Load model paths from config.yaml
@@ -755,21 +744,32 @@ class BirdDetector:
             print(f"Warning: Could not load classifier {path}: {e}")
             self.classifier_session = None
 
-    def classify_crop(self, crop_bgr: np.ndarray, fast_mode: bool = True) -> tuple:
+    def classify_crop(self, crop_bgr: np.ndarray, fast_mode: bool = True, top_k: int = 1) -> dict:
         """
-        Classify a bird crop into one of 7 functional groups.
+        Classify a bird crop into one of 25 species.
 
         Args:
             crop_bgr: Bird crop in BGR format (any size)
             fast_mode: Use Swift classifier (True) or Apex (False)
+            top_k: Number of top predictions to return (default: 1, max: 5)
 
         Returns:
-            Tuple of (group_name: str, confidence: float)
-            group_name is one of CLASSIFIER_GROUPS values or 'UNKNOWN'
+            Dict with:
+                - species_code: 4-letter code (e.g., 'BRPE')
+                - species_name: Common name (e.g., 'Brown Pelican')
+                - confidence: Float probability (0-1)
+                - group: Functional group (e.g., 'PELICAN') for color-coding
+                - top_predictions: List of top-k predictions if top_k > 1
         """
         self._load_classifier(fast_mode)
         if self.classifier_session is None:
-            return ('UNKNOWN', 0.0)
+            return {
+                'species_code': 'UNKNOWN',
+                'species_name': 'Unknown',
+                'confidence': 0.0,
+                'group': 'UNKNOWN',
+                'top_predictions': []
+            }
 
         try:
             # Resize to 224x224, BGR→RGB, normalize [0,1], NCHW float32
@@ -784,16 +784,50 @@ class BirdDetector:
             # Softmax to get probabilities
             exp_out = np.exp(output - output.max())
             probs = exp_out / exp_out.sum()
-            class_idx = int(np.argmax(probs))
-            confidence = float(probs[class_idx])
 
-            return (CLASSIFIER_GROUPS.get(class_idx, 'UNKNOWN'), round(confidence, 3))
+            # Get top-k predictions
+            top_k = min(max(1, top_k), 5)  # Clamp to [1, 5]
+            top_indices = np.argsort(probs)[::-1][:top_k]
+
+            top_predictions = []
+            for idx in top_indices:
+                species_code = get_species_code(int(idx))
+                species_name = get_species_name(species_code)
+                group = get_species_group(species_code)
+                confidence = float(probs[idx])
+
+                top_predictions.append({
+                    'species_code': species_code,
+                    'species_name': species_name,
+                    'confidence': round(confidence, 3),
+                    'group': group
+                })
+
+            # Return top prediction as main result + top-k list
+            # Create a copy to avoid circular reference
+            top_result = {
+                'species_code': top_predictions[0]['species_code'],
+                'species_name': top_predictions[0]['species_name'],
+                'confidence': top_predictions[0]['confidence'],
+                'group': top_predictions[0]['group'],
+                'top_predictions': top_predictions
+            }
+
+            return top_result
+
         except Exception as e:
-            return ('UNKNOWN', 0.0)
+            print(f"Classification error: {e}")
+            return {
+                'species_code': 'UNKNOWN',
+                'species_name': 'Unknown',
+                'confidence': 0.0,
+                'group': 'UNKNOWN',
+                'top_predictions': []
+            }
 
     def _classify_detections(self, image_bgr: np.ndarray, detections: List[dict], fast_mode: bool = True) -> List[dict]:
         """
-        Run species classifier on each detected bird crop and add group labels.
+        Run species classifier on each detected bird crop and add species info.
 
         Args:
             image_bgr: Full original image in BGR format
@@ -801,7 +835,11 @@ class BirdDetector:
             fast_mode: Use Swift (True) or Apex (False) classifier
 
         Returns:
-            Same detections list with 'species_group' and 'species_confidence' added
+            Same detections list with species info added:
+                - species_code: 4-letter code (e.g., 'BRPE')
+                - species_name: Common name (e.g., 'Brown Pelican')
+                - species_group: Functional group (e.g., 'PELICAN')
+                - species_confidence: Classification confidence (0-1)
         """
         h, w = image_bgr.shape[:2]
         for det in detections:
@@ -810,12 +848,19 @@ class BirdDetector:
             x1, y1 = max(0, x1), max(0, y1)
             x2, y2 = min(w, x2), min(h, y2)
             crop = image_bgr[y1:y2, x1:x2]
+
             if crop.size > 0 and (x2 - x1) >= 5 and (y2 - y1) >= 5:
-                group, conf = self.classify_crop(crop, fast_mode)
+                result = self.classify_crop(crop, fast_mode, top_k=1)
+                det['species_code'] = result['species_code']
+                det['species_name'] = result['species_name']
+                det['species_group'] = result['group']
+                det['species_confidence'] = result['confidence']
             else:
-                group, conf = 'UNKNOWN', 0.0
-            det['species_group'] = group
-            det['species_confidence'] = conf
+                det['species_code'] = 'UNKNOWN'
+                det['species_name'] = 'Unknown'
+                det['species_group'] = 'UNKNOWN'
+                det['species_confidence'] = 0.0
+
         return detections
 
     def _draw_custom_annotations_from_detections(self, image, detections: List[dict]):
@@ -836,21 +881,24 @@ class BirdDetector:
             x1, y1, x2, y2 = det['bbox']
             x1, y1, x2, y2 = int(x1), int(y1), int(x2), int(y2)
 
-            # Use species-specific color if available, else Claude orange
+            # Use species group color (for visual distinction)
             group = det.get('species_group', 'UNKNOWN')
-            box_color = CLASSIFIER_COLORS.get(group, CLASSIFIER_COLORS['UNKNOWN'])
+            box_color = get_group_color(group)
 
             cv2.rectangle(annotated_img, (x1, y1), (x2, y2), box_color, thickness)
 
-            # Draw species group label above box (only if classification ran)
-            if group and group != 'UNKNOWN':
-                label = group.replace('_', ' ')
-                font_scale = 0.45
-                font_thickness = 1
+            # Draw species code label above box (only if classification ran)
+            species_code = det.get('species_code', '')
+            if species_code and species_code != 'UNKNOWN':
+                label = species_code  # Show 4-letter code (e.g., 'BRPE')
+                font_scale = 0.5
+                font_thickness = 2
                 (tw, th), _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, font_scale, font_thickness)
                 label_y = max(y1 - 4, th + 4)
-                cv2.rectangle(annotated_img, (x1, label_y - th - 4), (x1 + tw + 4, label_y), box_color, -1)
-                cv2.putText(annotated_img, label, (x1 + 2, label_y - 2),
+                # Draw label background (same color as box)
+                cv2.rectangle(annotated_img, (x1, label_y - th - 6), (x1 + tw + 6, label_y), box_color, -1)
+                # Draw label text in white
+                cv2.putText(annotated_img, label, (x1 + 3, label_y - 3),
                             cv2.FONT_HERSHEY_SIMPLEX, font_scale, (255, 255, 255), font_thickness, cv2.LINE_AA)
 
         return annotated_img

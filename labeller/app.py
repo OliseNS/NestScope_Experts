@@ -57,6 +57,9 @@ class Config:
 MOBILESAM_MODEL = None
 INFERENCE_LOCK = threading.Lock()
 
+# Species classifier (lazy loaded)
+BIRD_DETECTOR = None
+
 # Image cache to reduce redundant loading
 IMAGE_CACHE = {
     "filename": None,
@@ -247,7 +250,7 @@ def get_question_tree():
     ]
 
 # ============================================================================
-# MOBILESAM SEGMENTATION
+# MOBILESAM SEGMENTATION & SPECIES CLASSIFICATION
 # ============================================================================
 
 def load_sam_model():
@@ -267,6 +270,24 @@ def load_sam_model():
             print(f"✗ Error loading MobileSAM: {e}")
             return None
     return MOBILESAM_MODEL
+
+def load_classifier():
+    """Lazy load species classifier"""
+    global BIRD_DETECTOR
+    if BIRD_DETECTOR is None:
+        try:
+            # Import BirdDetector from the server CV tools
+            sys.path.insert(0, os.path.join(PROJECT_ROOT, 'server'))
+            from cv_tools.inference import BirdDetector
+
+            BIRD_DETECTOR = BirdDetector()
+            print(f"✓ Species classifier loaded")
+        except Exception as e:
+            print(f"✗ Error loading species classifier: {e}")
+            import traceback
+            traceback.print_exc()
+            return None
+    return BIRD_DETECTOR
 
 def sam_segment_point(image_path, points):
     """
@@ -572,9 +593,10 @@ def save_annotation():
 
 @app.route('/api/species')
 def api_species():
-    """Get all species data"""
+    """Get all species data sorted alphabetically"""
     species = get_species_list()
-    return jsonify(species)
+    # Sort by common name
+    return jsonify(sorted(species, key=lambda x: x['common_name']))
 
 @app.route('/api/species/filter', methods=['POST'])
 def filter_species():
@@ -631,6 +653,96 @@ def sam_status():
         'device': 'cuda' if torch.cuda.is_available() else 'cpu'
     })
 
+@app.route('/api/classify_crop', methods=['POST'])
+def classify_crop():
+    """
+    Classify a bird crop and return top-5 species predictions
+
+    Request JSON:
+        {
+            "image_name": "image.jpg",
+            "bbox": {
+                "x_center": 0.5,
+                "y_center": 0.5,
+                "width": 0.1,
+                "height": 0.1
+            },
+            "fast_mode": true  # optional, default true
+        }
+
+    Returns:
+        {
+            "predictions": [
+                {
+                    "species_code": "BRPE",
+                    "species_name": "Brown Pelican",
+                    "confidence": 0.85,
+                    "group": "PELICAN"
+                },
+                ...  # top 5 predictions
+            ],
+            "crop_size": [width, height]
+        }
+    """
+    try:
+        data = request.json
+        image_name = data.get('image_name')
+        bbox = data.get('bbox')
+        fast_mode = data.get('fast_mode', True)
+
+        if not image_name or not bbox:
+            return jsonify({'error': 'Missing image_name or bbox'}), 400
+
+        # Load image
+        img_dir = get_image_dir()
+        image_path = os.path.join(img_dir, image_name)
+
+        if not os.path.exists(image_path):
+            return jsonify({'error': f'Image not found: {image_name}'}), 404
+
+        # Load classifier
+        detector = load_classifier()
+        if detector is None:
+            return jsonify({'error': 'Classifier not loaded'}), 500
+
+        # Load image
+        image = cv2.imread(image_path)
+        if image is None:
+            return jsonify({'error': 'Failed to read image'}), 500
+
+        h, w = image.shape[:2]
+
+        # Convert YOLO format (normalized) to pixel coordinates
+        x_center = bbox['x_center'] * w
+        y_center = bbox['y_center'] * h
+        box_w = bbox['width'] * w
+        box_h = bbox['height'] * h
+
+        x1 = int(max(0, x_center - box_w / 2))
+        y1 = int(max(0, y_center - box_h / 2))
+        x2 = int(min(w, x_center + box_w / 2))
+        y2 = int(min(h, y_center + box_h / 2))
+
+        # Crop bird
+        crop = image[y1:y2, x1:x2]
+
+        if crop.size == 0:
+            return jsonify({'error': 'Invalid crop dimensions'}), 400
+
+        # Classify with top-5 predictions
+        result = detector.classify_crop(crop, fast_mode=fast_mode, top_k=5)
+
+        return jsonify({
+            'predictions': result.get('top_predictions', []),
+            'crop_size': [crop.shape[1], crop.shape[0]]
+        })
+
+    except Exception as e:
+        print(f"Classification error: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
 @app.route('/api/user_stats/<username>')
 def user_stats(username):
     """Get user statistics"""
@@ -639,19 +751,59 @@ def user_stats(username):
 
 @app.route('/api/species/search', methods=['GET'])
 def search_species():
-    """Search species by name"""
-    query = request.args.get('q', '').lower()
+    """Search species by name or code with smart fuzzy matching"""
+    query = request.args.get('q', '').strip()
 
-    if not query or len(query) < 2:
+    # If empty query, return ALL species sorted alphabetically
+    if not query:
+        all_species = get_species_list()
+        return jsonify(sorted(all_species, key=lambda x: x['common_name']))
+
+    # Allow single character search for common codes
+    if len(query) < 1:
         return jsonify([])
 
     all_species = get_species_list()
+    query_lower = query.lower()
 
-    # Filter species by common name or code
-    results = [
-        s for s in all_species
-        if query in s['common_name'].lower() or query in s['code'].lower()
-    ]
+    # Enhanced search with multiple strategies:
+    # 1. Exact code match (case-insensitive)
+    # 2. Code starts with query
+    # 3. Code contains query (for abbreviations like "LAGU" matching "LAGU")
+    # 4. Common name starts with query
+    # 5. Common name contains any word starting with query
+    # 6. Common name contains query anywhere
+
+    exact_code_matches = []
+    code_starts_matches = []
+    code_contains_matches = []
+    name_starts_matches = []
+    name_word_starts_matches = []
+    name_contains_matches = []
+
+    for species in all_species:
+        code_lower = species['code'].lower()
+        name_lower = species['common_name'].lower()
+
+        # Code matching
+        if code_lower == query_lower:
+            exact_code_matches.append(species)
+        elif code_lower.startswith(query_lower):
+            code_starts_matches.append(species)
+        elif query_lower in code_lower:
+            code_contains_matches.append(species)
+        # Name matching
+        elif name_lower.startswith(query_lower):
+            name_starts_matches.append(species)
+        # Check if any word in the name starts with the query
+        elif any(word.startswith(query_lower) for word in name_lower.split()):
+            name_word_starts_matches.append(species)
+        elif query_lower in name_lower:
+            name_contains_matches.append(species)
+
+    # Combine results with priority ordering
+    results = (exact_code_matches + code_starts_matches + code_contains_matches +
+               name_starts_matches + name_word_starts_matches + name_contains_matches)
 
     return jsonify(results[:20])  # Return top 20 matches
 

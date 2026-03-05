@@ -55,7 +55,7 @@ with st.sidebar:
     # View mode selector
     view_mode = st.radio(
         "View Mode",
-        ["Overview Map", "Species Trends", "Colony Deep Dive", "Composition Analysis"],
+        ["Overview Map", "Species Trends", "Colony Deep Dive"],
         help="Choose visualization type"
     )
 
@@ -164,28 +164,6 @@ def load_trend_data(year_start: int, year_end: int):
         """
         colony_df = pd.read_sql_query(colony_query, conn, params=(year_start, year_end))
 
-        # Query: Species composition over time (top 10 species)
-        composition_query = """
-        WITH TopSpecies AS (
-            SELECT SpeciesCode
-            FROM [tblColonyTotals2010-2021_MayJuneCombined]
-            WHERE CAST(Year AS INTEGER) BETWEEN ? AND ?
-            GROUP BY SpeciesCode
-            ORDER BY SUM(CAST(COALESCE(Birds, 0) AS INTEGER)) DESC
-            LIMIT 10
-        )
-        SELECT
-            CAST(Year AS INTEGER) as Year,
-            SpeciesCode,
-            SUM(CAST(COALESCE(Birds, 0) AS INTEGER)) as total_birds
-        FROM [tblColonyTotals2010-2021_MayJuneCombined]
-        WHERE CAST(Year AS INTEGER) BETWEEN ? AND ?
-          AND SpeciesCode IN (SELECT SpeciesCode FROM TopSpecies)
-        GROUP BY Year, SpeciesCode
-        ORDER BY Year, SpeciesCode
-        """
-        composition_df = pd.read_sql_query(composition_query, conn, params=(year_start, year_end, year_start, year_end))
-
         # Query: Growth/decline analysis
         trends_query = """
         WITH FirstYear AS (
@@ -225,7 +203,6 @@ def load_trend_data(year_start: int, year_end: int):
         return {
             "species": species_df,
             "colonies": colony_df,
-            "composition": composition_df,
             "trends_analysis": trends_analysis
         }
     except Exception as e:
@@ -233,7 +210,6 @@ def load_trend_data(year_start: int, year_end: int):
         return {
             "species": pd.DataFrame(),
             "colonies": pd.DataFrame(),
-            "composition": pd.DataFrame(),
             "trends_analysis": pd.DataFrame()
         }
 
@@ -408,7 +384,7 @@ elif view_mode == "Species Trends":
                 name=species,
                 line=dict(color=colors[idx % len(colors)], width=3),
                 marker=dict(size=8),
-                hovertemplate=f"<b>{species}</b><br>Year: %{x}<br>Birds: %{y:,}<extra></extra>"
+                hovertemplate=f"<b>{species}</b><br>Year: %{{x}}<br>Birds: %{{y:,}}<extra></extra>"
             ))
 
         fig.update_layout(
@@ -573,77 +549,6 @@ elif view_mode == "Colony Deep Dive":
                                 st.image(img, use_container_width=True)
         else:
             st.info("No expert annotations for this colony")
-
-else:  # Composition Analysis
-    st.markdown("## 🎨 Species Composition Over Time")
-    st.caption(f"Stacked chart showing population shifts ({year_range[0]}-{year_range[1]})")
-
-    composition_df = data["composition"]
-
-    if not composition_df.empty:
-        pivot_df = composition_df.pivot(index="Year", columns="SpeciesCode", values="total_birds").fillna(0)
-
-        fig = go.Figure()
-        colors = ["#D97757", "#2AB8DC", "#2EC46A", "#F4B942", "#9B59B6",
-                  "#E74C3C", "#3498DB", "#1ABC9C", "#F39C12", "#8E44AD"]
-
-        for idx, species in enumerate(pivot_df.columns):
-            fig.add_trace(go.Scatter(
-                x=pivot_df.index,
-                y=pivot_df[species],
-                mode="lines",
-                name=species,
-                stackgroup="one",
-                fillcolor=colors[idx % len(colors)],
-                line=dict(width=0.5, color=colors[idx % len(colors)]),
-                hovertemplate=f"<b>{species}</b><br>Year: %{x}<br>Birds: %{y:,}<extra></extra>"
-            ))
-
-        fig.update_layout(
-            template="plotly_dark",
-            paper_bgcolor="#1A1A1A",
-            plot_bgcolor="#2D2D2D",
-            height=500,
-            xaxis=dict(title="Year", tickmode="linear", dtick=1, gridcolor="#3A3A3A"),
-            yaxis=dict(title="Total Birds (Stacked)", gridcolor="#3A3A3A"),
-            hovermode="x unified",
-            legend=dict(orientation="v", yanchor="top", y=1, xanchor="left", x=1.02, bgcolor="rgba(0,0,0,0.5)")
-        )
-
-        st.plotly_chart(fig, use_container_width=True)
-
-        # Composition insights
-        col1, col2 = st.columns(2)
-
-        with col1:
-            st.markdown("### Dominant Species by Year")
-            dominant = composition_df.loc[composition_df.groupby("Year")["total_birds"].idxmax()]
-            for _, row in dominant.iterrows():
-                st.markdown(f"**{int(row['Year'])}**: {row['SpeciesCode']} ({int(row['total_birds']):,})")
-
-        with col2:
-            st.markdown("### Species Diversity")
-            diversity = composition_df.groupby("Year")["SpeciesCode"].count().reset_index()
-
-            fig_div = go.Figure()
-            fig_div.add_trace(go.Bar(
-                x=diversity["Year"],
-                y=diversity["SpeciesCode"],
-                marker_color="#2AB8DC"
-            ))
-
-            fig_div.update_layout(
-                template="plotly_dark",
-                paper_bgcolor="#1A1A1A",
-                plot_bgcolor="#2D2D2D",
-                height=250,
-                margin=dict(l=10, r=10, t=10, b=10),
-                xaxis=dict(tickmode="linear", dtick=1),
-                yaxis=dict(title="Species Count"),
-                showlegend=False
-            )
-
-            st.plotly_chart(fig_div, use_container_width=True)
 
 # ============================================================================
 # FOOTER

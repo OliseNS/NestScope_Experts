@@ -1455,6 +1455,26 @@ async def get_config():
         }
     }
 
+@app.get("/api/species")
+async def get_all_species():
+    """
+    Get list of all species from the database
+    Returns: List of species with code and name
+    """
+    try:
+        conn = chatbot.get_connection()
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT SpeciesCode, SpeciesName
+            FROM tblSpeciesCodes
+            ORDER BY SpeciesName
+        """)
+        species = [{"code": row[0], "name": row[1]} for row in cursor.fetchall() if row[0] and row[1]]
+        conn.close()
+        return species
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to load species: {str(e)}")
+
 @app.get("/services/status")
 async def get_services_status():
     """
