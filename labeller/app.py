@@ -661,17 +661,28 @@ def get_species_images(species_name):
     max_images = int(request.args.get('max', 5))
     offset = int(request.args.get('offset', 0))
 
+    print(f"\n🖼️  API Request: /api/species/images/{species_name}")
+    print(f"   Parameters: max={max_images}, offset={offset}")
+
     try:
         images = get_wikipedia_images(species_name, max_images=max_images, offset=offset)
-        return jsonify({
+
+        response = {
             'species': species_name,
             'images': images,
             'count': len(images),
             'offset': offset,
             'has_more': len(images) == max_images  # Assume more if we got exactly max_images
-        })
+        }
+
+        print(f"✓ API Response: {len(images)} images returned")
+        return jsonify(response)
+
     except Exception as e:
-        print(f"Error fetching images for {species_name}: {e}")
+        print(f"❌ Error fetching images for {species_name}: {e}")
+        import traceback
+        traceback.print_exc()
+
         return jsonify({
             'species': species_name,
             'images': [],
@@ -679,7 +690,7 @@ def get_species_images(species_name):
             'offset': 0,
             'has_more': False,
             'error': str(e)
-        })
+        }), 500
 
 # ============================================================================
 # MAIN

@@ -39,51 +39,83 @@ def search_commons_images(search_query: str, max_results: int = 3) -> List[str]:
     try:
         api_url = "https://commons.wikimedia.org/w/api.php"
 
-        # Search for files on Commons
+        # Search for files on Commons - Updated for 2024/2025 API
         params = {
             "action": "query",
             "format": "json",
             "formatversion": "2",
             "generator": "search",  # Use search generator
-            "gsrsearch": f"{search_query} filetype:bitmap",  # Search for bitmap images
+            "gsrsearch": f"File:{search_query}",  # Search in File namespace
             "gsrnamespace": "6",  # Namespace 6 = File
-            "gsrlimit": max_results + 5,  # Get extra to filter
+            "gsrlimit": str(max_results + 5),  # Get extra to filter
             "prop": "imageinfo",  # Get image information
-            "iiprop": "url|size",  # Get URL and dimensions
-            "iiurlwidth": "800"  # Get 800px wide version
+            "iiprop": "url|size|mime",  # Get URL, dimensions, and mime type
+            "iiurlwidth": "800",  # Get 800px wide thumbnail
+            "origin": "*"  # Enable CORS
         }
 
-        response = requests.get(api_url, params=params, headers=HEADERS, timeout=10)
+        print(f"🔍 Searching Commons with query: '{search_query}'")
+        response = requests.get(api_url, params=params, headers=HEADERS, timeout=15)
         response.raise_for_status()
         data = response.json()
+
+        # Debug output
+        if "query" not in data:
+            print(f"⚠️  No 'query' in response for '{search_query}'")
+            if "error" in data:
+                print(f"❌ API Error: {data['error']}")
+            return []
 
         # Extract image URLs
         image_urls = []
         pages = data.get("query", {}).get("pages", [])
+        print(f"   Found {len(pages)} pages")
 
         for page in pages:
-            if "imageinfo" in page and page["imageinfo"]:
-                info = page["imageinfo"][0]
+            # Skip if not an image
+            if "imageinfo" not in page or not page["imageinfo"]:
+                continue
 
-                # Get thumb URL (good size for display)
-                if "thumburl" in info:
-                    image_urls.append(info["thumburl"])
-                # Fallback to full URL
-                elif "url" in info:
-                    image_urls.append(info["url"])
+            info = page["imageinfo"][0]
 
-                if len(image_urls) >= max_results:
-                    break
+            # Filter out non-image files and icons
+            mime_type = info.get("mime", "")
+            if not mime_type.startswith("image/"):
+                continue
+
+            # Skip SVG and very small images (likely icons)
+            if mime_type == "image/svg+xml":
+                continue
+
+            width = info.get("width", 0)
+            height = info.get("height", 0)
+            if width < 200 or height < 200:  # Skip tiny images
+                continue
+
+            # Get thumb URL (good size for display)
+            if "thumburl" in info:
+                image_urls.append(info["thumburl"])
+            # Fallback to full URL
+            elif "url" in info:
+                image_urls.append(info["url"])
+
+            if len(image_urls) >= max_results:
+                break
 
         if image_urls:
-            print(f"✓ Found {len(image_urls)} Commons images for '{search_query}'")
+            print(f"✓ Found {len(image_urls)} valid Commons images for '{search_query}'")
         else:
-            print(f"⚠️  No Commons images found for '{search_query}'")
+            print(f"⚠️  No suitable Commons images found for '{search_query}'")
 
         return image_urls
 
+    except requests.RequestException as e:
+        print(f"❌ Network error searching Commons for '{search_query}': {e}")
+        return []
     except Exception as e:
         print(f"❌ Error searching Commons for '{search_query}': {e}")
+        import traceback
+        traceback.print_exc()
         return []
 
 
@@ -104,32 +136,58 @@ def get_wikipedia_page_image(species_name: str) -> Optional[str]:
         api_url = "https://en.wikipedia.org/w/api.php"
         page_title = species_name.replace(" ", "_")
 
-        # Get page info with thumbnail
+        # Get page info with thumbnail - Updated for 2024/2025 API
         params = {
             "action": "query",
             "format": "json",
             "formatversion": "2",
             "titles": page_title,
-            "prop": "pageimages|pageterms",
+            "prop": "pageimages",
             "piprop": "thumbnail|original",
-            "pithumbsize": 800  # Get large thumbnail
+            "pithumbsize": "800",  # Get large thumbnail
+            "pilicense": "any",  # Accept any license
+            "origin": "*"  # Enable CORS
         }
 
-        response = requests.get(api_url, params=params, headers=HEADERS, timeout=10)
+        print(f"🔍 Getting Wikipedia page image for '{species_name}'")
+        response = requests.get(api_url, params=params, headers=HEADERS, timeout=15)
         response.raise_for_status()
         data = response.json()
 
         pages = data.get("query", {}).get("pages", [])
-        if pages and "thumbnail" in pages[0]:
-            thumbnail_url = pages[0]["thumbnail"]["source"]
+        if not pages:
+            print(f"⚠️  No Wikipedia page found for '{species_name}'")
+            return None
+
+        page = pages[0]
+
+        # Check if page exists and has an image
+        if "missing" in page:
+            print(f"⚠️  Wikipedia page doesn't exist for '{species_name}'")
+            return None
+
+        # Try to get thumbnail URL
+        if "thumbnail" in page and "source" in page["thumbnail"]:
+            thumbnail_url = page["thumbnail"]["source"]
             print(f"✓ Found Wikipedia page image for '{species_name}'")
             return thumbnail_url
+
+        # Try original image
+        if "original" in page and "source" in page["original"]:
+            original_url = page["original"]["source"]
+            print(f"✓ Found Wikipedia original image for '{species_name}'")
+            return original_url
 
         print(f"⚠️  No Wikipedia page image for '{species_name}'")
         return None
 
+    except requests.RequestException as e:
+        print(f"❌ Network error getting Wikipedia image for '{species_name}': {e}")
+        return None
     except Exception as e:
         print(f"❌ Error getting Wikipedia image for '{species_name}': {e}")
+        import traceback
+        traceback.print_exc()
         return None
 
 
@@ -151,27 +209,44 @@ def get_wikipedia_images(species_name: str, max_images: int = 3, offset: int = 0
     Returns:
         List of direct image URLs
     """
+    print(f"\n{'='*60}")
+    print(f"📸 Fetching images for: {species_name}")
+    print(f"   Requested: {max_images} images, offset: {offset}")
+    print(f"{'='*60}")
+
     # Fetch a larger batch to support pagination
-    fetch_limit = offset + max_images + 10  # Get extra for filtering
+    fetch_limit = offset + max_images + 15  # Get extra for filtering
     all_images = []
 
     # Strategy 1: Get main Wikipedia article image (only on first page)
     if offset == 0:
+        print("\n1️⃣  Trying Wikipedia article image...")
         wiki_image = get_wikipedia_page_image(species_name)
         if wiki_image:
             all_images.append(wiki_image)
+            print(f"   ✓ Added Wikipedia image")
+        else:
+            print(f"   ⚠️  No Wikipedia article image")
 
     # Strategy 2: Search Commons for more images
-    # We need to fetch more than needed because some might be filtered
+    print(f"\n2️⃣  Searching Wikimedia Commons...")
     commons_images = search_commons_images(species_name, max_results=fetch_limit)
 
     # Avoid duplicates
+    added = 0
     for img in commons_images:
         if img not in all_images:
             all_images.append(img)
+            added += 1
+
+    print(f"   ✓ Added {added} unique Commons images")
+    print(f"   📊 Total images before pagination: {len(all_images)}")
 
     # Apply pagination (skip offset, take max_images)
     paginated_images = all_images[offset:offset + max_images]
+
+    print(f"   📤 Returning {len(paginated_images)} images after pagination")
+    print(f"{'='*60}\n")
 
     return paginated_images
 

@@ -280,20 +280,6 @@
             opacity: 0.5;
         }
 
-        .preview-info {
-            padding: 0.75rem;
-            font-size: 0.75rem;
-            color: var(--text-secondary);
-            border-top: 1px solid rgba(217, 119, 87, 0.2);
-            display: flex;
-            justify-content: space-between;
-        }
-
-        .zoom-indicator {
-            color: var(--orange-primary);
-            font-weight: 700;
-        }
-
         .box-unidentified {
             color: var(--text-muted);
             font-style: italic;
@@ -725,12 +711,10 @@
                             <div style="font-size: 0.875rem;">Start drawing to see<br>live zoom preview</div>
                         </div>
                     </div>
-                    <div class="preview-info">
-                        <span id="preview-info-left">
-                            <span id="box-count">0</span> birds detected
-                        </span>
-                        <span class="zoom-indicator" id="zoom-info">2.0x</span>
-                    </div>
+                </div>
+                <!-- Box count display below preview -->
+                <div style="padding: 0.75rem 1.5rem; text-align: center; color: var(--text-muted); font-size: 0.875rem; border-top: 1px solid rgba(217, 119, 87, 0.2);">
+                    <span id="box-count">0</span> birds detected
                 </div>
             </div>
 
@@ -1431,11 +1415,6 @@ function updateBoxCount() {
             boxCount.textContent = boxes.length;
         }
 
-        const previewInfoLeft = document.getElementById('preview-info-left');
-        if (previewInfoLeft) {
-            previewInfoLeft.innerHTML = `<span>${boxes.length}</span> birds detected`;
-        }
-
         console.log(`Box count updated: ${boxes.length} birds`);
     } catch (e) {
         console.error('Update box count error:', e);
@@ -1479,6 +1458,60 @@ function updatePreview(centerX, centerY, label = 'Drawing') {
             cropX, cropY, cropW, cropH,
             offsetX, offsetY, cropW * scale, cropH * scale
         );
+
+        // Draw all bounding boxes that are visible in this preview area
+        boxes.forEach(box => {
+            const boxLeft = (box.x_center - box.width / 2) * canvas.width;
+            const boxRight = (box.x_center + box.width / 2) * canvas.width;
+            const boxTop = (box.y_center - box.height / 2) * canvas.height;
+            const boxBottom = (box.y_center + box.height / 2) * canvas.height;
+
+            // Check if box overlaps with preview area
+            if (boxRight >= cropX && boxLeft <= cropX + cropW &&
+                boxBottom >= cropY && boxTop <= cropY + cropH) {
+
+                // Calculate box position in preview coordinates
+                const previewBoxX = (boxLeft - cropX) * scale + offsetX;
+                const previewBoxY = (boxTop - cropY) * scale + offsetY;
+                const previewBoxW = box.width * canvas.width * scale;
+                const previewBoxH = box.height * canvas.height * scale;
+
+                // Draw box with appropriate color
+                const isSelected = (currentTool === 'edit') && (selectedBoxId === box.id);
+                const isHovered = (currentTool === 'edit') && (hoveredBoxId === box.id);
+
+                previewCtx.strokeStyle = isSelected ? '#7cb342' : (isHovered ? '#FFA500' : '#D97757');
+                previewCtx.lineWidth = isSelected || isHovered ? 3 : 2;
+                previewCtx.setLineDash([]);
+                previewCtx.strokeRect(previewBoxX, previewBoxY, previewBoxW, previewBoxH);
+            }
+        });
+
+        // Draw the box being drawn (if currently drawing)
+        if (isDrawing && startX && startY && currentX && currentY) {
+            const drawLeft = Math.min(startX, currentX);
+            const drawTop = Math.min(startY, currentY);
+            const drawRight = Math.max(startX, currentX);
+            const drawBottom = Math.max(startY, currentY);
+
+            // Check if drawing box overlaps with preview area
+            if (drawRight >= cropX && drawLeft <= cropX + cropW &&
+                drawBottom >= cropY && drawTop <= cropY + cropH) {
+
+                // Calculate drawing box position in preview coordinates
+                const previewDrawX = (drawLeft - cropX) * scale + offsetX;
+                const previewDrawY = (drawTop - cropY) * scale + offsetY;
+                const previewDrawW = (drawRight - drawLeft) * scale;
+                const previewDrawH = (drawBottom - drawTop) * scale;
+
+                // Draw with dashed orange line
+                previewCtx.strokeStyle = '#D97757';
+                previewCtx.lineWidth = 3;
+                previewCtx.setLineDash([5, 5]);
+                previewCtx.strokeRect(previewDrawX, previewDrawY, previewDrawW, previewDrawH);
+                previewCtx.setLineDash([]);
+            }
+        }
 
         // Draw crosshair at center
         const centerPreviewX = PREVIEW_SIZE / 2;
@@ -1547,15 +1580,31 @@ function updatePreviewForBox(box) {
             offsetX, offsetY, cropW * scale, cropH * scale
         );
 
-        // Draw box outline on preview
-        const boxX = ((box.x_center * canvas.width - (box.width * canvas.width) / 2) - cropX) * scale + offsetX;
-        const boxY = ((box.y_center * canvas.height - (box.height * canvas.height) / 2) - cropY) * scale + offsetY;
-        const boxW = (box.width * canvas.width) * scale;
-        const boxH = (box.height * canvas.height) * scale;
+        // Draw all bounding boxes that are visible in this preview area
+        boxes.forEach(otherBox => {
+            const boxLeft = (otherBox.x_center - otherBox.width / 2) * canvas.width;
+            const boxRight = (otherBox.x_center + otherBox.width / 2) * canvas.width;
+            const boxTop = (otherBox.y_center - otherBox.height / 2) * canvas.height;
+            const boxBottom = (otherBox.y_center + otherBox.height / 2) * canvas.height;
 
-        previewCtx.strokeStyle = '#7cb342';
-        previewCtx.lineWidth = 3;
-        previewCtx.strokeRect(boxX, boxY, boxW, boxH);
+            // Check if box overlaps with preview area
+            if (boxRight >= cropX && boxLeft <= cropX + cropW &&
+                boxBottom >= cropY && boxTop <= cropY + cropH) {
+
+                // Calculate box position in preview coordinates
+                const previewBoxX = (boxLeft - cropX) * scale + offsetX;
+                const previewBoxY = (boxTop - cropY) * scale + offsetY;
+                const previewBoxW = otherBox.width * canvas.width * scale;
+                const previewBoxH = otherBox.height * canvas.height * scale;
+
+                // Highlight the selected box
+                const isSelected = (otherBox.id === box.id);
+                previewCtx.strokeStyle = isSelected ? '#7cb342' : '#D97757';
+                previewCtx.lineWidth = isSelected ? 3 : 2;
+                previewCtx.setLineDash([]);
+                previewCtx.strokeRect(previewBoxX, previewBoxY, previewBoxW, previewBoxH);
+            }
+        });
     } catch (e) {
         console.error('Preview box update error:', e);
     }
@@ -1907,19 +1956,34 @@ function showSpeciesList(containerId = 'classification-content') {
 // Load species images
 async function loadSpeciesImages(speciesName, maxImages, offset, cardIdx) {
     try {
-        const response = await fetch(`/api/species/images/${encodeURIComponent(speciesName)}?max=${maxImages}&offset=${offset}`);
+        const url = `/api/species/images/${encodeURIComponent(speciesName)}?max=${maxImages}&offset=${offset}`;
+        console.log(`📸 Fetching images for "${speciesName}":`, url);
+
+        const response = await fetch(url);
+
+        if (!response.ok) {
+            console.error(`❌ HTTP error! status: ${response.status}`);
+            return { images: [], has_more: false };
+        }
+
         const data = await response.json();
+        console.log(`✓ Received ${data.images?.length || 0} images for "${speciesName}"`);
 
         if (data.images && data.images.length > 0) {
+            console.log('   First image URL:', data.images[0]);
             const thumbEl = document.getElementById(`species-thumb-${cardIdx}`);
             if (thumbEl && offset === 0) {
-                thumbEl.innerHTML = `<img src="${data.images[0]}" style="width: 100%; height: 100%; object-fit: cover; border-radius: 8px;" onerror="this.style.display='none'; this.parentElement.textContent='No image';">`;
+                thumbEl.innerHTML = `<img src="${data.images[0]}" style="width: 100%; height: 100%; object-fit: cover; border-radius: 8px;"
+                    onerror="console.error('Failed to load thumbnail:', this.src); this.style.display='none'; this.parentElement.textContent='No image';"
+                    onload="console.log('✓ Thumbnail loaded')">`;
             }
+        } else {
+            console.warn(`⚠️  No images returned for "${speciesName}"`);
         }
 
         return data;
     } catch (e) {
-        console.error('Error loading images:', e);
+        console.error('❌ Error loading images:', e);
         return { images: [], has_more: false };
     }
 }
