@@ -2411,6 +2411,281 @@ async def insert_table_row(table_name: str, request: RowInsertRequest):
             error=str(e)
         )
 
+# ============================================================================
+# EROSION & SPECIES RISK ENDPOINTS
+# ============================================================================
+
+from server.erosion_tools import (
+    get_species_risk_summary,
+    calculate_species_risk,
+    get_erosion_risk_zones,
+    get_shoreline_history,
+    project_population,
+    assess_colony_viability,
+    calculate_restoration_priorities,
+)
+from server.erosion_tools.erosion_data import (
+    get_sea_level_rise_projections,
+    get_storm_tracks,
+    get_colony_erosion_risk,
+)
+from server.erosion_tools.predictive_models import correlate_with_environmental_events
+
+@app.get("/species/risk_assessment")
+async def species_risk_assessment():
+    """
+    Get comprehensive species risk assessment for all Gulf Coast colonial nesters.
+
+    Returns:
+        {
+            "species_assessments": List of species with risk scores and categories,
+            "summary_stats": Count by risk category
+        }
+    """
+    try:
+        db_path = os.getenv("DB_PATH", "data/bird_data_complete.db")
+        result = get_species_risk_summary(db_path)
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/species/risk/{species_code}")
+async def species_risk_detail(species_code: str):
+    """
+    Get detailed risk assessment for a specific species.
+
+    Args:
+        species_code: 4-letter species code (e.g., BRPE, ROSP)
+    """
+    try:
+        db_path = os.getenv("DB_PATH", "data/bird_data_complete.db")
+        result = calculate_species_risk(db_path, species_code.upper())
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/species/population_projection/{species_code}")
+async def population_projection(species_code: str, years_forward: int = 10, model: str = "linear"):
+    """
+    Project future population for a species based on historical trends.
+
+    Args:
+        species_code: 4-letter species code
+        years_forward: Number of years to project (default: 10)
+        model: "linear" or "exponential"
+    """
+    try:
+        db_path = os.getenv("DB_PATH", "data/bird_data_complete.db")
+        risk_data = calculate_species_risk(db_path, species_code.upper())
+        population_history = risk_data.get("population_history", [])
+
+        projection = project_population(population_history, years_forward, model)
+        projection["species_code"] = species_code.upper()
+
+        return projection
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/erosion/risk_zones")
+async def erosion_risk_zones():
+    """
+    Get GeoJSON FeatureCollection of erosion risk zones across the Gulf Coast.
+
+    Returns:
+        GeoJSON with risk levels (EXTREME/HIGH/MEDIUM/LOW) and erosion rates
+    """
+    try:
+        return get_erosion_risk_zones()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/erosion/shoreline_history")
+async def shoreline_history():
+    """
+    Get historical shoreline positions (1850-2020) showing coastal erosion over time.
+
+    Returns:
+        GeoJSON FeatureCollection of shoreline LineStrings
+    """
+    try:
+        return get_shoreline_history()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/erosion/slr_projections")
+async def slr_projections(scenario: str = "2050_intermediate"):
+    """
+    Get sea level rise inundation projections for a given scenario.
+
+    Args:
+        scenario: One of 2030_intermediate, 2050_intermediate, 2070_intermediate, 2100_high
+
+    Returns:
+        GeoJSON FeatureCollection of inundation zones
+    """
+    try:
+        return get_sea_level_rise_projections(scenario)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/erosion/storm_tracks")
+async def storm_tracks(years: Optional[List[int]] = None):
+    """
+    Get major storm tracks that impacted Gulf Coast bird colonies (2005-2024).
+
+    Args:
+        years: Optional list of years to filter (e.g., [2005, 2021])
+
+    Returns:
+        GeoJSON FeatureCollection of storm tracks with impact descriptions
+    """
+    try:
+        return get_storm_tracks(years)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/colonies/erosion_risk/{colony_id}")
+async def colony_erosion_risk(colony_id: str):
+    """
+    Get erosion risk details for a specific colony.
+
+    Args:
+        colony_id: Colony identifier
+
+    Returns:
+        {
+            "colony_id": str,
+            "risk_score": float,
+            "risk_level": str,
+            "erosion_rate_m_per_year": float,
+            "recommendation": str
+        }
+    """
+    try:
+        return get_colony_erosion_risk(colony_id)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/colonies/viability/{colony_id}")
+async def colony_viability(
+    colony_id: str,
+    current_area_m2: float = 50000,
+    minimum_viable_area_m2: float = 5000
+):
+    """
+    Assess colony viability and predict years until critical threshold.
+
+    Args:
+        colony_id: Colony identifier
+        current_area_m2: Current colony land area (default: 50000)
+        minimum_viable_area_m2: Minimum area for viability (default: 5000)
+
+    Returns:
+        {
+            "years_until_critical": int,
+            "viability_2050": str,
+            "recommendation": str
+        }
+    """
+    try:
+        erosion_info = get_colony_erosion_risk(colony_id)
+        erosion_rate = erosion_info["erosion_rate_m_per_year"]
+
+        result = assess_colony_viability(
+            colony_id,
+            erosion_rate,
+            current_area_m2,
+            minimum_viable_area_m2
+        )
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/restoration/priorities")
+async def restoration_priorities():
+    """
+    Calculate restoration priority scores for all colonies.
+
+    Returns:
+        {
+            "priority_map": GeoJSON with priority scores,
+            "top_recommendations": Top 10 sites ranked by priority,
+            "methodology": Description of scoring algorithm
+        }
+    """
+    try:
+        db_path = os.getenv("DB_PATH", "data/bird_data_complete.db")
+
+        # Get species risk data
+        species_risk_data = get_species_risk_summary(db_path)
+
+        # Get erosion data
+        erosion_data = get_erosion_risk_zones()
+
+        # Calculate priorities
+        result = calculate_restoration_priorities(db_path, species_risk_data, erosion_data)
+
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/analysis/storm_impact/{species_code}")
+async def storm_impact_analysis(species_code: str):
+    """
+    Analyze correlation between population changes and major storm events.
+
+    Args:
+        species_code: 4-letter species code
+
+    Returns:
+        {
+            "storm_impact_detected": bool,
+            "avg_decline_post_storm_pct": float,
+            "recovery_time_years": int,
+            "resilience_score": float
+        }
+    """
+    try:
+        db_path = os.getenv("DB_PATH", "data/bird_data_complete.db")
+
+        # Get population history
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+
+        query = """
+        SELECT Year, SUM(BirdsTotal) as total_birds
+        FROM [tblColonyTotals2010-2021_MayJuneCombined]
+        WHERE SpeciesCode = ?
+        GROUP BY Year
+        ORDER BY Year
+        """
+
+        cursor.execute(query, (species_code.upper(),))
+        population_data = [(row[0], row[1] or 0) for row in cursor.fetchall()]
+        conn.close()
+
+        # Major Gulf Coast storms
+        storm_years = [2005, 2008, 2012, 2020, 2021]  # Katrina, Gustav, Isaac, Laura, Ida
+
+        result = correlate_with_environmental_events(population_data, storm_years)
+        result["species_code"] = species_code.upper()
+        result["analyzed_storms"] = ["Katrina (2005)", "Isaac (2012)", "Ida (2021)"]
+
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)
