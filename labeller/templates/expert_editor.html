@@ -701,6 +701,11 @@
                         <div class="tool-label">Edit</div>
                         <div class="tool-shortcut">E</div>
                     </button>
+                    <button class="tool-btn" id="tool-pan" onclick="selectTool('pan')" title="Pan/move canvas">
+                        <div class="tool-icon">✋</div>
+                        <div class="tool-label">Hand</div>
+                        <div class="tool-shortcut">H</div>
+                    </button>
                 </div>
             </div>
 
@@ -740,9 +745,10 @@
 
             <div class="canvas-overlay">
                 <div><strong>Tool:</strong> <span id="current-tool">Draw</span></div>
-                <div><strong>Zoom:</strong> <span id="zoom-level">100%</span></div>
+                <div><strong>Zoom:</strong> <span id="zoom-level">100%</span> <button onclick="resetZoom()" style="background: rgba(217, 119, 87, 0.2); border: 1px solid rgba(217, 119, 87, 0.4); color: #fff; padding: 0.125rem 0.5rem; border-radius: 4px; font-size: 0.75rem; cursor: pointer; margin-left: 0.5rem;">Reset</button></div>
                 <div style="margin-top: 0.5rem; padding-top: 0.5rem; border-top: 1px solid rgba(217, 119, 87, 0.3); font-size: 0.75rem; color: var(--text-muted);">
-                    <div><strong>Click box</strong> → Auto-identify</div>
+                    <div><strong>Wheel</strong> → Zoom to cursor</div>
+                    <div><strong>H or Space+Drag</strong> → Pan</div>
                     <div><strong>Delete</strong> → Remove box</div>
                     <div><strong>Ctrl+S</strong> → Save & next</div>
                 </div>
@@ -817,7 +823,20 @@ let currentX = 0;
 let currentY = 0;
 let draggedBox = null;
 let dragHandle = null;  // 'move', 'nw', 'ne', 'sw', 'se', 'n', 's', 'e', 'w'
+
+// Zoom and pan state
 let zoomLevel = 1;
+let panOffsetX = 0;  // Pan offset in image space
+let panOffsetY = 0;
+let isPanning = false;
+let panStartX = 0;
+let panStartY = 0;
+let spacePressed = false;
+
+// Zoom constraints
+const MIN_ZOOM = 0.1;    // 10% minimum
+const MAX_ZOOM = 10;     // 1000% maximum
+const ZOOM_STEP = 1.1;   // 10% per wheel tick (smooth and predictable)
 
 // Live preview state
 let previewCanvas, previewCtx;
@@ -868,6 +887,11 @@ function initCanvas() {
         canvas.addEventListener('mousedown', handleCanvasMouseDown);
         canvas.addEventListener('mouseup', handleCanvasMouseUp);
         canvas.addEventListener('mouseleave', handleCanvasMouseLeave);
+        canvas.addEventListener('wheel', handleCanvasWheel, { passive: false });
+
+        // Add keyboard event listeners for pan control
+        document.addEventListener('keydown', handleKeyDown);
+        document.addEventListener('keyup', handleKeyUp);
 
         console.log(`✓ Image loaded: ${IMAGE_NAME} (${imageObj.naturalWidth}x${imageObj.naturalHeight}), ${boxes.length} boxes loaded`);
     };
@@ -897,20 +921,117 @@ function fitCanvasToContainer() {
     }
 }
 
-// Get canvas coordinates from mouse event
+// Get canvas coordinates from mouse event (accounting for zoom and pan)
 function getCanvasCoords(e) {
     const rect = canvas.getBoundingClientRect();
     const scaleX = canvas.width / rect.width;
     const scaleY = canvas.height / rect.height;
+
+    // Get canvas pixel position
+    const canvasX = (e.clientX - rect.left) * scaleX;
+    const canvasY = (e.clientY - rect.top) * scaleY;
+
+    // Transform to image coordinates (undo pan and zoom)
+    const imageX = (canvasX - panOffsetX) / zoomLevel;
+    const imageY = (canvasY - panOffsetY) / zoomLevel;
+
     return {
-        x: (e.clientX - rect.left) * scaleX,
-        y: (e.clientY - rect.top) * scaleY
+        x: imageX,
+        y: imageY
     };
+}
+
+// Handle mouse wheel for zooming
+function handleCanvasWheel(e) {
+    e.preventDefault();
+
+    // Get mouse position in canvas pixel coordinates
+    const rect = canvas.getBoundingClientRect();
+    const mouseCanvasX = (e.clientX - rect.left) * (canvas.width / rect.width);
+    const mouseCanvasY = (e.clientY - rect.top) * (canvas.height / rect.height);
+
+    // Calculate zoom direction and new zoom level
+    const zoomFactor = e.deltaY < 0 ? ZOOM_STEP : (1 / ZOOM_STEP);
+    const oldZoom = zoomLevel;
+    const newZoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, oldZoom * zoomFactor));
+
+    // Don't do anything if we hit the zoom limits
+    if (newZoom === oldZoom) {
+        return;
+    }
+
+    // Zoom towards the mouse cursor
+    // The point under the cursor should stay fixed
+    // Formula: panOffset_new = mouseCanvas - (mouseCanvas - panOffset_old) * (newZoom / oldZoom)
+    panOffsetX = mouseCanvasX - (mouseCanvasX - panOffsetX) * (newZoom / oldZoom);
+    panOffsetY = mouseCanvasY - (mouseCanvasY - panOffsetY) * (newZoom / oldZoom);
+
+    zoomLevel = newZoom;
+
+    updateZoomDisplay();
+    redrawCanvas();
+}
+
+// Handle keyboard events for space key
+function handleKeyDown(e) {
+    if (e.code === 'Space' && !spacePressed && !e.repeat) {
+        e.preventDefault();
+        spacePressed = true;
+        canvas.style.cursor = 'grab';
+    }
+}
+
+function handleKeyUp(e) {
+    if (e.code === 'Space') {
+        e.preventDefault();
+        spacePressed = false;
+        if (!isPanning) {
+            // Restore cursor based on current tool
+            if (currentTool === 'pan') {
+                canvas.style.cursor = 'grab';
+            } else if (currentTool === 'edit') {
+                canvas.style.cursor = 'pointer';
+            } else {
+                canvas.style.cursor = 'crosshair';
+            }
+        }
+    }
+}
+
+// Reset zoom and pan to fit image in viewport
+function resetZoom() {
+    if (!imageObj || !imageObj.complete) return;
+
+    zoomLevel = 1;
+
+    // Center the image: pan offset is half the difference between canvas and image
+    panOffsetX = 0;
+    panOffsetY = 0;
+
+    updateZoomDisplay();
+    redrawCanvas();
+    showToast('✓ Zoom reset to 100%');
+}
+
+// Update zoom level display
+function updateZoomDisplay() {
+    const zoomPercent = Math.round(zoomLevel * 100);
+    document.getElementById('zoom-level').textContent = `${zoomPercent}%`;
 }
 
 // Handle mouse down
 function handleCanvasMouseDown(e) {
     const coords = getCanvasCoords(e);
+
+    // Check for panning mode (space key pressed OR pan tool active)
+    if (spacePressed || currentTool === 'pan') {
+        isPanning = true;
+        panStartX = e.clientX;
+        panStartY = e.clientY;
+        canvas.style.cursor = 'grabbing';
+        return;
+    }
+
     startX = coords.x;
     startY = coords.y;
     currentX = coords.x;
@@ -997,6 +1118,27 @@ function isNear(a, b, threshold) {
 
 // Handle mouse move
 function handleCanvasMouseMove(e) {
+    // Handle panning
+    if (isPanning) {
+        // Calculate screen-space delta
+        const rect = canvas.getBoundingClientRect();
+        const scaleX = canvas.width / rect.width;
+        const scaleY = canvas.height / rect.height;
+
+        const dx = (e.clientX - panStartX) * scaleX;
+        const dy = (e.clientY - panStartY) * scaleY;
+
+        // Apply pan offset
+        panOffsetX += dx;
+        panOffsetY += dy;
+
+        panStartX = e.clientX;
+        panStartY = e.clientY;
+
+        redrawCanvas();
+        return;
+    }
+
     const coords = getCanvasCoords(e);
     currentX = coords.x;
     currentY = coords.y;
@@ -1153,6 +1295,20 @@ function resizeBox(box, handle, dx, dy) {
 
 // Handle mouse up
 function handleCanvasMouseUp(e) {
+    // Stop panning
+    if (isPanning) {
+        isPanning = false;
+        // Restore appropriate cursor based on tool and space key
+        if (currentTool === 'pan' || spacePressed) {
+            canvas.style.cursor = 'grab';
+        } else if (currentTool === 'edit') {
+            canvas.style.cursor = 'pointer';
+        } else {
+            canvas.style.cursor = 'crosshair';
+        }
+        return;
+    }
+
     if (isDrawing) {
         // Finalize the drawn box
         const width = Math.abs(currentX - startX);
@@ -1206,6 +1362,11 @@ function handleCanvasMouseUp(e) {
 
 // Handle mouse leave
 function handleCanvasMouseLeave(e) {
+    if (isPanning) {
+        isPanning = false;
+        canvas.style.cursor = spacePressed ? 'grab' : (currentTool === 'edit' ? 'pointer' : 'crosshair');
+    }
+
     if (isDrawing) {
         isDrawing = false;
         redrawCanvas();
@@ -1235,8 +1396,8 @@ function drawDragRect() {
     const height = currentY - startY;
 
     ctx.strokeStyle = '#D97757';
-    ctx.lineWidth = 3;
-    ctx.setLineDash([5, 5]);
+    ctx.lineWidth = 3 / zoomLevel;
+    ctx.setLineDash([5 / zoomLevel, 5 / zoomLevel]);
     ctx.strokeRect(startX, startY, width, height);
     ctx.setLineDash([]);
 }
@@ -1307,6 +1468,13 @@ function redrawCanvas() {
     if (!imageObj || !imageObj.complete) return;
 
     ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    // Save context and apply zoom/pan transform
+    ctx.save();
+    ctx.translate(panOffsetX, panOffsetY);
+    ctx.scale(zoomLevel, zoomLevel);
+
+    // Draw image
     ctx.drawImage(imageObj, 0, 0);
 
     // Draw all boxes
@@ -1320,16 +1488,20 @@ function redrawCanvas() {
         const h = box.height * canvas.height;
 
         // Draw box (highlight only in edit mode)
+        // Scale line width inversely with zoom so it stays visible
+        const baseLineWidth = isSelected || isHovered ? 4 : 3;
+        const scaledLineWidth = baseLineWidth / zoomLevel;
+
         ctx.setLineDash([]);
         if (isSelected) {
             ctx.strokeStyle = '#7cb342';  // Green for selected (edit mode only)
-            ctx.lineWidth = 4;
+            ctx.lineWidth = scaledLineWidth;
         } else if (isHovered) {
             ctx.strokeStyle = '#FFA500';  // Orange for hovered (edit mode only)
-            ctx.lineWidth = 4;
+            ctx.lineWidth = scaledLineWidth;
         } else {
             ctx.strokeStyle = '#D97757';  // Default orange
-            ctx.lineWidth = 3;
+            ctx.lineWidth = scaledLineWidth;
         }
         ctx.strokeRect(x, y, w, h);
 
@@ -1337,20 +1509,22 @@ function redrawCanvas() {
         if (box.species) {
             ctx.fillStyle = 'rgba(217, 119, 87, 0.9)';
             const text = box.species;
-            ctx.font = '14px DM Sans, sans-serif';
+            const fontSize = 14 / zoomLevel;
+            ctx.font = `${fontSize}px DM Sans, sans-serif`;
             const textWidth = ctx.measureText(text).width;
-            ctx.fillRect(x, y - 24, textWidth + 12, 24);
+            const labelHeight = 24 / zoomLevel;
+            ctx.fillRect(x, y - labelHeight, textWidth + 12 / zoomLevel, labelHeight);
 
             ctx.fillStyle = '#fff';
-            ctx.fillText(text, x + 6, y - 6);
+            ctx.fillText(text, x + 6 / zoomLevel, y - 6 / zoomLevel);
         }
 
         // Draw resize handles for selected box in edit mode
         if (isSelected && currentTool === 'edit') {
-            const handleSize = 10;
+            const handleSize = 10 / zoomLevel;
             ctx.fillStyle = '#fff';
             ctx.strokeStyle = '#7cb342';
-            ctx.lineWidth = 2;
+            ctx.lineWidth = 2 / zoomLevel;
 
             // Draw corner handles (larger and more visible)
             const corners = [
@@ -1380,9 +1554,16 @@ function redrawCanvas() {
         }
     });
 
-    // Draw preview rectangle while drawing
+    // Restore context after drawing with zoom/pan
+    ctx.restore();
+
+    // Draw preview rectangle while drawing (in transformed space)
     if (isDrawing) {
+        ctx.save();
+        ctx.translate(panOffsetX, panOffsetY);
+        ctx.scale(zoomLevel, zoomLevel);
         drawDragRect();
+        ctx.restore();
     }
 }
 
@@ -1396,16 +1577,22 @@ function selectTool(tool) {
     const toolNames = {
         'draw': 'Draw',
         'ai': 'Segment',
-        'edit': 'Edit'
+        'edit': 'Edit',
+        'pan': 'Hand'
     };
     document.getElementById('current-tool').textContent = toolNames[tool] || tool.charAt(0).toUpperCase() + tool.slice(1);
 
+    // Set cursor based on tool
     if (tool === 'edit') {
         canvas.style.cursor = 'pointer';
+    } else if (tool === 'pan') {
+        canvas.style.cursor = 'grab';
     } else {
         canvas.style.cursor = 'crosshair';
+    }
 
-        // Clear selection when leaving edit mode
+    // Clear selection when leaving edit mode
+    if (tool !== 'edit') {
         selectedBoxId = null;
         redrawCanvas();
         clearPreview();
@@ -2786,33 +2973,43 @@ function handleJumpKeyPress(event) {
     }
 }
 
-// Zoom controls
+// Zoom button controls (zoom towards center of viewport)
 function zoomIn() {
-    zoomLevel = Math.min(zoomLevel * 1.2, 5);  // Max 5x zoom
-    applyZoom();
+    const centerX = canvas.width / 2;
+    const centerY = canvas.height / 2;
+
+    const oldZoom = zoomLevel;
+    const newZoom = Math.min(zoomLevel * (ZOOM_STEP * 1.5), MAX_ZOOM); // Faster for buttons
+
+    if (newZoom === oldZoom) return;
+
+    // Zoom towards center
+    panOffsetX = centerX - (centerX - panOffsetX) * (newZoom / oldZoom);
+    panOffsetY = centerY - (centerY - panOffsetY) * (newZoom / oldZoom);
+
+    zoomLevel = newZoom;
+
+    updateZoomDisplay();
+    redrawCanvas();
 }
 
 function zoomOut() {
-    zoomLevel = Math.max(zoomLevel / 1.2, 0.5);  // Min 0.5x zoom
-    applyZoom();
-}
+    const centerX = canvas.width / 2;
+    const centerY = canvas.height / 2;
 
-function resetZoom() {
-    zoomLevel = 1;
-    applyZoom();
-}
+    const oldZoom = zoomLevel;
+    const newZoom = Math.max(zoomLevel / (ZOOM_STEP * 1.5), MIN_ZOOM); // Faster for buttons
 
-function applyZoom() {
-    // Update canvas scale
-    const container = canvas.parentElement;
-    const baseWidth = container.clientWidth;
-    const baseHeight = container.clientHeight;
+    if (newZoom === oldZoom) return;
 
-    canvas.style.transform = `scale(${zoomLevel})`;
-    canvas.style.transformOrigin = 'center center';
+    // Zoom towards center
+    panOffsetX = centerX - (centerX - panOffsetX) * (newZoom / oldZoom);
+    panOffsetY = centerY - (centerY - panOffsetY) * (newZoom / oldZoom);
 
-    // Update zoom level display
-    document.getElementById('zoom-level').textContent = Math.round(zoomLevel * 100) + '%';
+    zoomLevel = newZoom;
+
+    updateZoomDisplay();
+    redrawCanvas();
 }
 
 // Keyboard shortcuts
@@ -2824,6 +3021,7 @@ document.addEventListener('keydown', (e) => {
     if (e.key === 'd' && !e.shiftKey && !e.ctrlKey) selectTool('draw');
     if (e.key === 's' && !e.shiftKey && !e.ctrlKey) selectTool('ai');
     if (e.key === 'e' && !e.shiftKey && !e.ctrlKey) selectTool('edit');
+    if (e.key === 'h' && !e.shiftKey && !e.ctrlKey) selectTool('pan');
     if (e.key === 'r' && !e.shiftKey && !e.ctrlKey) resetZoom();
 
     // Save and continue: Ctrl+S (standard save shortcut)

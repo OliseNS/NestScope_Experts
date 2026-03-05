@@ -143,15 +143,6 @@ def render_sidebar(active_page: str = "home"):
     ):
         st.switch_page("pages/04_db_editor.py")
 
-    # Species ID button
-    if st.button(
-        "🐦 Species ID",
-        use_container_width=True,
-        help="Visual species identification guide",
-        type="primary" if active_page == "speciesid" else "secondary"
-    ):
-        st.switch_page("pages/05_species_id.py")
-
     # Tools section
     render_sidebar_section("Tools")
 

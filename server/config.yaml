@@ -25,13 +25,13 @@ cv:
   image_size: 1024
   default_fast_mode: true  # Start in fast mode by default
 
-  # Classification model paths (ONNX format)
-  # Swift: Fast classifier (6MB, ~2x faster inference)
-  # Apex: Accurate classifier (21MB, better accuracy)
-  # Outputs 25 Gulf Coast colonial waterbird species
+  # Species Classification
   classifier_swift: models/classifier_swift.onnx
   classifier_apex: models/classifier_apex.onnx
   classifier_species: 25
+  classifier_confidence_threshold: 0.01  # Very low - always show best prediction
+  # With 25 species, even low confidence (5-15%) is better than random (4%)
+  # Shows classifier's best guess regardless of confidence
 
 api:
   host: 0.0.0.0

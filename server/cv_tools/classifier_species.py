@@ -92,11 +92,11 @@ SPECIES_TO_GROUP = {
     'ROSP': 'COLOR_WADER',
     'WFIB': 'COLOR_WADER',
 
-    # Gulls & Skimmers
+    # Gulls
     'LAGU': 'GULL',
-    'BLSK': 'GULL',
 
-    # Terns
+    # Terns & Skimmers (Skimmers are closely related to terns)
+    'BLSK': 'TERN',
     'ROYT': 'TERN',
     'CATE': 'TERN',
     'SATE': 'TERN',

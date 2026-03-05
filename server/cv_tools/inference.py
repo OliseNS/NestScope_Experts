@@ -30,7 +30,7 @@ from server.cv_tools.classifier_species import (
 
 # Load model paths from config.yaml
 def _load_model_paths():
-    """Load model paths from server configuration"""
+    """Load model paths and classifier threshold from server configuration"""
     config_path = Path(__file__).parent.parent / "config.yaml"
     try:
         with open(config_path, 'r') as f:
@@ -45,6 +45,9 @@ def _load_model_paths():
         classifier_swift = str(classifier_swift).replace('.pt', '.onnx')
         classifier_apex  = str(classifier_apex).replace('.pt', '.onnx')
 
+        # Classifier confidence threshold
+        classifier_threshold = config['cv'].get('classifier_confidence_threshold', 0.30)
+
         # Convert relative paths to absolute (relative to project root)
         project_root = Path(__file__).parent.parent.parent
 
@@ -57,7 +60,7 @@ def _load_model_paths():
         if not os.path.isabs(classifier_apex):
             classifier_apex = str(project_root / classifier_apex)
 
-        return model_fast, model_pro, classifier_swift, classifier_apex
+        return model_fast, model_pro, classifier_swift, classifier_apex, classifier_threshold
     except Exception as e:
         print(f"Warning: Could not load model paths from config: {e}")
         # Fallback to default models
@@ -67,20 +70,23 @@ def _load_model_paths():
             os.path.join(models_dir, "apex.onnx"),
             os.path.join(models_dir, "classifier_swift.onnx"),
             os.path.join(models_dir, "classifier_apex.onnx"),
+            0.30,  # Default threshold
         )
 
-MODEL_FAST, MODEL_PRO, CLASSIFIER_SWIFT, CLASSIFIER_APEX = _load_model_paths()
+MODEL_FAST, MODEL_PRO, CLASSIFIER_SWIFT, CLASSIFIER_APEX, CLASSIFIER_THRESHOLD = _load_model_paths()
 print(f"✓ CV Models configured:")
 print(f"  Fast mode: {MODEL_FAST}")
 print(f"  Pro mode: {MODEL_PRO}")
 print(f"  Classifier (Swift): {CLASSIFIER_SWIFT}")
 print(f"  Classifier (Apex): {CLASSIFIER_APEX}")
+print(f"  Classification threshold: {CLASSIFIER_THRESHOLD:.0%}")
 
 class BirdDetector:
     """YOLO-based bird detection and counting with dynamic model loading"""
 
     def __init__(self, model_fast=MODEL_FAST, model_pro=MODEL_PRO, imgsz=1024,
-                 classifier_swift=CLASSIFIER_SWIFT, classifier_apex=CLASSIFIER_APEX):
+                 classifier_swift=CLASSIFIER_SWIFT, classifier_apex=CLASSIFIER_APEX,
+                 classifier_threshold=CLASSIFIER_THRESHOLD):
         """
         Initialize the bird detector with support for multiple models
 
@@ -90,6 +96,7 @@ class BirdDetector:
             imgsz: Image size for inference (default: 1024)
             classifier_swift: Path to the fast species classifier ONNX
             classifier_apex: Path to the accurate species classifier ONNX
+            classifier_threshold: Minimum confidence for species classification (default: 0.30)
         """
         self.model_fast_path = model_fast
         self.model_pro_path = model_pro
@@ -98,6 +105,7 @@ class BirdDetector:
         self.model = None
         # Classifier state (lazy-loaded on first use)
         self.classifier_swift_path = classifier_swift
+        self.classifier_threshold = classifier_threshold
         self.classifier_apex_path = classifier_apex
         self.classifier_session = None
         self.classifier_path_loaded = None
@@ -785,6 +793,17 @@ class BirdDetector:
             exp_out = np.exp(output - output.max())
             probs = exp_out / exp_out.sum()
 
+            # DEBUG: Print classifier stats (first few predictions only to avoid spam)
+            if not hasattr(self, '_debug_count'):
+                self._debug_count = 0
+            if self._debug_count < 3:
+                print(f"\n[CLASSIFIER DEBUG #{self._debug_count + 1}]")
+                print(f"  Crop size: {crop_bgr.shape}")
+                print(f"  Raw logits (top 5): {output[np.argsort(output)[::-1][:5]]}")
+                print(f"  Probabilities (top 5): {probs[np.argsort(probs)[::-1][:5]]}")
+                print(f"  Top prediction: {get_species_code(int(np.argmax(probs)))} ({probs.max():.2%})")
+                self._debug_count += 1
+
             # Get top-k predictions
             top_k = min(max(1, top_k), 5)  # Clamp to [1, 5]
             top_indices = np.argsort(probs)[::-1][:top_k]
@@ -803,13 +822,23 @@ class BirdDetector:
                     'group': group
                 })
 
+            # Apply confidence threshold - if top prediction is below threshold, return UNKNOWN
+            top_pred = top_predictions[0]
+            if top_pred['confidence'] < self.classifier_threshold:
+                return {
+                    'species_code': 'UNKNOWN',
+                    'species_name': 'Unknown',
+                    'confidence': top_pred['confidence'],
+                    'group': 'UNKNOWN',
+                    'top_predictions': top_predictions  # Still include all predictions for reference
+                }
+
             # Return top prediction as main result + top-k list
-            # Create a copy to avoid circular reference
             top_result = {
-                'species_code': top_predictions[0]['species_code'],
-                'species_name': top_predictions[0]['species_name'],
-                'confidence': top_predictions[0]['confidence'],
-                'group': top_predictions[0]['group'],
+                'species_code': top_pred['species_code'],
+                'species_name': top_pred['species_name'],
+                'confidence': top_pred['confidence'],
+                'group': top_pred['group'],
                 'top_predictions': top_predictions
             }
 
@@ -958,11 +987,11 @@ class BirdDetector:
         # Classify each detected bird crop into a species group
         detections = self._classify_detections(original_img, detections, fast_mode)
 
-        # Build species summary: {group: count}
+        # Build species summary: {species_code: count}
         species_summary: dict = {}
         for det in detections:
-            g = det.get('species_group', 'UNKNOWN')
-            species_summary[g] = species_summary.get(g, 0) + 1
+            code = det.get('species_code', 'UNKNOWN')
+            species_summary[code] = species_summary.get(code, 0) + 1
 
         # Draw custom annotations (uses species group colors)
         annotated_img = self._draw_custom_annotations_from_detections(original_img, detections)
@@ -1091,11 +1120,11 @@ class BirdDetector:
         # Classify each detected bird crop into a species group
         detections = self._classify_detections(img, detections, fast_mode)
 
-        # Build species summary: {group: count}
+        # Build species summary: {species_code: count}
         species_summary: dict = {}
         for det in detections:
-            g = det.get('species_group', 'UNKNOWN')
-            species_summary[g] = species_summary.get(g, 0) + 1
+            code = det.get('species_code', 'UNKNOWN')
+            species_summary[code] = species_summary.get(code, 0) + 1
 
         # Draw custom annotations (uses species group colors)
         annotated_img = self._draw_custom_annotations_from_detections(img, detections)

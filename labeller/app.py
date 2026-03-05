@@ -844,6 +844,117 @@ def get_species_images(species_name):
             'error': str(e)
         }), 500
 
+@app.route('/api/correction/upload', methods=['POST'])
+def correction_upload():
+    """
+    Upload image with detections from NestVision for expert correction.
+
+    Request JSON:
+        {
+            "image_base64": "base64_encoded_image_data",
+            "detections": [
+                {
+                    "bbox": [x1, y1, x2, y2],
+                    "confidence": 0.95,
+                    "species_code": "BRPE",
+                    "species_name": "Brown Pelican",
+                    ...
+                }
+            ]
+        }
+
+    Returns:
+        {
+            "success": True,
+            "image_filename": "image_123.jpg",
+            "correction_url": "/editor/<expert>/",
+            "num_detections": 5
+        }
+    """
+    try:
+        import base64
+        from datetime import datetime
+
+        data = request.json
+        if not data:
+            return jsonify({'error': 'No data provided'}), 400
+
+        image_base64 = data.get('image_base64')
+        detections = data.get('detections', [])
+
+        if not image_base64:
+            return jsonify({'error': 'No image data provided'}), 400
+
+        # Decode base64 image
+        image_bytes = base64.b64decode(image_base64)
+
+        # Generate unique filename with timestamp
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        image_filename = f"nestvision_{timestamp}.jpg"
+
+        # Save image to images directory
+        img_dir = get_image_dir()
+        image_path = os.path.join(img_dir, image_filename)
+
+        with open(image_path, 'wb') as f:
+            f.write(image_bytes)
+
+        print(f"✓ Saved image: {image_path}")
+
+        # Convert detections to YOLO format
+        if detections and len(detections) > 0:
+            # Read image to get dimensions
+            img = cv2.imread(image_path)
+            if img is None:
+                return jsonify({'error': 'Failed to read saved image'}), 500
+
+            h, w = img.shape[:2]
+
+            # Convert detections to YOLO format (normalized coordinates)
+            yolo_boxes = []
+            for det in detections:
+                bbox = det.get('bbox', [])
+                if len(bbox) == 4:
+                    x1, y1, x2, y2 = bbox
+
+                    # Convert to YOLO format: class_id x_center y_center width height species confidence
+                    x_center = (x1 + x2) / 2 / w
+                    y_center = (y1 + y2) / 2 / h
+                    box_width = (x2 - x1) / w
+                    box_height = (y2 - y1) / h
+
+                    species_code = det.get('species_code', 'UNKNOWN')
+                    species_conf = det.get('species_confidence', 0.0)
+
+                    yolo_boxes.append({
+                        'class_id': 0,  # All birds are class 0
+                        'x_center': x_center,
+                        'y_center': y_center,
+                        'width': box_width,
+                        'height': box_height,
+                        'species': species_code if species_code != 'UNKNOWN' else None,
+                        'confidence': species_conf
+                    })
+
+            # Save YOLO labels
+            save_labels(image_filename, yolo_boxes)
+            print(f"✓ Saved {len(yolo_boxes)} detections to labels")
+
+        # Return success with correction URL
+        # Use "expert" as default username (user can switch in Nestperts)
+        return jsonify({
+            'success': True,
+            'image_filename': image_filename,
+            'correction_url': f'/editor/expert/',
+            'num_detections': len(detections)
+        })
+
+    except Exception as e:
+        print(f"❌ Error uploading correction: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
 # ============================================================================
 # MAIN
 # ============================================================================
