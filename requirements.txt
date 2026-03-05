@@ -108,6 +108,11 @@ pyyaml
 boto3
 botocore
 
+# Geospatial: rasterio for Cloud Optimized GeoTIFF (COG) windowed reads
+# Required for NestMap mosaic preview and STAC dataset builder
+# Install: uv pip install rasterio
+rasterio
+
 # ============================================================================
 # OPTIONAL: ADVANCED ML FEATURES
 # ============================================================================

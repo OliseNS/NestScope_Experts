@@ -144,6 +144,15 @@ def render_map(df: pd.DataFrame, key: str = None):
             st.info("Valid coordinates: Latitude 24-31°N, Longitude -98 to -80°W")
             return
 
+        # Limit map rendering for extremely large datasets
+        if len(map_df) > 2000:
+            st.warning(f"⚠️ Dataset has {len(map_df):,} locations - too many to render on a map efficiently.")
+            st.info("💡 **Tip:** Refine your query to show fewer locations (e.g., filter by year, species, or colony).")
+            with st.expander("📊 View data summary instead"):
+                st.dataframe(map_df[[lat_col, lon_col] + ([name_col] if name_col else [])].head(100), use_container_width=True)
+                st.caption(f"Showing first 100 of {len(map_df):,} locations")
+            return
+
         # ====================================================================
         # STEP 3: Calculate map center and bounds
         # ====================================================================

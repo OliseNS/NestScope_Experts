@@ -459,3 +459,259 @@ def insert_table_row(table_name: str, row_data: Dict[str, Any]) -> Dict[str, Any
         return response.json()
     except requests.exceptions.RequestException as e:
         return {"success": False, "message": None, "error": str(e)}
+
+
+# ============================================================================
+# STAC DATA API — Water Institute avian monitoring catalog
+# ============================================================================
+
+@st.cache_data(ttl=3600)
+def get_stac_summary() -> Dict[str, Any]:
+    """
+    Fetch complete STAC summary: colony metadata + species totals.
+    Cached for 1 hour — data is static (historical survey records).
+    """
+    from .config import API_BASE_URL
+    try:
+        r = requests.get(f"{API_BASE_URL}/stac/summary", timeout=15)
+        r.raise_for_status()
+        return r.json()
+    except Exception as e:
+        return {"error": str(e), "colonies": [], "species_totals": {}}
+
+
+@st.cache_data(ttl=3600)
+def get_stac_species(colony_id: str, year: str) -> Dict[str, Any]:
+    """
+    Fetch species breakdown for a specific colony-year.
+    Returns {colony_id, year, species: [{code, name, color, total_birds, total_nests}]}
+    """
+    from .config import API_BASE_URL
+    try:
+        r = requests.get(f"{API_BASE_URL}/stac/species/{colony_id}/{year}", timeout=10)
+        r.raise_for_status()
+        return r.json()
+    except Exception as e:
+        return {"error": str(e), "species": []}
+
+
+@st.cache_data(ttl=3600)
+def get_stac_dots(colony_id: str, year: str, species_code: str, dot_type: str = "Bird") -> Dict[str, Any]:
+    """
+    Fetch expert-annotated species dot GeoJSON for a colony-year-species.
+    Returns a GeoJSON FeatureCollection.
+    """
+    from .config import API_BASE_URL
+    try:
+        r = requests.get(
+            f"{API_BASE_URL}/stac/dots/{colony_id}/{year}/{species_code}",
+            params={"dot_type": dot_type},
+            timeout=15
+        )
+        r.raise_for_status()
+        return r.json()
+    except Exception as e:
+        return {"type": "FeatureCollection", "features": [], "error": str(e)}
+
+
+@st.cache_data(ttl=3600)
+def get_mosaic_preview(colony_id: str, year: str) -> Optional[str]:
+    """
+    Fetch a 512x512 JPEG preview of a COG mosaic from S3 via the backend.
+    Returns base64-encoded JPEG string, or None if unavailable.
+    """
+    from .config import API_BASE_URL
+    try:
+        r = requests.get(f"{API_BASE_URL}/stac/mosaic_preview/{colony_id}/{year}", timeout=30)
+        r.raise_for_status()
+        return r.json().get("preview_base64")
+    except Exception:
+        return None
+
+
+def run_mosaic_inference(colony_id: str, year: str, conf: float = 0.25, fast_mode: bool = True) -> Dict[str, Any]:
+    """
+    Run NestVision bird detection on a center tile of a colony COG mosaic.
+    Returns detection results with species_summary.
+    """
+    from .config import API_BASE_URL
+    try:
+        r = requests.post(
+            f"{API_BASE_URL}/cv/inference/mosaic",
+            params={"colony_id": colony_id, "year": year, "conf": conf, "fast_mode": fast_mode},
+            timeout=90
+        )
+        r.raise_for_status()
+        return r.json()
+    except Exception as e:
+        return {"error": str(e)}
+
+
+# ============================================================================
+# EROSION & SPECIES RISK API — Conservation intelligence endpoints
+# ============================================================================
+
+@st.cache_data(ttl=3600)
+def get_species_risk_assessment() -> Dict[str, Any]:
+    """
+    Fetch comprehensive species risk assessment for all Gulf Coast species.
+    Returns: {species_assessments: [...], summary_stats: {...}}
+    """
+    from .config import API_BASE_URL
+    try:
+        r = requests.get(f"{API_BASE_URL}/species/risk_assessment", timeout=15)
+        r.raise_for_status()
+        return r.json()
+    except Exception as e:
+        return {"error": str(e), "species_assessments": [], "summary_stats": {}}
+
+
+@st.cache_data(ttl=3600)
+def get_species_risk_detail(species_code: str) -> Dict[str, Any]:
+    """
+    Fetch detailed risk assessment for a specific species.
+    """
+    from .config import API_BASE_URL
+    try:
+        r = requests.get(f"{API_BASE_URL}/species/risk/{species_code}", timeout=10)
+        r.raise_for_status()
+        return r.json()
+    except Exception as e:
+        return {"error": str(e)}
+
+
+def get_population_projection(species_code: str, years_forward: int = 10, model: str = "linear") -> Dict[str, Any]:
+    """
+    Get population projection for a species.
+    """
+    from .config import API_BASE_URL
+    try:
+        r = requests.get(
+            f"{API_BASE_URL}/species/population_projection/{species_code}",
+            params={"years_forward": years_forward, "model": model},
+            timeout=10
+        )
+        r.raise_for_status()
+        return r.json()
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@st.cache_data(ttl=3600)
+def get_erosion_risk_zones() -> Dict[str, Any]:
+    """
+    Fetch erosion risk zones (GeoJSON).
+    """
+    from .config import API_BASE_URL
+    try:
+        r = requests.get(f"{API_BASE_URL}/erosion/risk_zones", timeout=10)
+        r.raise_for_status()
+        return r.json()
+    except Exception as e:
+        return {"type": "FeatureCollection", "features": [], "error": str(e)}
+
+
+@st.cache_data(ttl=3600)
+def get_shoreline_history() -> Dict[str, Any]:
+    """
+    Fetch historical shoreline positions (GeoJSON).
+    """
+    from .config import API_BASE_URL
+    try:
+        r = requests.get(f"{API_BASE_URL}/erosion/shoreline_history", timeout=10)
+        r.raise_for_status()
+        return r.json()
+    except Exception as e:
+        return {"type": "FeatureCollection", "features": [], "error": str(e)}
+
+
+@st.cache_data(ttl=3600)
+def get_slr_projections(scenario: str = "2050_intermediate") -> Dict[str, Any]:
+    """
+    Fetch sea level rise projections (GeoJSON).
+    """
+    from .config import API_BASE_URL
+    try:
+        r = requests.get(
+            f"{API_BASE_URL}/erosion/slr_projections",
+            params={"scenario": scenario},
+            timeout=10
+        )
+        r.raise_for_status()
+        return r.json()
+    except Exception as e:
+        return {"type": "FeatureCollection", "features": [], "error": str(e)}
+
+
+@st.cache_data(ttl=3600)
+def get_storm_tracks(years: Optional[List[int]] = None) -> Dict[str, Any]:
+    """
+    Fetch major storm tracks (GeoJSON).
+    """
+    from .config import API_BASE_URL
+    try:
+        params = {"years": years} if years else {}
+        r = requests.get(f"{API_BASE_URL}/erosion/storm_tracks", params=params, timeout=10)
+        r.raise_for_status()
+        return r.json()
+    except Exception as e:
+        return {"type": "FeatureCollection", "features": [], "error": str(e)}
+
+
+@st.cache_data(ttl=3600)
+def get_colony_erosion_risk(colony_id: str) -> Dict[str, Any]:
+    """
+    Get erosion risk details for a specific colony.
+    """
+    from .config import API_BASE_URL
+    try:
+        r = requests.get(f"{API_BASE_URL}/colonies/erosion_risk/{colony_id}", timeout=10)
+        r.raise_for_status()
+        return r.json()
+    except Exception as e:
+        return {"error": str(e)}
+
+
+def get_colony_viability(colony_id: str, current_area_m2: float = 50000, minimum_viable_area_m2: float = 5000) -> Dict[str, Any]:
+    """
+    Get colony viability assessment.
+    """
+    from .config import API_BASE_URL
+    try:
+        r = requests.get(
+            f"{API_BASE_URL}/colonies/viability/{colony_id}",
+            params={"current_area_m2": current_area_m2, "minimum_viable_area_m2": minimum_viable_area_m2},
+            timeout=10
+        )
+        r.raise_for_status()
+        return r.json()
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@st.cache_data(ttl=3600)
+def get_restoration_priorities() -> Dict[str, Any]:
+    """
+    Fetch restoration priority scores for all colonies.
+    Returns: {priority_map: GeoJSON, top_recommendations: [...], methodology: {...}}
+    """
+    from .config import API_BASE_URL
+    try:
+        r = requests.get(f"{API_BASE_URL}/restoration/priorities", timeout=30)
+        r.raise_for_status()
+        return r.json()
+    except Exception as e:
+        return {"error": str(e), "priority_map": {"type": "FeatureCollection", "features": []}, "top_recommendations": []}
+
+
+def get_storm_impact_analysis(species_code: str) -> Dict[str, Any]:
+    """
+    Get storm impact analysis for a species.
+    """
+    from .config import API_BASE_URL
+    try:
+        r = requests.get(f"{API_BASE_URL}/analysis/storm_impact/{species_code}", timeout=10)
+        r.raise_for_status()
+        return r.json()
+    except Exception as e:
+        return {"error": str(e)}

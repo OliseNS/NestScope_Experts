@@ -350,7 +350,7 @@ else:
 - Multi-expert annotation workflow
 - Species identification and classification
 - Project state tracked in `project_state.json`
-- YOLO format labels (normalized coordinates) with species metadata
+- YOLO26 format labels (normalized coordinates) with species metadata
 
 **MobileSAM Integration:**
 
@@ -401,7 +401,7 @@ Nestperts uses MobileSAM (from Ultralytics) for interactive segmentation:
 - `labeller/nestvision/` - Dataset directory (images/, labels/, classes.txt, species data)
 
 ### Models
-- `models/seconditer.onnx` - YOLOv8 bird detection model (1024x1024 input)
+- `models/seconditer.onnx` - YOLO26 bird detection model (1024x1024 input)
 - `models/mobile_sam.pt` - MobileSAM segmentation model
 
 ### Data

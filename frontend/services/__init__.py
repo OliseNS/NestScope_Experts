@@ -18,7 +18,12 @@ from .api_client import (
     update_table_row,
     delete_table_row,
     insert_table_row,
-    get_backend_config
+    get_backend_config,
+    get_stac_summary,
+    get_stac_species,
+    get_stac_dots,
+    get_mosaic_preview,
+    run_mosaic_inference,
 )
 from .config import API_BASE_URL
 
@@ -39,5 +44,10 @@ __all__ = [
     'delete_table_row',
     'insert_table_row',
     'get_backend_config',
+    'get_stac_summary',
+    'get_stac_species',
+    'get_stac_dots',
+    'get_mosaic_preview',
+    'run_mosaic_inference',
     'API_BASE_URL'
 ]

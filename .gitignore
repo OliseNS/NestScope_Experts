@@ -270,3 +270,16 @@ cluster_visualization_*.png
 !docs/reference/*.jpg
 !frontend/assets/logo.png
 !frontend/assets/favicon.ico
+
+# ============================================================================
+# NestVision Generated Data (heavy datasets and visualizations)
+# ============================================================================
+NestVision/species_dataset/
+NestVision/species_vis/
+NestVision/refined_dataset/
+NestVision/refined_vis/
+NestVision/cog_training_dataset/
+NestVision/dataset_vis/
+NestVision/coordinate_diagnosis/
+NestVision/__pycache__/
+NestVision/*.pyc

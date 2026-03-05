@@ -98,6 +98,7 @@ class StatsResponse(BaseModel):
 class CVInferenceResponse(BaseModel):
     bird_count: int
     detections: List[Dict[str, Any]]
+    species_summary: Dict[str, int] = {}  # {group_name: count}
     annotated_image_base64: str
     message: str
     inference_time: float
@@ -1728,6 +1729,7 @@ async def run_cv_inference(
         return {
             "bird_count": bird_count,
             "detections": results['detections'],
+            "species_summary": results.get('species_summary', {}),
             "annotated_image_base64": image_base64,
             "message": message,
             "inference_time": inference_time
@@ -1772,6 +1774,205 @@ async def get_example_image(filename: str):
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+# ============================================================================
+# STAC DATA ENDPOINTS
+# Proxy endpoints for The Water Institute's avian STAC catalog.
+# All S3 data is cached 1 hour in stac_client to keep responses fast.
+# ============================================================================
+
+from server.stac_tools.stac_client import (
+    get_colony_list, get_species_totals, get_colony_species_breakdown,
+    get_colony_dots, build_mosaic_url, COLONIES, SPECIES_INFO
+)
+
+@app.get("/stac/summary")
+async def stac_summary():
+    """
+    Returns complete STAC summary: colony metadata + species totals.
+    Used by the NestMap page to populate the colony map and species charts.
+    """
+    try:
+        return {
+            "colonies": get_colony_list(),
+            "species_totals": get_species_totals(),
+            "species_info": SPECIES_INFO,
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/stac/colonies")
+async def stac_colonies():
+    """Returns list of all colonies with coordinates and species counts."""
+    try:
+        return {"colonies": get_colony_list()}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/stac/species/{colony_id}/{year}")
+async def stac_species_breakdown(colony_id: str, year: str):
+    """
+    Returns species breakdown for a specific colony-year.
+    Each item: {code, name, color, total_birds, total_nests}
+    """
+    try:
+        breakdown = get_colony_species_breakdown(colony_id, year)
+        return {"colony_id": colony_id, "year": year, "species": breakdown}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/stac/dots/{colony_id}/{year}/{species_code}")
+async def stac_dots(colony_id: str, year: str, species_code: str, dot_type: str = "Bird"):
+    """
+    Proxy for species dot GeoJSON from S3. Cached 1 hour.
+    Returns a GeoJSON FeatureCollection with expert-annotated bird locations.
+    """
+    try:
+        geojson = get_colony_dots(colony_id, year, species_code, dot_type)
+        return geojson
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/stac/mosaic_preview/{colony_id}/{year}")
+async def stac_mosaic_preview(colony_id: str, year: str):
+    """
+    Returns a 512x512 JPEG preview of a COG mosaic via windowed read.
+    Requires rasterio. Returns base64-encoded JPEG.
+    """
+    try:
+        import io
+        import numpy as np
+        import base64 as b64
+        from PIL import Image as PILImage
+
+        cog_url = build_mosaic_url(colony_id, year)
+        if not cog_url:
+            raise HTTPException(status_code=404, detail=f"No mosaic for {colony_id}/{year}")
+
+        try:
+            import rasterio
+            import rasterio.windows
+        except ImportError:
+            raise HTTPException(status_code=501, detail="rasterio not installed. Run: pip install rasterio")
+
+        with rasterio.Env(GDAL_HTTP_UNSAFESSL="YES", GDAL_DISABLE_READDIR_ON_OPEN="EMPTY_DIR",
+                          GDAL_HTTP_MERGE_CONSECUTIVE_RANGES="YES"):
+            with rasterio.open(cog_url) as src:
+                w, h = src.width, src.height
+                cx, cy = w // 2, h // 2
+                half = min(256, cx, cy)
+                window = rasterio.windows.Window(cx - half, cy - half, half * 2, half * 2)
+                # Read RGB bands (bands 1,2,3)
+                num_bands = src.count
+                bands_to_read = list(range(1, min(4, num_bands + 1)))
+                data = src.read(bands_to_read, window=window, boundless=True, fill_value=0)
+
+        # data shape: (bands, H, W) — take first 3 bands
+        if data.shape[0] >= 3:
+            rgb = np.transpose(data[:3], (1, 2, 0))
+        elif data.shape[0] == 1:
+            rgb = np.repeat(np.transpose(data, (1, 2, 0)), 3, axis=2)
+        else:
+            rgb = np.transpose(data, (1, 2, 0))
+
+        img_pil = PILImage.fromarray(rgb.astype(np.uint8))
+        # Resize to 512x512 for consistent display
+        img_pil = img_pil.resize((512, 512), PILImage.LANCZOS)
+        buf = io.BytesIO()
+        img_pil.save(buf, format="JPEG", quality=80)
+        preview_b64 = b64.b64encode(buf.getvalue()).decode()
+
+        return {
+            "colony_id": colony_id,
+            "year": year,
+            "mosaic_url": cog_url,
+            "preview_base64": preview_b64,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Mosaic preview failed: {str(e)}")
+
+
+@app.post("/cv/inference/mosaic")
+async def cv_inference_on_mosaic(
+    colony_id: str,
+    year: str,
+    conf: float = 0.25,
+    fast_mode: bool = True,
+):
+    """
+    Run NestVision bird detection on a 1024x1024 center tile of a COG mosaic.
+    Useful for running inference directly on Water Institute survey mosaics.
+    """
+    if bird_detector is None:
+        raise HTTPException(status_code=503, detail="CV model not loaded")
+
+    try:
+        import io
+        import tempfile
+        import numpy as np
+
+        cog_url = build_mosaic_url(colony_id, year)
+        if not cog_url:
+            raise HTTPException(status_code=404, detail=f"No mosaic for {colony_id}/{year}")
+
+        try:
+            import rasterio
+            import rasterio.windows
+        except ImportError:
+            raise HTTPException(status_code=501, detail="rasterio not installed")
+
+        with rasterio.Env(GDAL_HTTP_UNSAFESSL="YES", GDAL_DISABLE_READDIR_ON_OPEN="EMPTY_DIR"):
+            with rasterio.open(cog_url) as src:
+                w, h = src.width, src.height
+                cx, cy = w // 2, h // 2
+                half = 512  # 1024x1024 tile
+                window = rasterio.windows.Window(
+                    max(0, cx - half), max(0, cy - half),
+                    min(half * 2, w), min(half * 2, h)
+                )
+                num_bands = src.count
+                bands = list(range(1, min(4, num_bands + 1)))
+                data = src.read(bands, window=window, boundless=True, fill_value=0)
+
+        if data.shape[0] >= 3:
+            rgb = np.transpose(data[:3], (1, 2, 0)).astype(np.uint8)
+        elif data.shape[0] == 1:
+            rgb = np.repeat(np.transpose(data, (1, 2, 0)), 3, axis=2).astype(np.uint8)
+        else:
+            rgb = np.transpose(data, (1, 2, 0)).astype(np.uint8)
+
+        # Convert RGB → BGR for OpenCV/BirdDetector
+        bgr = cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR)
+        img_bytes = cv2.imencode('.jpg', bgr)[1].tobytes()
+
+        results = bird_detector.predict_from_bytes(img_bytes, conf_threshold=conf, fast_mode=fast_mode)
+
+        annotated_bgr = results['annotated_image']
+        _, buffer = cv2.imencode('.jpg', annotated_bgr, [cv2.IMWRITE_JPEG_QUALITY, 85])
+        image_base64 = base64.b64encode(buffer).decode('utf-8')
+
+        bird_count = results['bird_count']
+        return {
+            "colony_id": colony_id,
+            "year": year,
+            "bird_count": bird_count,
+            "detections": results['detections'],
+            "species_summary": results.get('species_summary', {}),
+            "annotated_image_base64": image_base64,
+            "message": f"Detected {bird_count} bird{'s' if bird_count != 1 else ''} in {colony_id} {year} mosaic tile",
+            "inference_time": results.get('inference_time', 0.0),
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Mosaic inference failed: {str(e)}")
+
 
 @app.post("/query/execute", response_model=CustomSQLResponse)
 async def execute_custom_query(request: CustomSQLRequest):
@@ -2209,6 +2410,281 @@ async def insert_table_row(table_name: str, request: RowInsertRequest):
             message=None,
             error=str(e)
         )
+
+# ============================================================================
+# EROSION & SPECIES RISK ENDPOINTS
+# ============================================================================
+
+from server.erosion_tools import (
+    get_species_risk_summary,
+    calculate_species_risk,
+    get_erosion_risk_zones,
+    get_shoreline_history,
+    project_population,
+    assess_colony_viability,
+    calculate_restoration_priorities,
+)
+from server.erosion_tools.erosion_data import (
+    get_sea_level_rise_projections,
+    get_storm_tracks,
+    get_colony_erosion_risk,
+)
+from server.erosion_tools.predictive_models import correlate_with_environmental_events
+
+@app.get("/species/risk_assessment")
+async def species_risk_assessment():
+    """
+    Get comprehensive species risk assessment for all Gulf Coast colonial nesters.
+
+    Returns:
+        {
+            "species_assessments": List of species with risk scores and categories,
+            "summary_stats": Count by risk category
+        }
+    """
+    try:
+        db_path = os.getenv("DB_PATH", "data/bird_data_complete.db")
+        result = get_species_risk_summary(db_path)
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/species/risk/{species_code}")
+async def species_risk_detail(species_code: str):
+    """
+    Get detailed risk assessment for a specific species.
+
+    Args:
+        species_code: 4-letter species code (e.g., BRPE, ROSP)
+    """
+    try:
+        db_path = os.getenv("DB_PATH", "data/bird_data_complete.db")
+        result = calculate_species_risk(db_path, species_code.upper())
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/species/population_projection/{species_code}")
+async def population_projection(species_code: str, years_forward: int = 10, model: str = "linear"):
+    """
+    Project future population for a species based on historical trends.
+
+    Args:
+        species_code: 4-letter species code
+        years_forward: Number of years to project (default: 10)
+        model: "linear" or "exponential"
+    """
+    try:
+        db_path = os.getenv("DB_PATH", "data/bird_data_complete.db")
+        risk_data = calculate_species_risk(db_path, species_code.upper())
+        population_history = risk_data.get("population_history", [])
+
+        projection = project_population(population_history, years_forward, model)
+        projection["species_code"] = species_code.upper()
+
+        return projection
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/erosion/risk_zones")
+async def erosion_risk_zones():
+    """
+    Get GeoJSON FeatureCollection of erosion risk zones across the Gulf Coast.
+
+    Returns:
+        GeoJSON with risk levels (EXTREME/HIGH/MEDIUM/LOW) and erosion rates
+    """
+    try:
+        return get_erosion_risk_zones()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/erosion/shoreline_history")
+async def shoreline_history():
+    """
+    Get historical shoreline positions (1850-2020) showing coastal erosion over time.
+
+    Returns:
+        GeoJSON FeatureCollection of shoreline LineStrings
+    """
+    try:
+        return get_shoreline_history()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/erosion/slr_projections")
+async def slr_projections(scenario: str = "2050_intermediate"):
+    """
+    Get sea level rise inundation projections for a given scenario.
+
+    Args:
+        scenario: One of 2030_intermediate, 2050_intermediate, 2070_intermediate, 2100_high
+
+    Returns:
+        GeoJSON FeatureCollection of inundation zones
+    """
+    try:
+        return get_sea_level_rise_projections(scenario)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/erosion/storm_tracks")
+async def storm_tracks(years: Optional[List[int]] = None):
+    """
+    Get major storm tracks that impacted Gulf Coast bird colonies (2005-2024).
+
+    Args:
+        years: Optional list of years to filter (e.g., [2005, 2021])
+
+    Returns:
+        GeoJSON FeatureCollection of storm tracks with impact descriptions
+    """
+    try:
+        return get_storm_tracks(years)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/colonies/erosion_risk/{colony_id}")
+async def colony_erosion_risk(colony_id: str):
+    """
+    Get erosion risk details for a specific colony.
+
+    Args:
+        colony_id: Colony identifier
+
+    Returns:
+        {
+            "colony_id": str,
+            "risk_score": float,
+            "risk_level": str,
+            "erosion_rate_m_per_year": float,
+            "recommendation": str
+        }
+    """
+    try:
+        return get_colony_erosion_risk(colony_id)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/colonies/viability/{colony_id}")
+async def colony_viability(
+    colony_id: str,
+    current_area_m2: float = 50000,
+    minimum_viable_area_m2: float = 5000
+):
+    """
+    Assess colony viability and predict years until critical threshold.
+
+    Args:
+        colony_id: Colony identifier
+        current_area_m2: Current colony land area (default: 50000)
+        minimum_viable_area_m2: Minimum area for viability (default: 5000)
+
+    Returns:
+        {
+            "years_until_critical": int,
+            "viability_2050": str,
+            "recommendation": str
+        }
+    """
+    try:
+        erosion_info = get_colony_erosion_risk(colony_id)
+        erosion_rate = erosion_info["erosion_rate_m_per_year"]
+
+        result = assess_colony_viability(
+            colony_id,
+            erosion_rate,
+            current_area_m2,
+            minimum_viable_area_m2
+        )
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/restoration/priorities")
+async def restoration_priorities():
+    """
+    Calculate restoration priority scores for all colonies.
+
+    Returns:
+        {
+            "priority_map": GeoJSON with priority scores,
+            "top_recommendations": Top 10 sites ranked by priority,
+            "methodology": Description of scoring algorithm
+        }
+    """
+    try:
+        db_path = os.getenv("DB_PATH", "data/bird_data_complete.db")
+
+        # Get species risk data
+        species_risk_data = get_species_risk_summary(db_path)
+
+        # Get erosion data
+        erosion_data = get_erosion_risk_zones()
+
+        # Calculate priorities
+        result = calculate_restoration_priorities(db_path, species_risk_data, erosion_data)
+
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/analysis/storm_impact/{species_code}")
+async def storm_impact_analysis(species_code: str):
+    """
+    Analyze correlation between population changes and major storm events.
+
+    Args:
+        species_code: 4-letter species code
+
+    Returns:
+        {
+            "storm_impact_detected": bool,
+            "avg_decline_post_storm_pct": float,
+            "recovery_time_years": int,
+            "resilience_score": float
+        }
+    """
+    try:
+        db_path = os.getenv("DB_PATH", "data/bird_data_complete.db")
+
+        # Get population history
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+
+        query = """
+        SELECT Year, SUM(BirdsTotal) as total_birds
+        FROM [tblColonyTotals2010-2021_MayJuneCombined]
+        WHERE SpeciesCode = ?
+        GROUP BY Year
+        ORDER BY Year
+        """
+
+        cursor.execute(query, (species_code.upper(),))
+        population_data = [(row[0], row[1] or 0) for row in cursor.fetchall()]
+        conn.close()
+
+        # Major Gulf Coast storms
+        storm_years = [2005, 2008, 2012, 2020, 2021]  # Katrina, Gustav, Isaac, Laura, Ida
+
+        result = correlate_with_environmental_events(population_data, storm_years)
+        result["species_code"] = species_code.upper()
+        result["analyzed_storms"] = ["Katrina (2005)", "Isaac (2012)", "Ida (2021)"]
+
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 
 if __name__ == "__main__":
     import uvicorn

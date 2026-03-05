@@ -8,6 +8,7 @@ import requests
 import base64
 from io import BytesIO
 from PIL import Image
+import plotly.express as px
 
 # Import from modular structure
 from services import run_cv_inference, get_example_images, fetch_example_image, API_BASE_URL
@@ -83,10 +84,12 @@ with st.expander("ℹ️ About the Model", expanded=False):
     - Merges results intelligently to avoid duplicate detections
     - Works best for images with multiple birds or distant subjects
 
-    ### Species Identification
+    ### Species Classification
+    - Detections are automatically grouped into **7 functional categories**:
+      Pelican, Gull, Tern, White Wader, Color Wader, Dark, Shorebird
+    - Each box is **color-coded** by group for quick visual identification
     - For **expert species identification and training**, use the **Nestperts** platform
-    - Experts can assign species to detected birds
-    - Expert-labeled data improves future model versions
+    - Experts can assign precise species codes (e.g., BRPE, LAGU) to each detection
 
     ### Technical Details
     - **Input resolution**: 1024×1024 pixels
@@ -295,6 +298,40 @@ if image_to_process:
             st.metric("⚡ Inference Time", f"{inference_time:.2f}s")
 
         # ====================================================================
+        # SPECIES GROUP BREAKDOWN
+        # ====================================================================
+
+        species_summary = result.get("species_summary", {})
+        # Filter out UNKNOWN if other groups are present
+        display_summary = {k: v for k, v in species_summary.items() if k != "UNKNOWN"} or species_summary
+        if display_summary and bird_count > 0:
+            st.markdown("---")
+            st.markdown("#### 🦜 Species Group Breakdown")
+            # Metric tiles per group
+            group_cols = st.columns(min(len(display_summary), 5))
+            for i, (group, count) in enumerate(sorted(display_summary.items(), key=lambda x: -x[1])):
+                with group_cols[i % len(group_cols)]:
+                    label = group.replace("_", " ").title()
+                    st.metric(label=label, value=count)
+            # Mini horizontal bar chart
+            if len(display_summary) > 1:
+                fig = px.bar(
+                    x=list(display_summary.values()),
+                    y=[g.replace("_", " ").title() for g in display_summary.keys()],
+                    orientation="h",
+                    color_discrete_sequence=["#D97757"],
+                    labels={"x": "Count", "y": "Group"},
+                    template="plotly_dark",
+                )
+                fig.update_layout(
+                    paper_bgcolor="#1A1A1A", plot_bgcolor="#2D2D2D",
+                    showlegend=False, height=max(120, len(display_summary) * 35),
+                    margin=dict(l=10, r=10, t=8, b=8),
+                    yaxis=dict(categoryorder="total ascending")
+                )
+                st.plotly_chart(fig, use_container_width=True)
+
+        # ====================================================================
         # DOWNLOAD AND CORRECTION WORKFLOW
         # ====================================================================
 
@@ -365,11 +402,14 @@ if image_to_process:
                     detection_data = []
                     for i, det in enumerate(detections, 1):
                         bbox = det.get('bbox', [])
+                        group = det.get('species_group', '')
+                        cls_conf = det.get('species_confidence', 0.0)
                         detection_data.append({
                             "Detection #": i,
                             "Confidence": f"{det.get('confidence', 0):.2%}",
+                            "Species Group": group.replace("_", " ").title() if group else "—",
+                            "Group Conf": f"{cls_conf:.0%}" if cls_conf else "—",
                             "Bounding Box": f"[{bbox[0]:.0f}, {bbox[1]:.0f}, {bbox[2]:.0f}, {bbox[3]:.0f}]",
-                            "Class ID": det.get('class_id', 0)
                         })
 
                     st.dataframe(pd.DataFrame(detection_data), use_container_width=True)
