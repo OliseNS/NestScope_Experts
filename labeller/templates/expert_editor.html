@@ -1,0 +1,1775 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Nestperts - Annotate {{ image_name }}</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Crimson+Pro:wght@400;600;700&family=DM+Sans:wght@400;500;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --orange-primary: #D97757;
+            --orange-light: #e8b896;
+            --orange-dark: #c5654a;
+            --bg-dark: #1a1614;
+            --surface: #2a2421;
+            --surface-light: #3a3431;
+            --text-primary: #f5f1ed;
+            --text-secondary: #c4b5a8;
+            --text-muted: #8a7e74;
+            --success: #7cb342;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'DM Sans', sans-serif;
+            background: var(--bg-dark);
+            color: var(--text-primary);
+            overflow: hidden;
+            height: 100vh;
+        }
+
+        h1, h2, h3, h4 {
+            font-family: 'Crimson Pro', serif;
+        }
+
+        /* Top Bar */
+        .top-bar {
+            background: var(--surface);
+            border-bottom: 1px solid rgba(217, 119, 87, 0.2);
+            padding: 0.75rem 1.5rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            height: 60px;
+        }
+
+        .top-bar-left {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+
+        .back-btn {
+            background: none;
+            border: none;
+            color: var(--text-secondary);
+            font-size: 1.5rem;
+            cursor: pointer;
+            padding: 0.5rem;
+            border-radius: 6px;
+            transition: all 0.3s;
+        }
+
+        .back-btn:hover {
+            background: var(--surface-light);
+            color: var(--orange-primary);
+        }
+
+        .image-title {
+            font-size: 1.125rem;
+            color: var(--text-primary);
+        }
+
+        .progress-indicator {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            font-size: 0.875rem;
+            color: var(--text-muted);
+        }
+
+        .nav-controls {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .nav-btn {
+            background: var(--surface-light);
+            border: 2px solid rgba(217, 119, 87, 0.3);
+            color: var(--text-primary);
+            width: 36px;
+            height: 36px;
+            border-radius: 8px;
+            font-size: 1.125rem;
+            cursor: pointer;
+            transition: all 0.3s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+        }
+
+        .nav-btn:hover {
+            background: var(--orange-primary);
+            border-color: var(--orange-primary);
+            color: white;
+        }
+
+        .jump-input {
+            background: var(--surface-light);
+            border: 2px solid rgba(217, 119, 87, 0.3);
+            color: var(--text-primary);
+            width: 60px;
+            height: 36px;
+            border-radius: 8px;
+            text-align: center;
+            font-size: 0.875rem;
+            font-weight: 600;
+            padding: 0 0.5rem;
+            font-family: 'DM Sans', sans-serif;
+        }
+
+        .jump-input:focus {
+            outline: none;
+            border-color: var(--orange-primary);
+        }
+
+        .progress-bar {
+            width: 150px;
+            height: 6px;
+            background: var(--surface-light);
+            border-radius: 3px;
+            overflow: hidden;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: var(--orange-primary);
+            transition: width 0.3s;
+        }
+
+        /* Main Layout */
+        .main-layout {
+            display: grid;
+            grid-template-columns: 280px 1fr 400px;
+            height: calc(100vh - 60px);
+        }
+
+        /* Left Sidebar - Tools */
+        .left-sidebar {
+            background: var(--surface);
+            border-right: 1px solid rgba(217, 119, 87, 0.2);
+            display: flex;
+            flex-direction: column;
+            overflow-y: auto;
+        }
+
+        .sidebar-section {
+            padding: 1.5rem;
+            border-bottom: 1px solid rgba(217, 119, 87, 0.1);
+        }
+
+        .section-title {
+            font-size: 0.875rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: var(--text-muted);
+            margin-bottom: 1rem;
+        }
+
+        .tool-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 0.75rem;
+        }
+
+        .tool-btn {
+            background: var(--surface-light);
+            border: 2px solid transparent;
+            padding: 1rem;
+            border-radius: 10px;
+            cursor: pointer;
+            transition: all 0.3s;
+            text-align: center;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .tool-btn:hover {
+            border-color: var(--orange-primary);
+            background: rgba(217, 119, 87, 0.1);
+        }
+
+        .tool-btn.active {
+            border-color: var(--orange-primary);
+            background: var(--orange-primary);
+            color: white;
+        }
+
+        .tool-icon {
+            font-size: 1.75rem;
+        }
+
+        .tool-label {
+            font-size: 0.75rem;
+            font-weight: 600;
+        }
+
+        .tool-shortcut {
+            font-size: 0.7rem;
+            color: var(--text-muted);
+            margin-top: 0.25rem;
+        }
+
+        .tool-btn.active .tool-shortcut {
+            color: rgba(255, 255, 255, 0.7);
+        }
+
+        /* Box List */
+        .box-list {
+            max-height: 300px;
+            overflow-y: auto;
+        }
+
+        .box-item {
+            background: var(--surface-light);
+            padding: 0.75rem;
+            margin-bottom: 0.5rem;
+            border-radius: 8px;
+            cursor: pointer;
+            border: 2px solid transparent;
+            transition: all 0.3s;
+        }
+
+        .box-item:hover {
+            border-color: var(--orange-primary);
+        }
+
+        .box-item.selected {
+            border-color: var(--orange-primary);
+            background: rgba(217, 119, 87, 0.2);
+        }
+
+        .box-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 0.5rem;
+        }
+
+        .box-id {
+            font-weight: 600;
+            color: var(--orange-primary);
+        }
+
+        .box-species {
+            font-size: 0.875rem;
+            color: var(--text-secondary);
+        }
+
+        .box-unidentified {
+            color: var(--text-muted);
+            font-style: italic;
+        }
+
+        .identify-btn {
+            background: var(--orange-primary);
+            border: none;
+            color: white;
+            padding: 0.5rem 1rem;
+            border-radius: 6px;
+            font-size: 0.75rem;
+            cursor: pointer;
+            font-weight: 600;
+            transition: all 0.3s;
+            width: 100%;
+            margin-top: 0.5rem;
+        }
+
+        .identify-btn:hover {
+            background: var(--orange-dark);
+            transform: scale(1.02);
+        }
+
+        /* Canvas Container */
+        .canvas-container {
+            position: relative;
+            overflow: hidden;
+            background: #000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        #annotation-canvas {
+            cursor: crosshair;
+            image-rendering: crisp-edges;
+        }
+
+        .canvas-overlay {
+            position: absolute;
+            top: 1rem;
+            left: 1rem;
+            background: rgba(42, 36, 33, 0.9);
+            backdrop-filter: blur(10px);
+            padding: 1rem;
+            border-radius: 12px;
+            border: 1px solid rgba(217, 119, 87, 0.3);
+            font-size: 0.875rem;
+            z-index: 10;
+        }
+
+        .zoom-controls {
+            position: absolute;
+            bottom: 1rem;
+            right: 1rem;
+            display: flex;
+            gap: 0.5rem;
+            z-index: 10;
+        }
+
+        .zoom-btn {
+            background: rgba(42, 36, 33, 0.9);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(217, 119, 87, 0.3);
+            color: var(--text-primary);
+            width: 40px;
+            height: 40px;
+            border-radius: 8px;
+            font-size: 1.125rem;
+            cursor: pointer;
+            transition: all 0.3s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+        }
+
+        .zoom-btn:hover {
+            background: var(--orange-primary);
+            border-color: var(--orange-primary);
+        }
+
+        /* Right Sidebar - Species Classification */
+        .right-sidebar {
+            background: var(--surface);
+            border-left: 1px solid rgba(217, 119, 87, 0.2);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .classification-header {
+            padding: 1.5rem;
+            background: linear-gradient(135deg, var(--orange-dark), var(--orange-primary));
+            color: white;
+        }
+
+        .classification-title {
+            font-size: 1.25rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .classification-subtitle {
+            font-size: 0.875rem;
+            opacity: 0.9;
+        }
+
+        .classification-content {
+            flex: 1;
+            overflow-y: auto;
+            padding: 1.5rem;
+        }
+
+        .question-section {
+            margin-bottom: 2rem;
+        }
+
+        .question-number {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 0.5rem;
+        }
+
+        .question-text {
+            font-size: 1.125rem;
+            margin-bottom: 1.25rem;
+            color: var(--text-primary);
+            font-family: 'Crimson Pro', serif;
+            line-height: 1.5;
+        }
+
+        .answer-grid {
+            display: grid;
+            gap: 0.75rem;
+        }
+
+        .answer-option {
+            background: var(--surface-light);
+            border: 2px solid rgba(217, 119, 87, 0.2);
+            padding: 1rem;
+            border-radius: 10px;
+            cursor: pointer;
+            transition: all 0.3s;
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            font-weight: 500;
+        }
+
+        .answer-option:hover {
+            border-color: var(--orange-primary);
+            background: rgba(217, 119, 87, 0.1);
+            transform: translateX(4px);
+        }
+
+        .answer-icon {
+            font-size: 1.25rem;
+            width: 30px;
+            text-align: center;
+        }
+
+        .candidates-section {
+            background: var(--surface-light);
+            border-radius: 12px;
+            padding: 1.25rem;
+        }
+
+        .candidates-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1rem;
+        }
+
+        .candidates-title {
+            font-size: 0.875rem;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .candidates-count {
+            background: var(--orange-primary);
+            color: white;
+            padding: 0.25rem 0.75rem;
+            border-radius: 12px;
+            font-size: 0.75rem;
+            font-weight: 700;
+        }
+
+        .species-list {
+            display: grid;
+            gap: 0.75rem;
+        }
+
+        .species-option {
+            background: var(--surface);
+            border: 2px solid transparent;
+            padding: 1rem;
+            border-radius: 10px;
+            cursor: pointer;
+            transition: all 0.3s;
+            display: flex;
+            gap: 1rem;
+            align-items: center;
+        }
+
+        .species-option:hover {
+            border-color: var(--orange-primary);
+            transform: scale(1.02);
+        }
+
+        .species-thumb {
+            width: 60px;
+            height: 60px;
+            border-radius: 8px;
+            object-fit: cover;
+            background: var(--surface-light);
+        }
+
+        .species-info {
+            flex: 1;
+        }
+
+        .species-common {
+            font-weight: 600;
+            margin-bottom: 0.25rem;
+        }
+
+        .species-scientific {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            font-style: italic;
+        }
+
+        .species-confidence {
+            font-size: 0.75rem;
+            color: var(--orange-primary);
+            font-weight: 600;
+            margin-top: 0.25rem;
+        }
+
+        .action-footer {
+            padding: 1.5rem;
+            border-top: 1px solid rgba(217, 119, 87, 0.2);
+        }
+
+        .btn-primary {
+            background: var(--orange-primary);
+            border: none;
+            color: white;
+            padding: 1rem;
+            border-radius: 10px;
+            font-size: 1rem;
+            font-weight: 700;
+            cursor: pointer;
+            width: 100%;
+            transition: all 0.3s;
+            font-family: 'DM Sans', sans-serif;
+        }
+
+        .btn-primary:hover {
+            background: var(--orange-dark);
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(217, 119, 87, 0.4);
+        }
+
+        .btn-primary:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .btn-secondary {
+            background: var(--surface-light);
+            border: 2px solid rgba(217, 119, 87, 0.3);
+            color: var(--text-primary);
+            padding: 0.875rem;
+            border-radius: 10px;
+            font-size: 0.875rem;
+            font-weight: 600;
+            cursor: pointer;
+            width: 100%;
+            margin-top: 0.75rem;
+            transition: all 0.3s;
+            font-family: 'DM Sans', sans-serif;
+        }
+
+        .btn-secondary:hover {
+            border-color: var(--orange-primary);
+            background: rgba(217, 119, 87, 0.1);
+        }
+
+        /* Empty State */
+        .empty-state {
+            text-align: center;
+            padding: 3rem 2rem;
+            color: var(--text-muted);
+        }
+
+        .empty-icon {
+            font-size: 4rem;
+            margin-bottom: 1rem;
+            opacity: 0.5;
+        }
+
+        .empty-text {
+            font-size: 0.875rem;
+            line-height: 1.6;
+        }
+
+        /* Success Animation */
+        @keyframes checkmark {
+            0% { transform: scale(0) rotate(-45deg); }
+            50% { transform: scale(1.2) rotate(-45deg); }
+            100% { transform: scale(1) rotate(-45deg); }
+        }
+
+        .success-checkmark {
+            animation: checkmark 0.5s ease-in-out;
+        }
+
+        /* Loading State */
+        .loading-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(26, 22, 20, 0.9);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+        }
+
+        .spinner {
+            width: 60px;
+            height: 60px;
+            border: 4px solid var(--surface-light);
+            border-top-color: var(--orange-primary);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <!-- Top Bar -->
+    <div class="top-bar">
+        <div class="top-bar-left">
+            <button class="back-btn" onclick="window.location.href='{{ back_url }}'" title="Back to Dashboard">
+                ←
+            </button>
+            <h1 class="image-title">{{ image_name }}</h1>
+        </div>
+        <div class="progress-indicator">
+            <div class="nav-controls">
+                <button class="nav-btn" onclick="navigateToPrev()" title="Previous Image (←)">‹</button>
+                <input
+                    type="number"
+                    id="jump-input"
+                    class="jump-input"
+                    min="1"
+                    max="{{ total_images }}"
+                    value="{{ current_index }}"
+                    onkeypress="handleJumpKeyPress(event)"
+                    title="Jump to image number"
+                />
+                <button class="nav-btn" onclick="navigateToNext()" title="Next Image (→)">›</button>
+            </div>
+            <span>of {{ total_images }}</span>
+            <div class="progress-bar">
+                <div class="progress-fill" style="width: {{ (current_index / total_images * 100) }}%"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Layout -->
+    <div class="main-layout">
+        <!-- Left Sidebar - Tools -->
+        <aside class="left-sidebar">
+            <div class="sidebar-section">
+                <h3 class="section-title">🛠️ Drawing Tools</h3>
+                <div class="tool-grid">
+                    <button class="tool-btn active" id="tool-draw" onclick="selectTool('draw')">
+                        <div class="tool-icon">✏️</div>
+                        <div class="tool-label">Draw</div>
+                        <div class="tool-shortcut">(D)</div>
+                    </button>
+                    <button class="tool-btn" id="tool-ai" onclick="selectTool('ai')">
+                        <div class="tool-icon">🤖</div>
+                        <div class="tool-label">AI Detect</div>
+                        <div class="tool-shortcut">(S)</div>
+                    </button>
+                    <button class="tool-btn" id="tool-edit" onclick="selectTool('edit')">
+                        <div class="tool-icon">👆</div>
+                        <div class="tool-label">Edit</div>
+                        <div class="tool-shortcut">(E)</div>
+                    </button>
+                    <button class="tool-btn" id="tool-pan" onclick="selectTool('pan')">
+                        <div class="tool-icon">✋</div>
+                        <div class="tool-label">Pan</div>
+                        <div class="tool-shortcut">(H)</div>
+                    </button>
+                </div>
+            </div>
+
+            <div class="sidebar-section">
+                <h3 class="section-title">📦 Bounding Boxes (<span id="box-count">0</span>)</h3>
+                <div class="box-list" id="box-list">
+                    <div class="empty-state">
+                        <div class="empty-icon">📦</div>
+                        <div class="empty-text">No boxes yet.<br>Draw or use AI detect to find birds.</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="action-footer">
+                <button class="btn-primary" onclick="saveAndNext()">
+                    Save & Next Image
+                </button>
+                <button class="btn-secondary" onclick="saveOnly()">
+                    Save Only
+                </button>
+            </div>
+        </aside>
+
+        <!-- Canvas Container -->
+        <div class="canvas-container">
+            <canvas id="annotation-canvas"></canvas>
+
+            <div class="canvas-overlay">
+                <div><strong>Tool:</strong> <span id="current-tool">Draw</span></div>
+                <div><strong>Zoom:</strong> <span id="zoom-level">100%</span></div>
+            </div>
+
+            <div class="zoom-controls">
+                <button class="zoom-btn" onclick="resetZoom()" title="Reset (R)">R</button>
+                <button class="zoom-btn" onclick="zoomIn()" title="Zoom In">+</button>
+                <button class="zoom-btn" onclick="zoomOut()" title="Zoom Out">−</button>
+            </div>
+        </div>
+
+        <!-- Right Sidebar - Species Classification -->
+        <aside class="right-sidebar">
+            <div class="classification-header">
+                <h2 class="classification-title">
+                    <span>🏷️</span>
+                    Species ID
+                </h2>
+                <p class="classification-subtitle">Click a box to identify species</p>
+            </div>
+
+            <div class="classification-content" id="classification-content">
+                <div class="empty-state">
+                    <div class="empty-icon">🦅</div>
+                    <div class="empty-text">Select a bounding box<br>to start species identification.</div>
+                </div>
+            </div>
+        </aside>
+    </div>
+
+    <script>
+// Initialize from Flask template
+const USERNAME = {{ username | tojson | safe }};
+const IMAGE_NAME = {{ image_name | tojson | safe }};
+const IMAGE_URL = {{ image_url | tojson | safe }};
+const CURRENT_INDEX = {{ current_index }};
+const TOTAL_IMAGES = {{ total_images }};
+const PREV_INDEX = {{ prev_index }};
+const NEXT_INDEX = {{ next_index }};
+const EXISTING_BOXES = {{ boxes | tojson | safe }};
+const SPECIES_DATA = {{ species_list | tojson | safe }};
+const QUESTION_TREE = {{ questions | tojson | safe }};
+
+// Debug logging
+console.log('Editor initialized:', {
+    username: USERNAME,
+    image: IMAGE_NAME,
+    imageUrl: IMAGE_URL,
+    index: `${CURRENT_INDEX}/${TOTAL_IMAGES}`,
+    boxes: EXISTING_BOXES.length,
+    species: SPECIES_DATA.length
+});
+
+// Global state
+let canvas, ctx;
+let imageObj = null;
+let currentTool = 'draw';
+let boxes = [];
+let selectedBoxId = null;
+let hoveredBoxId = null;
+let currentQuestion = 0;
+let speciesCandidates = [];
+let speciesImages = {};  // Cache for species images
+
+// Drawing state
+let isDrawing = false;
+let isPanning = false;
+let isDragging = false;
+let startX = 0;
+let startY = 0;
+let currentX = 0;
+let currentY = 0;
+let draggedBox = null;
+let dragHandle = null;  // 'move', 'nw', 'ne', 'sw', 'se', 'n', 's', 'e', 'w'
+let panOffsetX = 0;
+let panOffsetY = 0;
+let panStartX = 0;
+let panStartY = 0;
+let zoomLevel = 1;
+let viewOffsetX = 0;
+let viewOffsetY = 0;
+
+// Initialize canvas
+function initCanvas() {
+    canvas = document.getElementById('annotation-canvas');
+    ctx = canvas.getContext('2d');
+
+    // Load image
+    imageObj = new Image();
+    imageObj.crossOrigin = "anonymous";
+
+    imageObj.onload = function() {
+        canvas.width = imageObj.naturalWidth;
+        canvas.height = imageObj.naturalHeight;
+        fitCanvasToContainer();
+
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(imageObj, 0, 0);
+
+        // Load existing boxes
+        boxes = (EXISTING_BOXES || []).map((box, idx) => ({
+            ...box,
+            id: box.id || Date.now() + idx
+        }));
+        updateBoxList();
+        redrawCanvas();
+
+        // Add canvas event listeners
+        canvas.addEventListener('mousemove', handleCanvasMouseMove);
+        canvas.addEventListener('mousedown', handleCanvasMouseDown);
+        canvas.addEventListener('mouseup', handleCanvasMouseUp);
+        canvas.addEventListener('mouseleave', handleCanvasMouseLeave);
+
+        console.log(`✓ Image loaded: ${IMAGE_NAME} (${imageObj.naturalWidth}x${imageObj.naturalHeight})`);
+    };
+
+    imageObj.onerror = function(e) {
+        console.error(`✗ Failed to load image: ${IMAGE_URL}`);
+        alert(`Error loading image: ${IMAGE_NAME}\n\nCheck the browser console for details.`);
+    };
+
+    imageObj.src = IMAGE_URL;
+}
+
+//Fit canvas to container
+function fitCanvasToContainer() {
+    const container = canvas.parentElement;
+    const containerWidth = container.clientWidth;
+    const containerHeight = container.clientHeight;
+    const imageAspect = imageObj.naturalWidth / imageObj.naturalHeight;
+    const containerAspect = containerWidth / containerHeight;
+
+    if (imageAspect > containerAspect) {
+        canvas.style.width = '100%';
+        canvas.style.height = 'auto';
+    } else {
+        canvas.style.width = 'auto';
+        canvas.style.height = '100%';
+    }
+}
+
+// Get canvas coordinates from mouse event
+function getCanvasCoords(e) {
+    const rect = canvas.getBoundingClientRect();
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+    return {
+        x: (e.clientX - rect.left) * scaleX,
+        y: (e.clientY - rect.top) * scaleY
+    };
+}
+
+// Handle mouse down
+function handleCanvasMouseDown(e) {
+    const coords = getCanvasCoords(e);
+    startX = coords.x;
+    startY = coords.y;
+    currentX = coords.x;
+    currentY = coords.y;
+
+    if (currentTool === 'draw') {
+        isDrawing = true;
+    } else if (currentTool === 'ai') {
+        // SAM click-to-detect
+        handleSAMClick(coords.x, coords.y);
+    } else if (currentTool === 'edit') {
+        // Check if clicking on a box
+        const clickedBox = findBoxAtPoint(coords.x, coords.y);
+        if (clickedBox) {
+            selectedBoxId = clickedBox.id;
+            draggedBox = clickedBox;
+            isDragging = true;
+            dragHandle = 'move';
+            updateBoxList();
+        }
+    } else if (currentTool === 'pan') {
+        isPanning = true;
+        panStartX = coords.x;
+        panStartY = coords.y;
+        canvas.style.cursor = 'grabbing';
+    }
+}
+
+// Handle mouse move
+function handleCanvasMouseMove(e) {
+    const coords = getCanvasCoords(e);
+    currentX = coords.x;
+    currentY = coords.y;
+
+    // Update hover highlighting
+    if (!isDrawing && !isDragging && !isPanning) {
+        const foundBox = findBoxAtPoint(coords.x, coords.y);
+        const foundBoxId = foundBox ? foundBox.id : null;
+        if (foundBoxId !== hoveredBoxId) {
+            hoveredBoxId = foundBoxId;
+            redrawCanvas();
+        }
+    }
+
+    // Handle drawing
+    if (isDrawing) {
+        redrawCanvas();
+        drawDragRect();
+    }
+
+    // Handle dragging box
+    if (isDragging && draggedBox) {
+        const dx = (coords.x - startX) / canvas.width;
+        const dy = (coords.y - startY) / canvas.height;
+
+        draggedBox.x_center += dx;
+        draggedBox.y_center += dy;
+
+        // Keep box within bounds
+        draggedBox.x_center = Math.max(draggedBox.width / 2, Math.min(1 - draggedBox.width / 2, draggedBox.x_center));
+        draggedBox.y_center = Math.max(draggedBox.height / 2, Math.min(1 - draggedBox.height / 2, draggedBox.y_center));
+
+        startX = coords.x;
+        startY = coords.y;
+        redrawCanvas();
+    }
+
+    // Handle panning
+    if (isPanning) {
+        // Panning would adjust view offset, but for simplicity we'll skip this for now
+        // Just show visual feedback
+    }
+}
+
+// Handle mouse up
+function handleCanvasMouseUp(e) {
+    if (isDrawing) {
+        // Finalize the drawn box
+        const width = Math.abs(currentX - startX);
+        const height = Math.abs(currentY - startY);
+
+        // Only create box if it's big enough (at least 10x10 pixels)
+        if (width > 10 && height > 10) {
+            const left = Math.min(startX, currentX);
+            const top = Math.min(startY, currentY);
+
+            // Convert to normalized coordinates
+            const x_center = (left + width / 2) / canvas.width;
+            const y_center = (top + height / 2) / canvas.height;
+            const norm_width = width / canvas.width;
+            const norm_height = height / canvas.height;
+
+            addBox(x_center, y_center, norm_width, norm_height);
+            showToast('✓ Box created');
+        }
+
+        isDrawing = false;
+        redrawCanvas();
+    }
+
+    if (isDragging) {
+        isDragging = false;
+        draggedBox = null;
+        dragHandle = null;
+    }
+
+    if (isPanning) {
+        isPanning = false;
+        canvas.style.cursor = 'grab';
+    }
+}
+
+// Handle mouse leave
+function handleCanvasMouseLeave(e) {
+    if (isDrawing) {
+        isDrawing = false;
+        redrawCanvas();
+    }
+    if (isDragging) {
+        isDragging = false;
+        draggedBox = null;
+    }
+    if (isPanning) {
+        isPanning = false;
+        canvas.style.cursor = 'grab';
+    }
+}
+
+// Draw drag rectangle while drawing
+function drawDragRect() {
+    const width = currentX - startX;
+    const height = currentY - startY;
+
+    ctx.strokeStyle = '#D97757';
+    ctx.lineWidth = 3;
+    ctx.setLineDash([5, 5]);
+    ctx.strokeRect(startX, startY, width, height);
+    ctx.setLineDash([]);
+}
+
+// Find box at point
+function findBoxAtPoint(x, y) {
+    for (let box of boxes) {
+        const boxX = box.x_center * canvas.width - (box.width * canvas.width) / 2;
+        const boxY = box.y_center * canvas.height - (box.height * canvas.height) / 2;
+        const boxW = box.width * canvas.width;
+        const boxH = box.height * canvas.height;
+
+        if (x >= boxX && x <= boxX + boxW && y >= boxY && y <= boxY + boxH) {
+            return box;
+        }
+    }
+    return null;
+}
+
+// Handle SAM click
+async function handleSAMClick(x, y) {
+    showToast('🤖 Running AI detection...');
+
+    try {
+        const response = await fetch('/api/sam_segment', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                image_name: IMAGE_NAME,
+                points: [[x, y]]
+            })
+        });
+
+        const result = await response.json();
+
+        if (result.error) {
+            showToast('❌ AI detection failed: ' + result.error);
+            return;
+        }
+
+        if (result.boxes && result.boxes.length > 0) {
+            result.boxes.forEach(box => {
+                addBox(box.x_center, box.y_center, box.width, box.height);
+            });
+            showToast(`✓ Detected ${result.boxes.length} bird(s)`);
+        } else {
+            showToast('⚠️ No birds detected at this location');
+        }
+    } catch (error) {
+        console.error('SAM error:', error);
+        showToast('❌ AI detection error: ' + error.message);
+    }
+}
+
+// Redraw canvas with boxes
+function redrawCanvas() {
+    if (!imageObj || !imageObj.complete) return;
+
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(imageObj, 0, 0);
+
+    // Draw all boxes
+    boxes.forEach(box => {
+        const isSelected = selectedBoxId === box.id;
+        const isHovered = hoveredBoxId === box.id;
+
+        const x = box.x_center * canvas.width - (box.width * canvas.width) / 2;
+        const y = box.y_center * canvas.height - (box.height * canvas.height) / 2;
+        const w = box.width * canvas.width;
+        const h = box.height * canvas.height;
+
+        // Draw box
+        ctx.setLineDash([]);
+        if (isSelected) {
+            ctx.strokeStyle = '#7cb342';  // Green for selected
+            ctx.lineWidth = 4;
+        } else if (isHovered) {
+            ctx.strokeStyle = '#FFA500';  // Orange for hovered
+            ctx.lineWidth = 4;
+        } else {
+            ctx.strokeStyle = '#D97757';  // Default orange
+            ctx.lineWidth = 3;
+        }
+        ctx.strokeRect(x, y, w, h);
+
+        // Draw label if species identified
+        if (box.species) {
+            ctx.fillStyle = 'rgba(217, 119, 87, 0.9)';
+            const text = box.species;
+            ctx.font = '14px DM Sans, sans-serif';
+            const textWidth = ctx.measureText(text).width;
+            ctx.fillRect(x, y - 24, textWidth + 12, 24);
+
+            ctx.fillStyle = '#fff';
+            ctx.fillText(text, x + 6, y - 6);
+        }
+
+        // Draw corner handles for selected box in edit mode
+        if (isSelected && currentTool === 'edit') {
+            const handleSize = 8;
+            ctx.fillStyle = '#7cb342';
+            // Draw corner handles
+            ctx.fillRect(x - handleSize/2, y - handleSize/2, handleSize, handleSize);  // NW
+            ctx.fillRect(x + w - handleSize/2, y - handleSize/2, handleSize, handleSize);  // NE
+            ctx.fillRect(x - handleSize/2, y + h - handleSize/2, handleSize, handleSize);  // SW
+            ctx.fillRect(x + w - handleSize/2, y + h - handleSize/2, handleSize, handleSize);  // SE
+        }
+    });
+
+    // Draw preview rectangle while drawing
+    if (isDrawing) {
+        drawDragRect();
+    }
+}
+
+// Tool selection
+function selectTool(tool) {
+    currentTool = tool;
+    document.querySelectorAll('.tool-btn').forEach(btn => btn.classList.remove('active'));
+    document.getElementById('tool-' + tool).classList.add('active');
+    document.getElementById('current-tool').textContent = tool.charAt(0).toUpperCase() + tool.slice(1);
+
+    if (tool === 'draw' || tool === 'ai') {
+        canvas.style.cursor = 'crosshair';
+    } else if (tool === 'edit') {
+        canvas.style.cursor = 'pointer';
+    } else {
+        canvas.style.cursor = 'grab';
+    }
+}
+
+// Add a new bounding box
+function addBox(xCenter, yCenter, width, height) {
+    const box = {
+        id: Date.now() + Math.random(),  // Unique ID
+        x_center: xCenter,
+        y_center: yCenter,
+        width: width,
+        height: height,
+        species: null,
+        confidence: null
+    };
+    boxes.push(box);
+    updateBoxList();
+    redrawCanvas();
+    return box;
+}
+
+// Update box list with hover support
+function updateBoxList() {
+    const boxList = document.getElementById('box-list');
+    const boxCount = document.getElementById('box-count');
+    boxCount.textContent = boxes.length;
+
+    if (boxes.length === 0) {
+        boxList.innerHTML = `
+            <div class="empty-state">
+                <div class="empty-icon">📦</div>
+                <div class="empty-text">No boxes yet.<br>Draw or use AI detect to find birds.</div>
+            </div>
+        `;
+        return;
+    }
+
+    boxList.innerHTML = boxes.map((box, idx) => `
+        <div class="box-item ${selectedBoxId === box.id ? 'selected' : ''}"
+             onclick="selectBox(${box.id})"
+             onmouseenter="hoveredBoxId = ${box.id}; redrawCanvas()"
+             onmouseleave="hoveredBoxId = null; redrawCanvas()">
+            <div class="box-header">
+                <span class="box-id">Bird #${idx + 1}</span>
+            </div>
+            ${box.species ?
+                `<div class="box-species" style="margin-bottom: 0.5rem; color: var(--success); font-weight: 600;">${box.species}</div>
+                 <div style="display: flex; gap: 0.5rem;">
+                    <button class="identify-btn" style="flex: 1; background: var(--surface-light); color: var(--text-primary);" onclick="event.stopPropagation(); selectAndIdentify(${box.id})">
+                        Edit Species
+                    </button>
+                    <button class="identify-btn" style="width: 36px; padding: 0; background: rgba(231, 76, 60, 0.2); color: #e74c3c;" onclick="event.stopPropagation(); deleteBox(${box.id})" title="Delete box">
+                        ×
+                    </button>
+                 </div>` :
+                `<div class="box-species box-unidentified">Not identified</div>
+                 <div style="display: flex; gap: 0.5rem;">
+                    <button class="identify-btn" style="flex: 1;" onclick="event.stopPropagation(); selectAndIdentify(${box.id})">
+                        Identify Species
+                    </button>
+                    <button class="identify-btn" style="width: 36px; padding: 0; background: rgba(231, 76, 60, 0.2); color: #e74c3c;" onclick="event.stopPropagation(); deleteBox(${box.id})" title="Delete box">
+                        ×
+                    </button>
+                 </div>`
+            }
+        </div>
+    `).join('');
+}
+
+// Select box
+function selectBox(boxId) {
+    selectedBoxId = boxId;
+    updateBoxList();
+    redrawCanvas();
+}
+
+// Select and start identification
+function selectAndIdentify(boxId) {
+    selectBox(boxId);
+    showIdentificationChoice();
+}
+
+// Show identification choice (Decision Tree or Search)
+function showIdentificationChoice() {
+    if (!selectedBoxId) return;
+
+    const content = document.getElementById('classification-content');
+    content.innerHTML = `
+        <div style="padding: 2rem; text-align: center;">
+            <h3 style="font-size: 1.5rem; margin-bottom: 1rem; color: var(--text-primary);">
+                How would you like to identify this bird?
+            </h3>
+            <p style="color: var(--text-secondary); margin-bottom: 2rem;">
+                Use the guided questions or search directly
+            </p>
+
+            <button class="btn-primary" style="width: 100%; margin-bottom: 1rem;" onclick="startQuestionTree()">
+                Use Decision Tree
+            </button>
+
+            <button class="btn-secondary" style="width: 100%; margin-top: 0;" onclick="showSearchUI()">
+                Search Species
+            </button>
+        </div>
+    `;
+}
+
+// Start decision tree
+function startQuestionTree() {
+    currentQuestion = 0;
+    speciesCandidates = [...SPECIES_DATA];
+    showQuestionUI();
+}
+
+// Show question UI
+function showQuestionUI() {
+    const content = document.getElementById('classification-content');
+    const question = QUESTION_TREE[currentQuestion];
+
+    content.innerHTML = `
+        <div class="question-section">
+            <div class="question-number">Question ${currentQuestion + 1} of ${QUESTION_TREE.length}</div>
+            <div class="question-text">${question.question}</div>
+            <div class="answer-grid">
+                ${question.options.map(option => `
+                    <div class="answer-option" onclick="answerQuestion('${option}')">
+                        <span>${option}</span>
+                    </div>
+                `).join('')}
+            </div>
+        </div>
+
+        <button class="btn-secondary" style="margin-top: 1rem;" onclick="showIdentificationChoice()">
+            ← Back to Options
+        </button>
+    `;
+}
+
+// Answer question
+function answerQuestion(answer) {
+    // Simple filtering (in production, use actual trait matching)
+    if (answer !== "Not Sure") {
+        speciesCandidates = speciesCandidates.slice(0, Math.max(5, Math.floor(speciesCandidates.length * 0.6)));
+    }
+
+    currentQuestion++;
+    if (currentQuestion < QUESTION_TREE.length && speciesCandidates.length > 10) {
+        showQuestionUI();
+    } else {
+        showSpeciesList();
+    }
+}
+
+// Show search UI
+function showSearchUI() {
+    const content = document.getElementById('classification-content');
+    content.innerHTML = `
+        <div style="padding: 1.5rem;">
+            <h3 style="font-size: 1.25rem; margin-bottom: 1rem; color: var(--text-primary);">
+                Search Species
+            </h3>
+
+            <input
+                type="text"
+                id="species-search"
+                placeholder="Type species name or code..."
+                style="width: 100%; padding: 0.875rem; background: var(--surface-light); border: 2px solid rgba(217, 119, 87, 0.3); border-radius: 8px; color: var(--text-primary); font-size: 1rem; font-family: 'DM Sans', sans-serif; margin-bottom: 1rem;"
+                oninput="handleSearchInput(this.value)"
+            />
+
+            <div id="search-results">
+                <div style="text-align: center; color: var(--text-muted); padding: 2rem;">
+                    Start typing to search species...
+                </div>
+            </div>
+
+            <button class="btn-secondary" style="margin-top: 1rem; width: 100%;" onclick="showIdentificationChoice()">
+                ← Back to Options
+            </button>
+        </div>
+    `;
+
+    // Focus search input
+    setTimeout(() => document.getElementById('species-search').focus(), 100);
+}
+
+// Handle search input
+let searchTimeout;
+function handleSearchInput(query) {
+    clearTimeout(searchTimeout);
+
+    if (!query || query.length < 2) {
+        document.getElementById('search-results').innerHTML = `
+            <div style="text-align: center; color: var(--text-muted); padding: 2rem;">
+                Type at least 2 characters...
+            </div>
+        `;
+        return;
+    }
+
+    searchTimeout = setTimeout(() => {
+        fetch(`/api/species/search?q=${encodeURIComponent(query)}`)
+            .then(r => r.json())
+            .then(results => {
+                if (results.length === 0) {
+                    document.getElementById('search-results').innerHTML = `
+                        <div style="text-align: center; color: var(--text-muted); padding: 2rem;">
+                            No species found for "${query}"
+                        </div>
+                    `;
+                } else {
+                    speciesCandidates = results;
+                    showSpeciesList('search-results');
+                }
+            });
+    }, 300);
+}
+
+// Show species list with images
+function showSpeciesList(containerId = 'classification-content') {
+    const container = document.getElementById(containerId);
+
+    if (speciesCandidates.length === 0) {
+        container.innerHTML = `
+            <div class="empty-state">
+                <div class="empty-icon">🔍</div>
+                <div class="empty-text">No species match the criteria.</div>
+            </div>
+        `;
+        return;
+    }
+
+    container.innerHTML = `
+        <div style="padding: 1.5rem;">
+            <h3 style="font-size: 1.25rem; margin-bottom: 0.5rem; color: var(--text-primary);">
+                Select Species (${speciesCandidates.length} options)
+            </h3>
+            <p style="font-size: 0.875rem; color: var(--text-muted); margin-bottom: 1rem;">
+                Click a species to select. You'll be asked to confirm.
+            </p>
+            <div id="species-list-container"></div>
+        </div>
+    `;
+
+    // Load images for each species
+    const listContainer = document.getElementById('species-list-container');
+    speciesCandidates.slice(0, 20).forEach((species, idx) => {
+        const speciesDiv = document.createElement('div');
+        speciesDiv.className = 'species-card';
+        speciesDiv.style.cssText = 'background: var(--surface-light); border-radius: 12px; padding: 1rem; margin-bottom: 1rem; cursor: pointer; border: 2px solid transparent; transition: all 0.3s;';
+        speciesDiv.onmouseenter = function() {
+            this.style.borderColor = 'var(--orange-primary)';
+            this.style.transform = 'translateX(4px)';
+        };
+        speciesDiv.onmouseleave = function() {
+            this.style.borderColor = 'transparent';
+            this.style.transform = 'translateX(0)';
+        };
+        speciesDiv.innerHTML = `
+            <div style="display: flex; gap: 1rem; align-items: center;" onclick="selectSpecies('${species.code}', '${species.common_name}')">
+                <div style="flex-shrink: 0;">
+                    <div id="species-thumb-${idx}" style="width: 80px; height: 80px; background: var(--surface); border-radius: 8px; display: flex; align-items: center; justify-content: center; color: var(--text-muted);">
+                        Loading...
+                    </div>
+                </div>
+                <div style="flex: 1;">
+                    <div style="font-weight: 600; font-size: 1.125rem; margin-bottom: 0.25rem;">${species.common_name}</div>
+                    <div style="font-size: 0.875rem; color: var(--text-muted);">${species.code}</div>
+                    <button class="btn-secondary" style="margin-top: 0.5rem; padding: 0.5rem 1rem; font-size: 0.875rem;" onclick="event.stopPropagation(); showSpeciesImages('${species.common_name}', ${idx})">
+                        View Reference Images
+                    </button>
+                </div>
+            </div>
+            <div id="species-images-${idx}" style="display: none; margin-top: 1rem; border-top: 1px solid rgba(217, 119, 87, 0.2); padding-top: 1rem;"></div>
+        `;
+        listContainer.appendChild(speciesDiv);
+
+        // Load first thumbnail
+        loadSpeciesImages(species.common_name, 1, 0, idx);
+    });
+}
+
+// Load species images
+async function loadSpeciesImages(speciesName, maxImages, offset, cardIdx) {
+    try {
+        const response = await fetch(`/api/species/images/${encodeURIComponent(speciesName)}?max=${maxImages}&offset=${offset}`);
+        const data = await response.json();
+
+        if (data.images && data.images.length > 0) {
+            const thumbEl = document.getElementById(`species-thumb-${cardIdx}`);
+            if (thumbEl && offset === 0) {
+                thumbEl.innerHTML = `<img src="${data.images[0]}" style="width: 100%; height: 100%; object-fit: cover; border-radius: 8px;" onerror="this.style.display='none'; this.parentElement.textContent='No image';">`;
+            }
+        }
+
+        return data;
+    } catch (e) {
+        console.error('Error loading images:', e);
+        return { images: [], has_more: false };
+    }
+}
+
+// Show species reference images
+async function showSpeciesImages(speciesName, cardIdx) {
+    const imagesDiv = document.getElementById(`species-images-${cardIdx}`);
+    imagesDiv.style.display = 'block';
+    imagesDiv.innerHTML = '<div style="text-align: center; padding: 1rem;">Loading images...</div>';
+
+    const data = await loadSpeciesImages(speciesName, 5, 0, cardIdx);
+
+    if (data.images.length === 0) {
+        imagesDiv.innerHTML = '<div style="text-align: center; color: var(--text-muted); padding: 1rem;">No reference images found</div>';
+        return;
+    }
+
+    imagesDiv.innerHTML = `
+        <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 0.5rem; margin-bottom: 1rem;">
+            ${data.images.map(url => `
+                <img src="${url}" style="width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 8px; cursor: pointer;"
+                     onclick="window.open('${url}', '_blank')"
+                     onerror="this.style.display='none';">
+            `).join('')}
+        </div>
+        ${data.has_more ? `
+            <button class="btn-secondary" style="width: 100%; padding: 0.75rem; font-size: 0.875rem;" onclick="loadMoreImages('${speciesName}', ${cardIdx}, ${data.images.length})">
+                Load More Images
+            </button>
+        ` : ''}
+    `;
+}
+
+// Load more images
+async function loadMoreImages(speciesName, cardIdx, currentOffset) {
+    const imagesDiv = document.getElementById(`species-images-${cardIdx}`);
+    const data = await loadSpeciesImages(speciesName, 5, currentOffset, cardIdx);
+
+    if (data.images.length === 0) {
+        alert('No more images available');
+        return;
+    }
+
+    // Append new images
+    const gridDiv = imagesDiv.querySelector('[style*="grid"]');
+    data.images.forEach(url => {
+        const img = document.createElement('img');
+        img.src = url;
+        img.style.cssText = 'width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 8px; cursor: pointer;';
+        img.onclick = () => window.open(url, '_blank');
+        img.onerror = () => img.style.display = 'none';
+        gridDiv.appendChild(img);
+    });
+
+    // Update load more button
+    const button = imagesDiv.querySelector('button');
+    if (button) {
+        if (data.has_more) {
+            button.onclick = () => loadMoreImages(speciesName, cardIdx, currentOffset + data.images.length);
+        } else {
+            button.remove();
+        }
+    }
+}
+
+// Select species (final) with confirmation
+async function selectSpecies(code, commonName) {
+    if (!selectedBoxId) return;
+
+    const box = boxes.find(b => b.id === selectedBoxId);
+    if (!box) return;
+
+    // Find which box number this is
+    const boxIndex = boxes.indexOf(box) + 1;
+    const previousSpecies = box.species;
+
+    // Show confirmation dialog
+    const message = previousSpecies
+        ? `Change Bird #${boxIndex} from "${previousSpecies}" to "${commonName} (${code})"?`
+        : `Identify Bird #${boxIndex} as "${commonName} (${code})"?`;
+
+    if (!confirm(message)) {
+        return; // User cancelled
+    }
+
+    // User confirmed, save the species
+    box.species = code;
+    updateBoxList();
+    redrawCanvas();
+
+    // Show success message
+    const successMsg = previousSpecies ? 'Species updated!' : 'Species identified!';
+    showToast(`✓ ${successMsg} ${commonName} (${code})`);
+
+    // Reset
+    selectedBoxId = null;
+    document.getElementById('classification-content').innerHTML = `
+        <div class="empty-state">
+            <div class="empty-icon">🦅</div>
+            <div class="empty-text">Select another box<br>to identify more species.</div>
+        </div>
+    `;
+}
+
+// Delete box
+function deleteBox(boxId) {
+    const box = boxes.find(b => b.id === boxId);
+    if (!box) return;
+
+    const boxIndex = boxes.indexOf(box) + 1;
+    const message = box.species
+        ? `Delete Bird #${boxIndex} (${box.species})?`
+        : `Delete Bird #${boxIndex}?`;
+
+    if (!confirm(message)) {
+        return; // User cancelled
+    }
+
+    // Remove box
+    boxes = boxes.filter(b => b.id !== boxId);
+
+    // Clear selection if this was selected
+    if (selectedBoxId === boxId) {
+        selectedBoxId = null;
+        document.getElementById('classification-content').innerHTML = `
+            <div class="empty-state">
+                <div class="empty-icon">🦅</div>
+                <div class="empty-text">Select a bounding box<br>to start species identification.</div>
+            </div>
+        `;
+    }
+
+    updateBoxList();
+    redrawCanvas();
+    showToast('✓ Box deleted');
+}
+
+// Show toast notification
+function showToast(message) {
+    // Create toast element
+    const toast = document.createElement('div');
+    toast.style.cssText = `
+        position: fixed;
+        bottom: 2rem;
+        right: 2rem;
+        background: rgba(42, 36, 33, 0.95);
+        backdrop-filter: blur(10px);
+        color: var(--text-primary);
+        padding: 1rem 1.5rem;
+        border-radius: 12px;
+        border: 2px solid var(--orange-primary);
+        font-weight: 600;
+        z-index: 10000;
+        animation: slideInRight 0.3s ease-out;
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+    `;
+    toast.textContent = message;
+
+    // Add animation keyframes
+    if (!document.getElementById('toast-styles')) {
+        const style = document.createElement('style');
+        style.id = 'toast-styles';
+        style.textContent = `
+            @keyframes slideInRight {
+                from {
+                    transform: translateX(400px);
+                    opacity: 0;
+                }
+                to {
+                    transform: translateX(0);
+                    opacity: 1;
+                }
+            }
+            @keyframes slideOutRight {
+                from {
+                    transform: translateX(0);
+                    opacity: 1;
+                }
+                to {
+                    transform: translateX(400px);
+                    opacity: 0;
+                }
+            }
+        `;
+        document.head.appendChild(style);
+    }
+
+    document.body.appendChild(toast);
+
+    // Remove after 3 seconds
+    setTimeout(() => {
+        toast.style.animation = 'slideOutRight 0.3s ease-out';
+        setTimeout(() => toast.remove(), 300);
+    }, 3000);
+}
+
+// Save functions
+async function saveOnly() {
+    // Show saving indicator
+    showToast('💾 Saving annotations...');
+
+    try {
+        const yoloBoxes = boxes.map(box => ({
+            class_id: 0,
+            x_center: box.x_center,
+            y_center: box.y_center,
+            width: box.width,
+            height: box.height,
+            species: box.species,
+            confidence: box.confidence
+        }));
+
+        console.log('Saving annotations:', {
+            image: IMAGE_NAME,
+            username: USERNAME,
+            boxes: yoloBoxes.length
+        });
+
+        const response = await fetch('/api/save_annotation', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                image_name: IMAGE_NAME,
+                boxes: yoloBoxes,
+                username: USERNAME
+            })
+        });
+
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+
+        const result = await response.json();
+
+        if (result.success) {
+            console.log('✓ Annotations saved successfully');
+            showToast(`✓ Saved ${yoloBoxes.length} annotation(s)`);
+            return true;
+        } else {
+            console.error('Save failed:', result.error);
+            showToast('❌ Save failed: ' + (result.error || 'Unknown error'));
+            return false;
+        }
+    } catch (error) {
+        console.error('Save error:', error);
+        showToast('❌ Save error: ' + error.message);
+        return false;
+    }
+}
+
+async function saveAndNext() {
+    const saved = await saveOnly();
+    if (saved) {
+        navigateToNext();
+    }
+}
+
+// Navigation
+function navigateToNext() {
+    window.location.href = `/editor/${USERNAME}/${NEXT_INDEX}`;
+}
+
+function navigateToPrev() {
+    window.location.href = `/editor/${USERNAME}/${PREV_INDEX}`;
+}
+
+function navigateToImage(imageIndex) {
+    if (imageIndex >= 1 && imageIndex <= TOTAL_IMAGES) {
+        window.location.href = `/editor/${USERNAME}/${imageIndex}`;
+    } else {
+        alert(`Please enter a number between 1 and ${TOTAL_IMAGES}`);
+        document.getElementById('jump-input').value = CURRENT_INDEX;
+    }
+}
+
+function handleJumpKeyPress(event) {
+    if (event.key === 'Enter') {
+        const imageIndex = parseInt(document.getElementById('jump-input').value);
+        navigateToImage(imageIndex);
+    }
+}
+
+// Zoom controls
+function zoomIn() {
+    zoomLevel = Math.min(zoomLevel * 1.2, 5);  // Max 5x zoom
+    applyZoom();
+}
+
+function zoomOut() {
+    zoomLevel = Math.max(zoomLevel / 1.2, 0.5);  // Min 0.5x zoom
+    applyZoom();
+}
+
+function resetZoom() {
+    zoomLevel = 1;
+    viewOffsetX = 0;
+    viewOffsetY = 0;
+    applyZoom();
+}
+
+function applyZoom() {
+    // Update canvas scale
+    const container = canvas.parentElement;
+    const baseWidth = container.clientWidth;
+    const baseHeight = container.clientHeight;
+
+    canvas.style.transform = `scale(${zoomLevel})`;
+    canvas.style.transformOrigin = 'center center';
+
+    // Update zoom level display
+    document.getElementById('zoom-level').textContent = Math.round(zoomLevel * 100) + '%';
+}
+
+// Keyboard shortcuts
+document.addEventListener('keydown', (e) => {
+    if (e.target.tagName === 'INPUT') return;
+
+    if (e.key === 'd') selectTool('draw');
+    if (e.key === 's') selectTool('ai');
+    if (e.key === 'e') selectTool('edit');
+    if (e.key === 'h') selectTool('pan');
+    if (e.key === 'r') resetZoom();
+
+    if (e.key === 'ArrowLeft') {
+        e.preventDefault();
+        navigateToPrev();
+    }
+    if (e.key === 'ArrowRight') {
+        e.preventDefault();
+        navigateToNext();
+    }
+});
+
+// Handle window resize
+window.addEventListener('resize', () => {
+    if (imageObj && imageObj.complete) {
+        fitCanvasToContainer();
+    }
+});
+
+// Initialize on load
+document.addEventListener('DOMContentLoaded', () => {
+    initCanvas();
+    updateBoxList();
+});
+    </script>
+</body>
+</html>

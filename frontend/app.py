@@ -143,7 +143,7 @@ with col2:
         </ul>
         <div style="margin-top: 1rem; padding-top: 1rem; border-top: 1px solid #404040;">
             <p style="font-size: 0.75rem; color: #888; margin: 0;">
-                ⚡ Powered by <code style="background: #1E1E1E; padding: 2px 6px; border-radius: 3px; color: #D97757;">YOLOv8 (ONNX)</code>
+                ⚡ Powered by <code style="background: #1E1E1E; padding: 2px 6px; border-radius: 3px; color: #D97757;">YOLO26 (ONNX)</code>
             </p>
         </div>
     </div>
