@@ -14,7 +14,12 @@ from services import (
     update_table_row,
     delete_table_row,
     insert_table_row,
-    execute_custom_sql
+    execute_custom_sql,
+    get_version_history,
+    get_version_stats,
+    get_version_diff,
+    rollback_database,
+    manual_version_commit
 )
 from components import init_page, render_header, render_sidebar
 
@@ -63,10 +68,18 @@ with st.sidebar:
 # ============================================================================
 
 st.title("NestDB")
-st.caption("Database management interface - view, edit, and add data")
+st.caption("Database management interface - view, edit, and add data with full version control")
 
-# Create tabs for Table Browser, Schema Viewer, and SQL Query Editor
-tab1, tab2, tab3 = st.tabs(["📊 Table Browser", "📋 Schema Viewer", "⚙️ SQL Query Editor"])
+# Version Control Status Banner
+version_stats = get_version_stats()
+if version_stats.get("success"):
+    total_commits = version_stats.get("total_commits", 0)
+    st.success(f"✅ Auto-versioning active ({total_commits:,} commits)")
+else:
+    st.warning("⚠️ Version control not active")
+
+# Create tabs for Table Browser, Schema Viewer, SQL Query Editor, and Version History
+tab1, tab2, tab3, tab4 = st.tabs(["📊 Table Browser", "📋 Schema Viewer", "⚙️ SQL Query Editor", "🕐 Version History"])
 
 # ============================================================================
 # TAB 1: TABLE BROWSER
@@ -258,7 +271,10 @@ with tab1:
                             response = insert_table_row(selected_table, new_row_data)
 
                             if response.get("success"):
-                                st.success(f"✅ {response.get('message', 'Row inserted successfully')}")
+                                success_msg = f"✅ {response.get('message', 'Row inserted successfully')}"
+                                if response.get("version_commit"):
+                                    success_msg += f" and automatically committed to version history (commit `{response['version_commit']}`)"
+                                st.success(success_msg)
                                 st.session_state.db_show_add_row = False
                                 st.rerun()
                             else:
@@ -332,7 +348,11 @@ with tab1:
 
                         # Show results
                         if changes_saved > 0:
-                            st.success(f"✅ Successfully saved {changes_saved} row(s)")
+                            # Check if the last response included version control info
+                            if response.get("version_commit"):
+                                st.success(f"✅ Successfully saved {changes_saved} row(s) and automatically committed to version history (commit `{response['version_commit']}`)")
+                            else:
+                                st.success(f"✅ Successfully saved {changes_saved} row(s)")
                             st.session_state.db_original_data = edited_df.copy()
                             st.rerun()
 
@@ -622,3 +642,217 @@ with tab3:
                     if st.button(f"🗑️ Remove", key=f"remove_{idx}", use_container_width=True):
                         st.session_state.sql_query_history.pop(idx)
                         st.rerun()
+
+# ============================================================================
+# TAB 4: VERSION HISTORY (Git-based Database Versioning)
+# ============================================================================
+
+with tab4:
+    st.markdown("""
+        <div class="title-card">
+            <h3>Database Version History</h3>
+            <p>
+                All database changes are automatically tracked. View history and rollback to any previous state.
+            </p>
+        </div>
+    """, unsafe_allow_html=True)
+
+    # Fetch version control stats
+    stats = get_version_stats()
+
+    if not stats.get("success"):
+        st.error(f"Version control unavailable: {stats.get('error', 'Unknown error')}")
+        st.stop()
+
+    # Display version control statistics
+    st.markdown("### 📊 Version Control Statistics")
+
+    col1, col2, col3, col4 = st.columns(4)
+
+    with col1:
+        st.metric(
+            "Total Commits",
+            f"{stats.get('total_commits', 0):,}",
+            help="Total number of database changes tracked"
+        )
+
+    with col2:
+        st.metric(
+            "Database Size",
+            f"{stats.get('database_size_mb', 0):.2f} MB",
+            help="Current size of the database file"
+        )
+
+    with col3:
+        st.metric(
+            "Snapshots",
+            stats.get('snapshot_count', 0),
+            help="Number of safety snapshots created"
+        )
+
+    with col4:
+        st.metric(
+            "First Commit",
+            stats.get('first_commit_date', 'N/A')[:10] if stats.get('first_commit_date') else 'N/A',
+            help="Date of first tracked change"
+        )
+
+    st.markdown("---")
+
+    # Manual commit section
+    st.markdown("### 💾 Create Checkpoint")
+    with st.expander("📌 Create Manual Checkpoint", expanded=False):
+        st.caption("Mark important moments for easier rollback later")
+
+        checkpoint_message = st.text_input(
+            "Checkpoint description",
+            placeholder="e.g., Before bulk species update",
+            key="checkpoint_message"
+        )
+
+        expert_email = st.text_input(
+            "Your email (for audit trail)",
+            placeholder="expert@email.com",
+            key="checkpoint_email"
+        )
+
+        if st.button("Create Checkpoint", type="primary"):
+            if not checkpoint_message:
+                st.warning("Please enter a checkpoint description")
+            else:
+                with st.spinner("Creating checkpoint..."):
+                    result = manual_version_commit(checkpoint_message, expert_email or "system")
+
+                    if result.get("success"):
+                        st.success(f"✅ Checkpoint created: {result.get('commit_hash_short', 'N/A')}")
+                        st.rerun()
+                    else:
+                        st.error(f"❌ Failed to create checkpoint: {result.get('error', 'Unknown error')}")
+
+    st.markdown("---")
+
+    # Commit history section
+    st.markdown("### 📜 Commit History")
+
+    # Controls for history view
+    col1, col2 = st.columns([3, 1])
+
+    with col1:
+        st.caption("Recent database changes (newest first)")
+
+    with col2:
+        history_limit = st.selectbox(
+            "Show",
+            options=[10, 25, 50, 100],
+            index=1,
+            key="history_limit",
+            label_visibility="collapsed"
+        )
+
+    # Fetch commit history
+    with st.spinner("Loading version history..."):
+        history_response = get_version_history(limit=history_limit)
+
+    if not history_response.get("success"):
+        st.error(f"Failed to load history: {history_response.get('error', 'Unknown error')}")
+        st.stop()
+
+    commits = history_response.get("commits", [])
+
+    if not commits:
+        st.info("No commits found. Make some database changes to see version history.")
+    else:
+        # Display commits
+        for idx, commit in enumerate(commits):
+            with st.expander(
+                f"[{commit['hash_short']}] {commit['date']} - {commit['message'][:80]}{'...' if len(commit['message']) > 80 else ''}",
+                expanded=(idx == 0)  # Expand first commit by default
+            ):
+                # Commit details
+                st.markdown(f"""
+                **Hash:** `{commit['hash_short']}`
+                **Author:** {commit['author']}
+                **Date:** {commit['date']}
+                **Message:** {commit['message']}
+                """)
+
+                # Action buttons
+                col1, col2, col3 = st.columns([1, 1, 1])
+
+                with col1:
+                    if st.button(f"🔍 View Diff", key=f"view_diff_{commit['hash_short']}", use_container_width=True):
+                        st.session_state[f"show_diff_{commit['hash_short']}"] = True
+                        st.rerun()
+
+                with col2:
+                    # Only show rollback for commits that aren't the most recent
+                    if idx > 0:
+                        if st.button(f"↩️ Rollback to Here", key=f"rollback_{commit['hash_short']}", use_container_width=True, type="secondary"):
+                            st.session_state[f"confirm_rollback_{commit['hash_short']}"] = True
+                            st.rerun()
+                    else:
+                        st.button(f"↩️ Rollback to Here", key=f"rollback_{commit['hash_short']}_disabled", use_container_width=True, disabled=True, help="This is the current version")
+
+                with col3:
+                    st.button(f"📋 Copy Hash", key=f"copy_{commit['hash_short']}", use_container_width=True, disabled=True, help="Copy feature coming soon")
+
+                # Show diff if requested
+                if st.session_state.get(f"show_diff_{commit['hash_short']}", False):
+                    with st.spinner("Loading diff..."):
+                        diff_response = get_version_diff(commit_hash=commit['hash'])
+
+                        if diff_response.get("success"):
+                            diff_text = diff_response.get('diff', '')
+
+                            if diff_text:
+                                st.markdown("**SQL Changes:**")
+                                st.code(diff_text, language="diff")
+                            else:
+                                st.info("No changes to display (empty diff)")
+
+                            if st.button(f"Hide Diff", key=f"hide_diff_{commit['hash_short']}"):
+                                st.session_state[f"show_diff_{commit['hash_short']}"] = False
+                                st.rerun()
+                        else:
+                            st.error(f"Failed to load diff: {diff_response.get('error', 'Unknown error')}")
+
+                # Rollback confirmation
+                if st.session_state.get(f"confirm_rollback_{commit['hash_short']}", False):
+                    st.warning(f"""
+                    ⚠️ **WARNING: Rollback will undo all changes after commit `{commit['hash_short']}`**
+
+                    A safety snapshot will be created. Are you sure?
+                    """)
+
+                    expert_email_rollback = st.text_input(
+                        "Your email (for audit trail)",
+                        placeholder="expert@email.com",
+                        key=f"rollback_email_{commit['hash_short']}"
+                    )
+
+                    col1, col2, col3 = st.columns([1, 1, 1])
+
+                    with col1:
+                        if st.button(f"✅ Yes, Rollback", key=f"confirm_rollback_yes_{commit['hash_short']}", type="primary"):
+                            with st.spinner("Rolling back database... This may take a minute."):
+                                rollback_result = rollback_database(
+                                    commit_hash=commit['hash'],
+                                    expert_email=expert_email_rollback or "system"
+                                )
+
+                                if rollback_result.get("success"):
+                                    st.success(f"✅ Rollback successful! Snapshot: `{rollback_result.get('snapshot_path', 'N/A')}`")
+
+                                    # Clear confirmation state
+                                    st.session_state[f"confirm_rollback_{commit['hash_short']}"] = False
+
+                                    st.rerun()
+                                else:
+                                    st.error(f"❌ Rollback failed: {rollback_result.get('error', 'Unknown error')}")
+
+                    with col2:
+                        if st.button(f"❌ Cancel", key=f"confirm_rollback_no_{commit['hash_short']}"):
+                            st.session_state[f"confirm_rollback_{commit['hash_short']}"] = False
+                            st.rerun()
+
+

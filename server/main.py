@@ -21,6 +21,7 @@ import base64
 import httpx
 import yaml
 from server.cv_tools.inference import BirdDetector, get_example_images
+from server.db_version import DatabaseVersionControl
 # Removed: No longer using dynamic prompt generators
 
 # Load environment variables (for secrets like API keys)
@@ -156,6 +157,7 @@ class RowUpdateResponse(BaseModel):
     success: bool
     message: Optional[str]
     error: Optional[str] = None
+    version_commit: Optional[str] = None  # Git commit hash if versioning is active
 
 class RowDeleteRequest(BaseModel):
     table_name: str
@@ -165,6 +167,7 @@ class RowDeleteResponse(BaseModel):
     success: bool
     message: Optional[str]
     error: Optional[str] = None
+    version_commit: Optional[str] = None  # Git commit hash if versioning is active
 
 class RowInsertRequest(BaseModel):
     table_name: str
@@ -174,10 +177,66 @@ class RowInsertResponse(BaseModel):
     success: bool
     message: Optional[str]
     error: Optional[str] = None
+    version_commit: Optional[str] = None  # Git commit hash if versioning is active
+
+# Version Control Response Models
+class VersionCommit(BaseModel):
+    """Represents a single Git commit in version history"""
+    hash: str
+    hash_short: str
+    author: str
+    date: str
+    message: str
+
+class VersionHistoryResponse(BaseModel):
+    """Response for /db/version/history endpoint"""
+    success: bool
+    commits: Optional[List[VersionCommit]] = None
+    error: Optional[str] = None
+
+class VersionStatsResponse(BaseModel):
+    """Response for /db/version/stats endpoint"""
+    success: bool
+    total_commits: Optional[int] = None
+    first_commit_date: Optional[str] = None
+    database_size_mb: Optional[float] = None
+    snapshot_count: Optional[int] = None
+    current_branch: Optional[str] = None
+    error: Optional[str] = None
+
+class VersionDiffResponse(BaseModel):
+    """Response for /db/version/diff endpoint"""
+    success: bool
+    diff: Optional[str] = None
+    error: Optional[str] = None
+
+class VersionRollbackRequest(BaseModel):
+    """Request for rollback operation"""
+    commit_hash: str
+    expert_email: Optional[str] = "system"
+
+class VersionRollbackResponse(BaseModel):
+    """Response for /db/version/rollback endpoint"""
+    success: bool
+    message: Optional[str] = None
+    snapshot_path: Optional[str] = None
+    new_commit: Optional[str] = None
+    error: Optional[str] = None
 
 # Database configuration
 # .env override takes priority, otherwise use config.yaml default
 DB_PATH = os.getenv("DB_PATH", config['database']['default_path'])
+
+# Initialize Database Version Control
+# This Git repo is SEPARATE from the project repo - it only versions the database
+# Location: data/.git (for database versioning only)
+# Project repo: /home/olisemeka.dev/Projects/nexus/.git (for code versioning)
+try:
+    db_version_control = DatabaseVersionControl(DB_PATH, expert_email="system")
+    print(f"✓ Database version control initialized at {Path(DB_PATH).parent}")
+except Exception as e:
+    print(f"⚠️  Warning: Database version control initialization failed: {e}")
+    db_version_control = None
 
 # Model configuration - SINGLE SOURCE OF TRUTH
 # Primary source: config.yaml (version controlled)
@@ -2295,10 +2354,29 @@ async def update_table_row(table_name: str, request: RowUpdateRequest):
                 error="No rows were updated. Row may not exist."
             )
 
+        # Auto-commit to version control
+        commit_hash = None
+        if db_version_control is not None:
+            try:
+                commit_result = db_version_control.commit(
+                    message=f"Updated {rows_affected} row(s) in {table_name}",
+                    details={
+                        "operation": "UPDATE",
+                        "table": table_name,
+                        "rows_affected": rows_affected,
+                        "columns_updated": list(request.updates.keys())
+                    }
+                )
+                commit_hash = commit_result.get('commit_hash_short')
+                print(f"✓ Database change committed to version control: {commit_hash}")
+            except Exception as e:
+                print(f"⚠️  Warning: Version control commit failed: {e}")
+
         return RowUpdateResponse(
             success=True,
             message=f"Successfully updated {rows_affected} row(s)",
-            error=None
+            error=None,
+            version_commit=commit_hash
         )
     except Exception as e:
         return RowUpdateResponse(
@@ -2349,10 +2427,28 @@ async def delete_table_row(table_name: str, request: RowDeleteRequest):
                 error="No rows were deleted. Row may not exist."
             )
 
+        # Auto-commit to version control
+        commit_hash = None
+        if db_version_control is not None:
+            try:
+                commit_result = db_version_control.commit(
+                    message=f"Deleted {rows_affected} row(s) from {table_name}",
+                    details={
+                        "operation": "DELETE",
+                        "table": table_name,
+                        "rows_affected": rows_affected
+                    }
+                )
+                commit_hash = commit_result.get('commit_hash_short')
+                print(f"✓ Database change committed to version control: {commit_hash}")
+            except Exception as e:
+                print(f"⚠️  Warning: Version control commit failed: {e}")
+
         return RowDeleteResponse(
             success=True,
             message=f"Successfully deleted {rows_affected} row(s)",
-            error=None
+            error=None,
+            version_commit=commit_hash
         )
     except Exception as e:
         return RowDeleteResponse(
@@ -2399,10 +2495,29 @@ async def insert_table_row(table_name: str, request: RowInsertRequest):
                 error="No rows were inserted."
             )
 
+        # Auto-commit to version control
+        commit_hash = None
+        if db_version_control is not None:
+            try:
+                commit_result = db_version_control.commit(
+                    message=f"Inserted {rows_affected} row(s) into {table_name}",
+                    details={
+                        "operation": "INSERT",
+                        "table": table_name,
+                        "rows_affected": rows_affected,
+                        "columns": list(request.row_data.keys())
+                    }
+                )
+                commit_hash = commit_result.get('commit_hash_short')
+                print(f"✓ Database change committed to version control: {commit_hash}")
+            except Exception as e:
+                print(f"⚠️  Warning: Version control commit failed: {e}")
+
         return RowInsertResponse(
             success=True,
             message=f"Successfully inserted {rows_affected} row(s)",
-            error=None
+            error=None,
+            version_commit=commit_hash
         )
     except Exception as e:
         return RowInsertResponse(
@@ -2410,6 +2525,198 @@ async def insert_table_row(table_name: str, request: RowInsertRequest):
             message=None,
             error=str(e)
         )
+
+# ============================================================================
+# DATABASE VERSION CONTROL ENDPOINTS
+# ============================================================================
+
+@app.get("/db/version/history", response_model=VersionHistoryResponse)
+async def get_version_history(limit: int = 50):
+    """
+    Get commit history for the database.
+
+    Shows all changes made to the database with timestamps and messages.
+    This allows experts to see who changed what and when.
+
+    Args:
+        limit: Maximum number of commits to return (default: 50)
+
+    Returns:
+        List of commits with hash, author, date, message
+    """
+    if db_version_control is None:
+        return VersionHistoryResponse(
+            success=False,
+            commits=None,
+            error="Version control is not initialized"
+        )
+
+    try:
+        commits = db_version_control.get_history(limit=limit)
+        return VersionHistoryResponse(
+            success=True,
+            commits=[VersionCommit(**commit) for commit in commits],
+            error=None
+        )
+    except Exception as e:
+        return VersionHistoryResponse(
+            success=False,
+            commits=None,
+            error=str(e)
+        )
+
+@app.get("/db/version/stats", response_model=VersionStatsResponse)
+async def get_version_stats():
+    """
+    Get statistics about database version history.
+
+    Returns:
+        Total commits, date range, database size, etc.
+    """
+    if db_version_control is None:
+        return VersionStatsResponse(
+            success=False,
+            total_commits=None,
+            error="Version control is not initialized"
+        )
+
+    try:
+        stats = db_version_control.get_stats()
+        if stats.get("success"):
+            return VersionStatsResponse(
+                success=True,
+                total_commits=stats.get("total_commits"),
+                first_commit_date=stats.get("first_commit_date"),
+                database_size_mb=stats.get("database_size_mb"),
+                snapshot_count=stats.get("snapshot_count"),
+                current_branch=stats.get("current_branch"),
+                error=None
+            )
+        else:
+            return VersionStatsResponse(
+                success=False,
+                error=stats.get("error", "Unknown error")
+            )
+    except Exception as e:
+        return VersionStatsResponse(
+            success=False,
+            error=str(e)
+        )
+
+@app.get("/db/version/diff", response_model=VersionDiffResponse)
+async def get_version_diff(commit_hash: Optional[str] = None):
+    """
+    Get diff showing what changed in a specific commit.
+
+    Shows the actual SQL statements that were added/removed.
+
+    Args:
+        commit_hash: Hash of commit to diff (default: latest changes)
+
+    Returns:
+        Diff string with SQL changes
+    """
+    if db_version_control is None:
+        return VersionDiffResponse(
+            success=False,
+            diff=None,
+            error="Version control is not initialized"
+        )
+
+    try:
+        diff = db_version_control.get_diff(commit_hash=commit_hash)
+        return VersionDiffResponse(
+            success=True,
+            diff=diff,
+            error=None
+        )
+    except Exception as e:
+        return VersionDiffResponse(
+            success=False,
+            diff=None,
+            error=str(e)
+        )
+
+@app.post("/db/version/rollback", response_model=VersionRollbackResponse)
+async def rollback_database(request: VersionRollbackRequest):
+    """
+    Rollback database to a specific commit.
+
+    **WARNING**: This is a destructive operation. It will:
+    1. Create a safety snapshot
+    2. Restore database to the specified commit
+    3. Commit the rollback (preserving history)
+
+    Args:
+        request: VersionRollbackRequest with commit_hash and expert_email
+
+    Returns:
+        Success status, snapshot path, new commit hash
+    """
+    if db_version_control is None:
+        return VersionRollbackResponse(
+            success=False,
+            error="Version control is not initialized"
+        )
+
+    try:
+        # Update expert email if provided
+        if request.expert_email:
+            db_version_control.expert_email = request.expert_email
+
+        result = db_version_control.rollback_to_commit(request.commit_hash)
+
+        if result.get("success"):
+            return VersionRollbackResponse(
+                success=True,
+                message=result.get("message"),
+                snapshot_path=result.get("snapshot_path"),
+                new_commit=result.get("new_commit"),
+                error=None
+            )
+        else:
+            return VersionRollbackResponse(
+                success=False,
+                error=result.get("error", "Unknown error")
+            )
+    except Exception as e:
+        return VersionRollbackResponse(
+            success=False,
+            error=str(e)
+        )
+
+@app.post("/db/version/commit")
+async def manual_commit(message: str, expert_email: str = "system"):
+    """
+    Manually create a version control commit.
+
+    This is useful for checkpointing database state at key moments.
+    Normally commits happen automatically after database writes.
+
+    Args:
+        message: Commit message
+        expert_email: Email/username of expert making the commit
+
+    Returns:
+        Commit hash and timestamp
+    """
+    if db_version_control is None:
+        return {
+            "success": False,
+            "error": "Version control is not initialized"
+        }
+
+    try:
+        # Update expert email
+        db_version_control.expert_email = expert_email
+
+        result = db_version_control.commit(message)
+        return result
+    except Exception as e:
+        return {
+            "success": False,
+            "error": str(e)
+        }
 
 # ============================================================================
 # EROSION & SPECIES RISK ENDPOINTS

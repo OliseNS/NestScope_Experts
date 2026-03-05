@@ -1,0 +1,27 @@
+# Database Git Repo .gitignore
+# This file controls what the DATABASE Git repo tracks (not the project Git)
+
+# Ignore binary database files (we only track the .sql dump)
+*.db
+
+# Ignore snapshots directory (safety backups, not part of version history)
+snapshots/
+
+# Ignore Python cache files
+__pycache__/
+*.pyc
+*.pyo
+
+# Ignore Access database files (source files, not versioned)
+*.accdb
+*.mdb
+
+# Ignore metadata cache files
+*.json
+
+# Ignore migration scripts (these are project code, not data)
+migrate_*.py
+
+# Ignore documentation files (project docs, not data)
+*.md
+*README*

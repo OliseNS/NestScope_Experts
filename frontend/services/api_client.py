@@ -715,3 +715,135 @@ def get_storm_impact_analysis(species_code: str) -> Dict[str, Any]:
         return r.json()
     except Exception as e:
         return {"error": str(e)}
+
+
+# ============================================================================
+# DATABASE VERSION CONTROL API FUNCTIONS
+# ============================================================================
+
+def get_version_history(limit: int = 50) -> Dict[str, Any]:
+    """
+    Get commit history for the database.
+
+    Shows all changes made to the database with timestamps and messages.
+
+    Args:
+        limit: Maximum number of commits to return (default: 50)
+
+    Returns:
+        Dictionary with success status and list of commits
+    """
+    from .config import API_BASE_URL
+
+    try:
+        response = requests.get(
+            f"{API_BASE_URL}/db/version/history",
+            params={"limit": limit},
+            timeout=10
+        )
+        response.raise_for_status()
+        return response.json()
+    except requests.exceptions.RequestException as e:
+        return {"success": False, "error": str(e)}
+
+
+def get_version_stats() -> Dict[str, Any]:
+    """
+    Get statistics about database version history.
+
+    Returns:
+        Dictionary with total commits, date range, database size, etc.
+    """
+    from .config import API_BASE_URL
+
+    try:
+        response = requests.get(f"{API_BASE_URL}/db/version/stats", timeout=10)
+        response.raise_for_status()
+        return response.json()
+    except requests.exceptions.RequestException as e:
+        return {"success": False, "error": str(e)}
+
+
+def get_version_diff(commit_hash: Optional[str] = None) -> Dict[str, Any]:
+    """
+    Get diff showing what changed in a specific commit.
+
+    Args:
+        commit_hash: Hash of commit to diff (default: latest changes)
+
+    Returns:
+        Dictionary with diff string
+    """
+    from .config import API_BASE_URL
+
+    try:
+        params = {}
+        if commit_hash:
+            params["commit_hash"] = commit_hash
+
+        response = requests.get(
+            f"{API_BASE_URL}/db/version/diff",
+            params=params,
+            timeout=10
+        )
+        response.raise_for_status()
+        return response.json()
+    except requests.exceptions.RequestException as e:
+        return {"success": False, "error": str(e)}
+
+
+def rollback_database(commit_hash: str, expert_email: str = "system") -> Dict[str, Any]:
+    """
+    Rollback database to a specific commit.
+
+    **WARNING**: This is a destructive operation. It will:
+    1. Create a safety snapshot
+    2. Restore database to the specified commit
+    3. Commit the rollback (preserving history)
+
+    Args:
+        commit_hash: Hash of commit to rollback to
+        expert_email: Email/username of expert performing rollback
+
+    Returns:
+        Dictionary with success status, snapshot path, new commit hash
+    """
+    from .config import API_BASE_URL
+
+    try:
+        response = requests.post(
+            f"{API_BASE_URL}/db/version/rollback",
+            json={"commit_hash": commit_hash, "expert_email": expert_email},
+            timeout=60  # Rollback can take time
+        )
+        response.raise_for_status()
+        return response.json()
+    except requests.exceptions.RequestException as e:
+        return {"success": False, "error": str(e)}
+
+
+def manual_version_commit(message: str, expert_email: str = "system") -> Dict[str, Any]:
+    """
+    Manually create a version control commit.
+
+    Useful for checkpointing database state at key moments.
+
+    Args:
+        message: Commit message
+        expert_email: Email/username of expert making the commit
+
+    Returns:
+        Dictionary with commit hash and timestamp
+    """
+    from .config import API_BASE_URL
+
+    try:
+        response = requests.post(
+            f"{API_BASE_URL}/db/version/commit",
+            params={"message": message, "expert_email": expert_email},
+            timeout=30
+        )
+        response.raise_for_status()
+        return response.json()
+    except requests.exceptions.RequestException as e:
+        return {"success": False, "error": str(e)}
