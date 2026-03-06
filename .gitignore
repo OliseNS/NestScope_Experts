@@ -228,7 +228,6 @@ cluster_visualization_*.png
 *.zarr
 
 # Database files (already covered above, but being explicit)
-*.db
 *.sqlite
 *.sqlite3
 *.db-shm
@@ -289,3 +288,32 @@ NestVision/dataset_vis/
 NestVision/coordinate_diagnosis/
 NestVision/__pycache__/
 NestVision/*.pyc
+
+# ============================================================================
+# VisionTrain Reconstruction Pipeline (STAC dataset and downloads)
+# ============================================================================
+# Generated YOLO dataset from STAC expert dots
+VisionTrain/stac_dataset/images/
+VisionTrain/stac_dataset/labels/
+VisionTrain/stac_dataset/mosaics/
+VisionTrain/stac_dataset/*.yaml
+VisionTrain/stac_dataset/*.txt
+
+# Reconstruction pipeline intermediate data
+VisionTrain/reconstruction/data/
+VisionTrain/reconstruction/stac_data/
+VisionTrain/reconstruction/downloads/
+VisionTrain/reconstruction/vis/
+VisionTrain/reconstruction/stac_vis/
+VisionTrain/reconstruction/*.log
+
+# Social Engineering test data (dotted screenshots and visualizations)
+Social_Engineering/data/
+Social_Engineering/vis/
+
+# Keep only the code and documentation
+!VisionTrain/reconstruction/*.py
+!VisionTrain/reconstruction/*.md
+!VisionTrain/stac_dataset/*.md
+!Social_Engineering/*.py
+!Social_Engineering/*.md

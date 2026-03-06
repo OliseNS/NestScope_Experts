@@ -13,10 +13,10 @@ After analyzing the Avian Data Monitoring Portal, judge feedback, mentor advice,
 ### Derek Dohler (The Water Institute) - 50/100 points
 
 **Concerns:**
-1. ❌ "Can it be made reliable enough for real-world usage?"
-2. ❌ "Would like to see more thought on what type of person might use this—what's their job, what are they trying to do?"
+1.  "Can it be made reliable enough for real-world usage?"
+2.  "Would like to see more thought on what type of person might use this—what's their job, what are they trying to do?"
 
-**Status:** ✅ Addressed in `judge_inferred_persona.md` (Dr. Sarah Chen persona)
+**Status:**  Addressed in `judge_inferred_persona.md` (Dr. Sarah Chen persona)
 
 **Action Items:**
 - Demonstrate reliability with accuracy benchmarks
@@ -26,8 +26,8 @@ After analyzing the Avian Data Monitoring Portal, judge feedback, mentor advice,
 ### Jessica Henkel (The Water Institute) - 58/100 points
 
 **Positives:**
-- ✅ Appreciated accuracy checking
-- ✅ Research into existing architecture (AWS)
+-  Appreciated accuracy checking
+-  Research into existing architecture (AWS)
 
 **Suggestions:**
 - 🔄 "Build out" expert and non-expert bounding box annotation features
@@ -43,9 +43,9 @@ After analyzing the Avian Data Monitoring Portal, judge feedback, mentor advice,
 ### Mikala Streeter (Wild Oasis) - 68/100 points
 
 **Strongest Feedback:**
-- ✅ "Making complex datasets usable for non-technical users"
-- ✅ "Strong practical value"
-- ✅ "Accessibility focus really stood out"
+-  "Making complex datasets usable for non-technical users"
+-  "Strong practical value"
+-  "Accessibility focus really stood out"
 
 **Key Strength:** Natural language interface resonates with conservation practitioners
 
@@ -133,18 +133,18 @@ After analyzing the Avian Data Monitoring Portal, judge feedback, mentor advice,
 ### Water Institute's 5-Year Plan (2024-2028)
 
 **What They're Building:**
-- ✅ High-altitude nadir imagery with fixed mounts
-- ✅ GIS-based dotting interface (still manual)
-- ✅ Web GIS frontend for data access
-- ✅ Better georeferencing workflows
-- ✅ Self-service query tools
+-  High-altitude nadir imagery with fixed mounts
+-  GIS-based dotting interface (still manual)
+-  Web GIS frontend for data access
+-  Better georeferencing workflows
+-  Self-service query tools
 
 **What They're NOT Building:**
-- ❌ Automated AI detection
-- ❌ Real-time processing
-- ❌ Edge deployment
-- ❌ Species classification AI
-- ❌ Batch processing of backlog
+-  Automated AI detection
+-  Real-time processing
+-  Edge deployment
+-  Species classification AI
+-  Batch processing of backlog
 
 ### NestScope's Competitive Advantage
 
@@ -195,7 +195,7 @@ Deploy Jetson Nano with:
 
 **Physical Tie-In:** This addresses Dustin's advice about hardware integration
 
-#### Tier 2: Cloud Processing (Backend API) ☁️
+#### Tier 2: Cloud Processing (Backend API) ☁
 
 **Use Case: Deep Analysis & Validation**
 
@@ -206,7 +206,7 @@ Current FastAPI backend for:
 - Active learning pipeline
 - Model retraining
 
-**Already Built:** ✅
+**Already Built:** 
 
 #### Tier 3: Data Access (NestChat + Portal Integration) 💬
 
@@ -217,7 +217,7 @@ Current FastAPI backend for:
 - Export to NOAA DIVER and CPRA CIMS
 - Public-facing dashboard
 
-**Already Built:** ✅ (NestChat exists)
+**Already Built:**  (NestChat exists)
 
 ### Full Workflow Diagram
 
@@ -267,14 +267,14 @@ Current FastAPI backend for:
 
 #### 1. Physical Differentiation (Dustin's Advice)
 
-✅ **Hardware tie-in wins points**
+ **Hardware tie-in wins points**
 - Last year's winners had physical sensors
 - Jetson Nano is tangible, demo-able hardware
 - Can bring to demo day for live inference
 
 #### 2. Addresses Real Need
 
-✅ **In-field processing solves actual problem**
+ **In-field processing solves actual problem**
 - Surveyors currently wait months for results
 - Field biologists want immediate feedback
 - Enables adaptive survey planning
@@ -282,7 +282,7 @@ Current FastAPI backend for:
 
 #### 3. Scalability Story
 
-✅ **Shows production-ready thinking**
+ **Shows production-ready thinking**
 - "We can deploy 50 units across the Gulf Coast"
 - Each unit processes surveys independently
 - No cloud costs for inference
@@ -290,14 +290,14 @@ Current FastAPI backend for:
 
 #### 4. Technical Credibility
 
-✅ **Demonstrates ML engineering expertise**
+ **Demonstrates ML engineering expertise**
 - Model optimization for edge (ONNX, TensorRT)
 - Understanding of resource constraints
 - Real-world deployment considerations
 
 #### 5. Competitive Moat
 
-✅ **Harder to replicate**
+ **Harder to replicate**
 - Requires hardware + software integration
 - More impressive than cloud-only solution
 - Shows commitment to production deployment
@@ -306,7 +306,7 @@ Current FastAPI backend for:
 
 #### 1. Time Constraint
 
-⚠️ **Demo Day is March 20 (23 days away)**
+ **Demo Day is March 20 (23 days away)**
 - Need to acquire hardware
 - Port and optimize model for Jetson
 - Build user interface for field use
@@ -315,7 +315,7 @@ Current FastAPI backend for:
 
 #### 2. Model Performance
 
-⚠️ **YOLOv8 may be too large for real-time edge inference**
+ **YOLOv8 may be too large for real-time edge inference**
 - Jetson Nano has limited compute (472 GFLOPS)
 - Current model is 1024x1024 input size
 - May need to downscale or use YOLOv8n (nano variant)
@@ -323,7 +323,7 @@ Current FastAPI backend for:
 
 #### 3. Development Complexity
 
-⚠️ **Adds significant engineering work**
+ **Adds significant engineering work**
 - ONNX model optimization for Jetson
 - TensorRT conversion and quantization
 - GPIO/hardware interface programming
@@ -332,7 +332,7 @@ Current FastAPI backend for:
 
 #### 4. Demo Feasibility
 
-⚠️ **Hard to demo at Nexus HQ**
+ **Hard to demo at Nexus HQ**
 - Need aerial survey images on SD card
 - Setup time during presentation
 - Potential technical difficulties
@@ -682,11 +682,11 @@ Other teams are building cool demos. We're building a **production system that s
 The Avian Data Monitoring Portal analysis reveals that The Water Institute has done incredible work collecting data but is constrained by manual analysis bottlenecks. Their 5-year roadmap focuses on GIS integration but **completely overlooks AI automation**.
 
 This is NestScope's moment. We have:
-- ✅ The technology (YOLOv8, NestChat, Nestperts)
-- ✅ The customer validation (judge feedback from Water Institute staff)
-- ✅ The business case ($13M savings, $1.2M revenue potential)
-- ✅ The differentiation (edge deployment, not just cloud)
-- ✅ The impact story (environmental justice through data access)
+-  The technology (YOLOv8, NestChat, Nestperts)
+-  The customer validation (judge feedback from Water Institute staff)
+-  The business case ($13M savings, $1.2M revenue potential)
+-  The differentiation (edge deployment, not just cloud)
+-  The impact story (environmental justice through data access)
 
 **We don't need to reinvent the project. We need to reframe it.**
 

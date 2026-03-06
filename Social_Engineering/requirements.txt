@@ -1,0 +1,14 @@
+# Dot Reconstruction Pipeline Requirements
+
+# Core dependencies
+opencv-python>=4.8.0
+numpy>=1.24.0
+requests>=2.31.0
+
+# Optional for database access (Phase 5)
+# pyodbc>=4.0.39
+# mdb-tools (system package: apt-get install mdb-tools)
+
+# Geospatial (if needed)
+# geojson>=3.0.0
+# shapely>=2.0.0
