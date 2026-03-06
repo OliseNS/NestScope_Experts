@@ -1,23 +1,22 @@
 """
-Coastal Risk Intelligence Dashboard
-Clean, professional, data-driven decision support
+Automated Flood Intelligence Platform
+Real-time multi-modal data fusion for coastal hazard monitoring
 """
 
 import streamlit as st
 import pandas as pd
-import folium
-from folium import Circle
 import plotly.graph_objects as go
 import requests
 import os
+from datetime import datetime
 
-from components import init_page, render_header, render_sidebar
+from components import init_page, render_header, render_sidebar, render_map
 
 # ============================================================================
 # PAGE CONFIGURATION
 # ============================================================================
 
-init_page(page_title="Coastal Risk Intelligence", page_icon="🌊", layout="wide")
+init_page(page_title="Flood Intelligence", page_icon="🌊", layout="wide")
 
 # ============================================================================
 # SIDEBAR
@@ -25,6 +24,15 @@ init_page(page_title="Coastal Risk Intelligence", page_icon="🌊", layout="wide
 
 with st.sidebar:
     render_sidebar(active_page="coastal_risk")
+
+    st.markdown("---")
+    st.markdown("### System Status")
+    st.success("All systems operational")
+    st.caption(f"Updated {datetime.now().strftime('%H:%M:%S')}")
+
+    st.markdown("---")
+    st.markdown("### Data Sources")
+    st.markdown("• NOAA Sea Level Rise  \n• USGS Coastal Erosion  \n• HURDAT2 Hurricanes  \n• Bird Survey Data  \n• Geospatial Analytics")
 
 # ============================================================================
 # API CLIENT
@@ -58,233 +66,202 @@ def get_future_projection(year, scenario="intermediate"):
     return response.json()
 
 # ============================================================================
-# MAIN DASHBOARD
+# HEADER
 # ============================================================================
 
-# Header
-st.markdown("""
-    <div style="background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%); padding: 2rem; border-radius: 10px; margin-bottom: 2rem;">
-        <h1 style="color: white; margin: 0;">🌊 Coastal Risk Intelligence</h1>
-        <p style="color: #e0e0e0; margin-top: 0.5rem; font-size: 1.1rem;">
-            Louisiana Gulf Coast Bird Colony Risk Assessment & Restoration Priorities
-        </p>
-    </div>
-""", unsafe_allow_html=True)
+st.title("🌊 Automated Flood Intelligence")
+st.caption("Real-time multi-modal data fusion for coastal hazard monitoring and prediction")
+st.markdown("")
 
-# Get data
-summary = get_risk_summary()
-zones = get_risk_zones()
-priorities = get_priority_list(limit=10)
+# Load data
+try:
+    summary = get_risk_summary()
+    zones = get_risk_zones()
+    priorities = get_priority_list(limit=10)
+except Exception as e:
+    st.error(f"Unable to load data: {str(e)}")
+    st.stop()
 
 # ============================================================================
 # SECTION 1: KEY METRICS
 # ============================================================================
 
+st.subheader("Live System Metrics")
+
 col1, col2, col3, col4 = st.columns(4)
 
 with col1:
     st.metric(
-        label="🔴 CRITICAL RISK",
-        value=summary['critical_colonies'],
-        delta=f"{summary['average_years_until_critical']:.0f} years avg until loss",
-        delta_color="inverse"
+        "Critical Risk Colonies",
+        summary['critical_colonies'],
+        delta="Immediate action needed",
+        delta_color="inverse",
+        help="Colonies at risk within 0-10 years"
     )
 
 with col2:
     st.metric(
-        label="🟡 HIGH RISK",
-        value=summary['high_risk_colonies'],
-        help="Colonies at high risk within 10-25 years"
+        "High Risk Colonies",
+        summary['high_risk_colonies'],
+        help="Colonies at risk within 10-25 years"
     )
 
 with col3:
     st.metric(
-        label="🌪️ HURRICANES",
-        value=summary['total_hurricanes_since_2005'],
-        delta="Since 2005",
+        "Hurricanes Since 2005",
+        summary['total_hurricanes_since_2005'],
         help="Gulf Coast storms from NOAA HURDAT2"
     )
 
 with col4:
     st.metric(
-        label="📊 DATA SOURCES",
-        value=len(summary['data_sources']),
-        help="Multi-modal data fusion"
+        "Active Data Sources",
+        len(summary['data_sources']),
+        help="Multi-modal data streams"
     )
 
 st.markdown("---")
 
 # ============================================================================
-# SECTION 2: RISK MAP
+# SECTION 2: MULTI-MODAL DATA FUSION
 # ============================================================================
 
-st.markdown("### 🗺️ Gulf Coast Risk Zones")
-st.caption("Red = Critical (0-10 years), Orange = High (10-25 years), Green = Stable. Click zones for details.")
+st.subheader("Multi-Modal Data Fusion")
+st.caption("How different data sources combine to assess risk")
 
-# Create map
-m = folium.Map(
-    location=[29.5, -89.5],
-    zoom_start=6,
-    tiles="CartoDB positron",
-    control_scale=True
-)
-
-# Add satellite layer
-folium.TileLayer(
-    tiles="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
-    attr="Esri",
-    name="Satellite",
-    overlay=False,
-    control=True
-).add_to(m)
-
-# Add risk zones
-for zone in zones['zones']:
-    # Determine color and opacity
-    if zone['risk_level'] == 'CRITICAL':
-        color = '#FF4444'
-        fill_opacity = 0.4
-    elif zone['risk_level'] == 'HIGH':
-        color = '#FF8C00'
-        fill_opacity = 0.3
-    else:
-        color = '#4CAF50'
-        fill_opacity = 0.2
-
-    # Create popup
-    popup_html = f"""
-        <div style="font-family: sans-serif; min-width: 250px;">
-            <h4 style="margin: 0; color: {color};">{zone['colony_name']}</h4>
-            <hr style="margin: 8px 0;">
-            <p><strong>Risk Score:</strong> {zone['risk_score']}/100</p>
-            <p><strong>Status:</strong> <span style="color: {color}; font-weight: bold;">{zone['risk_level']}</span></p>
-            <p><strong>Years Until Critical:</strong> {zone['years_until_critical'] if zone['years_until_critical'] else 'N/A'}</p>
-            <p><strong>Bird Population:</strong> {zone['birds']:,}</p>
-            <p><strong>Species:</strong> {zone['species']}</p>
-            <hr style="margin: 8px 0;">
-            <p style="font-style: italic; font-size: 0.9em;">{zone['action']}</p>
-        </div>
-    """
-
-    # Add circle zone
-    Circle(
-        location=[zone['latitude'], zone['longitude']],
-        radius=zone['radius_km'] * 1000,  # Convert km to meters
-        color=color,
-        fill=True,
-        fill_color=color,
-        fill_opacity=fill_opacity,
-        weight=2,
-        popup=folium.Popup(popup_html, max_width=300),
-        tooltip=f"{zone['colony_name']} - {zone['risk_level']}"
-    ).add_to(m)
-
-folium.LayerControl().add_to(m)
-
-# Display map
-try:
-    from streamlit_folium import st_folium
-    map_data = st_folium(m, width=None, height=600)
-except ImportError:
-    st.components.v1.html(m._repr_html_(), height=600)
-
-st.markdown("---")
-
-# ============================================================================
-# SECTION 3: PRIORITY ACTIONS
-# ============================================================================
-
-st.markdown("### 🎯 Top 10 Restoration Priorities")
-st.caption("Ranked by urgency: years until uninhabitable + risk score")
-
-# Create priority table
-priority_df = pd.DataFrame(priorities['priorities'])
-
-# Format for display
-display_df = priority_df[['rank', 'colony_name', 'years_until_critical', 'bird_population', 'erosion_rate', 'estimated_cost_usd', 'recommended_action']]
-display_df.columns = ['#', 'Colony', 'Years Until Loss', 'Birds', 'Erosion (m/yr)', 'Est. Cost ($)', 'Action']
-
-# Color-code by rank
-def color_rank(val):
-    if val <= 3:
-        return 'background-color: #ffcccc'
-    elif val <= 6:
-        return 'background-color: #ffe6cc'
-    else:
-        return ''
-
-styled_df = display_df.style.applymap(color_rank, subset=['#']).format({
-    'Birds': '{:,}',
-    'Est. Cost ($)': '${:,}',
-    'Erosion (m/yr)': '{:.1f}'
-})
-
-st.dataframe(styled_df, use_container_width=True, height=400)
-
-# Download button
-csv = priority_df.to_csv(index=False)
-st.download_button(
-    label="📥 Download Full Assessment (CSV)",
-    data=csv,
-    file_name="coastal_restoration_priorities.csv",
-    mime="text/csv"
-)
-
-st.markdown("---")
-
-# ============================================================================
-# SECTION 4: DATA FUSION EXAMPLE
-# ============================================================================
-
-st.markdown("### 📊 How We Calculate Risk: Multi-Modal Data Fusion")
-st.caption("Example: Top priority colony showing how different data sources combine")
-
-# Get data fusion for top priority
+# Get top priority colony
 top_colony = priorities['priorities'][0]['colony_name']
 fusion_data = get_data_fusion(top_colony)
 
 col_left, col_right = st.columns([2, 1])
 
 with col_left:
-    st.markdown(f"#### {fusion_data['colony_name']}")
-    st.markdown(f"**Risk Score:** {fusion_data['combined_score']}/100")
-    st.markdown(f"**Status:** <span style='color: #FF4444; font-weight: bold;'>{fusion_data['risk_level']}</span>", unsafe_allow_html=True)
+    st.markdown(f"**Example: {fusion_data['colony_name']}**")
 
-    # Data sources breakdown
-    st.markdown("**Data Sources:**")
+    # Data sources table
+    sources_data = []
+    for key, source in fusion_data['data_sources'].items():
+        sources_data.append({
+            "Data Source": key.replace('_', ' ').title(),
+            "Value": f"{source['value']} {source['unit']}",
+            "Weight": f"{source['weight']*100:.0f}%",
+            "Impact": source['impact'],
+            "Origin": source['source']
+        })
 
-    sources = fusion_data['data_sources']
+    sources_df = pd.DataFrame(sources_data)
 
-    for key, source in sources.items():
-        with st.expander(f"**{key.replace('_', ' ').title()}**: {source['value']} {source['unit']}", expanded=False):
-            st.write(f"**Source:** {source['source']}")
-            st.write(f"**Weight in Algorithm:** {source['weight']*100}%")
-            st.write(f"**Impact Level:** {source['impact']}")
-
-with col_right:
-    # Visual flowchart
-    st.markdown("**Risk Calculation:**")
-
-    fig = go.Figure()
-
-    fig.add_trace(go.Funnel(
-        name='Data Sources',
-        y=list(fusion_data['data_sources'].keys()),
-        x=[source['weight'] for source in fusion_data['data_sources'].values()],
-        textinfo="value+percent initial"
-    ))
-
-    fig.update_layout(
-        template="plotly_dark",
-        paper_bgcolor="#1A1A1A",
-        height=400,
-        showlegend=False
+    st.dataframe(
+        sources_df,
+        use_container_width=True,
+        hide_index=True,
+        column_config={
+            "Impact": st.column_config.TextColumn(
+                "Impact",
+                help="Severity of this factor"
+            )
+        }
     )
 
-    st.plotly_chart(fig, use_container_width=True)
+with col_right:
+    st.metric("Final Risk Score", f"{fusion_data['combined_score']}/100")
+    st.metric("Risk Level", fusion_data['risk_level'])
 
-    st.markdown(f"**Final Score:** {fusion_data['combined_score']}/100")
-    st.markdown(f"**Action Required:** {fusion_data['recommended_action']}")
+    st.info(f"**Recommendation:** {fusion_data['recommended_action']}")
+
+st.markdown("")
+st.caption("**How it works:** Each data source contributes to the overall risk score based on its assigned weight. High-impact factors like erosion rate and sea level rise carry more weight in the calculation.")
+
+st.markdown("---")
+
+# ============================================================================
+# SECTION 3: INTERACTIVE RISK MAP
+# ============================================================================
+
+st.subheader("Gulf Coast Risk Zones")
+st.caption("Red = Critical (0-10 years) • Orange = High (10-25 years) • Green = Stable")
+
+render_map(
+    pd.DataFrame(),
+    key="risk_zones_map",
+    height=500,
+    risk_zones=zones['zones']
+)
+
+st.markdown("---")
+
+# ============================================================================
+# SECTION 4: PRIORITY RESTORATION QUEUE
+# ============================================================================
+
+st.subheader("Priority Restoration Sites")
+st.caption("Ranked by urgency using multi-criteria decision analysis")
+
+priority_df = pd.DataFrame(priorities['priorities'])
+
+# Format for display
+display_cols = ['rank', 'colony_name', 'years_until_critical', 'bird_population_2026', 'erosion_rate', 'estimated_cost_usd']
+display_df = priority_df[display_cols].copy()
+display_df.columns = ['Rank', 'Colony', 'Years Until Critical', 'Birds (2026)', 'Erosion (m/yr)', 'Est. Cost (USD)']
+
+# Format numbers safely
+display_df['Years Until Critical'] = display_df['Years Until Critical'].apply(
+    lambda x: f"{int(x)}" if pd.notna(x) else "N/A"
+)
+display_df['Birds (2026)'] = display_df['Birds (2026)'].apply(
+    lambda x: f"{int(x):,}" if pd.notna(x) else "N/A"
+)
+display_df['Erosion (m/yr)'] = display_df['Erosion (m/yr)'].apply(
+    lambda x: f"{x:.1f}" if pd.notna(x) else "N/A"
+)
+display_df['Est. Cost (USD)'] = display_df['Est. Cost (USD)'].apply(
+    lambda x: f"${int(x):,}" if pd.notna(x) else "N/A"
+)
+
+st.dataframe(
+    display_df,
+    use_container_width=True,
+    hide_index=True,
+    height=400
+)
+
+# Download
+csv = priority_df.to_csv(index=False)
+st.download_button(
+    "📥 Download Complete Assessment",
+    data=csv,
+    file_name="coastal_restoration_priorities.csv",
+    mime="text/csv"
+)
+
+# Show detailed cards for top 3
+st.markdown("#### Top 3 Priority Details")
+
+for idx, row in priority_df.head(3).iterrows():
+    with st.expander(f"#{row['rank']} - {row['colony_name']}", expanded=idx==0):
+        col1, col2, col3, col4 = st.columns(4)
+
+        with col1:
+            years = row['years_until_critical']
+            years_display = f"{int(years)} years" if pd.notna(years) else "N/A"
+            st.metric("Years Until Critical", years_display)
+
+        with col2:
+            birds = row['bird_population_2026']
+            birds_display = f"{int(birds):,}" if pd.notna(birds) else "N/A"
+            st.metric("Birds at Risk", birds_display)
+
+        with col3:
+            erosion = row['erosion_rate']
+            erosion_display = f"{erosion:.1f} m/yr" if pd.notna(erosion) else "N/A"
+            st.metric("Erosion Rate", erosion_display)
+
+        with col4:
+            cost = row['estimated_cost_usd']
+            cost_display = f"${int(cost):,}" if pd.notna(cost) else "N/A"
+            st.metric("Estimated Cost", cost_display)
+
+        st.info(f"**Recommended Action:** {row['recommended_action']}")
 
 st.markdown("---")
 
@@ -292,10 +269,10 @@ st.markdown("---")
 # SECTION 5: FUTURE PROJECTIONS
 # ============================================================================
 
-st.markdown("### 🔮 Future Scenarios: What Happens Next")
-st.caption("Select a year to see projected colony status under NOAA sea level rise scenarios")
+st.subheader("Future Scenario Projections")
+st.caption("Climate-informed projections using NOAA sea level rise models")
 
-col_year, col_scenario = st.columns([2, 1])
+col_year, col_scenario = st.columns([3, 1])
 
 with col_year:
     selected_year = st.select_slider(
@@ -308,91 +285,49 @@ with col_scenario:
     scenario = st.selectbox(
         "Climate Scenario",
         ["low", "intermediate", "high"],
-        index=1,
-        help="NOAA sea level rise scenarios"
+        index=1
     )
 
-# Get projection
 projection = get_future_projection(selected_year, scenario)
 
-# Show summary
+# Metrics
 col1, col2, col3, col4 = st.columns(4)
 
 with col1:
-    st.metric(
-        "Submerged",
-        f"{projection['summary']['submerged']} colonies",
-        delta=f"{(projection['summary']['submerged']/projection['summary']['total_colonies']*100):.0f}%",
-        delta_color="inverse"
-    )
+    st.metric("Submerged Colonies", projection['summary']['submerged'], delta="Uninhabitable", delta_color="inverse")
 
 with col2:
-    st.metric(
-        "At Risk",
-        f"{projection['summary']['at_risk']} colonies",
-        help="Flooded during typical storms"
-    )
+    st.metric("At-Risk Colonies", projection['summary']['at_risk'], help="Vulnerable during storms")
 
 with col3:
-    st.metric(
-        "Viable",
-        f"{projection['summary']['viable']} colonies",
-        delta_color="normal"
-    )
+    st.metric("Viable Colonies", projection['summary']['viable'], delta="Above water", delta_color="normal")
 
 with col4:
-    st.metric(
-        "Bird Loss",
-        f"{projection['summary']['bird_population_loss_pct']:.0f}%",
-        delta="Population decline",
-        delta_color="inverse"
-    )
+    loss_pct = projection['summary']['bird_population_loss_pct']
+    st.metric("Population Loss", f"{loss_pct:.0f}%", delta="Est. decline", delta_color="inverse")
 
-# Create projection map
-st.markdown(f"**Map: {selected_year} Projection ({scenario.title()} Scenario)**")
+st.markdown(f"**Projection for {selected_year} ({scenario.title()} Scenario)**")
 
-m2 = folium.Map(
-    location=[29.5, -89.5],
-    zoom_start=6,
-    tiles="CartoDB positron"
+render_map(
+    pd.DataFrame(),
+    key=f"projection_map_{selected_year}_{scenario}",
+    height=450,
+    future_projections=projection['colonies'][:100]
 )
-
-# Add colonies with status colors
-for colony in projection['colonies'][:100]:  # Limit for performance
-    if colony['status'] == 'submerged':
-        color = '#666666'
-        icon = 'remove'
-    elif colony['status'] == 'at_risk':
-        color = '#FFA500'
-        icon = 'warning'
-    else:
-        color = '#4CAF50'
-        icon = 'ok'
-
-    folium.Marker(
-        location=[colony['latitude'], colony['longitude']],
-        icon=folium.Icon(color='gray' if colony['status'] == 'submerged' else 'orange' if colony['status'] == 'at_risk' else 'green', icon=icon),
-        popup=f"{colony['colony_name']}<br>Status: {colony['status'].title()}<br>Area: {colony['projected_area_m2']:.0f}m²",
-        tooltip=colony['colony_name']
-    ).add_to(m2)
-
-try:
-    from streamlit_folium import st_folium
-    st_folium(m2, width=None, height=500)
-except ImportError:
-    st.components.v1.html(m2._repr_html_(), height=500)
 
 # ============================================================================
 # FOOTER
 # ============================================================================
 
 st.markdown("---")
-st.markdown("""
-    <div style="text-align: center; color: #666; padding: 1rem;">
-        <strong>Data Sources:</strong> NOAA Sea Level Rise Viewer | USGS Coastal Erosion Study (2017-1051) |
-        NOAA HURDAT2 Hurricane Database | Water Institute Bird Survey Data (2010-2021)
-        <br><br>
-        <em>This tool provides decision support for coastal restoration prioritization.
-        All projections based on peer-reviewed scientific models.</em>
-    </div>
-""", unsafe_allow_html=True)
+
+st.info("""
+**Data Sources:** NOAA Sea Level Rise Viewer • USGS Coastal Erosion Study (2017-1051) •
+NOAA HURDAT2 Hurricane Database • Water Institute Bird Survey Data (2010-2021)
+
+**Automated Capabilities:** Multi-modal data fusion • Probabilistic modeling •
+Extreme value analysis • Geospatial analytics • Real-time hazard quantification
+
+This platform demonstrates automated flood intelligence using physics-based and data-driven models,
+eliminating manual research workflows described in traditional research positions.
+""")

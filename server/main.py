@@ -497,8 +497,8 @@ class SQLChatbot:
 
 CRITICAL REQUIREMENTS:
 1. Return ONLY the SQL query - no explanations, no markdown, no comments
-2. If the query returns colony data, you MUST include "Latitude, Longitude" in SELECT and GROUP BY clauses
-3. Add "WHERE Latitude IS NOT NULL AND Longitude IS NOT NULL" for colony queries
+2. If the question involves locations, colonies, states, or mapping, you MUST include "Latitude" and "Longitude" columns in the SELECT and GROUP BY clauses.
+3. Add "WHERE "Latitude" IS NOT NULL AND "Longitude" IS NOT NULL" to ensure results can be mapped.
 4. Use exact column names: "ColonyName", "Latitude", "Longitude" (case-sensitive)
 
 Generate the SQL query now:"""
@@ -1236,12 +1236,16 @@ RULE: If question asks about "how many birds/observations/nests/counts", MUST us
 - Table: tblColonyTotals2010-2021_MayJuneCombined
 - Aggregation: SUM(Birds) or SUM(Nests), NOT COUNT(*)
 
-Only use tblSpeciesData for questions about PHOTO METHODOLOGY, not bird counts!
+🚨 ERROR #2:
+**Missing Latitude/Longitude for mapping queries.**
+
+If the question involves locations, colonies, maps, or specific regions:
+- Query MUST include "Latitude" and "Longitude" in SELECT and GROUP BY.
+- If they are missing, mark as INVALID.
 
 OTHER ERRORS TO CHECK:
-2. Using COUNT(*) when should use SUM(Birds) for bird totals
-3. Missing Year filter when question specifies a year
-4. Missing Latitude/Longitude for location questions
+3. Using COUNT(*) when should use SUM(Birds) for bird totals
+4. Missing Year filter when question specifies a year
 
 IMPORTANT: Respond with a JSON object:
 {
@@ -3119,9 +3123,36 @@ async def get_priority_restoration_sites(limit: int = 10):
 
         priorities = []
         for idx, row in enumerate(cursor.fetchall(), 1):
-            # Estimate cost based on risk level and population
-            # Typical Louisiana coastal restoration: $50-100/m²
-            estimated_cost = 50000 * (row['combined_risk_score'] / 10)  # Rough estimate
+            # Realistic cost estimation based on multiple factors
+            # Base restoration cost: $50-150/m² depending on complexity
+
+            # Estimate affected area based on erosion and population
+            erosion = row['erosion_rate_m_per_year'] or 5.0
+            birds = row['estimated_2026_birds'] or 1000
+
+            # Calculate complexity multiplier
+            complexity = 1.0
+            if birds > 10000:
+                complexity = 1.5  # Large colonies need more infrastructure
+            elif birds > 5000:
+                complexity = 1.2
+
+            # Urgency multiplier
+            years_critical = row['years_until_critical'] or 20
+            urgency = 1.0
+            if years_critical < 5:
+                urgency = 1.8  # Urgent projects cost more
+            elif years_critical < 10:
+                urgency = 1.4
+
+            # Estimate area needing restoration (hectares)
+            estimated_area_m2 = max(10000, min(200000, erosion * 1000 + birds * 2))
+
+            # Cost per m² varies by project
+            cost_per_m2 = 75 * complexity * urgency
+
+            # Add mobilization and engineering costs (20% overhead)
+            estimated_cost = estimated_area_m2 * cost_per_m2 * 1.2
 
             priorities.append({
                 "rank": idx,
@@ -3131,7 +3162,7 @@ async def get_priority_restoration_sites(limit: int = 10):
                 "recommended_action": row['recommended_action'],
                 "bird_population_2026": row['estimated_2026_birds'],
                 "species_count": row['species_count'],
-                "erosion_rate": round(row['erosion_rate_m_per_year'], 1),
+                "erosion_rate": round(row['erosion_rate_m_per_year'], 1) if row['erosion_rate_m_per_year'] else None,
                 "slr_2050": round(row['slr_2050_m'], 2),
                 "population_trend_pct": round(row['population_trend_2010_2021_pct'], 1) if row['population_trend_2010_2021_pct'] else None,
                 "estimated_cost_usd": int(estimated_cost),

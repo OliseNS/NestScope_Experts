@@ -125,23 +125,14 @@ def render_sidebar(active_page: str = "home"):
     ):
         st.switch_page("pages/02_nest_vision.py")
 
-    # Coastal Risk button (NEW)
+    # Flood Intelligence button
     if st.button(
-        "🌊 Coastal Risk",
+        "🌊 Flood Intelligence",
         use_container_width=True,
-        help="Risk assessment & restoration priorities",
+        help="Automated multi-modal flood hazard monitoring",
         type="primary" if active_page == "coastal_risk" else "secondary"
     ):
         st.switch_page("pages/06_coastal_risk.py")
-
-    # NestTrends button
-    if st.button(
-        "📈 NestTrends",
-        use_container_width=True,
-        help="Interactive population trends & analytics",
-        type="primary" if active_page == "nesttrends" else "secondary"
-    ):
-        st.switch_page("pages/03_nest_trends.py")
 
     # NestDB button
     if st.button(
