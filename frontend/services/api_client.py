@@ -849,158 +849,19 @@ def manual_version_commit(message: str, expert_email: str = "system") -> Dict[st
         return {"success": False, "error": str(e)}
 
 
-# ============================================================================
-# FLOOD DATA API FUNCTIONS
-# ============================================================================
 
-def get_flood_stations() -> Dict[str, Any]:
+def explore_database() -> Dict[str, Any]:
     """
-    Get all NOAA flood monitoring stations in Louisiana coastal region.
+    Trigger the Database Explorer Agent on the backend.
 
     Returns:
-        Dictionary with 'stations' list and 'count'
+        Dictionary with success status, message, and insights
     """
     from .config import API_BASE_URL
 
     try:
-        response = requests.get(f"{API_BASE_URL}/flood/stations", timeout=10)
+        response = requests.post(f"{API_BASE_URL}/db/explore", timeout=60)
         response.raise_for_status()
         return response.json()
     except requests.exceptions.RequestException as e:
-        return {"stations": [], "count": 0, "error": str(e)}
-
-
-def get_flood_events(
-    station_id: Optional[str] = None,
-    year: Optional[int] = None,
-    min_severity: Optional[str] = None,
-    limit: int = 1000
-) -> Dict[str, Any]:
-    """
-    Query flood events from NOAA water level data.
-
-    Args:
-        station_id: Filter by specific station (e.g., "8761724")
-        year: Filter by year (e.g., 2012)
-        min_severity: Minimum severity ("minor", "moderate", "major")
-        limit: Maximum results (default: 1000)
-
-    Returns:
-        Dictionary with 'events' list, 'count', and 'filters'
-    """
-    from .config import API_BASE_URL
-
-    params = {"limit": limit}
-    if station_id:
-        params["station_id"] = station_id
-    if year:
-        params["year"] = year
-    if min_severity:
-        params["min_severity"] = min_severity
-
-    try:
-        response = requests.get(
-            f"{API_BASE_URL}/flood/events",
-            params=params,
-            timeout=15
-        )
-        response.raise_for_status()
-        return response.json()
-    except requests.exceptions.RequestException as e:
-        return {"events": [], "count": 0, "error": str(e)}
-
-
-def get_flood_summary(station_id: Optional[str] = None) -> Dict[str, Any]:
-    """
-    Get flood event summary statistics by year and severity.
-
-    Args:
-        station_id: Filter by specific station (optional)
-
-    Returns:
-        Dictionary with yearly summary of flood counts by severity level
-    """
-    from .config import API_BASE_URL
-
-    params = {}
-    if station_id:
-        params["station_id"] = station_id
-
-    try:
-        response = requests.get(
-            f"{API_BASE_URL}/flood/summary",
-            params=params,
-            timeout=10
-        )
-        response.raise_for_status()
-        return response.json()
-    except requests.exceptions.RequestException as e:
-        return {"summary": [], "error": str(e)}
-
-
-def calculate_flood_impact(
-    latitude: float,
-    longitude: float,
-    max_distance_km: float = 50,
-    year: Optional[int] = None
-) -> Dict[str, Any]:
-    """
-    Calculate flood impact for colonies near a geographic location.
-
-    Args:
-        latitude: Colony latitude
-        longitude: Colony longitude
-        max_distance_km: Search radius in kilometers (default: 50)
-        year: Filter events by year (optional)
-
-    Returns:
-        Dictionary with nearby_stations, flood_events, impact_score, severity_summary
-    """
-    from .config import API_BASE_URL
-
-    data = {
-        "latitude": latitude,
-        "longitude": longitude,
-        "max_distance_km": max_distance_km
-    }
-    if year:
-        data["year"] = year
-
-    try:
-        response = requests.post(
-            f"{API_BASE_URL}/flood/impact",
-            json=data,
-            timeout=15
-        )
-        response.raise_for_status()
-        return response.json()
-    except requests.exceptions.RequestException as e:
-        return {
-            "nearby_stations": [],
-            "flood_events": [],
-            "impact_score": 0,
-            "severity_summary": {"minor": 0, "moderate": 0, "major": 0},
-            "error": str(e)
-        }
-
-
-def get_flood_stats() -> Dict[str, Any]:
-    """
-    Get overall flood database statistics.
-
-    Returns:
-        Database stats including station count, event count, year range
-    """
-    from .config import API_BASE_URL
-
-    try:
-        response = requests.get(f"{API_BASE_URL}/flood/stats", timeout=10)
-        response.raise_for_status()
-        return response.json()
-    except requests.exceptions.RequestException as e:
-        return {
-            "station_count": 0,
-            "event_count": 0,
-            "year_range": (None, None),
-            "error": str(e)
-        }
+        return {"success": False, "error": str(e)}

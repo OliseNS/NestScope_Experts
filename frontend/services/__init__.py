@@ -29,6 +29,18 @@ from .api_client import (
     get_version_diff,
     rollback_database,
     manual_version_commit,
+    explore_database,
+    get_species_risk_assessment,
+    get_species_risk_detail,
+    get_population_projection,
+    get_erosion_risk_zones,
+    get_shoreline_history,
+    get_slr_projections,
+    get_storm_tracks,
+    get_colony_erosion_risk,
+    get_colony_viability,
+    get_restoration_priorities,
+    get_storm_impact_analysis,
 )
 from .config import API_BASE_URL
 
@@ -59,5 +71,17 @@ __all__ = [
     'get_version_diff',
     'rollback_database',
     'manual_version_commit',
+    'explore_database',
+    'get_species_risk_assessment',
+    'get_species_risk_detail',
+    'get_population_projection',
+    'get_erosion_risk_zones',
+    'get_shoreline_history',
+    'get_slr_projections',
+    'get_storm_tracks',
+    'get_colony_erosion_risk',
+    'get_colony_viability',
+    'get_restoration_priorities',
+    'get_storm_impact_analysis',
     'API_BASE_URL'
 ]

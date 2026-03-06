@@ -293,6 +293,17 @@ if noaa_ok:
         st.metric("Height", f"{elevation:.2f}m")
         st.caption("Above MHHW datum")
 
+    st.markdown("### 📈 Live 48-Hour Water Level Forecast")
+    fig_surge = px.line(
+        noaa_forecast, 
+        x='t', y='v',
+        title="NOAA Predicted Water Levels (MHHW Datum) - Grand Isle, LA",
+        labels={'t': 'Time', 'v': 'Water Level (m)'}
+    )
+    fig_surge.add_hline(y=0.5, line_dash="dash", line_color="red", annotation_text="Minor Flood Stage")
+    fig_surge.update_layout(height=300, margin=dict(l=20, r=20, t=40, b=20))
+    st.plotly_chart(fig_surge, use_container_width=True)
+
     st.markdown("")
 
     # Step 2: Normalization

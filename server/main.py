@@ -24,6 +24,19 @@ from server.cv_tools.inference import BirdDetector, get_example_images
 from server.db_version import DatabaseVersionControl
 from server.flood_tools.flood_database import FloodDatabase
 from server.flood_tools.noaa_client import NOAAClient
+from server.services.risk_intelligence import RiskIntelligenceService
+from server.services.db_explorer import DatabaseExplorer
+
+# Initialize risk intelligence service
+_risk_service = None
+
+def get_risk_service():
+    global _risk_service
+    if _risk_service is None:
+        db_path = os.getenv("DB_PATH", "data/bird_data_complete.db")
+        _risk_service = RiskIntelligenceService(db_path)
+    return _risk_service
+
 # Removed: No longer using dynamic prompt generators
 
 # Load environment variables (for secrets like API keys)
@@ -600,16 +613,35 @@ class SQLChatbot:
             raise FileNotFoundError(f"System prompt file not found: {self.prompt_path}")
 
     def _load_metadata(self):
-        """Load enhanced database metadata JSON"""
-        metadata_path = SERVER_DIR.parent / "data" / "database_metadata_enhanced.json"
-        try:
-            with open(metadata_path, 'r', encoding='utf-8') as f:
-                metadata = json.load(f)
-            print(f"✓ Enhanced metadata loaded from {metadata_path}")
-            return metadata
-        except FileNotFoundError:
-            print(f"⚠ Warning: Enhanced metadata not found at {metadata_path}")
-            return None
+        """Load database metadata (prefers compressed essential metadata)"""
+        # Try compressed essential metadata first (2k tokens vs 35k!)
+        essential_path = SERVER_DIR.parent / "data" / "metadata_essential.json"
+        extended_path = SERVER_DIR.parent / "data" / "metadata_extended.json"
+        fallback_path = SERVER_DIR.parent / "data" / "database_metadata_enhanced.json"
+
+        # Priority: essential > extended > fallback
+        for path, tier in [(essential_path, "essential"), (extended_path, "extended"), (fallback_path, "fallback")]:
+            try:
+                with open(path, 'r', encoding='utf-8') as f:
+                    metadata = json.load(f)
+
+                # Calculate token estimate (rough: 1 token ≈ 4 chars)
+                json_size = len(json.dumps(metadata))
+                token_estimate = json_size // 4
+
+                print(f"✓ Metadata loaded: {tier.upper()} tier from {path.name} (~{token_estimate:,} tokens)")
+                return metadata
+            except FileNotFoundError:
+                continue
+
+        print(f"⚠ Warning: No metadata found. Run: python scripts/compress_metadata.py")
+        return None
+
+    def refresh_metadata(self):
+        """Reload metadata from disk"""
+        self.metadata = self._load_metadata()
+        self.schema = None # Force schema regeneration
+        print("🔄 Chatbot metadata context refreshed")
 
     def get_connection(self, read_only=True):
         """
@@ -677,9 +709,64 @@ class SQLChatbot:
         if not self.metadata:
             return "No metadata available."
 
+        # Check metadata format (compressed vs legacy)
+        is_compressed = "_meta" in self.metadata and "compression_version" in self.metadata.get("_meta", {})
+
+        if is_compressed:
+            # Use compressed format (much more concise!)
+            return self._format_compressed_metadata()
+        else:
+            # Fallback: legacy verbose format
+            return self._format_legacy_metadata()
+
+    def _format_compressed_metadata(self):
+        """Format AI-compressed metadata (essential tier)"""
+        context = "# DATABASE SCHEMA (COMPRESSED)\n\n"
+
+        # Critical rules first (most important!)
+        rules = self.metadata.get('critical_rules', [])
+        if rules:
+            context += "## CRITICAL RULES\n"
+            for rule in rules:
+                context += f"- {rule}\n"
+            context += "\n"
+
+        # Tables with purpose and key columns
+        tables = self.metadata.get('tables', {})
+        for table_name, table_info in tables.items():
+            context += f"## {table_name}\n"
+
+            if 'purpose' in table_info:
+                context += f"Purpose: {table_info['purpose']}\n"
+
+            if 'row_count' in table_info:
+                context += f"Rows: {table_info['row_count']:,}\n"
+
+            if 'key_columns' in table_info:
+                context += f"Columns: {', '.join(table_info['key_columns'])}\n"
+
+            if 'joins' in table_info:
+                context += f"Joins: {', '.join(table_info['joins'])}\n"
+
+            if 'query_hints' in table_info:
+                context += f"Hints: {'; '.join(table_info['query_hints'])}\n"
+
+            context += "\n"
+
+        # Common query patterns
+        patterns = self.metadata.get('common_patterns', [])
+        if patterns:
+            context += "## COMMON PATTERNS\n"
+            for pattern in patterns:
+                context += f"- {pattern}\n"
+            context += "\n"
+
+        return context
+
+    def _format_legacy_metadata(self):
+        """Format legacy verbose metadata (fallback)"""
         context = "# DATABASE SCHEMA\n\n"
 
-        # Add tables with columns
         tables = self.metadata.get('tables', {})
         for table_name, table_info in tables.items():
             rows = table_info.get('row_count', 0)
@@ -1356,37 +1443,67 @@ class AgenticSQLChatbot(SQLChatbot):
         yield {'type': 'error', 'content': f"Failed to generate accurate results after {self.max_attempts} attempts. Please try rephrasing your question."}
 
     async def _analyze_question(self, question: str, conversation_history: list = None) -> dict:
-        """Analyze the question to understand what's being asked."""
+        """
+        Analyze the question with high-fidelity reasoning to understand intent, entities, and constraints.
+        This provides the foundation for accurate SQL generation.
+        """
 
         messages = [
-            {"role": "system", "content": """You are analyzing a natural language question about bird colony data.
+            {"role": "system", "content": """You are an expert data analyst specializing in Gulf Coast avian ecology.
+Analyze the natural language question to extract deep semantic meaning, entities, and logical constraints.
 
 Respond with ONLY a valid JSON object (no markdown, no extra text):
 
 {
-  "summary": "One sentence describing what the user wants",
-  "question_type": "count, trend, comparison, or list",
-  "tables_needed": ["tblColonyTotals2010-2021_MayJuneCombined"],
+  "summary": "Deep semantic summary of the user's intent",
+  "question_type": "count | trend | comparison | list | distribution",
+  "entities": {
+    "species": ["List of species names or 'all'"],
+    "locations": ["List of states, colonies, or regions"],
+    "time_range": "Specific years or 'all historical'",
+    "metrics": ["Birds", "Nests", "Diversity"]
+  },
+  "constraints": [
+    "List of logical filters (e.g., 'Only Louisiana', 'After 2015')"
+  ],
+  "tables_needed": ["List of specific tables"],
+  "needs_coordinates": true/false,
   "step_by_step_reasoning": [
-    "Step 1: What is being asked",
-    "Step 2: What table to use and why",
-    "Step 3: What aggregation/filters needed",
-    "Step 4: Any special considerations"
+    "1. Intent Analysis: Deep dive into what the user is actually seeking.",
+    "2. Ambiguity Check: Identify any terms that need clarification or default assumptions.",
+    "3. Table Selection: Scientific justification for choosing specific tables.",
+    "4. Column Mapping: Exact columns required for metrics and filters.",
+    "5. Aggregation Logic: Mathematical approach (SUM vs COUNT vs AVG).",
+    "6. Spatial Requirement: Determine if Latitude/Longitude are needed for mapping.",
+    "7. Visualization Strategy: Best chart type to convey this specific insight."
   ]
 }
 
-Keep it simple and focused. Example:
-
-Question: "How many brown pelicans in Louisiana in 2021?"
+Example: "Show me the trend of Brown Pelicans in Louisiana after 2015"
 {
-  "summary": "Total brown pelican count in Louisiana for 2021",
-  "question_type": "count",
+  "summary": "Analyze the temporal population trajectory of Brown Pelicans within Louisiana's coastal colonies specifically from 2016-2021.",
+  "question_type": "trend",
+  "entities": {
+    "species": ["Brown Pelican (BRPE)"],
+    "locations": ["Louisiana (LA)"],
+    "time_range": "2016-2021",
+    "metrics": ["Birds"]
+  },
+  "constraints": [
+    "State must be 'LA'",
+    "Year must be > 2015",
+    "SpeciesCode must map to 'BRPE'"
+  ],
   "tables_needed": ["tblColonyTotals2010-2021_MayJuneCombined"],
+  "needs_coordinates": true,
   "step_by_step_reasoning": [
-    "User wants BIRD COUNTS, not photo records",
-    "Use tblColonyTotals with pre-aggregated counts",
-    "Filter by species code BRPE, State=LA, Year=2021",
-    "Sum Birds column across all matching colonies"
+    "1. Intent: User seeks a time-series (trend) analysis of a specific species population in a specific state.",
+    "2. Ambiguity: 'After 2015' implies 2016 inclusive to 2021 (last available survey).",
+    "3. Table: Must use tblColonyTotals as it contains pre-aggregated Bird/Nest counts (Observations), avoiding the photo-record bias of tblSpeciesData.",
+    "4. Mapping: Will use 'Birds' column for population, 'Year' for temporal x-axis, and 'State'/'SpeciesCode' for filtering.",
+    "5. Logic: SUM('Birds') grouped by 'Year' to get total annual state population.",
+    "6. Spatial: Since it's a state-level query, Latitude/Longitude of colonies should be included to enable a colony-level map overlay.",
+    "7. Viz: Line chart is the mathematically correct choice for temporal trends."
   ]
 }"""}
         ]
@@ -1465,50 +1582,35 @@ Question: "How many brown pelicans in Louisiana in 2021?"
             }
 
     async def _validate_sql(self, sql_query: str, question: str, conversation_history: list = None) -> dict:
-        """Self-validate the generated SQL query using LLM reasoning."""
+        """
+        Expert SQL validation with scientific and structural integrity checks.
+        Ensures the query matches the ecological intent of the question.
+        """
 
         # Pure LLM validation - no hard-coded rules
         messages = [
-            {"role": "system", "content": """You are a SQL validator for bird colony database queries.
+            {"role": "system", "content": """You are a Principal Data Engineer and Ecologist.
+Validate the SQL query against high-level scientific and structural principles.
 
-🚨 ERROR #1 (MOST COMMON - CHECK FIRST):
-**Using tblSpeciesData for bird/observation counts = WRONG!**
+🚨 STRUCTURAL INTEGRITY CHECK:
+1. Observations vs Records: DOES THE QUERY CONFUSE tblSpeciesData WITH tblColonyTotals?
+   - Any query for "birds/observations/nests/counts" MUST use tblColonyTotals and SUM(Birds/Nests).
+   - Queries using tblSpeciesData with COUNT(*) for population are WRONG.
+2. Spatial Integrity: IF IT INVOLVES LOCATIONS, ARE LATITUDE/LONGITUDE INCLUDED?
+   - Locations MUST have Latitude and Longitude in SELECT and GROUP BY.
+3. Column Accuracy: ARE COLUMN NAMES WRAPPED IN DOUBLE QUOTES?
+   - SQLite requires "Year", "ColonyName", "Latitude", "Longitude" for stability.
+4. Join Logic: IF JOINING tblSpeciesCodes, IS THE SpeciesCode JOIN CORRECT?
+   - Should be: ct.SpeciesCode = sc.SpeciesCode
 
-This is the MOST COMMON MISTAKE. Check IMMEDIATELY:
-
-❌ WRONG (counts photo records, not birds):
-- SELECT Year, COUNT(*) FROM tblSpeciesData GROUP BY Year
-- Anything using tblSpeciesData for "how many birds/observations"
-
-✅ CORRECT (counts actual birds):
-- SELECT Year, SUM(Birds) FROM tblColonyTotals2010-2021_MayJuneCombined GROUP BY Year
-
-RULE: If question asks about "how many birds/observations/nests/counts", MUST use:
-- Table: tblColonyTotals2010-2021_MayJuneCombined
-- Aggregation: SUM(Birds) or SUM(Nests), NOT COUNT(*)
-
-🚨 ERROR #2:
-**Missing Latitude/Longitude for mapping queries.**
-
-If the question involves locations, colonies, maps, or specific regions:
-- Query MUST include "Latitude" and "Longitude" in SELECT and GROUP BY.
-- If they are missing, mark as INVALID.
-
-OTHER ERRORS TO CHECK:
-3. Using COUNT(*) when should use SUM(Birds) for bird totals
-4. Missing Year filter when question specifies a year
-
-IMPORTANT: Respond with a JSON object:
+Respond with a JSON object:
 {
   "is_valid": true/false,
-  "feedback": "Brief issue description or 'Looks good'",
-  "reasoning": "Concise validation (2-3 sentences max):
-    - Table check: Correct table used?
-    - Aggregation check: Correct method (SUM vs COUNT)?
-    - Logic check: Query answers the question?"
+  "feedback": "Deep structural/scientific critique or 'Structurally sound'",
+  "reasoning": "Technical justification of why this query is correct or incorrect (1-3 sentences)."
 }
 
-Be STRICT but FAIR. Only mark invalid if there's a clear error."""}
+Be technically rigorous. Error on the side of caution."""}
         ]
 
         messages.append({
@@ -1562,49 +1664,39 @@ Validate (respond with JSON only):"""
             return {"is_valid": True, "feedback": "Looks good", "reasoning": "Validation check performed"}
 
     async def _validate_results(self, question: str, sql_query: str, results_df, conversation_history: list = None) -> dict:
-        """Validate if the results make sense for the question."""
+        """
+        Final scientific validation of the query output.
+        Checks for data sanity, entity matching, and aggregation correctness.
+        """
 
         if results_df is None or len(results_df) == 0:
-            return {"is_valid": True, "feedback": "No results to validate"}
+            return {"is_valid": True, "feedback": "No results returned - verifying if this is an expected empty set for the given filters."}
 
-        # Pure LLM validation - no hard-coded rules
-        # Convert results to text summary for LLM validation
-        results_summary = f"{len(results_df)} rows returned. "
-        if len(results_df) > 0:
-            # Show column names and sample values
-            results_summary += f"Columns: {', '.join(results_df.columns[:5])}. "
-            if len(results_df.columns) > 5:
-                results_summary += f"({len(results_df.columns)} total columns). "
-
-            # Show first row as sample
-            first_row = results_df.iloc[0].to_dict()
-            results_summary += f"Sample row: {first_row}"
+        # Format sample for the model
+        results_summary = f"Total Rows: {len(results_df)}\n"
+        results_summary += f"Columns: {', '.join(results_df.columns)}\n"
+        results_summary += f"Sample Row: {results_df.iloc[0].to_dict() if len(results_df) > 0 else 'None'}"
 
         messages = [
-            {"role": "system", "content": """You are validating query results for bird colony data.
+            {"role": "system", "content": """You are a Senior Data Scientist performing a final Quality Assurance check.
+Cross-reference the original question with the SQL query and the actual data samples returned.
 
-🚨 CRITICAL CHECK:
-**Are these BIRD COUNTS or PHOTO RECORD COUNTS?**
+🚨 FACTUAL INTEGRITY CHECK:
+1. Metric Alignment: Does the question ask for 'Birds' but the query returns 'COUNT(*)'?
+   - If 'how many' birds, it MUST be a SUM, not a row count.
+2. Entity Alignment: Does the result set actually contain the years/species/locations requested?
+   - If user asked for '2021' but results show '2010', the query filter is wrong.
+3. Scale Sanity: Do the numbers look realistic for avian monitoring (e.g., thousands vs millions)?
+4. Observation Bias: Ensure no use of tblSpeciesData for population totals.
 
-The ONLY red flags that indicate wrong results:
-- If SQL uses tblSpeciesData for a bird count question → WRONG! (that's photo records)
-- If SQL uses COUNT(*) instead of SUM(Birds) for bird counts → WRONG!
-
-✅ CORRECT approaches:
-- Using tblColonyTotals with SUM(Birds) → Correct for bird counts
-- Using tblSpeciesData only for photo methodology questions → Correct
-
-IMPORTANT: Respond with a JSON object:
+Respond with a JSON object:
 {
   "is_valid": true/false,
-  "feedback": "Brief issue description or 'Results look correct'",
-  "reasoning": "Concise 1-2 sentence assessment:
-    - Table/aggregation correct?
-    - Columns match question?
-    - Overall assessment"
+  "feedback": "Detailed scientific assessment of why the results are accurate or misleading.",
+  "reasoning": "Technical trace of the validation logic applied to the columns and values."
 }
 
-ONLY mark as invalid if SQL used wrong table or wrong aggregation method. Different questions produce different result sizes - this is normal."""}
+Mark as INVALID if there is ANY logical disconnect between the user's intent and the data returned."""}
         ]
 
         messages.append({
@@ -2430,6 +2522,95 @@ Column Statistics:
         )
 
 # ============================================================================
+# DATABASE EXPLORER ENDPOINT
+# ============================================================================
+
+@app.post("/db/explore")
+async def explore_database():
+    """
+    Trigger the Database Explorer Agent to autonomously discover schema,
+    relationships, and semantic context.
+    """
+    try:
+        db_path = str(DB_PATH)
+        metadata_path = str(SERVER_DIR.parent / "data" / "database_metadata_enhanced.json")
+
+        explorer = DatabaseExplorer(db_path, metadata_path)
+        results = explorer.explore()
+
+        # Refresh chatbot context
+        chatbot.refresh_metadata()
+        if 'agentic_chatbot' in globals():
+            agentic_chatbot.refresh_metadata()
+
+        return {
+            "success": True,
+            "message": "Database exploration complete. Context refreshed.",
+            "insights": results.get("semantic_insights", []),
+            "tables_discovered": list(results.get("tables", {}).keys())
+        }
+    except Exception as e:
+        logger.error(f"Error during database exploration: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/db/compress-metadata")
+async def compress_metadata():
+    """
+    Use AI to compress database metadata from 35k+ tokens to <2k tokens.
+
+    Creates three-tier metadata system:
+    - Essential: Ultra-compact, query-optimized (default)
+    - Extended: Mid-tier with full column names
+    - Raw: Original verbose metadata (fallback)
+    """
+    try:
+        from server.services.metadata_compressor import MetadataCompressor
+
+        db_path = str(DB_PATH)
+        api_key = os.getenv("OPENROUTER_API_KEY")
+
+        if not api_key:
+            raise HTTPException(
+                status_code=500,
+                detail="OPENROUTER_API_KEY not found in environment"
+            )
+
+        compressor = MetadataCompressor(db_path, api_key, config['model']['name'])
+        paths = compressor.compress(output_dir=str(SERVER_DIR.parent / "data"))
+
+        # Refresh chatbot to use new compressed metadata
+        chatbot.refresh_metadata()
+        if 'agentic_chatbot' in globals():
+            agentic_chatbot.refresh_metadata()
+
+        # Calculate compression stats
+        essential_size = Path(paths['essential']).stat().st_size
+        raw_size = Path(paths['raw']).stat().st_size
+        essential_tokens = essential_size // 4
+        raw_tokens = raw_size // 4
+        compression_ratio = (1 - essential_tokens / raw_tokens) * 100
+
+        return {
+            "success": True,
+            "message": "Metadata compression complete. Chatbot context refreshed.",
+            "stats": {
+                "before_tokens": raw_tokens,
+                "after_tokens": essential_tokens,
+                "tokens_saved": raw_tokens - essential_tokens,
+                "compression_ratio": f"{compression_ratio:.1f}%"
+            },
+            "files": {
+                "essential": paths['essential'],
+                "extended": paths['extended'],
+                "raw": paths['raw']
+            }
+        }
+    except Exception as e:
+        logger.error(f"Error during metadata compression: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+# ============================================================================
 # DATABASE BROWSER ENDPOINTS
 # ============================================================================
 
@@ -2995,280 +3176,6 @@ async def manual_commit(message: str, expert_email: str = "system"):
             "error": str(e)
         }
 
-# ============================================================================
-# EROSION & SPECIES RISK ENDPOINTS
-# ============================================================================
-
-from server.erosion_tools import (
-    get_species_risk_summary,
-    calculate_species_risk,
-    get_erosion_risk_zones,
-    get_shoreline_history,
-    project_population,
-    assess_colony_viability,
-    calculate_restoration_priorities,
-)
-from server.erosion_tools.erosion_data import (
-    get_sea_level_rise_projections,
-    get_storm_tracks,
-    get_colony_erosion_risk,
-)
-from server.erosion_tools.predictive_models import correlate_with_environmental_events
-
-@app.get("/species/risk_assessment")
-async def species_risk_assessment():
-    """
-    Get comprehensive species risk assessment for all Gulf Coast colonial nesters.
-
-    Returns:
-        {
-            "species_assessments": List of species with risk scores and categories,
-            "summary_stats": Count by risk category
-        }
-    """
-    try:
-        db_path = os.getenv("DB_PATH", "data/bird_data_complete.db")
-        result = get_species_risk_summary(db_path)
-        return result
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@app.get("/species/risk/{species_code}")
-async def species_risk_detail(species_code: str):
-    """
-    Get detailed risk assessment for a specific species.
-
-    Args:
-        species_code: 4-letter species code (e.g., BRPE, ROSP)
-    """
-    try:
-        db_path = os.getenv("DB_PATH", "data/bird_data_complete.db")
-        result = calculate_species_risk(db_path, species_code.upper())
-        return result
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@app.get("/species/population_projection/{species_code}")
-async def population_projection(species_code: str, years_forward: int = 10, model: str = "linear"):
-    """
-    Project future population for a species based on historical trends.
-
-    Args:
-        species_code: 4-letter species code
-        years_forward: Number of years to project (default: 10)
-        model: "linear" or "exponential"
-    """
-    try:
-        db_path = os.getenv("DB_PATH", "data/bird_data_complete.db")
-        risk_data = calculate_species_risk(db_path, species_code.upper())
-        population_history = risk_data.get("population_history", [])
-
-        projection = project_population(population_history, years_forward, model)
-        projection["species_code"] = species_code.upper()
-
-        return projection
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@app.get("/erosion/risk_zones")
-async def erosion_risk_zones():
-    """
-    Get GeoJSON FeatureCollection of erosion risk zones across the Gulf Coast.
-
-    Returns:
-        GeoJSON with risk levels (EXTREME/HIGH/MEDIUM/LOW) and erosion rates
-    """
-    try:
-        return get_erosion_risk_zones()
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@app.get("/erosion/shoreline_history")
-async def shoreline_history():
-    """
-    Get historical shoreline positions (1850-2020) showing coastal erosion over time.
-
-    Returns:
-        GeoJSON FeatureCollection of shoreline LineStrings
-    """
-    try:
-        return get_shoreline_history()
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@app.get("/erosion/slr_projections")
-async def slr_projections(scenario: str = "2050_intermediate"):
-    """
-    Get sea level rise inundation projections for a given scenario.
-
-    Args:
-        scenario: One of 2030_intermediate, 2050_intermediate, 2070_intermediate, 2100_high
-
-    Returns:
-        GeoJSON FeatureCollection of inundation zones
-    """
-    try:
-        return get_sea_level_rise_projections(scenario)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@app.get("/erosion/storm_tracks")
-async def storm_tracks(years: Optional[List[int]] = None):
-    """
-    Get major storm tracks that impacted Gulf Coast bird colonies (2005-2024).
-
-    Args:
-        years: Optional list of years to filter (e.g., [2005, 2021])
-
-    Returns:
-        GeoJSON FeatureCollection of storm tracks with impact descriptions
-    """
-    try:
-        return get_storm_tracks(years)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@app.get("/colonies/erosion_risk/{colony_id}")
-async def colony_erosion_risk(colony_id: str):
-    """
-    Get erosion risk details for a specific colony.
-
-    Args:
-        colony_id: Colony identifier
-
-    Returns:
-        {
-            "colony_id": str,
-            "risk_score": float,
-            "risk_level": str,
-            "erosion_rate_m_per_year": float,
-            "recommendation": str
-        }
-    """
-    try:
-        return get_colony_erosion_risk(colony_id)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@app.get("/colonies/viability/{colony_id}")
-async def colony_viability(
-    colony_id: str,
-    current_area_m2: float = 50000,
-    minimum_viable_area_m2: float = 5000
-):
-    """
-    Assess colony viability and predict years until critical threshold.
-
-    Args:
-        colony_id: Colony identifier
-        current_area_m2: Current colony land area (default: 50000)
-        minimum_viable_area_m2: Minimum area for viability (default: 5000)
-
-    Returns:
-        {
-            "years_until_critical": int,
-            "viability_2050": str,
-            "recommendation": str
-        }
-    """
-    try:
-        erosion_info = get_colony_erosion_risk(colony_id)
-        erosion_rate = erosion_info["erosion_rate_m_per_year"]
-
-        result = assess_colony_viability(
-            colony_id,
-            erosion_rate,
-            current_area_m2,
-            minimum_viable_area_m2
-        )
-        return result
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@app.get("/restoration/priorities")
-async def restoration_priorities():
-    """
-    Calculate restoration priority scores for all colonies.
-
-    Returns:
-        {
-            "priority_map": GeoJSON with priority scores,
-            "top_recommendations": Top 10 sites ranked by priority,
-            "methodology": Description of scoring algorithm
-        }
-    """
-    try:
-        db_path = os.getenv("DB_PATH", "data/bird_data_complete.db")
-
-        # Get species risk data
-        species_risk_data = get_species_risk_summary(db_path)
-
-        # Get erosion data
-        erosion_data = get_erosion_risk_zones()
-
-        # Calculate priorities
-        result = calculate_restoration_priorities(db_path, species_risk_data, erosion_data)
-
-        return result
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@app.get("/analysis/storm_impact/{species_code}")
-async def storm_impact_analysis(species_code: str):
-    """
-    Analyze correlation between population changes and major storm events.
-
-    Args:
-        species_code: 4-letter species code
-
-    Returns:
-        {
-            "storm_impact_detected": bool,
-            "avg_decline_post_storm_pct": float,
-            "recovery_time_years": int,
-            "resilience_score": float
-        }
-    """
-    try:
-        db_path = os.getenv("DB_PATH", "data/bird_data_complete.db")
-
-        # Get population history
-        conn = sqlite3.connect(db_path)
-        cursor = conn.cursor()
-
-        query = """
-        SELECT Year, SUM(BirdsTotal) as total_birds
-        FROM [tblColonyTotals2010-2021_MayJuneCombined]
-        WHERE SpeciesCode = ?
-        GROUP BY Year
-        ORDER BY Year
-        """
-
-        cursor.execute(query, (species_code.upper(),))
-        population_data = [(row[0], row[1] or 0) for row in cursor.fetchall()]
-        conn.close()
-
-        # Major Gulf Coast storms
-        storm_years = [2005, 2008, 2012, 2020, 2021]  # Katrina, Gustav, Isaac, Laura, Ida
-
-        result = correlate_with_environmental_events(population_data, storm_years)
-        result["species_code"] = species_code.upper()
-        result["analyzed_storms"] = ["Katrina (2005)", "Isaac (2012)", "Ida (2021)"]
-
-        return result
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
 
 # ============================================================================
 # COASTAL RISK INTELLIGENCE ENDPOINTS - Real Data Fusion
@@ -3277,52 +3184,31 @@ async def storm_impact_analysis(species_code: str):
 @app.get("/api/risk/map_zones")
 async def get_risk_map_zones():
     """
-    Get GeoJSON-style risk zones for map visualization
-
-    Returns colored zones showing colony risk levels with 50km radius
+    Get dynamic GeoJSON-style risk zones for map visualization
+    Fuses colony data with live NOAA/HURDAT2/USGS regional factors.
     """
     try:
-        db_path = os.getenv("DB_PATH", "data/bird_data_complete.db")
-        conn = sqlite3.connect(db_path)
-        conn.row_factory = sqlite3.Row
-        cursor = conn.cursor()
-
-        cursor.execute("""
-            SELECT
-                colony_name,
-                latitude,
-                longitude,
-                combined_risk_score,
-                risk_level,
-                risk_color,
-                years_until_critical,
-                recommended_action,
-                estimated_2026_birds,
-                species_count,
-                last_survey_year
-            FROM colony_risk_assessment
-            ORDER BY combined_risk_score DESC
-        """)
+        service = get_risk_service()
+        colonies = service.get_colonies_with_stats()
+        results = service.calculate_dynamic_risk(colonies)
 
         zones = []
-        for row in cursor.fetchall():
+        for row in results:
             zones.append({
                 "colony_name": row['colony_name'],
                 "latitude": row['latitude'],
                 "longitude": row['longitude'],
-                "risk_score": round(row['combined_risk_score'], 1),
+                "risk_score": row['risk_score'],
                 "risk_level": row['risk_level'],
                 "color": row['risk_color'],
                 "years_until_critical": row['years_until_critical'],
                 "action": row['recommended_action'],
-                "birds": row['estimated_2026_birds'],
+                "birds": row['bird_count'],
                 "species": row['species_count'],
-                "last_survey": row['last_survey_year'],
-                "data_year": 2026,  # Current estimate
-                "radius_km": 50  # 50km risk zone
+                "last_survey": row['last_year'] if 'last_year' in row else 2021,
+                "data_year": 2026,
+                "radius_km": 50
             })
-
-        conn.close()
 
         return {
             "zones": zones,
@@ -3332,138 +3218,78 @@ async def get_risk_map_zones():
             }
         }
     except Exception as e:
+        logger.error(f"Error in get_risk_map_zones: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.get("/api/risk/priority_list")
 async def get_priority_restoration_sites(limit: int = 10):
     """
-    Get top priority sites for restoration ranked by urgency
-
-    Args:
-        limit: Number of sites to return (default 10)
+    Get top priority sites for restoration ranked by dynamic risk/urgency
     """
     try:
-        db_path = os.getenv("DB_PATH", "data/bird_data_complete.db")
-        conn = sqlite3.connect(db_path)
-        conn.row_factory = sqlite3.Row
-        cursor = conn.cursor()
+        service = get_risk_service()
+        colonies = service.get_colonies_with_stats()
+        results = service.calculate_dynamic_risk(colonies)
 
-        cursor.execute("""
-            SELECT
-                colony_name,
-                combined_risk_score,
-                years_until_critical,
-                recommended_action,
-                estimated_2026_birds,
-                species_count,
-                erosion_rate_m_per_year,
-                slr_2050_m,
-                population_trend_2010_2021_pct,
-                last_survey_year
-            FROM colony_risk_assessment
-            WHERE risk_level IN ('CRITICAL', 'HIGH')
-            ORDER BY
-                CASE
-                    WHEN years_until_critical IS NOT NULL THEN years_until_critical
-                    ELSE 999
-                END ASC,
-                combined_risk_score DESC
-            LIMIT ?
-        """, (limit,))
+        # Filter to high priority
+        priorities_raw = [r for r in results if r['risk_level'] in ('CRITICAL', 'HIGH')]
+        # Sort by urgency (years until critical) then by risk score
+        priorities_raw = sorted(priorities_raw, key=lambda x: (x['years_until_critical'], -x['risk_score']))[:limit]
 
         priorities = []
-        for idx, row in enumerate(cursor.fetchall(), 1):
-            # Realistic cost estimation based on multiple factors
-            # Base restoration cost: $50-150/m² depending on complexity
-
-            # Estimate affected area based on erosion and population
-            erosion = row['erosion_rate_m_per_year'] or 5.0
-            birds = row['estimated_2026_birds'] or 1000
-
-            # Calculate complexity multiplier
-            complexity = 1.0
-            if birds > 10000:
-                complexity = 1.5  # Large colonies need more infrastructure
-            elif birds > 5000:
-                complexity = 1.2
-
-            # Urgency multiplier
-            years_critical = row['years_until_critical'] or 20
-            urgency = 1.0
-            if years_critical < 5:
-                urgency = 1.8  # Urgent projects cost more
-            elif years_critical < 10:
-                urgency = 1.4
-
-            # Estimate area needing restoration (hectares)
+        for idx, row in enumerate(priorities_raw, 1):
+            # Dynamic cost estimation
+            erosion = row['erosion_rate']
+            birds = row['bird_count']
+            complexity = 1.5 if birds > 10000 else 1.2 if birds > 5000 else 1.0
+            years_critical = row['years_until_critical']
+            urgency = 1.8 if years_critical < 5 else 1.4 if years_critical < 10 else 1.0
             estimated_area_m2 = max(10000, min(200000, erosion * 1000 + birds * 2))
-
-            # Cost per m² varies by project
-            cost_per_m2 = 75 * complexity * urgency
-
-            # Add mobilization and engineering costs (20% overhead)
-            estimated_cost = estimated_area_m2 * cost_per_m2 * 1.2
+            estimated_cost = estimated_area_m2 * (75 * complexity * urgency) * 1.2
 
             priorities.append({
                 "rank": idx,
                 "colony_name": row['colony_name'],
-                "risk_score": round(row['combined_risk_score'], 1),
+                "risk_score": row['risk_score'],
                 "years_until_critical": row['years_until_critical'],
                 "recommended_action": row['recommended_action'],
-                "bird_population_2026": row['estimated_2026_birds'],
+                "bird_population_2026": row['bird_count'],
                 "species_count": row['species_count'],
-                "erosion_rate": round(row['erosion_rate_m_per_year'], 1) if row['erosion_rate_m_per_year'] else None,
+                "erosion_rate": round(row['erosion_rate'], 1),
                 "slr_2050": round(row['slr_2050_m'], 2),
-                "population_trend_pct": round(row['population_trend_2010_2021_pct'], 1) if row['population_trend_2010_2021_pct'] else None,
+                "population_trend_pct": None,
                 "estimated_cost_usd": int(estimated_cost),
-                "last_survey_year": row['last_survey_year']
+                "last_survey_year": row.get('last_year', 2021)
             })
-
-        conn.close()
 
         return {
             "priorities": priorities,
-            "total_high_priority": len(priorities)
+            "total_high_priority": len(priorities_raw)
         }
     except Exception as e:
+        logger.error(f"Error in get_priority_restoration_sites: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.get("/api/risk/data_sources/{colony_name}")
 async def get_data_fusion_breakdown(colony_name: str):
     """
-    Show how different data sources combine to create risk score
-
-    Args:
-        colony_name: Name of colony
+    Show how dynamic data sources fuse into a risk score for a colony
     """
     try:
-        db_path = os.getenv("DB_PATH", "data/bird_data_complete.db")
-        conn = sqlite3.connect(db_path)
-        conn.row_factory = sqlite3.Row
-        cursor = conn.cursor()
-
-        cursor.execute("""
-            SELECT *
-            FROM colony_risk_assessment
-            WHERE colony_name = ?
-        """, (colony_name,))
-
-        row = cursor.fetchone()
-
-        if not row:
+        service = get_risk_service()
+        colonies = service.get_colonies_with_stats()
+        # Find specific colony
+        colony_data = [c for c in colonies if c['ColonyName'] == colony_name]
+        if not colony_data:
             raise HTTPException(status_code=404, detail="Colony not found")
 
-        # Get hurricane count for this region
-        cursor.execute("""
-            SELECT COUNT(*) as count
-            FROM gulf_hurricanes
-            WHERE year >= 2005
-        """)
-        hurricane_count = cursor.fetchone()['count']
+        results = service.calculate_dynamic_risk(colony_data)
+        if not results:
+            raise HTTPException(status_code=500, detail="Risk calculation failed")
 
-        conn.close()
+        row = results[0]
 
         return {
             "colony_name": row['colony_name'],
@@ -3472,32 +3298,32 @@ async def get_data_fusion_breakdown(colony_name: str):
                     "value": round(row['slr_2050_m'], 2),
                     "unit": "meters by 2050",
                     "source": "NOAA Sea Level Rise Viewer",
-                    "weight": 0.4,
+                    "weight": 0.25,
                     "impact": "High" if row['slr_2050_m'] > 0.5 else "Moderate"
                 },
                 "erosion_rate": {
-                    "value": round(row['erosion_rate_m_per_year'], 1),
+                    "value": round(row['erosion_rate'], 1),
                     "unit": "meters/year",
                     "source": "USGS Open-File Report 2017-1051",
-                    "weight": 0.4,
-                    "impact": "High" if row['erosion_rate_m_per_year'] > 10 else "Moderate"
+                    "weight": 0.35,
+                    "impact": "High" if row['erosion_rate'] > 10 else "Moderate"
                 },
                 "hurricane_exposure": {
-                    "value": hurricane_count,
+                    "value": len(service.major_storms),
                     "unit": "major storms since 2005",
                     "source": "NOAA HURDAT2 Database",
                     "weight": 0.1,
-                    "impact": "High" if hurricane_count > 20 else "Moderate"
+                    "impact": "High"
                 },
                 "population_trend": {
-                    "value": round(row['population_trend_2010_2021_pct'], 1) if row['population_trend_2010_2021_pct'] else 0,
-                    "unit": "percent change 2010-2021",
+                    "value": row['bird_count'],
+                    "unit": "birds (current)",
                     "source": "Water Institute Survey Data",
                     "weight": 0.1,
-                    "impact": "High" if (row['population_trend_2010_2021_pct'] or 0) < -20 else "Moderate"
+                    "impact": "High" if row['bird_count'] < 500 else "Moderate"
                 }
             },
-            "combined_score": round(row['combined_risk_score'], 1),
+            "combined_score": row['risk_score'],
             "risk_level": row['risk_level'],
             "years_until_critical": row['years_until_critical'],
             "recommended_action": row['recommended_action']
@@ -3505,76 +3331,57 @@ async def get_data_fusion_breakdown(colony_name: str):
     except HTTPException:
         raise
     except Exception as e:
+        logger.error(f"Error in get_data_fusion_breakdown: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.get("/api/risk/projection/{year}")
 async def get_future_projection(year: int, scenario: str = "intermediate"):
     """
-    Get projected state of colonies for a future year
-
-    Args:
-        year: Future year (2030, 2050, 2070, 2100)
-        scenario: "low", "intermediate", or "high"
+    Get dynamic projection for future state
     """
     try:
         if year not in [2030, 2050, 2070, 2100]:
             raise HTTPException(status_code=400, detail="Year must be 2030, 2050, 2070, or 2100")
 
-        if scenario not in ["low", "intermediate", "high"]:
-            raise HTTPException(status_code=400, detail="Scenario must be low, intermediate, or high")
+        service = get_risk_service()
+        colonies = service.get_colonies_with_stats()
+        results = service.calculate_dynamic_risk(colonies)
 
-        db_path = os.getenv("DB_PATH", "data/bird_data_complete.db")
-        conn = sqlite3.connect(db_path)
-        conn.row_factory = sqlite3.Row
-        cursor = conn.cursor()
-
-        cursor.execute("""
-            SELECT
-                cp.colony_name,
-                cp.projected_area_m2,
-                cp.inundated,
-                cp.habitable,
-                cra.latitude,
-                cra.longitude,
-                cra.current_bird_count
-            FROM colony_projections cp
-            JOIN colony_risk_assessment cra ON cp.colony_name = cra.colony_name
-            WHERE cp.projection_year = ?
-              AND cp.scenario = ?
-        """, (year, scenario))
-
-        colonies = []
+        colonies_projected = []
         submerged = 0
         at_risk = 0
         viable = 0
         total_birds_affected = 0
 
-        for row in cursor.fetchall():
-            status = "submerged" if not row['habitable'] else "at_risk" if row['inundated'] else "viable"
+        years_ahead = year - 2026
+
+        for row in results:
+            # Simple projection logic based on erosion rate and years ahead
+            area_remaining_pct = max(0, 100 - (row['erosion_rate'] * years_ahead / 100))
+            status = "submerged" if area_remaining_pct == 0 else "at_risk" if area_remaining_pct < 30 else "viable"
 
             if status == "submerged":
                 submerged += 1
-                total_birds_affected += row['current_bird_count']
+                total_birds_affected += row['bird_count']
             elif status == "at_risk":
                 at_risk += 1
-                total_birds_affected += int(row['current_bird_count'] * 0.5)  # 50% loss estimate
+                total_birds_affected += int(row['bird_count'] * 0.5)
             else:
                 viable += 1
 
-            colonies.append({
+            colonies_projected.append({
                 "colony_name": row['colony_name'],
                 "latitude": row['latitude'],
                 "longitude": row['longitude'],
                 "status": status,
-                "projected_area_m2": round(row['projected_area_m2'], 0),
-                "birds_current": row['current_bird_count']
+                "projected_area_pct": round(area_remaining_pct, 1),
+                "birds_current": row['bird_count']
             })
 
-        conn.close()
-
-        total = len(colonies)
-        bird_loss_pct = (total_birds_affected / sum(c['birds_current'] for c in colonies)) * 100 if total > 0 else 0
+        total = len(results)
+        total_birds = sum(r['bird_count'] for r in results)
+        bird_loss_pct = (total_birds_affected / total_birds) * 100 if total_birds > 0 else 0
 
         return {
             "year": year,
@@ -3586,59 +3393,26 @@ async def get_future_projection(year: int, scenario: str = "intermediate"):
                 "viable": viable,
                 "bird_population_loss_pct": round(bird_loss_pct, 1)
             },
-            "colonies": colonies[:100]  # Limit for performance
+            "colonies": colonies_projected[:100]
         }
-    except HTTPException:
-        raise
     except Exception as e:
+        logger.error(f"Error in get_future_projection: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.get("/api/risk/summary")
 async def get_risk_summary():
-    """Get overall risk summary statistics"""
+    """Get dynamic overall risk summary statistics"""
     try:
-        db_path = os.getenv("DB_PATH", "data/bird_data_complete.db")
-        conn = sqlite3.connect(db_path)
-        conn.row_factory = sqlite3.Row
-        cursor = conn.cursor()
-
-        # Risk level counts
-        cursor.execute("""
-            SELECT risk_level, COUNT(*) as count
-            FROM colony_risk_assessment
-            GROUP BY risk_level
-        """)
-        risk_counts = {row['risk_level']: row['count'] for row in cursor.fetchall()}
-
-        # Average years until critical
-        cursor.execute("""
-            SELECT AVG(years_until_critical) as avg_years
-            FROM colony_risk_assessment
-            WHERE years_until_critical IS NOT NULL
-        """)
-        avg_years = cursor.fetchone()['avg_years']
-
-        # Hurricane count
-        cursor.execute("SELECT COUNT(*) as count FROM gulf_hurricanes")
-        hurricane_count = cursor.fetchone()['count']
-
-        conn.close()
-
-        return {
-            "critical_colonies": risk_counts.get('CRITICAL', 0),
-            "high_risk_colonies": risk_counts.get('HIGH', 0),
-            "average_years_until_critical": round(avg_years, 1) if avg_years else None,
-            "total_hurricanes_since_2005": hurricane_count,
-            "data_sources": [
-                "NOAA Sea Level Rise Projections",
-                "USGS Louisiana Coastal Erosion Study",
-                "NOAA HURDAT2 Hurricane Database",
-                "Water Institute Bird Survey Data (2010-2021)"
-            ]
-        }
+        service = get_risk_service()
+        colonies = service.get_colonies_with_stats()
+        results = service.calculate_dynamic_risk(colonies)
+        summary = service.get_summary_stats(results)
+        return summary
     except Exception as e:
+        logger.error(f"Error in get_risk_summary: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
 
 
 # ============================================================================

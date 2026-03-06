@@ -275,3 +275,32 @@ st.markdown("""
     </ol>
 </div>
 """, unsafe_allow_html=True)
+
+# System Management Section
+st.markdown("<div style='height: 3rem;'></div>", unsafe_allow_html=True)
+st.markdown("""
+    <div style="
+        font-size: 0.6875rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: #A0A0A0;
+        margin-bottom: 1rem;
+    ">System Management</div>
+""", unsafe_allow_html=True)
+
+with st.expander("🛠️ Advanced Settings & AI Context"):
+    st.write("Optimize AI accuracy by allowing the agent to explore the latest database schema and content.")
+    
+    if st.button("🕵️ Trigger Database Explorer Agent", use_container_width=True):
+        with st.spinner("Agent exploring database and refreshing context..."):
+            from services import explore_database
+            result = explore_database()
+            
+            if result.get("success"):
+                st.success(result["message"])
+                if result.get("insights"):
+                    st.info("💡 **Agent Insights:**\n" + "\n".join([f"- {i}" for i in result["insights"]]))
+                st.balloons()
+            else:
+                st.error(f"Agent failed: {result.get('error')}")
