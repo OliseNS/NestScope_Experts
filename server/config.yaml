@@ -8,9 +8,9 @@ model:
   sql_max_tokens: 500
 
 agentic:
-  max_attempts: 10 # Number of retry attempts for agentic self-correction
+  max_attempts: 10 
   validation_temperature: 0.1 # Low temperature for strict validation
-  analysis_temperature: 0.3 # Moderate temperature for question analysis
+  analysis_temperature: 0.2 # Moderate temperature for question analysis
 
 database:
   default_path: data/bird_data_complete.db
@@ -30,9 +30,6 @@ cv:
   classifier_apex: models/classifier_apex.onnx
   classifier_species: 25
   classifier_confidence_threshold: 0.01  # Very low - always show best prediction
-  # With 25 species, even low confidence (5-15%) is better than random (4%)
-  # Shows classifier's best guess regardless of confidence
-
 api:
   host: 0.0.0.0
   port: 8000

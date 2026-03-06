@@ -23,7 +23,10 @@ import os
 import base64
 
 from components import init_page, render_header, render_sidebar
-from services.api_client import get_stac_summary, get_stac_species, get_stac_dots, get_mosaic_preview
+from services.api_client import (
+    get_stac_summary, get_stac_species, get_stac_dots, get_mosaic_preview,
+    get_flood_stations, get_flood_events, get_flood_stats, calculate_flood_impact
+)
 
 # ============================================================================
 # PAGE CONFIGURATION
@@ -55,7 +58,7 @@ with st.sidebar:
     # View mode selector
     view_mode = st.radio(
         "View Mode",
-        ["Overview Map", "Species Trends", "Colony Deep Dive"],
+        ["Overview Map", "Species Trends", "Colony Deep Dive", "Flood Impact Analysis"],
         help="Choose visualization type"
     )
 
@@ -67,6 +70,18 @@ with st.sidebar:
         "🔵 STAC colonies only",
         value=False,
         help="Show only colonies with expert annotations (4 colonies)"
+    )
+
+    show_flood_gages = st.checkbox(
+        "🌊 Flood monitoring stations",
+        value=True,
+        help="Show NOAA water level monitoring stations"
+    )
+
+    show_flood_impact = st.checkbox(
+        "⚠️ Flood impact zones",
+        value=False,
+        help="Highlight colonies affected by major flooding"
     )
 
     st.markdown("---")
@@ -330,6 +345,72 @@ if view_mode == "Overview Map":
                 tooltip=f"{colony['ColonyName']}"
             ).add_to(m)
 
+        # Add flood monitoring stations if enabled
+        if show_flood_gages:
+            flood_data = get_flood_stations()
+            flood_stations = flood_data.get("stations", [])
+
+            for station in flood_stations:
+                # Get flood summary for this station
+                events_data = get_flood_events(
+                    station_id=station["station_id"],
+                    year=year_range[1],  # Most recent year
+                    limit=100
+                )
+                event_count = events_data.get("count", 0)
+
+                # Color based on flood severity
+                if event_count > 50:
+                    gage_color = "#FF4444"  # Red - high flood risk
+                elif event_count > 20:
+                    gage_color = "#FFA500"  # Orange - moderate
+                else:
+                    gage_color = "#4169E1"  # Blue - low
+
+                popup_html = f"""
+                <div style="font-family:sans-serif; min-width:200px">
+                    <b style="font-size:14px; color:#1E90FF">🌊 {station["station_name"]}</b><br><br>
+                    <b>Region:</b> {station["region"]}<br>
+                    <b>Station ID:</b> {station["station_id"]}<br>
+                    <b>Flood Events ({year_range[1]}):</b> {event_count}<br>
+                    <b>MHHW Datum:</b> {station["mhhw_value"]}m<br>
+                </div>
+                """
+
+                folium.Marker(
+                    location=[station["latitude"], station["longitude"]],
+                    icon=folium.Icon(color="blue", icon="tint", prefix="fa"),
+                    popup=folium.Popup(popup_html, max_width=250),
+                    tooltip=f"🌊 {station['station_name']}"
+                ).add_to(m)
+
+        # Add flood impact zones if enabled
+        if show_flood_impact:
+            # Get major flooding years
+            major_flood_years = [2012, 2016, 2020, 2021]
+
+            # Highlight colonies affected by major floods
+            for _, colony in display_df.iterrows():
+                impact = calculate_flood_impact(
+                    latitude=colony["Latitude"],
+                    longitude=colony["Longitude"],
+                    max_distance_km=50,
+                    year=2021  # Most recent major flood (Ida)
+                )
+
+                impact_score = impact.get("impact_score", 0)
+
+                if impact_score > 50:  # Significant impact
+                    folium.Circle(
+                        location=[colony["Latitude"], colony["Longitude"]],
+                        radius=10000,  # 10km radius
+                        color="#FF4444",
+                        fill=True,
+                        fill_opacity=0.2,
+                        weight=2,
+                        tooltip=f"High flood impact: {colony['ColonyName']}"
+                    ).add_to(m)
+
         folium.LayerControl().add_to(m)
 
         try:
@@ -347,6 +428,35 @@ if view_mode == "Overview Map":
         st.metric("Survey Years", f"{year_range[0]}-{year_range[1]}")
 
         st.markdown("---")
+
+        # Flood data statistics
+        if show_flood_gages or show_flood_impact:
+            st.markdown("### 🌊 Flood Intelligence")
+
+            flood_stats = get_flood_stats()
+            st.metric("Monitoring Stations", flood_stats.get("station_count", 0))
+            st.metric("Flood Events Recorded", f"{flood_stats.get('event_count', 0):,}")
+
+            # Major flood events summary
+            major_events = get_flood_events(min_severity="major", limit=1000)
+            major_count = major_events.get("count", 0)
+            st.metric("Major Flood Events", major_count, help="Water level >1.5m above normal")
+
+            # Highlight critical years
+            st.markdown("**Critical Years:**")
+            critical_years = {
+                2012: "Hurricane Isaac",
+                2016: "Louisiana Floods",
+                2020: "Hurricane Laura",
+                2021: "Hurricane Ida"
+            }
+            for yr, event in critical_years.items():
+                if year_range[0] <= yr <= year_range[1]:
+                    events = get_flood_events(year=yr, min_severity="major")
+                    count = events.get("count", 0)
+                    st.caption(f"**{yr}**: {event} ({count} events)")
+
+            st.markdown("---")
         st.markdown("### 🔵 STAC Colonies")
         for stac_id, meta in stac_colonies.items():
             st.markdown(f"**{stac_id}**")
@@ -549,6 +659,265 @@ elif view_mode == "Colony Deep Dive":
                                 st.image(img, use_container_width=True)
         else:
             st.info("No expert annotations for this colony")
+
+elif view_mode == "Flood Impact Analysis":
+    st.markdown("## 🌊 Coastal Flooding & Population Impact")
+    st.caption("Analyzing correlation between NOAA flood events and bird population changes")
+
+    # Get flood stats
+    flood_stats = get_flood_stats()
+    flood_stations = get_flood_stations().get("stations", [])
+
+    col1, col2, col3, col4 = st.columns(4)
+
+    with col1:
+        st.metric("Flood Monitoring Stations", flood_stats.get("station_count", 0))
+    with col2:
+        st.metric("Total Flood Events", f"{flood_stats.get('event_count', 0):,}")
+    with col3:
+        major_events = get_flood_events(min_severity="major", limit=1000)
+        st.metric("Major Events", major_events.get("count", 0))
+    with col4:
+        yr_start, yr_end = flood_stats.get("year_range", (2010, 2021))
+        st.metric("Data Coverage", f"{yr_start}-{yr_end}")
+
+    st.markdown("---")
+
+    # Flood timeline by year and severity
+    st.markdown("### 📅 Flood Event Timeline")
+
+    # Get flood events grouped by year
+    years = list(range(year_range[0], year_range[1] + 1))
+    severity_data = {"minor": [], "moderate": [], "major": []}
+
+    for year in years:
+        year_events = get_flood_events(year=year, limit=1000)
+        events = year_events.get("events", [])
+
+        counts = {"minor": 0, "moderate": 0, "major": 0}
+        for event in events:
+            counts[event["severity"]] += 1
+
+        severity_data["minor"].append(counts["minor"])
+        severity_data["moderate"].append(counts["moderate"])
+        severity_data["major"].append(counts["major"])
+
+    # Create stacked bar chart
+    fig = go.Figure()
+
+    fig.add_trace(go.Bar(
+        x=years,
+        y=severity_data["minor"],
+        name="Minor Flooding",
+        marker_color="#4169E1",
+        hovertemplate="Year: %{x}<br>Minor: %{y}<extra></extra>"
+    ))
+
+    fig.add_trace(go.Bar(
+        x=years,
+        y=severity_data["moderate"],
+        name="Moderate Flooding",
+        marker_color="#FFA500",
+        hovertemplate="Year: %{x}<br>Moderate: %{y}<extra></extra>"
+    ))
+
+    fig.add_trace(go.Bar(
+        x=years,
+        y=severity_data["major"],
+        name="Major Flooding",
+        marker_color="#FF4444",
+        hovertemplate="Year: %{x}<br>Major: %{y}<extra></extra>"
+    ))
+
+    fig.update_layout(
+        barmode="stack",
+        template="plotly_dark",
+        paper_bgcolor="#1A1A1A",
+        plot_bgcolor="#2D2D2D",
+        height=400,
+        xaxis=dict(title="Year", tickmode="linear", dtick=1, gridcolor="#3A3A3A"),
+        yaxis=dict(title="Flood Events", gridcolor="#3A3A3A"),
+        hovermode="x unified",
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
+    )
+
+    st.plotly_chart(fig, use_container_width=True)
+
+    st.markdown("---")
+
+    # Colony-level flood impact analysis
+    st.markdown("### 🎯 Colony Flood Risk Assessment")
+
+    # Select a colony for detailed analysis
+    colony_names = colonies_df["ColonyName"].tolist()
+    analyzed_colony = st.selectbox(
+        "Select colony for detailed flood impact analysis",
+        options=colony_names,
+        key="flood_analysis_colony"
+    )
+
+    colony_data = colonies_df[colonies_df["ColonyName"] == analyzed_colony].iloc[0]
+
+    col_left, col_right = st.columns([1.5, 1], gap="large")
+
+    with col_left:
+        st.markdown(f"#### {analyzed_colony}")
+        st.caption(f"📍 {colony_data['Latitude']:.3f}°N, {colony_data['Longitude']:.3f}°W")
+
+        # Calculate flood impact for this colony
+        impact_2021 = calculate_flood_impact(
+            latitude=colony_data["Latitude"],
+            longitude=colony_data["Longitude"],
+            max_distance_km=50,
+            year=2021
+        )
+
+        impact_2012 = calculate_flood_impact(
+            latitude=colony_data["Latitude"],
+            longitude=colony_data["Longitude"],
+            max_distance_km=50,
+            year=2012
+        )
+
+        nearby_stations = impact_2021.get("nearby_stations", [])
+
+        st.markdown(f"**Nearby Monitoring Stations:** {len(nearby_stations)}")
+        for station in nearby_stations[:3]:
+            st.caption(f"🌊 {station['station_name']} ({station['distance_km']:.1f} km away)")
+
+        # Flood impact metrics
+        st.markdown("#### Flood Exposure Metrics")
+
+        col_a, col_b = st.columns(2)
+
+        with col_a:
+            score_2021 = impact_2021.get("impact_score", 0)
+            risk_level_2021 = "HIGH" if score_2021 > 50 else "MODERATE" if score_2021 > 20 else "LOW"
+            st.metric("2021 Impact (Hurricane Ida)", f"{score_2021:.0f}", risk_level_2021)
+
+        with col_b:
+            score_2012 = impact_2012.get("impact_score", 0)
+            risk_level_2012 = "HIGH" if score_2012 > 50 else "MODERATE" if score_2012 > 20 else "LOW"
+            st.metric("2012 Impact (Hurricane Isaac)", f"{score_2012:.0f}", risk_level_2012)
+
+        # Severity breakdown
+        st.markdown("#### 2021 Flood Event Breakdown")
+        severity_summary = impact_2021.get("severity_summary", {})
+
+        severity_fig = go.Figure()
+
+        severity_fig.add_trace(go.Bar(
+            x=["Minor", "Moderate", "Major"],
+            y=[
+                severity_summary.get("minor", 0),
+                severity_summary.get("moderate", 0),
+                severity_summary.get("major", 0)
+            ],
+            marker_color=["#4169E1", "#FFA500", "#FF4444"],
+            text=[
+                severity_summary.get("minor", 0),
+                severity_summary.get("moderate", 0),
+                severity_summary.get("major", 0)
+            ],
+            textposition="outside"
+        ))
+
+        severity_fig.update_layout(
+            template="plotly_dark",
+            paper_bgcolor="#1A1A1A",
+            plot_bgcolor="#2D2D2D",
+            height=300,
+            xaxis=dict(title="Severity", gridcolor="#3A3A3A"),
+            yaxis=dict(title="Event Count", gridcolor="#3A3A3A"),
+            showlegend=False
+        )
+
+        st.plotly_chart(severity_fig, use_container_width=True)
+
+    with col_right:
+        st.markdown("#### 🗺️ Colony Location & Flood Gages")
+
+        # Create mini map showing colony and nearby gages
+        mini_map = folium.Map(
+            location=[colony_data["Latitude"], colony_data["Longitude"]],
+            zoom_start=9,
+            tiles="CartoDB positron"
+        )
+
+        # Colony marker
+        folium.CircleMarker(
+            location=[colony_data["Latitude"], colony_data["Longitude"]],
+            radius=12,
+            color="#D97757",
+            fill=True,
+            fill_color="#D97757",
+            fill_opacity=0.8,
+            popup=f"<b>{analyzed_colony}</b>",
+            tooltip=analyzed_colony
+        ).add_to(mini_map)
+
+        # Nearby flood gages
+        for station in nearby_stations:
+            folium.Marker(
+                location=[station["latitude"], station["longitude"]],
+                icon=folium.Icon(color="blue", icon="tint", prefix="fa"),
+                popup=f"<b>{station['station_name']}</b><br>{station['distance_km']:.1f} km away",
+                tooltip=station["station_name"]
+            ).add_to(mini_map)
+
+        try:
+            from streamlit_folium import st_folium
+            st_folium(mini_map, width=None, height=400)
+        except ImportError:
+            st.components.v1.html(mini_map._repr_html_(), height=400)
+
+        st.markdown("---")
+
+        # Population correlation (if we have time-series data)
+        st.markdown("#### 📊 Population Trend Context")
+        trend_df = get_colony_trend(analyzed_colony, year_range[0], year_range[1])
+
+        if not trend_df.empty:
+            # Highlight major flood years on population chart
+            pop_fig = go.Figure()
+
+            pop_fig.add_trace(go.Scatter(
+                x=trend_df["Year"],
+                y=trend_df["total_birds"],
+                mode="lines+markers",
+                name="Bird Population",
+                line=dict(color="#D97757", width=3),
+                marker=dict(size=8)
+            ))
+
+            # Add markers for major flood events
+            major_flood_years = [2011, 2012, 2016, 2017, 2020, 2021]
+            for yr in major_flood_years:
+                if yr in trend_df["Year"].values:
+                    pop_fig.add_vline(
+                        x=yr,
+                        line_dash="dash",
+                        line_color="#FF4444",
+                        opacity=0.5,
+                        annotation_text=f"Flood {yr}",
+                        annotation_position="top"
+                    )
+
+            pop_fig.update_layout(
+                template="plotly_dark",
+                paper_bgcolor="#1A1A1A",
+                plot_bgcolor="#2D2D2D",
+                height=300,
+                xaxis=dict(title="Year", tickmode="linear", dtick=1, gridcolor="#3A3A3A"),
+                yaxis=dict(title="Bird Count", gridcolor="#3A3A3A"),
+                showlegend=False
+            )
+
+            st.plotly_chart(pop_fig, use_container_width=True)
+
+            st.caption("Red dashed lines indicate major flood events")
+        else:
+            st.info("No population trend data available for this colony")
 
 # ============================================================================
 # FOOTER

@@ -22,6 +22,8 @@ import httpx
 import yaml
 from server.cv_tools.inference import BirdDetector, get_example_images
 from server.db_version import DatabaseVersionControl
+from server.flood_tools.flood_database import FloodDatabase
+from server.flood_tools.noaa_client import NOAAClient
 # Removed: No longer using dynamic prompt generators
 
 # Load environment variables (for secrets like API keys)
@@ -3009,6 +3011,540 @@ async def storm_impact_analysis(species_code: str):
         result["analyzed_storms"] = ["Katrina (2005)", "Isaac (2012)", "Ida (2021)"]
 
         return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ============================================================================
+# COASTAL RISK INTELLIGENCE ENDPOINTS - Real Data Fusion
+# ============================================================================
+
+@app.get("/api/risk/map_zones")
+async def get_risk_map_zones():
+    """
+    Get GeoJSON-style risk zones for map visualization
+
+    Returns colored zones showing colony risk levels with 50km radius
+    """
+    try:
+        db_path = os.getenv("DB_PATH", "data/bird_data_complete.db")
+        conn = sqlite3.connect(db_path)
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+
+        cursor.execute("""
+            SELECT
+                colony_name,
+                latitude,
+                longitude,
+                combined_risk_score,
+                risk_level,
+                risk_color,
+                years_until_critical,
+                recommended_action,
+                estimated_2026_birds,
+                species_count,
+                last_survey_year
+            FROM colony_risk_assessment
+            ORDER BY combined_risk_score DESC
+        """)
+
+        zones = []
+        for row in cursor.fetchall():
+            zones.append({
+                "colony_name": row['colony_name'],
+                "latitude": row['latitude'],
+                "longitude": row['longitude'],
+                "risk_score": round(row['combined_risk_score'], 1),
+                "risk_level": row['risk_level'],
+                "color": row['risk_color'],
+                "years_until_critical": row['years_until_critical'],
+                "action": row['recommended_action'],
+                "birds": row['estimated_2026_birds'],
+                "species": row['species_count'],
+                "last_survey": row['last_survey_year'],
+                "data_year": 2026,  # Current estimate
+                "radius_km": 50  # 50km risk zone
+            })
+
+        conn.close()
+
+        return {
+            "zones": zones,
+            "summary": {
+                "critical": len([z for z in zones if z['risk_level'] == 'CRITICAL']),
+                "high": len([z for z in zones if z['risk_level'] == 'HIGH'])
+            }
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/risk/priority_list")
+async def get_priority_restoration_sites(limit: int = 10):
+    """
+    Get top priority sites for restoration ranked by urgency
+
+    Args:
+        limit: Number of sites to return (default 10)
+    """
+    try:
+        db_path = os.getenv("DB_PATH", "data/bird_data_complete.db")
+        conn = sqlite3.connect(db_path)
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+
+        cursor.execute("""
+            SELECT
+                colony_name,
+                combined_risk_score,
+                years_until_critical,
+                recommended_action,
+                estimated_2026_birds,
+                species_count,
+                erosion_rate_m_per_year,
+                slr_2050_m,
+                population_trend_2010_2021_pct,
+                last_survey_year
+            FROM colony_risk_assessment
+            WHERE risk_level IN ('CRITICAL', 'HIGH')
+            ORDER BY
+                CASE
+                    WHEN years_until_critical IS NOT NULL THEN years_until_critical
+                    ELSE 999
+                END ASC,
+                combined_risk_score DESC
+            LIMIT ?
+        """, (limit,))
+
+        priorities = []
+        for idx, row in enumerate(cursor.fetchall(), 1):
+            # Estimate cost based on risk level and population
+            # Typical Louisiana coastal restoration: $50-100/m²
+            estimated_cost = 50000 * (row['combined_risk_score'] / 10)  # Rough estimate
+
+            priorities.append({
+                "rank": idx,
+                "colony_name": row['colony_name'],
+                "risk_score": round(row['combined_risk_score'], 1),
+                "years_until_critical": row['years_until_critical'],
+                "recommended_action": row['recommended_action'],
+                "bird_population_2026": row['estimated_2026_birds'],
+                "species_count": row['species_count'],
+                "erosion_rate": round(row['erosion_rate_m_per_year'], 1),
+                "slr_2050": round(row['slr_2050_m'], 2),
+                "population_trend_pct": round(row['population_trend_2010_2021_pct'], 1) if row['population_trend_2010_2021_pct'] else None,
+                "estimated_cost_usd": int(estimated_cost),
+                "last_survey_year": row['last_survey_year']
+            })
+
+        conn.close()
+
+        return {
+            "priorities": priorities,
+            "total_high_priority": len(priorities)
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/risk/data_sources/{colony_name}")
+async def get_data_fusion_breakdown(colony_name: str):
+    """
+    Show how different data sources combine to create risk score
+
+    Args:
+        colony_name: Name of colony
+    """
+    try:
+        db_path = os.getenv("DB_PATH", "data/bird_data_complete.db")
+        conn = sqlite3.connect(db_path)
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+
+        cursor.execute("""
+            SELECT *
+            FROM colony_risk_assessment
+            WHERE colony_name = ?
+        """, (colony_name,))
+
+        row = cursor.fetchone()
+
+        if not row:
+            raise HTTPException(status_code=404, detail="Colony not found")
+
+        # Get hurricane count for this region
+        cursor.execute("""
+            SELECT COUNT(*) as count
+            FROM gulf_hurricanes
+            WHERE year >= 2005
+        """)
+        hurricane_count = cursor.fetchone()['count']
+
+        conn.close()
+
+        return {
+            "colony_name": row['colony_name'],
+            "data_sources": {
+                "sea_level_rise": {
+                    "value": round(row['slr_2050_m'], 2),
+                    "unit": "meters by 2050",
+                    "source": "NOAA Sea Level Rise Viewer",
+                    "weight": 0.4,
+                    "impact": "High" if row['slr_2050_m'] > 0.5 else "Moderate"
+                },
+                "erosion_rate": {
+                    "value": round(row['erosion_rate_m_per_year'], 1),
+                    "unit": "meters/year",
+                    "source": "USGS Open-File Report 2017-1051",
+                    "weight": 0.4,
+                    "impact": "High" if row['erosion_rate_m_per_year'] > 10 else "Moderate"
+                },
+                "hurricane_exposure": {
+                    "value": hurricane_count,
+                    "unit": "major storms since 2005",
+                    "source": "NOAA HURDAT2 Database",
+                    "weight": 0.1,
+                    "impact": "High" if hurricane_count > 20 else "Moderate"
+                },
+                "population_trend": {
+                    "value": round(row['population_trend_2010_2021_pct'], 1) if row['population_trend_2010_2021_pct'] else 0,
+                    "unit": "percent change 2010-2021",
+                    "source": "Water Institute Survey Data",
+                    "weight": 0.1,
+                    "impact": "High" if (row['population_trend_2010_2021_pct'] or 0) < -20 else "Moderate"
+                }
+            },
+            "combined_score": round(row['combined_risk_score'], 1),
+            "risk_level": row['risk_level'],
+            "years_until_critical": row['years_until_critical'],
+            "recommended_action": row['recommended_action']
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/risk/projection/{year}")
+async def get_future_projection(year: int, scenario: str = "intermediate"):
+    """
+    Get projected state of colonies for a future year
+
+    Args:
+        year: Future year (2030, 2050, 2070, 2100)
+        scenario: "low", "intermediate", or "high"
+    """
+    try:
+        if year not in [2030, 2050, 2070, 2100]:
+            raise HTTPException(status_code=400, detail="Year must be 2030, 2050, 2070, or 2100")
+
+        if scenario not in ["low", "intermediate", "high"]:
+            raise HTTPException(status_code=400, detail="Scenario must be low, intermediate, or high")
+
+        db_path = os.getenv("DB_PATH", "data/bird_data_complete.db")
+        conn = sqlite3.connect(db_path)
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+
+        cursor.execute("""
+            SELECT
+                cp.colony_name,
+                cp.projected_area_m2,
+                cp.inundated,
+                cp.habitable,
+                cra.latitude,
+                cra.longitude,
+                cra.current_bird_count
+            FROM colony_projections cp
+            JOIN colony_risk_assessment cra ON cp.colony_name = cra.colony_name
+            WHERE cp.projection_year = ?
+              AND cp.scenario = ?
+        """, (year, scenario))
+
+        colonies = []
+        submerged = 0
+        at_risk = 0
+        viable = 0
+        total_birds_affected = 0
+
+        for row in cursor.fetchall():
+            status = "submerged" if not row['habitable'] else "at_risk" if row['inundated'] else "viable"
+
+            if status == "submerged":
+                submerged += 1
+                total_birds_affected += row['current_bird_count']
+            elif status == "at_risk":
+                at_risk += 1
+                total_birds_affected += int(row['current_bird_count'] * 0.5)  # 50% loss estimate
+            else:
+                viable += 1
+
+            colonies.append({
+                "colony_name": row['colony_name'],
+                "latitude": row['latitude'],
+                "longitude": row['longitude'],
+                "status": status,
+                "projected_area_m2": round(row['projected_area_m2'], 0),
+                "birds_current": row['current_bird_count']
+            })
+
+        conn.close()
+
+        total = len(colonies)
+        bird_loss_pct = (total_birds_affected / sum(c['birds_current'] for c in colonies)) * 100 if total > 0 else 0
+
+        return {
+            "year": year,
+            "scenario": scenario,
+            "summary": {
+                "total_colonies": total,
+                "submerged": submerged,
+                "at_risk": at_risk,
+                "viable": viable,
+                "bird_population_loss_pct": round(bird_loss_pct, 1)
+            },
+            "colonies": colonies[:100]  # Limit for performance
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/risk/summary")
+async def get_risk_summary():
+    """Get overall risk summary statistics"""
+    try:
+        db_path = os.getenv("DB_PATH", "data/bird_data_complete.db")
+        conn = sqlite3.connect(db_path)
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+
+        # Risk level counts
+        cursor.execute("""
+            SELECT risk_level, COUNT(*) as count
+            FROM colony_risk_assessment
+            GROUP BY risk_level
+        """)
+        risk_counts = {row['risk_level']: row['count'] for row in cursor.fetchall()}
+
+        # Average years until critical
+        cursor.execute("""
+            SELECT AVG(years_until_critical) as avg_years
+            FROM colony_risk_assessment
+            WHERE years_until_critical IS NOT NULL
+        """)
+        avg_years = cursor.fetchone()['avg_years']
+
+        # Hurricane count
+        cursor.execute("SELECT COUNT(*) as count FROM gulf_hurricanes")
+        hurricane_count = cursor.fetchone()['count']
+
+        conn.close()
+
+        return {
+            "critical_colonies": risk_counts.get('CRITICAL', 0),
+            "high_risk_colonies": risk_counts.get('HIGH', 0),
+            "average_years_until_critical": round(avg_years, 1) if avg_years else None,
+            "total_hurricanes_since_2005": hurricane_count,
+            "data_sources": [
+                "NOAA Sea Level Rise Projections",
+                "USGS Louisiana Coastal Erosion Study",
+                "NOAA HURDAT2 Hurricane Database",
+                "Water Institute Bird Survey Data (2010-2021)"
+            ]
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ============================================================================
+# FLOOD DATA ENDPOINTS - NOAA Water Level Integration (OLD - KEEP FOR NOW)
+# ============================================================================
+
+@app.get("/flood/stations")
+async def get_flood_stations():
+    """
+    Get all NOAA flood monitoring stations in Louisiana coastal region.
+
+    Returns:
+        List of stations with metadata (name, location, region, MHHW datum)
+    """
+    try:
+        db_path = os.getenv("DB_PATH", "data/bird_data_complete.db")
+        flood_db = FloodDatabase(db_path)
+
+        stations = flood_db.get_all_stations()
+
+        return {
+            "stations": stations,
+            "count": len(stations)
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/flood/events")
+async def get_flood_events(
+    station_id: Optional[str] = None,
+    year: Optional[int] = None,
+    min_severity: Optional[str] = None,
+    limit: int = 1000
+):
+    """
+    Query flood events from NOAA water level data.
+
+    Args:
+        station_id: Filter by specific station (e.g., "8761724")
+        year: Filter by year (e.g., 2012)
+        min_severity: Minimum severity ("minor", "moderate", "major")
+        limit: Maximum results (default: 1000)
+
+    Returns:
+        List of flood events with timestamp, severity, water level
+    """
+    try:
+        db_path = os.getenv("DB_PATH", "data/bird_data_complete.db")
+        flood_db = FloodDatabase(db_path)
+
+        events = flood_db.get_flood_events(
+            station_id=station_id,
+            year=year,
+            min_severity=min_severity,
+            limit=limit
+        )
+
+        return {
+            "events": events,
+            "count": len(events),
+            "filters": {
+                "station_id": station_id,
+                "year": year,
+                "min_severity": min_severity
+            }
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/flood/summary")
+async def get_flood_summary(station_id: Optional[str] = None):
+    """
+    Get flood event summary statistics by year and severity.
+
+    Args:
+        station_id: Filter by specific station (optional)
+
+    Returns:
+        Yearly summary of flood counts by severity level
+    """
+    try:
+        db_path = os.getenv("DB_PATH", "data/bird_data_complete.db")
+        flood_db = FloodDatabase(db_path)
+
+        summary = flood_db.get_flood_summary_by_year(station_id=station_id)
+
+        return {
+            "summary": summary,
+            "station_id": station_id
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/flood/impact")
+async def calculate_flood_impact(
+    latitude: float,
+    longitude: float,
+    max_distance_km: float = 50,
+    year: Optional[int] = None
+):
+    """
+    Calculate flood impact for colonies near a geographic location.
+
+    Args:
+        latitude: Colony latitude
+        longitude: Colony longitude
+        max_distance_km: Search radius in kilometers (default: 50)
+        year: Filter events by year (optional)
+
+    Returns:
+        {
+            "nearby_stations": List of stations within radius,
+            "flood_events": Flood events at those stations,
+            "impact_score": Calculated impact metric,
+            "severity_summary": Counts by severity level
+        }
+    """
+    try:
+        db_path = os.getenv("DB_PATH", "data/bird_data_complete.db")
+        flood_db = FloodDatabase(db_path)
+
+        # Find nearby stations
+        nearby_stations = flood_db.get_stations_near_point(
+            latitude=latitude,
+            longitude=longitude,
+            max_distance_km=max_distance_km
+        )
+
+        if not nearby_stations:
+            return {
+                "nearby_stations": [],
+                "flood_events": [],
+                "impact_score": 0,
+                "severity_summary": {"minor": 0, "moderate": 0, "major": 0}
+            }
+
+        # Get flood events for nearby stations
+        all_events = []
+        for station in nearby_stations:
+            events = flood_db.get_flood_events(
+                station_id=station['station_id'],
+                year=year,
+                limit=1000
+            )
+            all_events.extend(events)
+
+        # Calculate severity summary
+        severity_counts = {"minor": 0, "moderate": 0, "major": 0}
+        for event in all_events:
+            severity_counts[event['severity']] += 1
+
+        # Simple impact score: weighted sum of events
+        # major=3, moderate=2, minor=1
+        impact_score = (
+            severity_counts['major'] * 3 +
+            severity_counts['moderate'] * 2 +
+            severity_counts['minor'] * 1
+        )
+
+        return {
+            "nearby_stations": nearby_stations,
+            "flood_events": all_events[:100],  # Limit returned events
+            "total_events": len(all_events),
+            "impact_score": impact_score,
+            "severity_summary": severity_counts
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/flood/stats")
+async def get_flood_database_stats():
+    """
+    Get overall flood database statistics.
+
+    Returns:
+        Database stats including station count, event count, year range
+    """
+    try:
+        db_path = os.getenv("DB_PATH", "data/bird_data_complete.db")
+        flood_db = FloodDatabase(db_path)
+
+        stats = flood_db.get_database_stats()
+
+        return stats
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
