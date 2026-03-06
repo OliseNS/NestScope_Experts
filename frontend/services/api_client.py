@@ -1004,3 +1004,20 @@ def get_flood_stats() -> Dict[str, Any]:
             "year_range": (None, None),
             "error": str(e)
         }
+
+
+def explore_database() -> Dict[str, Any]:
+    """
+    Trigger the Database Explorer Agent on the backend.
+
+    Returns:
+        Dictionary with success status, message, and insights
+    """
+    from .config import API_BASE_URL
+
+    try:
+        response = requests.post(f"{API_BASE_URL}/db/explore", timeout=60)
+        response.raise_for_status()
+        return response.json()
+    except requests.exceptions.RequestException as e:
+        return {"success": False, "error": str(e)}

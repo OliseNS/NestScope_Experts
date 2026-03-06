@@ -42,8 +42,24 @@ class AccessToSQLiteMigrator:
         self.accdb_path = Path(accdb_path)
         self.sqlite_path = Path(sqlite_path)
 
+        # Smart input path resolution: if not found, check script's directory
+        if not self.accdb_path.exists():
+            script_dir = Path(__file__).parent
+            alt_path = script_dir / self.accdb_path.name
+            if alt_path.exists():
+                print(f"ℹ Input not found at {self.accdb_path}, using {alt_path}")
+                self.accdb_path = alt_path
+
+        # Smart output path resolution: if directory doesn't exist, use script's directory
+        if not self.sqlite_path.parent.exists():
+             self.sqlite_path = Path(__file__).parent / self.sqlite_path.name
+             print(f"ℹ Output directory not found, using {self.sqlite_path}")
+
         if metadata_path:
             self.metadata_path = Path(metadata_path)
+            if not self.metadata_path.parent.exists():
+                 self.metadata_path = Path(__file__).parent / self.metadata_path.name
+                 print(f"ℹ Metadata directory not found, using {self.metadata_path}")
         else:
             # Default: same directory as SQLite DB with _metadata.json suffix
             self.metadata_path = self.sqlite_path.with_suffix('').with_suffix('.metadata.json')
@@ -541,19 +557,19 @@ Examples:
 
     parser.add_argument(
         '--input', '-i',
-        default='Colibri2010-2021CWBColonies_2Jan2023.accdb',
+        default='data/Colibri2010-2021CWBColonies_2Jan2023.accdb',
         help='Path to Access database (.accdb or .mdb)'
     )
 
     parser.add_argument(
         '--output', '-o',
-        default='bird_data_complete.db',
+        default='data/bird_data_complete.db',
         help='Path for output SQLite database'
     )
 
     parser.add_argument(
         '--metadata', '-m',
-        default='database_metadata_enhanced.json',
+        default='data/database_metadata_enhanced.json',
         help='Path for output enhanced metadata JSON file'
     )
 
