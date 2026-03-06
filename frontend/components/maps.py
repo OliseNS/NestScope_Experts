@@ -50,8 +50,8 @@ def get_species_color(species_list, species_name):
 
 
 def render_map(
-    df: pd.DataFrame, 
-    key: str = None, 
+    df: pd.DataFrame,
+    key: str = None,
     height: int = 500,
     show_flood_gages: bool = False,
     show_stac_data: bool = False,
@@ -72,6 +72,13 @@ def render_map(
         risk_zones: Optional list of risk zone dicts for Coastal Risk page
         future_projections: Optional list of projection dicts for Coastal Risk page
     """
+    print(f"\n{'='*60}")
+    print(f"🗺️  render_map() CALLED")
+    print(f"   DataFrame shape: {df.shape}")
+    print(f"   DataFrame columns: {list(df.columns) if not df.empty else 'EMPTY'}")
+    print(f"   Key: {key}")
+    print(f"   Height: {height}")
+    print(f"{'='*60}\n")
     # ========================================================================
     # STEP 1: Find coordinate columns (case-insensitive search)
     # ========================================================================
@@ -243,49 +250,56 @@ def render_map(
 
         # C. DATAFRAME MARKERS (Standard Colonies)
         if not map_df.empty:
-            map_df[lat_col] = map_df[lat_col].round(5)
-            map_df[lon_col] = map_df[lon_col].round(5)
+            print(f"📍 Rendering {len(map_df)} points on map...")
 
-            species_col = next((col for col in map_df.columns if 'species' in col.lower()), None)
+            # Convert to numeric and round coordinates
+            map_df[lat_col] = pd.to_numeric(map_df[lat_col], errors='coerce').round(5)
+            map_df[lon_col] = pd.to_numeric(map_df[lon_col], errors='coerce').round(5)
+
+            # Remove NaN coordinates
+            map_df = map_df.dropna(subset=[lat_col, lon_col])
+            print(f"   After cleaning: {len(map_df)} valid points")
+
+            # Find name/species columns
             name_col = next((col for col in map_df.columns if 'name' in col.lower() and col not in [lat_col, lon_col]), None)
+            species_col = next((col for col in map_df.columns if 'species' in col.lower()), None)
 
-            unique_species = sorted(map_df[species_col].dropna().unique().tolist()) if species_col else []
+            # SIMPLE & FAST: Just iterate and add markers
+            for idx, row in enumerate(map_df.to_dict('records')):
+                try:
+                    lat = row[lat_col]
+                    lon = row[lon_col]
 
-            # No clustering - show all individual points
-            target = m
+                    # Get name for tooltip
+                    name = str(row.get(name_col, "")) if name_col else f"Point {idx+1}"
 
-            for _, row in map_df.iterrows():
-                lat, lon = row[lat_col], row[lon_col]
-                colony_name = str(row[name_col]) if name_col and pd.notna(row[name_col]) else ""
-                is_stac = show_stac_data and stac_colonies_list and any(colony_name.lower() in str(s).lower() for s in stac_colonies_list)
-                
-                if is_stac:
-                    color, radius, weight = '#2AB8DC', 10, 3
-                elif species_col and pd.notna(row[species_col]):
-                    color, radius, weight = get_species_color(unique_species, row[species_col]), 8, 2
-                else:
-                    color, radius, weight = '#D97757', 8, 2
+                    # Simple popup with first 3 fields
+                    popup_fields = []
+                    field_count = 0
+                    for key, val in row.items():
+                        if key not in [lat_col, lon_col] and pd.notna(val) and field_count < 3:
+                            popup_fields.append(f"<b>{key}:</b> {val}")
+                            field_count += 1
 
-                popup_html = f"<div style='font-family:sans-serif;min-width:200px;'>"
-                if colony_name: popup_html += f"<h4 style='margin:0 0 8px 0;color:#2C3E50;'>{colony_name}</h4>"
-                if is_stac: popup_html += f"<p style='margin:4px 0;color:#2AB8DC;font-weight:bold;'>🔵 Expert Annotated (STAC)</p>"
-                if species_col and pd.notna(row[species_col]): popup_html += f"<p style='margin:4px 0;color:{color};font-weight:bold;'>🦅 {row[species_col]}</p>"
-                
-                count = 0
-                for col in row.index:
-                    if col not in [lat_col, lon_col, name_col, species_col] and pd.notna(row[col]) and count < 4:
-                        val = row[col]
-                        val_str = f"{val:,.0f}" if isinstance(val, (int, float)) and val > 1000 else str(val)
-                        popup_html += f"<p style='margin:2px 0;font-size:0.9em;'><b>{col}:</b> {val_str}</p>"
-                        count += 1
-                popup_html += f"<p style='margin:8px 0 0 0;font-size:0.8em;color:#7F8C8D;'>📍 {lat:.4f}, {lon:.4f}</p></div>"
+                    popup_html = f"<div style='font-size:0.9em;'>{name}<br>{'<br>'.join(popup_fields)}</div>"
 
-                folium.CircleMarker(
-                    location=[lat, lon],
-                    radius=radius, color='white', weight=weight, fill=True, fillColor=color, fillOpacity=0.7,
-                    popup=folium.Popup(popup_html, max_width=300),
-                    tooltip=colony_name if colony_name else f"{lat:.2f}, {lon:.2f}"
-                ).add_to(target)
+                    folium.CircleMarker(
+                        location=[lat, lon],
+                        radius=6,
+                        color='white',
+                        weight=1,
+                        fill=True,
+                        fillColor='#D97757',
+                        fillOpacity=0.7,
+                        popup=folium.Popup(popup_html, max_width=250),
+                        tooltip=name
+                    ).add_to(m)
+
+                except Exception as e:
+                    print(f"⚠️  Skipped point {idx}: {e}")
+                    continue
+
+            print(f"✅ Added {len(map_df)} markers to map")
 
         # D. FLOOD GAGES
         if show_flood_gages:
@@ -308,14 +322,32 @@ def render_map(
         # ====================================================================
         # STEP 6: Controls & Render
         # ====================================================================
+        print(f"🗺️  Finalizing map...")
         folium.LayerControl(position='topright').add_to(m)
-        m.fit_bounds(bounds, padding=(30, 30))
+
+        try:
+            m.fit_bounds(bounds, padding=(30, 30))
+        except Exception as bounds_error:
+            print(f"⚠️  Bounds fitting failed: {bounds_error}, using default view")
+
         plugins.Fullscreen(position='topright', title='Expand map', title_cancel='Exit fullscreen', force_separate_button=True).add_to(m)
 
-        st_folium(m, width=None, height=height, returned_objects=[], key=key)
+        print(f"🗺️  Displaying map with streamlit-folium...")
+        print(f"   Map object created: {m is not None}")
+        print(f"   Using key: {key}")
+
+        # Display the map
+        map_data = st_folium(m, width='100%', height=height, returned_objects=[], key=key)
+
+        print(f"✅ Map component rendered!")
+        print(f"   Map data returned: {map_data is not None}")
 
     except Exception as e:
+        print(f"❌ Map rendering error: {e}")
+        import traceback
+        traceback.print_exc()
         st.error(f"Map rendering error: {e}")
+        st.info("Try reducing the number of results or rephrasing your query.")
 
 def render_simple_map(lat, lon, label=None, height=300, key=None):
     """Render a single location map efficiently."""

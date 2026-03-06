@@ -188,10 +188,15 @@ for message in st.session_state.messages:
             chart_type = message.get("chart_type")
             show_map = message.get("show_map", False)
 
-            # Check if dataframe has coordinates
+            # Enhanced coordinate detection for historical messages
             cols_lower = [str(col).lower() for col in df.columns]
-            has_lat = any('latitude' in col for col in cols_lower)
-            has_lon = any('longitude' in col for col in cols_lower)
+
+            # Flexible pattern matching
+            lat_patterns = ['latitude', 'lat']
+            lon_patterns = ['longitude', 'lon', 'lng', 'long']
+
+            has_lat = any(any(pattern in col for pattern in lat_patterns) for col in cols_lower)
+            has_lon = any(any(pattern in col for pattern in lon_patterns) for col in cols_lower)
             has_coords = has_lat and has_lon
 
             # Force map if coordinates exist (override backend directive)
@@ -634,15 +639,15 @@ if prompt:
                 st.session_state.messages.append({"role": "assistant", "content": answer})
                 st.stop()
 
-            # Check if dataframe has coordinates
-            cols_lower = [str(col).lower() for col in df.columns]
-            has_lat = any('latitude' in col for col in cols_lower)
-            has_lon = any('longitude' in col for col in cols_lower)
-            has_coords = has_lat and has_lon
+            # DEAD SIMPLE: If Latitude and Longitude columns exist, show map
+            has_lat = any('latitude' in str(col).lower() for col in df.columns)
+            has_lon = any('longitude' in str(col).lower() for col in df.columns)
 
-            # Force map if coordinates exist (override backend directive)
-            if has_coords and not df.empty:
+            if has_lat and has_lon and not df.empty:
                 show_map = True
+                print(f"✅ MAP ENABLED: Found Latitude and Longitude columns")
+            else:
+                print(f"ℹ️  No map: has_lat={has_lat}, has_lon={has_lon}, empty={df.empty}")
 
             response_data = {
                 "role": "assistant",
@@ -660,8 +665,15 @@ if prompt:
             else:
                 tabs_to_render.append(("data", "📋 Data Table"))
 
+            # Debug: Always log map decision
+            print(f"🗺️  MAP DECISION: show_map={show_map}, df_empty={df.empty}")
+            print(f"   DataFrame columns: {list(df.columns)}")
+
             if show_map:
                 tabs_to_render.append(("map", "🗺️ Map View"))
+                print(f"✅ Map tab ADDED to tabs_to_render")
+            else:
+                print(f"❌ Map tab NOT added (show_map=False)")
 
             # Render visualization
             if len(tabs_to_render) > 1:
@@ -701,6 +713,16 @@ if prompt:
                         mime="text/csv",
                         key="download_simple_current"
                     )
+
+            # LAYER 5: User-facing map troubleshooting (simplified)
+            if not show_map and 'ColonyName' in df.columns:
+                # Should have map but doesn't - system failure
+                with st.expander("🗺️ Why isn't there a map?", expanded=False):
+                    st.error("**System Issue:** This colony query should have included geographic coordinates.")
+                    st.markdown("**What you can try:**")
+                    st.markdown('- Rephrase with: "Show me [your question] **with locations**"')
+                    st.markdown('- Ask explicitly: "Map all colonies in [state]"')
+                    st.markdown('- Use keywords: "where are", "locations", "coordinates"')
 
             st.session_state.messages.append(response_data)
 

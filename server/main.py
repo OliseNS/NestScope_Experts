@@ -284,14 +284,18 @@ def parse_visualization_directives(answer_text: str, results_df=None) -> Dict[st
     if not no_viz_match and results_df is not None and not results_df.empty:
         # Check if we should show a map (has coordinates)
         if not directives['show_map']:
-            cols_lower = [str(col).lower() for col in results_df.columns]
-            has_lat = 'latitude' in cols_lower
-            has_lon = 'longitude' in cols_lower
+            # Simple check: look for Latitude and Longitude columns (case-insensitive)
+            lat_col = None
+            lon_col = None
+            for col in results_df.columns:
+                col_lower = str(col).lower()
+                if 'latitude' in col_lower and not lat_col:
+                    lat_col = col
+                if 'longitude' in col_lower and not lon_col:
+                    lon_col = col
 
-            if has_lat and has_lon:
+            if lat_col and lon_col:
                 # Check if we have valid non-null coordinates
-                lat_col = results_df.columns[cols_lower.index('latitude')]
-                lon_col = results_df.columns[cols_lower.index('longitude')]
                 has_valid_coords = (
                     results_df[lat_col].notna().any() and
                     results_df[lon_col].notna().any()
@@ -341,6 +345,238 @@ def parse_visualization_directives(answer_text: str, results_df=None) -> Dict[st
     directives['clean_answer'] = clean_answer.strip()
 
     return directives
+
+
+def validate_and_enhance_sql_for_mapping(sql_query: str) -> tuple[str, bool, str]:
+    """
+    Validate SQL includes coordinates for colony queries and auto-enhance if missing.
+
+    This is a safety net for when the LLM forgets to include Lat/Lon despite prompting.
+
+    Args:
+        sql_query: The generated SQL query
+
+    Returns:
+        (enhanced_sql, was_modified, reason)
+    """
+    import re
+
+    sql_upper = sql_query.upper()
+
+    # Detect if this is a colony-related query
+    colony_indicators = [
+        r'\bCOLONYNAME\b',
+        r'\bCOLONY\b',
+        r'\bSTATE\b',
+        r'\bGEOREGION\b',
+        r'GROUP BY.*COLONY',
+    ]
+
+    is_colony_query = any(re.search(pattern, sql_upper) for pattern in colony_indicators)
+
+    if not is_colony_query:
+        return sql_query, False, "Not a colony query - coordinates not required"
+
+    # Check if coordinates already present
+    has_latitude = bool(re.search(r'"?Latitude"?', sql_query, re.IGNORECASE))
+    has_longitude = bool(re.search(r'"?Longitude"?', sql_query, re.IGNORECASE))
+
+    if has_latitude and has_longitude:
+        # Verify they're in GROUP BY if needed
+        group_by_match = re.search(
+            r'GROUP\s+BY\s+(.+?)(?:ORDER\s+BY|LIMIT|HAVING|;|$)',
+            sql_query,
+            re.IGNORECASE | re.DOTALL
+        )
+
+        if group_by_match:
+            group_by_clause = group_by_match.group(1)
+            has_lat_in_group = bool(re.search(r'"?Latitude"?', group_by_clause, re.IGNORECASE))
+            has_lon_in_group = bool(re.search(r'"?Longitude"?', group_by_clause, re.IGNORECASE))
+
+            if not (has_lat_in_group and has_lon_in_group):
+                # Add to GROUP BY
+                enhanced_group = group_by_clause.rstrip().rstrip(',') + ', "Latitude", "Longitude"'
+                enhanced_sql = sql_query.replace(
+                    f"GROUP BY {group_by_clause}",
+                    f"GROUP BY {enhanced_group}",
+                    1  # Replace only first occurrence
+                )
+                return enhanced_sql, True, "Added Lat/Lon to GROUP BY clause"
+
+        return sql_query, False, "Coordinates already present and correct"
+
+    # Coordinates MISSING - Check if we can fix this
+    # Identify the source table
+    from_match = re.search(
+        r'FROM\s+"?(tblColonyTotals2010-2021_MayJuneCombined|tblRWCWB_ColonyInventory_10Nov22)"?',
+        sql_query,
+        re.IGNORECASE
+    )
+
+    if not from_match:
+        return sql_query, False, "Cannot enhance: Table doesn't have coordinate columns"
+
+    table_name = from_match.group(1)
+
+    # Strategy: Add Lat/Lon to SELECT clause after ColonyName
+    select_match = re.search(
+        r'SELECT\s+(DISTINCT\s+)?(.*?)\s+FROM',
+        sql_query,
+        re.IGNORECASE | re.DOTALL
+    )
+
+    if not select_match:
+        return sql_query, False, "Cannot parse SELECT clause"
+
+    distinct_keyword = select_match.group(1) or ""
+    select_list = select_match.group(2).strip()
+
+    # Smart insertion: After ColonyName if present, otherwise at end
+    if '"ColonyName"' in select_list or '"COLONYNAME"' in select_list.upper():
+        # Insert after first occurrence of ColonyName
+        enhanced_select = re.sub(
+            r'("ColonyName")',
+            r'\1, "Latitude", "Longitude"',
+            select_list,
+            count=1,
+            flags=re.IGNORECASE
+        )
+    else:
+        # Append to end
+        enhanced_select = select_list.rstrip(',') + ', "Latitude", "Longitude"'
+
+    # Replace SELECT clause
+    enhanced_sql = re.sub(
+        r'SELECT\s+(DISTINCT\s+)?.*?\s+FROM',
+        f'SELECT {distinct_keyword}{enhanced_select} FROM',
+        sql_query,
+        count=1,
+        flags=re.IGNORECASE | re.DOTALL
+    )
+
+    # Add to GROUP BY if present
+    group_by_match = re.search(
+        r'GROUP\s+BY\s+(.+?)(?:ORDER\s+BY|LIMIT|HAVING|;|$)',
+        enhanced_sql,
+        re.IGNORECASE | re.DOTALL
+    )
+
+    if group_by_match:
+        group_by_clause = group_by_match.group(1).strip().rstrip(',')
+        enhanced_group = group_by_clause + ', "Latitude", "Longitude"'
+        enhanced_sql = re.sub(
+            r'GROUP\s+BY\s+' + re.escape(group_by_clause),
+            f'GROUP BY {enhanced_group}',
+            enhanced_sql,
+            count=1,
+            flags=re.IGNORECASE
+        )
+
+    # Ensure WHERE filters for non-null coordinates
+    if re.search(r'\bWHERE\b', enhanced_sql, re.IGNORECASE):
+        # Add to existing WHERE
+        where_match = re.search(
+            r'(WHERE\s+.+?)(\s+GROUP\s+BY|\s+ORDER\s+BY|\s+LIMIT|;|$)',
+            enhanced_sql,
+            re.IGNORECASE | re.DOTALL
+        )
+        if where_match:
+            where_clause = where_match.group(1)
+            if 'IS NOT NULL' not in where_clause.upper() or '"Latitude"' not in where_clause:
+                enhanced_where = where_clause.rstrip() + ' AND "Latitude" IS NOT NULL AND "Longitude" IS NOT NULL'
+                enhanced_sql = enhanced_sql.replace(where_clause, enhanced_where, 1)
+    else:
+        # Insert new WHERE before GROUP BY/ORDER BY/LIMIT
+        insertion_point = re.search(
+            r'\s+(GROUP\s+BY|ORDER\s+BY|LIMIT|;|$)',
+            enhanced_sql,
+            re.IGNORECASE
+        )
+        if insertion_point:
+            pos = insertion_point.start()
+            enhanced_sql = (
+                enhanced_sql[:pos] +
+                '\nWHERE "Latitude" IS NOT NULL AND "Longitude" IS NOT NULL' +
+                enhanced_sql[pos:]
+            )
+
+    return enhanced_sql, True, f"Auto-injected Latitude/Longitude columns for table {table_name}"
+
+
+def inject_coordinates_via_join(results_df: pd.DataFrame, db_path: str) -> pd.DataFrame:
+    """
+    Last-resort coordinate injection: If results have ColonyName but no Lat/Lon,
+    fetch coordinates from database and merge them in.
+
+    This handles edge cases where Layer 2 couldn't fix the SQL (complex queries, CTEs, etc.)
+
+    Args:
+        results_df: Query results DataFrame
+        db_path: Path to SQLite database
+
+    Returns:
+        DataFrame with coordinates merged in (if possible)
+    """
+    if results_df is None or results_df.empty:
+        return results_df
+
+    # Check if coordinates are already present
+    has_colony = 'ColonyName' in results_df.columns
+    has_lat = 'Latitude' in results_df.columns
+    has_lon = 'Longitude' in results_df.columns
+
+    if not has_colony:
+        return results_df  # No colony data to map
+
+    if has_lat and has_lon:
+        return results_df  # Coordinates already present
+
+    print(f"🔧 Layer 3 Activation: Injecting coordinates via JOIN lookup")
+
+    import sqlite3
+
+    try:
+        unique_colonies = results_df['ColonyName'].unique().tolist()
+
+        # Connect in read-only mode
+        conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
+
+        # Fetch coordinates from primary table
+        placeholders = ','.join(['?' for _ in unique_colonies])
+        coord_query = f"""
+        SELECT DISTINCT
+            "ColonyName",
+            "Latitude",
+            "Longitude"
+        FROM "tblColonyTotals2010-2021_MayJuneCombined"
+        WHERE "ColonyName" IN ({placeholders})
+          AND "Latitude" IS NOT NULL
+          AND "Longitude" IS NOT NULL
+        """
+
+        coord_df = pd.read_sql_query(coord_query, conn, params=unique_colonies)
+        conn.close()
+
+        if coord_df.empty:
+            print(f"⚠️  No coordinates found for {len(unique_colonies)} colonies")
+            return results_df
+
+        # Merge coordinates into results (left join to preserve all rows)
+        results_with_coords = results_df.merge(
+            coord_df[['ColonyName', 'Latitude', 'Longitude']],
+            on='ColonyName',
+            how='left'
+        )
+
+        matched_count = results_with_coords['Latitude'].notna().sum()
+        print(f"✓ Injected coordinates for {matched_count}/{len(results_df)} rows")
+
+        return results_with_coords
+
+    except Exception as e:
+        print(f"⚠️  Coordinate injection failed: {e}")
+        return results_df
 
 
 class SQLChatbot:
@@ -530,6 +766,15 @@ Generate the SQL query now:"""
                     sql_query = sql_query[idx:].strip()
                     break
 
+            # LAYER 2: Validate and enhance SQL for mapping
+            enhanced_sql, was_modified, reason = validate_and_enhance_sql_for_mapping(sql_query)
+
+            if was_modified:
+                print(f"🗺️  SQL Enhancement: {reason}")
+                print(f"   Original: {sql_query[:80]}...")
+                print(f"   Enhanced: {enhanced_sql[:80]}...")
+                sql_query = enhanced_sql
+
             return sql_query
 
         except Exception as e:
@@ -573,6 +818,9 @@ Generate the SQL query now:"""
             conn = self.get_connection(read_only=True)
             df = pd.read_sql_query(sql_query, conn)
             conn.close()
+
+            # LAYER 3: Inject coordinates if missing (safety net)
+            df = inject_coordinates_via_join(df, self.db_path)
 
             # Return empty dataframe, not an error - let AI explain the empty result
             return df, None
@@ -780,10 +1028,13 @@ Please provide a clear, informative answer to the question based on these result
             )
 
             for chunk in stream:
-                if chunk.choices[0].delta.content is not None:
+                if chunk.choices and len(chunk.choices) > 0 and chunk.choices[0].delta.content is not None:
                     yield chunk.choices[0].delta.content
 
         except Exception as e:
+            print(f"❌ Error in generate_answer_stream: {e}")
+            import traceback
+            traceback.print_exc()
             yield f"Error generating answer: {e}"
 
     def ask(self, question: str, conversation_history: list = None) -> dict:
