@@ -1,6 +1,6 @@
 """
 NestScope UI Styles
-Clean, modern chatbot interface inspired by Claude and ChatGPT
+Clean, modern interface inspired by Claude Code
 """
 
 def get_custom_css():
@@ -53,20 +53,21 @@ def get_custom_css():
         z-index: 999999 !important;
     }
 
-    /* Main Container */
+    /* Main Container - Improved spacing and max-width */
     .main .block-container {
         padding: 2rem 3rem 6rem;
-        max-width: 900px;
+        max-width: 1000px;
         margin: 0 auto;
     }
 
-    /* Title Section */
+    /* Typography - Improved hierarchy */
     h1 {
         color: var(--claude-text);
         font-weight: 600;
         font-size: 2.25rem;
         letter-spacing: -0.03em;
         margin-bottom: 0.5rem;
+        line-height: 1.2;
     }
 
     h2 {
@@ -76,6 +77,7 @@ def get_custom_css():
         letter-spacing: -0.02em;
         margin-top: 2rem;
         margin-bottom: 1rem;
+        line-height: 1.3;
     }
 
     h3 {
@@ -85,6 +87,7 @@ def get_custom_css():
         letter-spacing: -0.015em;
         margin-top: 1.5rem;
         margin-bottom: 0.75rem;
+        line-height: 1.4;
     }
 
     h4 {
@@ -92,12 +95,14 @@ def get_custom_css():
         font-weight: 600;
         font-size: 1rem;
         letter-spacing: -0.01em;
+        line-height: 1.5;
     }
 
     .main .block-container > div:first-child p {
         color: var(--claude-text-light);
         font-size: 0.9375rem;
         margin-top: 0;
+        line-height: 1.6;
     }
 
     /* Improve list styling */
@@ -122,7 +127,7 @@ def get_custom_css():
         text-decoration: underline;
     }
 
-    /* Welcome Card */
+    /* Welcome Card - Better spacing */
     .title-card {
         background: var(--claude-surface);
         border: 1px solid var(--claude-border);
@@ -136,6 +141,7 @@ def get_custom_css():
         font-weight: 600;
         font-size: 1.25rem;
         margin: 0 0 1rem 0;
+        line-height: 1.4;
     }
 
     .title-card p {
@@ -145,7 +151,7 @@ def get_custom_css():
         font-size: 0.9375rem;
     }
 
-    /* Chat Messages */
+    /* Chat Messages - Better spacing */
     .stChatMessage {
         background: transparent !important;
         border: none !important;
@@ -352,7 +358,7 @@ def get_custom_css():
         background: rgba(255, 255, 255, 0.15);
     }
 
-    /* Main content area buttons - Keep styled */
+    /* Main content area buttons - Better hover states */
     .main .stButton > button {
         width: 100%;
         border: 1px solid var(--claude-border);
@@ -373,7 +379,7 @@ def get_custom_css():
         transform: translateY(-1px);
     }
 
-    /* Expander */
+    /* Expander - Improved styling */
     .streamlit-expanderHeader {
         background: var(--claude-surface) !important;
         border: 1px solid var(--claude-border) !important;
@@ -382,10 +388,12 @@ def get_custom_css():
         font-size: 0.875rem !important;
         color: var(--claude-text) !important;
         padding: 0.875rem 1rem !important;
+        transition: all 0.2s ease !important;
     }
 
     .streamlit-expanderHeader:hover {
         border-color: var(--claude-orange) !important;
+        background: var(--claude-surface-hover) !important;
     }
 
     .streamlit-expanderContent {
@@ -396,7 +404,7 @@ def get_custom_css():
         padding: 1rem !important;
     }
 
-    /* Tabs */
+    /* Tabs - Cleaner design */
     .stTabs [data-baseweb="tab-list"] {
         gap: 0.5rem;
         border-bottom: 1px solid var(--claude-border);
@@ -412,6 +420,7 @@ def get_custom_css():
         font-size: 0.9375rem;
         color: var(--claude-text-light);
         background: transparent;
+        transition: all 0.2s ease;
     }
 
     .stTabs [data-baseweb="tab"]:hover {
@@ -424,16 +433,17 @@ def get_custom_css():
         color: var(--claude-orange);
     }
 
-    /* Alerts */
+    /* Alerts - Better visual hierarchy */
     .stAlert {
         border-radius: 10px;
         border: 1px solid var(--claude-border);
         background: var(--claude-surface);
         font-size: 0.875rem;
         color: var(--claude-text);
+        padding: 0.875rem 1rem;
     }
 
-    /* Dataframes */
+    /* Dataframes - Cleaner styling */
     .stDataFrame {
         border: 1px solid var(--claude-border);
         border-radius: 10px;
@@ -445,7 +455,7 @@ def get_custom_css():
         background: var(--claude-surface);
     }
 
-    /* Download Button */
+    /* Download Button - Better visual feedback */
     .stDownloadButton > button {
         background: var(--claude-orange) !important;
         color: #FFFFFF !important;
@@ -463,12 +473,18 @@ def get_custom_css():
         box-shadow: 0 4px 12px rgba(212, 148, 122, 0.3);
     }
 
-    /* Metrics - Modern clean design */
+    /* Metrics - Modern card design */
     [data-testid="stMetric"] {
         background: var(--claude-surface);
         border: 1px solid var(--claude-border);
         border-radius: 10px;
-        padding: 1rem;
+        padding: 1.25rem;
+        transition: all 0.2s ease;
+    }
+
+    [data-testid="stMetric"]:hover {
+        border-color: var(--claude-border-light);
+        transform: translateY(-2px);
     }
 
     [data-testid="stMetricValue"] {
@@ -483,6 +499,7 @@ def get_custom_css():
         text-transform: uppercase;
         letter-spacing: 0.08em;
         font-weight: 600;
+        margin-bottom: 0.5rem;
     }
 
     /* Loading Spinner */
@@ -497,7 +514,7 @@ def get_custom_css():
         font-size: 0.8125rem;
     }
 
-    /* Code blocks */
+    /* Code blocks - Improved readability */
     code {
         background: var(--claude-surface-hover) !important;
         color: var(--claude-orange) !important;
@@ -518,7 +535,7 @@ def get_custom_css():
         color: var(--claude-text) !important;
     }
 
-    /* Scrollbar */
+    /* Scrollbar - Subtle styling */
     ::-webkit-scrollbar {
         width: 10px;
         height: 10px;
@@ -553,6 +570,43 @@ def get_custom_css():
         animation: fadeIn 0.3s ease-out;
     }
 
+    /* File uploader - Better styling */
+    [data-testid="stFileUploader"] {
+        border: 2px dashed var(--claude-border);
+        border-radius: 10px;
+        padding: 1.5rem;
+        background: var(--claude-surface);
+        transition: all 0.2s ease;
+    }
+
+    [data-testid="stFileUploader"]:hover {
+        border-color: var(--claude-orange);
+        background: var(--claude-surface-hover);
+    }
+
+    /* Slider - Improved styling */
+    .stSlider {
+        padding: 1rem 0;
+    }
+
+    /* Radio buttons - Better spacing */
+    .stRadio > div {
+        gap: 0.75rem;
+    }
+
+    /* Columns - Better gap management */
+    [data-testid="column"] {
+        padding: 0 0.75rem;
+    }
+
+    [data-testid="column"]:first-child {
+        padding-left: 0;
+    }
+
+    [data-testid="column"]:last-child {
+        padding-right: 0;
+    }
+
     /* Style Streamlit's default sidebar collapse button */
     [data-testid="collapsedControl"] {
         background: var(--claude-surface) !important;
@@ -576,6 +630,22 @@ def get_custom_css():
 
     [data-testid="collapsedControl"]:hover svg {
         stroke: var(--claude-orange) !important;
+    }
+
+    /* Improved spacing for form elements */
+    .stTextInput, .stNumberInput, .stSelectbox {
+        margin-bottom: 1rem;
+    }
+
+    /* Better image display */
+    img {
+        border-radius: 8px;
+    }
+
+    /* Plotly charts - Dark theme integration */
+    .js-plotly-plot {
+        border-radius: 10px;
+        overflow: hidden;
     }
 </style>
 """

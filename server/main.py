@@ -21,6 +21,9 @@ import base64
 import httpx
 import yaml
 from server.cv_tools.inference import BirdDetector, get_example_images
+from server.db_version import DatabaseVersionControl
+from server.flood_tools.flood_database import FloodDatabase
+from server.flood_tools.noaa_client import NOAAClient
 # Removed: No longer using dynamic prompt generators
 
 # Load environment variables (for secrets like API keys)
@@ -156,6 +159,7 @@ class RowUpdateResponse(BaseModel):
     success: bool
     message: Optional[str]
     error: Optional[str] = None
+    version_commit: Optional[str] = None  # Git commit hash if versioning is active
 
 class RowDeleteRequest(BaseModel):
     table_name: str
@@ -165,6 +169,7 @@ class RowDeleteResponse(BaseModel):
     success: bool
     message: Optional[str]
     error: Optional[str] = None
+    version_commit: Optional[str] = None  # Git commit hash if versioning is active
 
 class RowInsertRequest(BaseModel):
     table_name: str
@@ -174,10 +179,66 @@ class RowInsertResponse(BaseModel):
     success: bool
     message: Optional[str]
     error: Optional[str] = None
+    version_commit: Optional[str] = None  # Git commit hash if versioning is active
+
+# Version Control Response Models
+class VersionCommit(BaseModel):
+    """Represents a single Git commit in version history"""
+    hash: str
+    hash_short: str
+    author: str
+    date: str
+    message: str
+
+class VersionHistoryResponse(BaseModel):
+    """Response for /db/version/history endpoint"""
+    success: bool
+    commits: Optional[List[VersionCommit]] = None
+    error: Optional[str] = None
+
+class VersionStatsResponse(BaseModel):
+    """Response for /db/version/stats endpoint"""
+    success: bool
+    total_commits: Optional[int] = None
+    first_commit_date: Optional[str] = None
+    database_size_mb: Optional[float] = None
+    snapshot_count: Optional[int] = None
+    current_branch: Optional[str] = None
+    error: Optional[str] = None
+
+class VersionDiffResponse(BaseModel):
+    """Response for /db/version/diff endpoint"""
+    success: bool
+    diff: Optional[str] = None
+    error: Optional[str] = None
+
+class VersionRollbackRequest(BaseModel):
+    """Request for rollback operation"""
+    commit_hash: str
+    expert_email: Optional[str] = "system"
+
+class VersionRollbackResponse(BaseModel):
+    """Response for /db/version/rollback endpoint"""
+    success: bool
+    message: Optional[str] = None
+    snapshot_path: Optional[str] = None
+    new_commit: Optional[str] = None
+    error: Optional[str] = None
 
 # Database configuration
 # .env override takes priority, otherwise use config.yaml default
 DB_PATH = os.getenv("DB_PATH", config['database']['default_path'])
+
+# Initialize Database Version Control
+# This Git repo is SEPARATE from the project repo - it only versions the database
+# Location: data/.git (for database versioning only)
+# Project repo: /home/olisemeka.dev/Projects/nexus/.git (for code versioning)
+try:
+    db_version_control = DatabaseVersionControl(DB_PATH, expert_email="system")
+    print(f"✓ Database version control initialized at {Path(DB_PATH).parent}")
+except Exception as e:
+    print(f"⚠️  Warning: Database version control initialization failed: {e}")
+    db_version_control = None
 
 # Model configuration - SINGLE SOURCE OF TRUTH
 # Primary source: config.yaml (version controlled)
@@ -223,14 +284,18 @@ def parse_visualization_directives(answer_text: str, results_df=None) -> Dict[st
     if not no_viz_match and results_df is not None and not results_df.empty:
         # Check if we should show a map (has coordinates)
         if not directives['show_map']:
-            cols_lower = [str(col).lower() for col in results_df.columns]
-            has_lat = 'latitude' in cols_lower
-            has_lon = 'longitude' in cols_lower
+            # Simple check: look for Latitude and Longitude columns (case-insensitive)
+            lat_col = None
+            lon_col = None
+            for col in results_df.columns:
+                col_lower = str(col).lower()
+                if 'latitude' in col_lower and not lat_col:
+                    lat_col = col
+                if 'longitude' in col_lower and not lon_col:
+                    lon_col = col
 
-            if has_lat and has_lon:
+            if lat_col and lon_col:
                 # Check if we have valid non-null coordinates
-                lat_col = results_df.columns[cols_lower.index('latitude')]
-                lon_col = results_df.columns[cols_lower.index('longitude')]
                 has_valid_coords = (
                     results_df[lat_col].notna().any() and
                     results_df[lon_col].notna().any()
@@ -280,6 +345,238 @@ def parse_visualization_directives(answer_text: str, results_df=None) -> Dict[st
     directives['clean_answer'] = clean_answer.strip()
 
     return directives
+
+
+def validate_and_enhance_sql_for_mapping(sql_query: str) -> tuple[str, bool, str]:
+    """
+    Validate SQL includes coordinates for colony queries and auto-enhance if missing.
+
+    This is a safety net for when the LLM forgets to include Lat/Lon despite prompting.
+
+    Args:
+        sql_query: The generated SQL query
+
+    Returns:
+        (enhanced_sql, was_modified, reason)
+    """
+    import re
+
+    sql_upper = sql_query.upper()
+
+    # Detect if this is a colony-related query
+    colony_indicators = [
+        r'\bCOLONYNAME\b',
+        r'\bCOLONY\b',
+        r'\bSTATE\b',
+        r'\bGEOREGION\b',
+        r'GROUP BY.*COLONY',
+    ]
+
+    is_colony_query = any(re.search(pattern, sql_upper) for pattern in colony_indicators)
+
+    if not is_colony_query:
+        return sql_query, False, "Not a colony query - coordinates not required"
+
+    # Check if coordinates already present
+    has_latitude = bool(re.search(r'"?Latitude"?', sql_query, re.IGNORECASE))
+    has_longitude = bool(re.search(r'"?Longitude"?', sql_query, re.IGNORECASE))
+
+    if has_latitude and has_longitude:
+        # Verify they're in GROUP BY if needed
+        group_by_match = re.search(
+            r'GROUP\s+BY\s+(.+?)(?:ORDER\s+BY|LIMIT|HAVING|;|$)',
+            sql_query,
+            re.IGNORECASE | re.DOTALL
+        )
+
+        if group_by_match:
+            group_by_clause = group_by_match.group(1)
+            has_lat_in_group = bool(re.search(r'"?Latitude"?', group_by_clause, re.IGNORECASE))
+            has_lon_in_group = bool(re.search(r'"?Longitude"?', group_by_clause, re.IGNORECASE))
+
+            if not (has_lat_in_group and has_lon_in_group):
+                # Add to GROUP BY
+                enhanced_group = group_by_clause.rstrip().rstrip(',') + ', "Latitude", "Longitude"'
+                enhanced_sql = sql_query.replace(
+                    f"GROUP BY {group_by_clause}",
+                    f"GROUP BY {enhanced_group}",
+                    1  # Replace only first occurrence
+                )
+                return enhanced_sql, True, "Added Lat/Lon to GROUP BY clause"
+
+        return sql_query, False, "Coordinates already present and correct"
+
+    # Coordinates MISSING - Check if we can fix this
+    # Identify the source table
+    from_match = re.search(
+        r'FROM\s+"?(tblColonyTotals2010-2021_MayJuneCombined|tblRWCWB_ColonyInventory_10Nov22)"?',
+        sql_query,
+        re.IGNORECASE
+    )
+
+    if not from_match:
+        return sql_query, False, "Cannot enhance: Table doesn't have coordinate columns"
+
+    table_name = from_match.group(1)
+
+    # Strategy: Add Lat/Lon to SELECT clause after ColonyName
+    select_match = re.search(
+        r'SELECT\s+(DISTINCT\s+)?(.*?)\s+FROM',
+        sql_query,
+        re.IGNORECASE | re.DOTALL
+    )
+
+    if not select_match:
+        return sql_query, False, "Cannot parse SELECT clause"
+
+    distinct_keyword = select_match.group(1) or ""
+    select_list = select_match.group(2).strip()
+
+    # Smart insertion: After ColonyName if present, otherwise at end
+    if '"ColonyName"' in select_list or '"COLONYNAME"' in select_list.upper():
+        # Insert after first occurrence of ColonyName
+        enhanced_select = re.sub(
+            r'("ColonyName")',
+            r'\1, "Latitude", "Longitude"',
+            select_list,
+            count=1,
+            flags=re.IGNORECASE
+        )
+    else:
+        # Append to end
+        enhanced_select = select_list.rstrip(',') + ', "Latitude", "Longitude"'
+
+    # Replace SELECT clause
+    enhanced_sql = re.sub(
+        r'SELECT\s+(DISTINCT\s+)?.*?\s+FROM',
+        f'SELECT {distinct_keyword}{enhanced_select} FROM',
+        sql_query,
+        count=1,
+        flags=re.IGNORECASE | re.DOTALL
+    )
+
+    # Add to GROUP BY if present
+    group_by_match = re.search(
+        r'GROUP\s+BY\s+(.+?)(?:ORDER\s+BY|LIMIT|HAVING|;|$)',
+        enhanced_sql,
+        re.IGNORECASE | re.DOTALL
+    )
+
+    if group_by_match:
+        group_by_clause = group_by_match.group(1).strip().rstrip(',')
+        enhanced_group = group_by_clause + ', "Latitude", "Longitude"'
+        enhanced_sql = re.sub(
+            r'GROUP\s+BY\s+' + re.escape(group_by_clause),
+            f'GROUP BY {enhanced_group}',
+            enhanced_sql,
+            count=1,
+            flags=re.IGNORECASE
+        )
+
+    # Ensure WHERE filters for non-null coordinates
+    if re.search(r'\bWHERE\b', enhanced_sql, re.IGNORECASE):
+        # Add to existing WHERE
+        where_match = re.search(
+            r'(WHERE\s+.+?)(\s+GROUP\s+BY|\s+ORDER\s+BY|\s+LIMIT|;|$)',
+            enhanced_sql,
+            re.IGNORECASE | re.DOTALL
+        )
+        if where_match:
+            where_clause = where_match.group(1)
+            if 'IS NOT NULL' not in where_clause.upper() or '"Latitude"' not in where_clause:
+                enhanced_where = where_clause.rstrip() + ' AND "Latitude" IS NOT NULL AND "Longitude" IS NOT NULL'
+                enhanced_sql = enhanced_sql.replace(where_clause, enhanced_where, 1)
+    else:
+        # Insert new WHERE before GROUP BY/ORDER BY/LIMIT
+        insertion_point = re.search(
+            r'\s+(GROUP\s+BY|ORDER\s+BY|LIMIT|;|$)',
+            enhanced_sql,
+            re.IGNORECASE
+        )
+        if insertion_point:
+            pos = insertion_point.start()
+            enhanced_sql = (
+                enhanced_sql[:pos] +
+                '\nWHERE "Latitude" IS NOT NULL AND "Longitude" IS NOT NULL' +
+                enhanced_sql[pos:]
+            )
+
+    return enhanced_sql, True, f"Auto-injected Latitude/Longitude columns for table {table_name}"
+
+
+def inject_coordinates_via_join(results_df: pd.DataFrame, db_path: str) -> pd.DataFrame:
+    """
+    Last-resort coordinate injection: If results have ColonyName but no Lat/Lon,
+    fetch coordinates from database and merge them in.
+
+    This handles edge cases where Layer 2 couldn't fix the SQL (complex queries, CTEs, etc.)
+
+    Args:
+        results_df: Query results DataFrame
+        db_path: Path to SQLite database
+
+    Returns:
+        DataFrame with coordinates merged in (if possible)
+    """
+    if results_df is None or results_df.empty:
+        return results_df
+
+    # Check if coordinates are already present
+    has_colony = 'ColonyName' in results_df.columns
+    has_lat = 'Latitude' in results_df.columns
+    has_lon = 'Longitude' in results_df.columns
+
+    if not has_colony:
+        return results_df  # No colony data to map
+
+    if has_lat and has_lon:
+        return results_df  # Coordinates already present
+
+    print(f"🔧 Layer 3 Activation: Injecting coordinates via JOIN lookup")
+
+    import sqlite3
+
+    try:
+        unique_colonies = results_df['ColonyName'].unique().tolist()
+
+        # Connect in read-only mode
+        conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
+
+        # Fetch coordinates from primary table
+        placeholders = ','.join(['?' for _ in unique_colonies])
+        coord_query = f"""
+        SELECT DISTINCT
+            "ColonyName",
+            "Latitude",
+            "Longitude"
+        FROM "tblColonyTotals2010-2021_MayJuneCombined"
+        WHERE "ColonyName" IN ({placeholders})
+          AND "Latitude" IS NOT NULL
+          AND "Longitude" IS NOT NULL
+        """
+
+        coord_df = pd.read_sql_query(coord_query, conn, params=unique_colonies)
+        conn.close()
+
+        if coord_df.empty:
+            print(f"⚠️  No coordinates found for {len(unique_colonies)} colonies")
+            return results_df
+
+        # Merge coordinates into results (left join to preserve all rows)
+        results_with_coords = results_df.merge(
+            coord_df[['ColonyName', 'Latitude', 'Longitude']],
+            on='ColonyName',
+            how='left'
+        )
+
+        matched_count = results_with_coords['Latitude'].notna().sum()
+        print(f"✓ Injected coordinates for {matched_count}/{len(results_df)} rows")
+
+        return results_with_coords
+
+    except Exception as e:
+        print(f"⚠️  Coordinate injection failed: {e}")
+        return results_df
 
 
 class SQLChatbot:
@@ -436,8 +733,8 @@ class SQLChatbot:
 
 CRITICAL REQUIREMENTS:
 1. Return ONLY the SQL query - no explanations, no markdown, no comments
-2. If the query returns colony data, you MUST include "Latitude, Longitude" in SELECT and GROUP BY clauses
-3. Add "WHERE Latitude IS NOT NULL AND Longitude IS NOT NULL" for colony queries
+2. If the question involves locations, colonies, states, or mapping, you MUST include "Latitude" and "Longitude" columns in the SELECT and GROUP BY clauses.
+3. Add "WHERE "Latitude" IS NOT NULL AND "Longitude" IS NOT NULL" to ensure results can be mapped.
 4. Use exact column names: "ColonyName", "Latitude", "Longitude" (case-sensitive)
 
 Generate the SQL query now:"""
@@ -468,6 +765,15 @@ Generate the SQL query now:"""
                     idx = sql_query.upper().find(keyword)
                     sql_query = sql_query[idx:].strip()
                     break
+
+            # LAYER 2: Validate and enhance SQL for mapping
+            enhanced_sql, was_modified, reason = validate_and_enhance_sql_for_mapping(sql_query)
+
+            if was_modified:
+                print(f"🗺️  SQL Enhancement: {reason}")
+                print(f"   Original: {sql_query[:80]}...")
+                print(f"   Enhanced: {enhanced_sql[:80]}...")
+                sql_query = enhanced_sql
 
             return sql_query
 
@@ -512,6 +818,9 @@ Generate the SQL query now:"""
             conn = self.get_connection(read_only=True)
             df = pd.read_sql_query(sql_query, conn)
             conn.close()
+
+            # LAYER 3: Inject coordinates if missing (safety net)
+            df = inject_coordinates_via_join(df, self.db_path)
 
             # Return empty dataframe, not an error - let AI explain the empty result
             return df, None
@@ -719,10 +1028,13 @@ Please provide a clear, informative answer to the question based on these result
             )
 
             for chunk in stream:
-                if chunk.choices[0].delta.content is not None:
+                if chunk.choices and len(chunk.choices) > 0 and chunk.choices[0].delta.content is not None:
                     yield chunk.choices[0].delta.content
 
         except Exception as e:
+            print(f"❌ Error in generate_answer_stream: {e}")
+            import traceback
+            traceback.print_exc()
             yield f"Error generating answer: {e}"
 
     def ask(self, question: str, conversation_history: list = None) -> dict:
@@ -1175,12 +1487,16 @@ RULE: If question asks about "how many birds/observations/nests/counts", MUST us
 - Table: tblColonyTotals2010-2021_MayJuneCombined
 - Aggregation: SUM(Birds) or SUM(Nests), NOT COUNT(*)
 
-Only use tblSpeciesData for questions about PHOTO METHODOLOGY, not bird counts!
+🚨 ERROR #2:
+**Missing Latitude/Longitude for mapping queries.**
+
+If the question involves locations, colonies, maps, or specific regions:
+- Query MUST include "Latitude" and "Longitude" in SELECT and GROUP BY.
+- If they are missing, mark as INVALID.
 
 OTHER ERRORS TO CHECK:
-2. Using COUNT(*) when should use SUM(Birds) for bird totals
-3. Missing Year filter when question specifies a year
-4. Missing Latitude/Longitude for location questions
+3. Using COUNT(*) when should use SUM(Birds) for bird totals
+4. Missing Year filter when question specifies a year
 
 IMPORTANT: Respond with a JSON object:
 {
@@ -1395,6 +1711,26 @@ async def get_config():
             "default_fast_mode": config['cv']['default_fast_mode']
         }
     }
+
+@app.get("/api/species")
+async def get_all_species():
+    """
+    Get list of all species from the database
+    Returns: List of species with code and name
+    """
+    try:
+        conn = chatbot.get_connection()
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT SpeciesCode, SpeciesName
+            FROM tblSpeciesCodes
+            ORDER BY SpeciesName
+        """)
+        species = [{"code": row[0], "name": row[1]} for row in cursor.fetchall() if row[0] and row[1]]
+        conn.close()
+        return species
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to load species: {str(e)}")
 
 @app.get("/services/status")
 async def get_services_status():
@@ -2295,10 +2631,29 @@ async def update_table_row(table_name: str, request: RowUpdateRequest):
                 error="No rows were updated. Row may not exist."
             )
 
+        # Auto-commit to version control
+        commit_hash = None
+        if db_version_control is not None:
+            try:
+                commit_result = db_version_control.commit(
+                    message=f"Updated {rows_affected} row(s) in {table_name}",
+                    details={
+                        "operation": "UPDATE",
+                        "table": table_name,
+                        "rows_affected": rows_affected,
+                        "columns_updated": list(request.updates.keys())
+                    }
+                )
+                commit_hash = commit_result.get('commit_hash_short')
+                print(f"✓ Database change committed to version control: {commit_hash}")
+            except Exception as e:
+                print(f"⚠️  Warning: Version control commit failed: {e}")
+
         return RowUpdateResponse(
             success=True,
             message=f"Successfully updated {rows_affected} row(s)",
-            error=None
+            error=None,
+            version_commit=commit_hash
         )
     except Exception as e:
         return RowUpdateResponse(
@@ -2349,10 +2704,28 @@ async def delete_table_row(table_name: str, request: RowDeleteRequest):
                 error="No rows were deleted. Row may not exist."
             )
 
+        # Auto-commit to version control
+        commit_hash = None
+        if db_version_control is not None:
+            try:
+                commit_result = db_version_control.commit(
+                    message=f"Deleted {rows_affected} row(s) from {table_name}",
+                    details={
+                        "operation": "DELETE",
+                        "table": table_name,
+                        "rows_affected": rows_affected
+                    }
+                )
+                commit_hash = commit_result.get('commit_hash_short')
+                print(f"✓ Database change committed to version control: {commit_hash}")
+            except Exception as e:
+                print(f"⚠️  Warning: Version control commit failed: {e}")
+
         return RowDeleteResponse(
             success=True,
             message=f"Successfully deleted {rows_affected} row(s)",
-            error=None
+            error=None,
+            version_commit=commit_hash
         )
     except Exception as e:
         return RowDeleteResponse(
@@ -2399,10 +2772,29 @@ async def insert_table_row(table_name: str, request: RowInsertRequest):
                 error="No rows were inserted."
             )
 
+        # Auto-commit to version control
+        commit_hash = None
+        if db_version_control is not None:
+            try:
+                commit_result = db_version_control.commit(
+                    message=f"Inserted {rows_affected} row(s) into {table_name}",
+                    details={
+                        "operation": "INSERT",
+                        "table": table_name,
+                        "rows_affected": rows_affected,
+                        "columns": list(request.row_data.keys())
+                    }
+                )
+                commit_hash = commit_result.get('commit_hash_short')
+                print(f"✓ Database change committed to version control: {commit_hash}")
+            except Exception as e:
+                print(f"⚠️  Warning: Version control commit failed: {e}")
+
         return RowInsertResponse(
             success=True,
             message=f"Successfully inserted {rows_affected} row(s)",
-            error=None
+            error=None,
+            version_commit=commit_hash
         )
     except Exception as e:
         return RowInsertResponse(
@@ -2410,6 +2802,198 @@ async def insert_table_row(table_name: str, request: RowInsertRequest):
             message=None,
             error=str(e)
         )
+
+# ============================================================================
+# DATABASE VERSION CONTROL ENDPOINTS
+# ============================================================================
+
+@app.get("/db/version/history", response_model=VersionHistoryResponse)
+async def get_version_history(limit: int = 50):
+    """
+    Get commit history for the database.
+
+    Shows all changes made to the database with timestamps and messages.
+    This allows experts to see who changed what and when.
+
+    Args:
+        limit: Maximum number of commits to return (default: 50)
+
+    Returns:
+        List of commits with hash, author, date, message
+    """
+    if db_version_control is None:
+        return VersionHistoryResponse(
+            success=False,
+            commits=None,
+            error="Version control is not initialized"
+        )
+
+    try:
+        commits = db_version_control.get_history(limit=limit)
+        return VersionHistoryResponse(
+            success=True,
+            commits=[VersionCommit(**commit) for commit in commits],
+            error=None
+        )
+    except Exception as e:
+        return VersionHistoryResponse(
+            success=False,
+            commits=None,
+            error=str(e)
+        )
+
+@app.get("/db/version/stats", response_model=VersionStatsResponse)
+async def get_version_stats():
+    """
+    Get statistics about database version history.
+
+    Returns:
+        Total commits, date range, database size, etc.
+    """
+    if db_version_control is None:
+        return VersionStatsResponse(
+            success=False,
+            total_commits=None,
+            error="Version control is not initialized"
+        )
+
+    try:
+        stats = db_version_control.get_stats()
+        if stats.get("success"):
+            return VersionStatsResponse(
+                success=True,
+                total_commits=stats.get("total_commits"),
+                first_commit_date=stats.get("first_commit_date"),
+                database_size_mb=stats.get("database_size_mb"),
+                snapshot_count=stats.get("snapshot_count"),
+                current_branch=stats.get("current_branch"),
+                error=None
+            )
+        else:
+            return VersionStatsResponse(
+                success=False,
+                error=stats.get("error", "Unknown error")
+            )
+    except Exception as e:
+        return VersionStatsResponse(
+            success=False,
+            error=str(e)
+        )
+
+@app.get("/db/version/diff", response_model=VersionDiffResponse)
+async def get_version_diff(commit_hash: Optional[str] = None):
+    """
+    Get diff showing what changed in a specific commit.
+
+    Shows the actual SQL statements that were added/removed.
+
+    Args:
+        commit_hash: Hash of commit to diff (default: latest changes)
+
+    Returns:
+        Diff string with SQL changes
+    """
+    if db_version_control is None:
+        return VersionDiffResponse(
+            success=False,
+            diff=None,
+            error="Version control is not initialized"
+        )
+
+    try:
+        diff = db_version_control.get_diff(commit_hash=commit_hash)
+        return VersionDiffResponse(
+            success=True,
+            diff=diff,
+            error=None
+        )
+    except Exception as e:
+        return VersionDiffResponse(
+            success=False,
+            diff=None,
+            error=str(e)
+        )
+
+@app.post("/db/version/rollback", response_model=VersionRollbackResponse)
+async def rollback_database(request: VersionRollbackRequest):
+    """
+    Rollback database to a specific commit.
+
+    **WARNING**: This is a destructive operation. It will:
+    1. Create a safety snapshot
+    2. Restore database to the specified commit
+    3. Commit the rollback (preserving history)
+
+    Args:
+        request: VersionRollbackRequest with commit_hash and expert_email
+
+    Returns:
+        Success status, snapshot path, new commit hash
+    """
+    if db_version_control is None:
+        return VersionRollbackResponse(
+            success=False,
+            error="Version control is not initialized"
+        )
+
+    try:
+        # Update expert email if provided
+        if request.expert_email:
+            db_version_control.expert_email = request.expert_email
+
+        result = db_version_control.rollback_to_commit(request.commit_hash)
+
+        if result.get("success"):
+            return VersionRollbackResponse(
+                success=True,
+                message=result.get("message"),
+                snapshot_path=result.get("snapshot_path"),
+                new_commit=result.get("new_commit"),
+                error=None
+            )
+        else:
+            return VersionRollbackResponse(
+                success=False,
+                error=result.get("error", "Unknown error")
+            )
+    except Exception as e:
+        return VersionRollbackResponse(
+            success=False,
+            error=str(e)
+        )
+
+@app.post("/db/version/commit")
+async def manual_commit(message: str, expert_email: str = "system"):
+    """
+    Manually create a version control commit.
+
+    This is useful for checkpointing database state at key moments.
+    Normally commits happen automatically after database writes.
+
+    Args:
+        message: Commit message
+        expert_email: Email/username of expert making the commit
+
+    Returns:
+        Commit hash and timestamp
+    """
+    if db_version_control is None:
+        return {
+            "success": False,
+            "error": "Version control is not initialized"
+        }
+
+    try:
+        # Update expert email
+        db_version_control.expert_email = expert_email
+
+        result = db_version_control.commit(message)
+        return result
+    except Exception as e:
+        return {
+            "success": False,
+            "error": str(e)
+        }
 
 # ============================================================================
 # EROSION & SPECIES RISK ENDPOINTS
@@ -2682,6 +3266,567 @@ async def storm_impact_analysis(species_code: str):
         result["analyzed_storms"] = ["Katrina (2005)", "Isaac (2012)", "Ida (2021)"]
 
         return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ============================================================================
+# COASTAL RISK INTELLIGENCE ENDPOINTS - Real Data Fusion
+# ============================================================================
+
+@app.get("/api/risk/map_zones")
+async def get_risk_map_zones():
+    """
+    Get GeoJSON-style risk zones for map visualization
+
+    Returns colored zones showing colony risk levels with 50km radius
+    """
+    try:
+        db_path = os.getenv("DB_PATH", "data/bird_data_complete.db")
+        conn = sqlite3.connect(db_path)
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+
+        cursor.execute("""
+            SELECT
+                colony_name,
+                latitude,
+                longitude,
+                combined_risk_score,
+                risk_level,
+                risk_color,
+                years_until_critical,
+                recommended_action,
+                estimated_2026_birds,
+                species_count,
+                last_survey_year
+            FROM colony_risk_assessment
+            ORDER BY combined_risk_score DESC
+        """)
+
+        zones = []
+        for row in cursor.fetchall():
+            zones.append({
+                "colony_name": row['colony_name'],
+                "latitude": row['latitude'],
+                "longitude": row['longitude'],
+                "risk_score": round(row['combined_risk_score'], 1),
+                "risk_level": row['risk_level'],
+                "color": row['risk_color'],
+                "years_until_critical": row['years_until_critical'],
+                "action": row['recommended_action'],
+                "birds": row['estimated_2026_birds'],
+                "species": row['species_count'],
+                "last_survey": row['last_survey_year'],
+                "data_year": 2026,  # Current estimate
+                "radius_km": 50  # 50km risk zone
+            })
+
+        conn.close()
+
+        return {
+            "zones": zones,
+            "summary": {
+                "critical": len([z for z in zones if z['risk_level'] == 'CRITICAL']),
+                "high": len([z for z in zones if z['risk_level'] == 'HIGH'])
+            }
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/risk/priority_list")
+async def get_priority_restoration_sites(limit: int = 10):
+    """
+    Get top priority sites for restoration ranked by urgency
+
+    Args:
+        limit: Number of sites to return (default 10)
+    """
+    try:
+        db_path = os.getenv("DB_PATH", "data/bird_data_complete.db")
+        conn = sqlite3.connect(db_path)
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+
+        cursor.execute("""
+            SELECT
+                colony_name,
+                combined_risk_score,
+                years_until_critical,
+                recommended_action,
+                estimated_2026_birds,
+                species_count,
+                erosion_rate_m_per_year,
+                slr_2050_m,
+                population_trend_2010_2021_pct,
+                last_survey_year
+            FROM colony_risk_assessment
+            WHERE risk_level IN ('CRITICAL', 'HIGH')
+            ORDER BY
+                CASE
+                    WHEN years_until_critical IS NOT NULL THEN years_until_critical
+                    ELSE 999
+                END ASC,
+                combined_risk_score DESC
+            LIMIT ?
+        """, (limit,))
+
+        priorities = []
+        for idx, row in enumerate(cursor.fetchall(), 1):
+            # Realistic cost estimation based on multiple factors
+            # Base restoration cost: $50-150/m² depending on complexity
+
+            # Estimate affected area based on erosion and population
+            erosion = row['erosion_rate_m_per_year'] or 5.0
+            birds = row['estimated_2026_birds'] or 1000
+
+            # Calculate complexity multiplier
+            complexity = 1.0
+            if birds > 10000:
+                complexity = 1.5  # Large colonies need more infrastructure
+            elif birds > 5000:
+                complexity = 1.2
+
+            # Urgency multiplier
+            years_critical = row['years_until_critical'] or 20
+            urgency = 1.0
+            if years_critical < 5:
+                urgency = 1.8  # Urgent projects cost more
+            elif years_critical < 10:
+                urgency = 1.4
+
+            # Estimate area needing restoration (hectares)
+            estimated_area_m2 = max(10000, min(200000, erosion * 1000 + birds * 2))
+
+            # Cost per m² varies by project
+            cost_per_m2 = 75 * complexity * urgency
+
+            # Add mobilization and engineering costs (20% overhead)
+            estimated_cost = estimated_area_m2 * cost_per_m2 * 1.2
+
+            priorities.append({
+                "rank": idx,
+                "colony_name": row['colony_name'],
+                "risk_score": round(row['combined_risk_score'], 1),
+                "years_until_critical": row['years_until_critical'],
+                "recommended_action": row['recommended_action'],
+                "bird_population_2026": row['estimated_2026_birds'],
+                "species_count": row['species_count'],
+                "erosion_rate": round(row['erosion_rate_m_per_year'], 1) if row['erosion_rate_m_per_year'] else None,
+                "slr_2050": round(row['slr_2050_m'], 2),
+                "population_trend_pct": round(row['population_trend_2010_2021_pct'], 1) if row['population_trend_2010_2021_pct'] else None,
+                "estimated_cost_usd": int(estimated_cost),
+                "last_survey_year": row['last_survey_year']
+            })
+
+        conn.close()
+
+        return {
+            "priorities": priorities,
+            "total_high_priority": len(priorities)
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/risk/data_sources/{colony_name}")
+async def get_data_fusion_breakdown(colony_name: str):
+    """
+    Show how different data sources combine to create risk score
+
+    Args:
+        colony_name: Name of colony
+    """
+    try:
+        db_path = os.getenv("DB_PATH", "data/bird_data_complete.db")
+        conn = sqlite3.connect(db_path)
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+
+        cursor.execute("""
+            SELECT *
+            FROM colony_risk_assessment
+            WHERE colony_name = ?
+        """, (colony_name,))
+
+        row = cursor.fetchone()
+
+        if not row:
+            raise HTTPException(status_code=404, detail="Colony not found")
+
+        # Get hurricane count for this region
+        cursor.execute("""
+            SELECT COUNT(*) as count
+            FROM gulf_hurricanes
+            WHERE year >= 2005
+        """)
+        hurricane_count = cursor.fetchone()['count']
+
+        conn.close()
+
+        return {
+            "colony_name": row['colony_name'],
+            "data_sources": {
+                "sea_level_rise": {
+                    "value": round(row['slr_2050_m'], 2),
+                    "unit": "meters by 2050",
+                    "source": "NOAA Sea Level Rise Viewer",
+                    "weight": 0.4,
+                    "impact": "High" if row['slr_2050_m'] > 0.5 else "Moderate"
+                },
+                "erosion_rate": {
+                    "value": round(row['erosion_rate_m_per_year'], 1),
+                    "unit": "meters/year",
+                    "source": "USGS Open-File Report 2017-1051",
+                    "weight": 0.4,
+                    "impact": "High" if row['erosion_rate_m_per_year'] > 10 else "Moderate"
+                },
+                "hurricane_exposure": {
+                    "value": hurricane_count,
+                    "unit": "major storms since 2005",
+                    "source": "NOAA HURDAT2 Database",
+                    "weight": 0.1,
+                    "impact": "High" if hurricane_count > 20 else "Moderate"
+                },
+                "population_trend": {
+                    "value": round(row['population_trend_2010_2021_pct'], 1) if row['population_trend_2010_2021_pct'] else 0,
+                    "unit": "percent change 2010-2021",
+                    "source": "Water Institute Survey Data",
+                    "weight": 0.1,
+                    "impact": "High" if (row['population_trend_2010_2021_pct'] or 0) < -20 else "Moderate"
+                }
+            },
+            "combined_score": round(row['combined_risk_score'], 1),
+            "risk_level": row['risk_level'],
+            "years_until_critical": row['years_until_critical'],
+            "recommended_action": row['recommended_action']
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/risk/projection/{year}")
+async def get_future_projection(year: int, scenario: str = "intermediate"):
+    """
+    Get projected state of colonies for a future year
+
+    Args:
+        year: Future year (2030, 2050, 2070, 2100)
+        scenario: "low", "intermediate", or "high"
+    """
+    try:
+        if year not in [2030, 2050, 2070, 2100]:
+            raise HTTPException(status_code=400, detail="Year must be 2030, 2050, 2070, or 2100")
+
+        if scenario not in ["low", "intermediate", "high"]:
+            raise HTTPException(status_code=400, detail="Scenario must be low, intermediate, or high")
+
+        db_path = os.getenv("DB_PATH", "data/bird_data_complete.db")
+        conn = sqlite3.connect(db_path)
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+
+        cursor.execute("""
+            SELECT
+                cp.colony_name,
+                cp.projected_area_m2,
+                cp.inundated,
+                cp.habitable,
+                cra.latitude,
+                cra.longitude,
+                cra.current_bird_count
+            FROM colony_projections cp
+            JOIN colony_risk_assessment cra ON cp.colony_name = cra.colony_name
+            WHERE cp.projection_year = ?
+              AND cp.scenario = ?
+        """, (year, scenario))
+
+        colonies = []
+        submerged = 0
+        at_risk = 0
+        viable = 0
+        total_birds_affected = 0
+
+        for row in cursor.fetchall():
+            status = "submerged" if not row['habitable'] else "at_risk" if row['inundated'] else "viable"
+
+            if status == "submerged":
+                submerged += 1
+                total_birds_affected += row['current_bird_count']
+            elif status == "at_risk":
+                at_risk += 1
+                total_birds_affected += int(row['current_bird_count'] * 0.5)  # 50% loss estimate
+            else:
+                viable += 1
+
+            colonies.append({
+                "colony_name": row['colony_name'],
+                "latitude": row['latitude'],
+                "longitude": row['longitude'],
+                "status": status,
+                "projected_area_m2": round(row['projected_area_m2'], 0),
+                "birds_current": row['current_bird_count']
+            })
+
+        conn.close()
+
+        total = len(colonies)
+        bird_loss_pct = (total_birds_affected / sum(c['birds_current'] for c in colonies)) * 100 if total > 0 else 0
+
+        return {
+            "year": year,
+            "scenario": scenario,
+            "summary": {
+                "total_colonies": total,
+                "submerged": submerged,
+                "at_risk": at_risk,
+                "viable": viable,
+                "bird_population_loss_pct": round(bird_loss_pct, 1)
+            },
+            "colonies": colonies[:100]  # Limit for performance
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/risk/summary")
+async def get_risk_summary():
+    """Get overall risk summary statistics"""
+    try:
+        db_path = os.getenv("DB_PATH", "data/bird_data_complete.db")
+        conn = sqlite3.connect(db_path)
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+
+        # Risk level counts
+        cursor.execute("""
+            SELECT risk_level, COUNT(*) as count
+            FROM colony_risk_assessment
+            GROUP BY risk_level
+        """)
+        risk_counts = {row['risk_level']: row['count'] for row in cursor.fetchall()}
+
+        # Average years until critical
+        cursor.execute("""
+            SELECT AVG(years_until_critical) as avg_years
+            FROM colony_risk_assessment
+            WHERE years_until_critical IS NOT NULL
+        """)
+        avg_years = cursor.fetchone()['avg_years']
+
+        # Hurricane count
+        cursor.execute("SELECT COUNT(*) as count FROM gulf_hurricanes")
+        hurricane_count = cursor.fetchone()['count']
+
+        conn.close()
+
+        return {
+            "critical_colonies": risk_counts.get('CRITICAL', 0),
+            "high_risk_colonies": risk_counts.get('HIGH', 0),
+            "average_years_until_critical": round(avg_years, 1) if avg_years else None,
+            "total_hurricanes_since_2005": hurricane_count,
+            "data_sources": [
+                "NOAA Sea Level Rise Projections",
+                "USGS Louisiana Coastal Erosion Study",
+                "NOAA HURDAT2 Hurricane Database",
+                "Water Institute Bird Survey Data (2010-2021)"
+            ]
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ============================================================================
+# FLOOD DATA ENDPOINTS - NOAA Water Level Integration (OLD - KEEP FOR NOW)
+# ============================================================================
+
+@app.get("/flood/stations")
+async def get_flood_stations():
+    """
+    Get all NOAA flood monitoring stations in Louisiana coastal region.
+
+    Returns:
+        List of stations with metadata (name, location, region, MHHW datum)
+    """
+    try:
+        db_path = os.getenv("DB_PATH", "data/bird_data_complete.db")
+        flood_db = FloodDatabase(db_path)
+
+        stations = flood_db.get_all_stations()
+
+        return {
+            "stations": stations,
+            "count": len(stations)
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/flood/events")
+async def get_flood_events(
+    station_id: Optional[str] = None,
+    year: Optional[int] = None,
+    min_severity: Optional[str] = None,
+    limit: int = 1000
+):
+    """
+    Query flood events from NOAA water level data.
+
+    Args:
+        station_id: Filter by specific station (e.g., "8761724")
+        year: Filter by year (e.g., 2012)
+        min_severity: Minimum severity ("minor", "moderate", "major")
+        limit: Maximum results (default: 1000)
+
+    Returns:
+        List of flood events with timestamp, severity, water level
+    """
+    try:
+        db_path = os.getenv("DB_PATH", "data/bird_data_complete.db")
+        flood_db = FloodDatabase(db_path)
+
+        events = flood_db.get_flood_events(
+            station_id=station_id,
+            year=year,
+            min_severity=min_severity,
+            limit=limit
+        )
+
+        return {
+            "events": events,
+            "count": len(events),
+            "filters": {
+                "station_id": station_id,
+                "year": year,
+                "min_severity": min_severity
+            }
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/flood/summary")
+async def get_flood_summary(station_id: Optional[str] = None):
+    """
+    Get flood event summary statistics by year and severity.
+
+    Args:
+        station_id: Filter by specific station (optional)
+
+    Returns:
+        Yearly summary of flood counts by severity level
+    """
+    try:
+        db_path = os.getenv("DB_PATH", "data/bird_data_complete.db")
+        flood_db = FloodDatabase(db_path)
+
+        summary = flood_db.get_flood_summary_by_year(station_id=station_id)
+
+        return {
+            "summary": summary,
+            "station_id": station_id
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/flood/impact")
+async def calculate_flood_impact(
+    latitude: float,
+    longitude: float,
+    max_distance_km: float = 50,
+    year: Optional[int] = None
+):
+    """
+    Calculate flood impact for colonies near a geographic location.
+
+    Args:
+        latitude: Colony latitude
+        longitude: Colony longitude
+        max_distance_km: Search radius in kilometers (default: 50)
+        year: Filter events by year (optional)
+
+    Returns:
+        {
+            "nearby_stations": List of stations within radius,
+            "flood_events": Flood events at those stations,
+            "impact_score": Calculated impact metric,
+            "severity_summary": Counts by severity level
+        }
+    """
+    try:
+        db_path = os.getenv("DB_PATH", "data/bird_data_complete.db")
+        flood_db = FloodDatabase(db_path)
+
+        # Find nearby stations
+        nearby_stations = flood_db.get_stations_near_point(
+            latitude=latitude,
+            longitude=longitude,
+            max_distance_km=max_distance_km
+        )
+
+        if not nearby_stations:
+            return {
+                "nearby_stations": [],
+                "flood_events": [],
+                "impact_score": 0,
+                "severity_summary": {"minor": 0, "moderate": 0, "major": 0}
+            }
+
+        # Get flood events for nearby stations
+        all_events = []
+        for station in nearby_stations:
+            events = flood_db.get_flood_events(
+                station_id=station['station_id'],
+                year=year,
+                limit=1000
+            )
+            all_events.extend(events)
+
+        # Calculate severity summary
+        severity_counts = {"minor": 0, "moderate": 0, "major": 0}
+        for event in all_events:
+            severity_counts[event['severity']] += 1
+
+        # Simple impact score: weighted sum of events
+        # major=3, moderate=2, minor=1
+        impact_score = (
+            severity_counts['major'] * 3 +
+            severity_counts['moderate'] * 2 +
+            severity_counts['minor'] * 1
+        )
+
+        return {
+            "nearby_stations": nearby_stations,
+            "flood_events": all_events[:100],  # Limit returned events
+            "total_events": len(all_events),
+            "impact_score": impact_score,
+            "severity_summary": severity_counts
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/flood/stats")
+async def get_flood_database_stats():
+    """
+    Get overall flood database statistics.
+
+    Returns:
+        Database stats including station count, event count, year range
+    """
+    try:
+        db_path = os.getenv("DB_PATH", "data/bird_data_complete.db")
+        flood_db = FloodDatabase(db_path)
+
+        stats = flood_db.get_database_stats()
+
+        return stats
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

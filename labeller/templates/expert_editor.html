@@ -176,23 +176,23 @@
         }
 
         .tool-grid {
-            display: grid;
-            grid-template-columns: 1fr 1fr 1fr;
-            gap: 0.75rem;
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
         }
 
         .tool-btn {
             background: var(--surface-light);
             border: 2px solid transparent;
-            padding: 1rem;
-            border-radius: 10px;
+            padding: 0.875rem 1rem;
+            border-radius: 8px;
             cursor: pointer;
             transition: all 0.3s;
-            text-align: center;
             display: flex;
-            flex-direction: column;
+            flex-direction: row;
             align-items: center;
-            gap: 0.5rem;
+            gap: 0.75rem;
+            text-align: left;
         }
 
         .tool-btn:hover {
@@ -207,18 +207,25 @@
         }
 
         .tool-icon {
-            font-size: 1.75rem;
+            font-size: 1.5rem;
+            flex-shrink: 0;
+            width: 28px;
+            text-align: center;
         }
 
         .tool-label {
-            font-size: 0.75rem;
+            font-size: 0.9375rem;
             font-weight: 600;
+            flex: 1;
         }
 
         .tool-shortcut {
-            font-size: 0.7rem;
+            font-size: 0.75rem;
             color: var(--text-muted);
-            margin-top: 0.25rem;
+            background: rgba(255, 255, 255, 0.05);
+            padding: 0.25rem 0.5rem;
+            border-radius: 4px;
+            flex-shrink: 0;
         }
 
         .tool-btn.active .tool-shortcut {
@@ -682,17 +689,22 @@
                     <button class="tool-btn active" id="tool-draw" onclick="selectTool('draw')">
                         <div class="tool-icon">✏️</div>
                         <div class="tool-label">Draw</div>
-                        <div class="tool-shortcut">(D)</div>
+                        <div class="tool-shortcut">D</div>
                     </button>
                     <button class="tool-btn" id="tool-ai" onclick="selectTool('ai')">
                         <div class="tool-icon">🤖</div>
-                        <div class="tool-label">AI Detect</div>
-                        <div class="tool-shortcut">(S)</div>
+                        <div class="tool-label">Segment</div>
+                        <div class="tool-shortcut">S</div>
                     </button>
                     <button class="tool-btn" id="tool-edit" onclick="selectTool('edit')" title="Move and resize boxes">
                         <div class="tool-icon">👆</div>
                         <div class="tool-label">Edit</div>
-                        <div class="tool-shortcut">(E)</div>
+                        <div class="tool-shortcut">E</div>
+                    </button>
+                    <button class="tool-btn" id="tool-pan" onclick="selectTool('pan')" title="Pan/move canvas">
+                        <div class="tool-icon">✋</div>
+                        <div class="tool-label">Hand</div>
+                        <div class="tool-shortcut">H</div>
                     </button>
                 </div>
             </div>
@@ -733,9 +745,10 @@
 
             <div class="canvas-overlay">
                 <div><strong>Tool:</strong> <span id="current-tool">Draw</span></div>
-                <div><strong>Zoom:</strong> <span id="zoom-level">100%</span></div>
+                <div><strong>Zoom:</strong> <span id="zoom-level">100%</span> <button onclick="resetZoom()" style="background: rgba(217, 119, 87, 0.2); border: 1px solid rgba(217, 119, 87, 0.4); color: #fff; padding: 0.125rem 0.5rem; border-radius: 4px; font-size: 0.75rem; cursor: pointer; margin-left: 0.5rem;">Reset</button></div>
                 <div style="margin-top: 0.5rem; padding-top: 0.5rem; border-top: 1px solid rgba(217, 119, 87, 0.3); font-size: 0.75rem; color: var(--text-muted);">
-                    <div><strong>Click box</strong> → Auto-identify</div>
+                    <div><strong>Wheel</strong> → Zoom to cursor</div>
+                    <div><strong>H or Space+Drag</strong> → Pan</div>
                     <div><strong>Delete</strong> → Remove box</div>
                     <div><strong>Ctrl+S</strong> → Save & next</div>
                 </div>
@@ -810,7 +823,20 @@ let currentX = 0;
 let currentY = 0;
 let draggedBox = null;
 let dragHandle = null;  // 'move', 'nw', 'ne', 'sw', 'se', 'n', 's', 'e', 'w'
+
+// Zoom and pan state
 let zoomLevel = 1;
+let panOffsetX = 0;  // Pan offset in image space
+let panOffsetY = 0;
+let isPanning = false;
+let panStartX = 0;
+let panStartY = 0;
+let spacePressed = false;
+
+// Zoom constraints
+const MIN_ZOOM = 0.1;    // 10% minimum
+const MAX_ZOOM = 10;     // 1000% maximum
+const ZOOM_STEP = 1.1;   // 10% per wheel tick (smooth and predictable)
 
 // Live preview state
 let previewCanvas, previewCtx;
@@ -861,6 +887,11 @@ function initCanvas() {
         canvas.addEventListener('mousedown', handleCanvasMouseDown);
         canvas.addEventListener('mouseup', handleCanvasMouseUp);
         canvas.addEventListener('mouseleave', handleCanvasMouseLeave);
+        canvas.addEventListener('wheel', handleCanvasWheel, { passive: false });
+
+        // Add keyboard event listeners for pan control
+        document.addEventListener('keydown', handleKeyDown);
+        document.addEventListener('keyup', handleKeyUp);
 
         console.log(`✓ Image loaded: ${IMAGE_NAME} (${imageObj.naturalWidth}x${imageObj.naturalHeight}), ${boxes.length} boxes loaded`);
     };
@@ -890,20 +921,117 @@ function fitCanvasToContainer() {
     }
 }
 
-// Get canvas coordinates from mouse event
+// Get canvas coordinates from mouse event (accounting for zoom and pan)
 function getCanvasCoords(e) {
     const rect = canvas.getBoundingClientRect();
     const scaleX = canvas.width / rect.width;
     const scaleY = canvas.height / rect.height;
+
+    // Get canvas pixel position
+    const canvasX = (e.clientX - rect.left) * scaleX;
+    const canvasY = (e.clientY - rect.top) * scaleY;
+
+    // Transform to image coordinates (undo pan and zoom)
+    const imageX = (canvasX - panOffsetX) / zoomLevel;
+    const imageY = (canvasY - panOffsetY) / zoomLevel;
+
     return {
-        x: (e.clientX - rect.left) * scaleX,
-        y: (e.clientY - rect.top) * scaleY
+        x: imageX,
+        y: imageY
     };
+}
+
+// Handle mouse wheel for zooming
+function handleCanvasWheel(e) {
+    e.preventDefault();
+
+    // Get mouse position in canvas pixel coordinates
+    const rect = canvas.getBoundingClientRect();
+    const mouseCanvasX = (e.clientX - rect.left) * (canvas.width / rect.width);
+    const mouseCanvasY = (e.clientY - rect.top) * (canvas.height / rect.height);
+
+    // Calculate zoom direction and new zoom level
+    const zoomFactor = e.deltaY < 0 ? ZOOM_STEP : (1 / ZOOM_STEP);
+    const oldZoom = zoomLevel;
+    const newZoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, oldZoom * zoomFactor));
+
+    // Don't do anything if we hit the zoom limits
+    if (newZoom === oldZoom) {
+        return;
+    }
+
+    // Zoom towards the mouse cursor
+    // The point under the cursor should stay fixed
+    // Formula: panOffset_new = mouseCanvas - (mouseCanvas - panOffset_old) * (newZoom / oldZoom)
+    panOffsetX = mouseCanvasX - (mouseCanvasX - panOffsetX) * (newZoom / oldZoom);
+    panOffsetY = mouseCanvasY - (mouseCanvasY - panOffsetY) * (newZoom / oldZoom);
+
+    zoomLevel = newZoom;
+
+    updateZoomDisplay();
+    redrawCanvas();
+}
+
+// Handle keyboard events for space key
+function handleKeyDown(e) {
+    if (e.code === 'Space' && !spacePressed && !e.repeat) {
+        e.preventDefault();
+        spacePressed = true;
+        canvas.style.cursor = 'grab';
+    }
+}
+
+function handleKeyUp(e) {
+    if (e.code === 'Space') {
+        e.preventDefault();
+        spacePressed = false;
+        if (!isPanning) {
+            // Restore cursor based on current tool
+            if (currentTool === 'pan') {
+                canvas.style.cursor = 'grab';
+            } else if (currentTool === 'edit') {
+                canvas.style.cursor = 'pointer';
+            } else {
+                canvas.style.cursor = 'crosshair';
+            }
+        }
+    }
+}
+
+// Reset zoom and pan to fit image in viewport
+function resetZoom() {
+    if (!imageObj || !imageObj.complete) return;
+
+    zoomLevel = 1;
+
+    // Center the image: pan offset is half the difference between canvas and image
+    panOffsetX = 0;
+    panOffsetY = 0;
+
+    updateZoomDisplay();
+    redrawCanvas();
+    showToast('✓ Zoom reset to 100%');
+}
+
+// Update zoom level display
+function updateZoomDisplay() {
+    const zoomPercent = Math.round(zoomLevel * 100);
+    document.getElementById('zoom-level').textContent = `${zoomPercent}%`;
 }
 
 // Handle mouse down
 function handleCanvasMouseDown(e) {
     const coords = getCanvasCoords(e);
+
+    // Check for panning mode (space key pressed OR pan tool active)
+    if (spacePressed || currentTool === 'pan') {
+        isPanning = true;
+        panStartX = e.clientX;
+        panStartY = e.clientY;
+        canvas.style.cursor = 'grabbing';
+        return;
+    }
+
     startX = coords.x;
     startY = coords.y;
     currentX = coords.x;
@@ -990,6 +1118,27 @@ function isNear(a, b, threshold) {
 
 // Handle mouse move
 function handleCanvasMouseMove(e) {
+    // Handle panning
+    if (isPanning) {
+        // Calculate screen-space delta
+        const rect = canvas.getBoundingClientRect();
+        const scaleX = canvas.width / rect.width;
+        const scaleY = canvas.height / rect.height;
+
+        const dx = (e.clientX - panStartX) * scaleX;
+        const dy = (e.clientY - panStartY) * scaleY;
+
+        // Apply pan offset
+        panOffsetX += dx;
+        panOffsetY += dy;
+
+        panStartX = e.clientX;
+        panStartY = e.clientY;
+
+        redrawCanvas();
+        return;
+    }
+
     const coords = getCanvasCoords(e);
     currentX = coords.x;
     currentY = coords.y;
@@ -1019,8 +1168,15 @@ function handleCanvasMouseMove(e) {
                 } else {
                     canvas.style.cursor = 'move';
                 }
+
+                // Update preview for hovered box in edit mode
+                if (foundBoxId !== selectedBoxId) {
+                    updatePreviewForBox(foundBox);
+                }
             } else {
                 canvas.style.cursor = 'pointer';
+                // Show general area preview when not hovering over a box in edit mode
+                updatePreview(coords.x, coords.y, 'Editing');
             }
 
             if (foundBoxId !== hoveredBoxId) {
@@ -1034,10 +1190,13 @@ function handleCanvasMouseMove(e) {
                 redrawCanvas();
             }
 
-            // Update preview during draw/ai mode
-            if (currentTool === 'draw' || currentTool === 'ai') {
-                updatePreview(coords.x, coords.y, currentTool === 'draw' ? 'Drawing' : 'AI Detection');
-            }
+            // Update preview during all modes (draw/ai/edit)
+            const previewLabels = {
+                'draw': 'Drawing',
+                'ai': 'Segmenting',
+                'edit': 'Editing'
+            };
+            updatePreview(coords.x, coords.y, previewLabels[currentTool] || 'Preview');
         }
     }
 
@@ -1136,6 +1295,20 @@ function resizeBox(box, handle, dx, dy) {
 
 // Handle mouse up
 function handleCanvasMouseUp(e) {
+    // Stop panning
+    if (isPanning) {
+        isPanning = false;
+        // Restore appropriate cursor based on tool and space key
+        if (currentTool === 'pan' || spacePressed) {
+            canvas.style.cursor = 'grab';
+        } else if (currentTool === 'edit') {
+            canvas.style.cursor = 'pointer';
+        } else {
+            canvas.style.cursor = 'crosshair';
+        }
+        return;
+    }
+
     if (isDrawing) {
         // Finalize the drawn box
         const width = Math.abs(currentX - startX);
@@ -1189,6 +1362,11 @@ function handleCanvasMouseUp(e) {
 
 // Handle mouse leave
 function handleCanvasMouseLeave(e) {
+    if (isPanning) {
+        isPanning = false;
+        canvas.style.cursor = spacePressed ? 'grab' : (currentTool === 'edit' ? 'pointer' : 'crosshair');
+    }
+
     if (isDrawing) {
         isDrawing = false;
         redrawCanvas();
@@ -1199,9 +1377,16 @@ function handleCanvasMouseLeave(e) {
         dragHandle = null;
     }
 
-    // Clear preview when leaving canvas in draw/ai modes
+    // Clear preview when leaving canvas in draw/ai modes only (keep preview in edit mode)
     if (currentTool === 'draw' || currentTool === 'ai') {
         clearPreview();
+    }
+    // In edit mode, keep the preview if a box is selected
+    if (currentTool === 'edit' && selectedBoxId) {
+        const selectedBox = boxes.find(b => b.id === selectedBoxId);
+        if (selectedBox) {
+            updatePreviewForBox(selectedBox);
+        }
     }
 }
 
@@ -1211,8 +1396,8 @@ function drawDragRect() {
     const height = currentY - startY;
 
     ctx.strokeStyle = '#D97757';
-    ctx.lineWidth = 3;
-    ctx.setLineDash([5, 5]);
+    ctx.lineWidth = 3 / zoomLevel;
+    ctx.setLineDash([5 / zoomLevel, 5 / zoomLevel]);
     ctx.strokeRect(startX, startY, width, height);
     ctx.setLineDash([]);
 }
@@ -1234,10 +1419,10 @@ function findBoxAtPoint(x, y) {
 
 // Handle SAM click
 async function handleSAMClick(x, y) {
-    showToast('🤖 Running AI detection...');
+    showToast('🤖 Running segmentation...');
 
     // Show preview at clicked location
-    updatePreview(x, y, 'AI Detecting...');
+    updatePreview(x, y, 'Segmenting...');
 
     try {
         const response = await fetch('/api/sam_segment', {
@@ -1252,7 +1437,7 @@ async function handleSAMClick(x, y) {
         const result = await response.json();
 
         if (result.error) {
-            showToast('❌ AI detection failed: ' + result.error);
+            showToast('❌ Segmentation failed: ' + result.error);
             return;
         }
 
@@ -1260,21 +1445,21 @@ async function handleSAMClick(x, y) {
             result.boxes.forEach(box => {
                 addBox(box.x_center, box.y_center, box.width, box.height);
             });
-            showToast(`✓ Detected ${result.boxes.length} bird(s)`);
+            showToast(`✓ Segmented ${result.boxes.length} bird(s)`);
 
             // Update preview to show first detected box
             if (result.boxes.length > 0) {
                 const firstBox = boxes[boxes.length - 1];  // Last added box
                 const centerX = firstBox.x_center * canvas.width;
                 const centerY = firstBox.y_center * canvas.height;
-                updatePreview(centerX, centerY, 'Detected!');
+                updatePreview(centerX, centerY, 'Segmented!');
             }
         } else {
             showToast('⚠️ No birds detected at this location');
         }
     } catch (error) {
         console.error('SAM error:', error);
-        showToast('❌ AI detection error: ' + error.message);
+        showToast('❌ Segmentation error: ' + error.message);
     }
 }
 
@@ -1283,6 +1468,13 @@ function redrawCanvas() {
     if (!imageObj || !imageObj.complete) return;
 
     ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    // Save context and apply zoom/pan transform
+    ctx.save();
+    ctx.translate(panOffsetX, panOffsetY);
+    ctx.scale(zoomLevel, zoomLevel);
+
+    // Draw image
     ctx.drawImage(imageObj, 0, 0);
 
     // Draw all boxes
@@ -1296,16 +1488,20 @@ function redrawCanvas() {
         const h = box.height * canvas.height;
 
         // Draw box (highlight only in edit mode)
+        // Scale line width inversely with zoom so it stays visible
+        const baseLineWidth = isSelected || isHovered ? 4 : 3;
+        const scaledLineWidth = baseLineWidth / zoomLevel;
+
         ctx.setLineDash([]);
         if (isSelected) {
             ctx.strokeStyle = '#7cb342';  // Green for selected (edit mode only)
-            ctx.lineWidth = 4;
+            ctx.lineWidth = scaledLineWidth;
         } else if (isHovered) {
             ctx.strokeStyle = '#FFA500';  // Orange for hovered (edit mode only)
-            ctx.lineWidth = 4;
+            ctx.lineWidth = scaledLineWidth;
         } else {
             ctx.strokeStyle = '#D97757';  // Default orange
-            ctx.lineWidth = 3;
+            ctx.lineWidth = scaledLineWidth;
         }
         ctx.strokeRect(x, y, w, h);
 
@@ -1313,20 +1509,22 @@ function redrawCanvas() {
         if (box.species) {
             ctx.fillStyle = 'rgba(217, 119, 87, 0.9)';
             const text = box.species;
-            ctx.font = '14px DM Sans, sans-serif';
+            const fontSize = 14 / zoomLevel;
+            ctx.font = `${fontSize}px DM Sans, sans-serif`;
             const textWidth = ctx.measureText(text).width;
-            ctx.fillRect(x, y - 24, textWidth + 12, 24);
+            const labelHeight = 24 / zoomLevel;
+            ctx.fillRect(x, y - labelHeight, textWidth + 12 / zoomLevel, labelHeight);
 
             ctx.fillStyle = '#fff';
-            ctx.fillText(text, x + 6, y - 6);
+            ctx.fillText(text, x + 6 / zoomLevel, y - 6 / zoomLevel);
         }
 
         // Draw resize handles for selected box in edit mode
         if (isSelected && currentTool === 'edit') {
-            const handleSize = 10;
+            const handleSize = 10 / zoomLevel;
             ctx.fillStyle = '#fff';
             ctx.strokeStyle = '#7cb342';
-            ctx.lineWidth = 2;
+            ctx.lineWidth = 2 / zoomLevel;
 
             // Draw corner handles (larger and more visible)
             const corners = [
@@ -1356,9 +1554,16 @@ function redrawCanvas() {
         }
     });
 
-    // Draw preview rectangle while drawing
+    // Restore context after drawing with zoom/pan
+    ctx.restore();
+
+    // Draw preview rectangle while drawing (in transformed space)
     if (isDrawing) {
+        ctx.save();
+        ctx.translate(panOffsetX, panOffsetY);
+        ctx.scale(zoomLevel, zoomLevel);
         drawDragRect();
+        ctx.restore();
     }
 }
 
@@ -1367,14 +1572,27 @@ function selectTool(tool) {
     currentTool = tool;
     document.querySelectorAll('.tool-btn').forEach(btn => btn.classList.remove('active'));
     document.getElementById('tool-' + tool).classList.add('active');
-    document.getElementById('current-tool').textContent = tool.charAt(0).toUpperCase() + tool.slice(1);
 
+    // Display tool name (special case for 'ai' -> 'Segment')
+    const toolNames = {
+        'draw': 'Draw',
+        'ai': 'Segment',
+        'edit': 'Edit',
+        'pan': 'Hand'
+    };
+    document.getElementById('current-tool').textContent = toolNames[tool] || tool.charAt(0).toUpperCase() + tool.slice(1);
+
+    // Set cursor based on tool
     if (tool === 'edit') {
         canvas.style.cursor = 'pointer';
+    } else if (tool === 'pan') {
+        canvas.style.cursor = 'grab';
     } else {
         canvas.style.cursor = 'crosshair';
+    }
 
-        // Clear selection when leaving edit mode
+    // Clear selection when leaving edit mode
+    if (tool !== 'edit') {
         selectedBoxId = null;
         redrawCanvas();
         clearPreview();
@@ -1637,11 +1855,11 @@ function selectBox(boxId) {
 
     const selectedBox = boxes.find(b => b.id === boxId);
 
-    // Update preview and show identification in edit mode
+    // Update preview and auto-run AI classification in edit mode
     if (boxId && currentTool === 'edit' && selectedBox) {
-        console.log('Opening species ID for bird:', boxes.indexOf(selectedBox) + 1);
+        console.log('Auto-running AI classification for bird:', boxes.indexOf(selectedBox) + 1);
         updatePreviewForBox(selectedBox);
-        showIdentificationChoice();
+        runAIClassification();  // Auto-classify on selection
     }
 }
 
@@ -1758,6 +1976,10 @@ function showIdentificationChoice() {
                 Use guided questions or search directly
             </p>
 
+            <button class="btn-primary" style="width: 100%; margin-bottom: 0.75rem; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border: none;" onclick="runAIClassification()">
+                🤖 AI Classification
+            </button>
+
             <button class="btn-primary" style="width: 100%; margin-bottom: 0.75rem;" onclick="startQuestionTree()">
                 🌳 Use Decision Tree
             </button>
@@ -1825,10 +2047,10 @@ function answerQuestion(answer) {
 }
 
 // Show search UI
-function showSearchUI() {
+async function showSearchUI() {
     const content = document.getElementById('classification-content');
     content.innerHTML = `
-        <div class="classification-inner">
+        <div style="padding: 1.5rem; overflow-y: auto; max-height: calc(100vh - 120px);">
             <h3 style="font-size: 1.25rem; margin-bottom: 1rem; color: var(--text-primary);">
                 🔍 Search Species
             </h3>
@@ -1836,14 +2058,14 @@ function showSearchUI() {
             <input
                 type="text"
                 id="species-search"
-                placeholder="Type species name or code..."
+                placeholder="Type species name or code (e.g., LAGU)..."
                 style="width: 100%; padding: 0.875rem; background: var(--surface-light); border: 2px solid rgba(217, 119, 87, 0.3); border-radius: 8px; color: var(--text-primary); font-size: 1rem; font-family: 'DM Sans', sans-serif; margin-bottom: 1rem;"
                 oninput="handleSearchInput(this.value)"
             />
 
-            <div id="search-results">
+            <div id="search-results" style="min-height: 200px;">
                 <div style="text-align: center; color: var(--text-muted); padding: 2rem;">
-                    Start typing to search species...
+                    Loading all species...
                 </div>
             </div>
 
@@ -1853,41 +2075,504 @@ function showSearchUI() {
         </div>
     `;
 
-    // Focus search input
-    setTimeout(() => document.getElementById('species-search').focus(), 100);
+    // Load ALL species initially
+    try {
+        const response = await fetch('/api/species');
+        const allSpecies = await response.json();
+        speciesCandidates = allSpecies;
+        showSpeciesList('search-results');
+    } catch (error) {
+        console.error('Error loading species:', error);
+        document.getElementById('search-results').innerHTML = `
+            <div style="text-align: center; color: var(--text-muted); padding: 2rem;">
+                Error loading species. Please try again.
+            </div>
+        `;
+    }
+
+    // Focus search input after loading
+    setTimeout(() => {
+        const input = document.getElementById('species-search');
+        if (input) input.focus();
+    }, 100);
 }
 
 // Handle search input
 let searchTimeout;
-function handleSearchInput(query) {
+async function handleSearchInput(query) {
     clearTimeout(searchTimeout);
 
-    if (!query || query.length < 2) {
-        document.getElementById('search-results').innerHTML = `
-            <div style="text-align: center; color: var(--text-muted); padding: 2rem;">
-                Type at least 2 characters...
-            </div>
-        `;
+    // If empty, show all species again
+    if (!query || query.trim() === '') {
+        searchTimeout = setTimeout(async () => {
+            try {
+                const response = await fetch('/api/species');
+                const allSpecies = await response.json();
+                speciesCandidates = allSpecies;
+                showSpeciesList('search-results');
+            } catch (error) {
+                console.error('Error loading species:', error);
+            }
+        }, 100);
         return;
     }
 
-    searchTimeout = setTimeout(() => {
-        fetch(`/api/species/search?q=${encodeURIComponent(query)}`)
-            .then(r => r.json())
-            .then(results => {
-                if (results.length === 0) {
-                    document.getElementById('search-results').innerHTML = `
-                        <div style="text-align: center; color: var(--text-muted); padding: 2rem;">
-                            No species found for "${query}"
-                        </div>
-                    `;
-                } else {
-                    speciesCandidates = results;
-                    showSpeciesList('search-results');
-                }
-            });
+    // Search with debouncing
+    searchTimeout = setTimeout(async () => {
+        try {
+            const response = await fetch(`/api/species/search?q=${encodeURIComponent(query)}`);
+            const results = await response.json();
+
+            if (results.length === 0) {
+                document.getElementById('search-results').innerHTML = `
+                    <div style="text-align: center; color: var(--text-muted); padding: 2rem;">
+                        <div style="font-size: 2rem; margin-bottom: 0.5rem;">🔍</div>
+                        <div>No species found for "<strong>${query}</strong>"</div>
+                        <div style="font-size: 0.875rem; margin-top: 0.5rem;">Try searching by code (e.g., LAGU) or name (e.g., Laughing Gull)</div>
+                    </div>
+                `;
+            } else {
+                speciesCandidates = results;
+                showSpeciesList('search-results');
+            }
+        } catch (error) {
+            console.error('Error searching species:', error);
+            document.getElementById('search-results').innerHTML = `
+                <div style="text-align: center; color: var(--text-muted); padding: 2rem;">
+                    Error searching. Please try again.
+                </div>
+            `;
+        }
     }, 300);
 }
+
+// ============================================================================
+// AI CLASSIFICATION - Top-5 Species Predictions
+// ============================================================================
+
+async function runAIClassification() {
+    if (!selectedBoxId) return;
+
+    const selectedBox = boxes.find(b => b.id === selectedBoxId);
+    if (!selectedBox) return;
+
+    const boxNumber = boxes.indexOf(selectedBox) + 1;
+    const content = document.getElementById('classification-content');
+
+    // Show loading state
+    content.innerHTML = `
+        <div class="classification-inner" style="text-align: center; padding: 2rem;">
+            <div style="font-size: 3rem; margin-bottom: 1rem;">🤖</div>
+            <h3 style="color: var(--text-primary); margin-bottom: 0.5rem;">AI Classification Running...</h3>
+            <p style="color: var(--text-secondary); margin-top: 0.5rem; font-size: 0.875rem;">
+                Analyzing bird features...
+            </p>
+            <div style="margin-top: 1.5rem;">
+                <div style="width: 200px; height: 4px; background: var(--surface-light); border-radius: 2px; margin: 0 auto; overflow: hidden;">
+                    <div style="width: 100%; height: 100%; background: linear-gradient(90deg, #667eea, #764ba2); animation: loading 1.5s ease-in-out infinite;"></div>
+                </div>
+            </div>
+        </div>
+    `;
+
+    // Add loading animation
+    const style = document.createElement('style');
+    style.textContent = `
+        @keyframes loading {
+            0% { transform: translateX(-100%); }
+            100% { transform: translateX(200%); }
+        }
+    `;
+    document.head.appendChild(style);
+
+    try {
+        // Call the classification API
+        const response = await fetch('/api/classify_crop', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                image_name: IMAGE_NAME,  // Use the JavaScript variable
+                bbox: {
+                    x_center: selectedBox.x_center,
+                    y_center: selectedBox.y_center,
+                    width: selectedBox.width,
+                    height: selectedBox.height
+                },
+                fast_mode: true
+            })
+        });
+
+        const result = await response.json();
+
+        if (result.error) {
+            throw new Error(result.error);
+        }
+
+        // Show top-5 predictions
+        showAIPredictions(result.predictions, boxNumber);
+
+    } catch (error) {
+        console.error('Classification error:', error);
+        content.innerHTML = `
+            <div class="classification-inner" style="text-align: center; padding: 2rem;">
+                <div style="font-size: 3rem; margin-bottom: 1rem;">❌</div>
+                <h3 style="color: var(--text-primary);">Classification Failed</h3>
+                <p style="color: var(--text-secondary); margin-top: 0.5rem; font-size: 0.875rem;">
+                    ${error.message}
+                </p>
+                <button class="btn-secondary" style="margin-top: 1.5rem; width: 80%;" onclick="showIdentificationChoice()">
+                    ← Try Another Method
+                </button>
+            </div>
+        `;
+    }
+}
+
+async function showAIPredictions(predictions, boxNumber) {
+    const content = document.getElementById('classification-content');
+
+    const selectedBox = boxes.find(b => b.id === selectedBoxId);
+
+    // Create bird crop preview (same as NestVision)
+    let cropCanvas = null;
+    if (selectedBox && imageObj && imageObj.complete) {
+        cropCanvas = document.createElement('canvas');
+        const cropSize = 300;
+        cropCanvas.width = cropSize;
+        cropCanvas.height = cropSize;
+        const cropCtx = cropCanvas.getContext('2d');
+
+        // Calculate box coordinates
+        const boxX = selectedBox.x_center * canvas.width - (selectedBox.width * canvas.width) / 2;
+        const boxY = selectedBox.y_center * canvas.height - (selectedBox.height * canvas.height) / 2;
+        const boxW = selectedBox.width * canvas.width;
+        const boxH = selectedBox.height * canvas.height;
+
+        // Add padding
+        const padding = 0.2;
+        const cropX = Math.max(0, boxX - boxW * padding);
+        const cropY = Math.max(0, boxY - boxH * padding);
+        const cropW = Math.min(canvas.width - cropX, boxW * (1 + 2 * padding));
+        const cropH = Math.min(canvas.height - cropY, boxH * (1 + 2 * padding));
+
+        // Draw scaled crop
+        const scale = Math.min(cropSize / cropW, cropSize / cropH);
+        const offsetX = (cropSize - cropW * scale) / 2;
+        const offsetY = (cropSize - cropH * scale) / 2;
+
+        cropCtx.fillStyle = '#1a1614';
+        cropCtx.fillRect(0, 0, cropSize, cropSize);
+        cropCtx.drawImage(imageObj, cropX, cropY, cropW, cropH, offsetX, offsetY, cropW * scale, cropH * scale);
+
+        // Draw box outline
+        const relBoxX = (boxX - cropX) * scale + offsetX;
+        const relBoxY = (boxY - cropY) * scale + offsetY;
+        const relBoxW = boxW * scale;
+        const relBoxH = boxH * scale;
+
+        cropCtx.strokeStyle = '#667eea';
+        cropCtx.lineWidth = 3;
+        cropCtx.strokeRect(relBoxX, relBoxY, relBoxW, relBoxH);
+    }
+
+    // Start building the HTML
+    let html = `
+        <div style="overflow-y: auto; max-height: calc(100vh - 120px);">
+            <!-- Bird Crop Preview -->
+            <div style="background: var(--surface-light); border-bottom: 2px solid rgba(102, 126, 234, 0.3); padding: 1rem;">
+                <div style="aspect-ratio: 1; display: flex; align-items: center; justify-content: center; overflow: hidden; background: var(--bg-dark); border-radius: 8px;">
+                    <canvas id="bird-crop-canvas-ai" style="max-width: 100%; max-height: 100%;"></canvas>
+                </div>
+                <div style="padding: 0.75rem; text-align: center;">
+                    <div style="font-size: 0.875rem; color: var(--text-muted);">AI Classification Results</div>
+                    <div style="font-size: 1.125rem; font-weight: 700; color: #667eea;">Bird #${boxNumber}</div>
+                </div>
+            </div>
+
+            <!-- Predictions -->
+            <div style="padding: 1.5rem;">
+                <div style="text-align: center; margin-bottom: 1rem;">
+                    <p style="color: var(--text-secondary); font-size: 0.875rem;">
+                        Top 5 predictions • Click to select
+                    </p>
+                </div>
+
+                <div style="display: flex; flex-direction: column; gap: 1rem;">
+    `;
+
+    // Add each prediction as a card
+    for (let i = 0; i < predictions.length; i++) {
+        const pred = predictions[i];
+        const rank = i + 1;
+        const confidencePercent = (pred.confidence * 100).toFixed(1);
+
+        // Color based on confidence
+        let confidenceColor = '#7cb342'; // green
+        if (confidencePercent < 30) confidenceColor = 'var(--text-muted)';
+        else if (confidencePercent < 50) confidenceColor = 'var(--orange-primary)';
+
+        // Rank badge background
+        const rankBg = rank === 1 ? 'linear-gradient(135deg, #667eea, #764ba2)' : 'var(--surface)';
+
+        html += `
+            <div class="ai-species-card" onclick="selectSpeciesFromAI('${pred.species_code}', '${pred.species_name}')"
+                 style="background: var(--surface-light); border: 2px solid rgba(217, 119, 87, 0.2); border-radius: 12px; padding: 1rem; cursor: pointer; transition: all 0.3s;">
+
+                <div style="display: flex; gap: 1rem; align-items: center; margin-bottom: 1rem;">
+                    <!-- Rank badge -->
+                    <div style="background: ${rankBg}; color: white; width: 36px; height: 36px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 1.125rem; flex-shrink: 0; box-shadow: 0 2px 8px rgba(0,0,0,0.2);">
+                        ${rank}
+                    </div>
+
+                    <!-- Species info -->
+                    <div style="flex-grow: 1;">
+                        <div style="font-weight: 700; color: var(--text-primary); font-size: 1rem; margin-bottom: 0.25rem;">
+                            ${pred.species_name}
+                        </div>
+                        <div style="font-size: 0.875rem; color: var(--text-secondary);">
+                            ${pred.species_code} • ${pred.group.replace(/_/g, ' ').toLowerCase()}
+                        </div>
+                    </div>
+
+                    <!-- Confidence -->
+                    <div style="text-align: right; flex-shrink: 0;">
+                        <div style="font-size: 1.75rem; font-weight: 700; color: ${confidenceColor};">
+                            ${confidencePercent}%
+                        </div>
+                        <div style="font-size: 0.75rem; color: var(--text-muted);">
+                            confidence
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Bird image placeholder -->
+                <div id="ai-bird-img-${pred.species_code}" style="background: var(--bg-dark); border-radius: 8px; overflow: hidden; min-height: 150px; display: flex; align-items: center; justify-content: center;">
+                    <div style="color: var(--text-muted); font-size: 0.875rem;">Loading image...</div>
+                </div>
+
+                <!-- More images button -->
+                <button class="btn-secondary"
+                        style="width: 100%; margin-top: 0.75rem; padding: 0.5rem; font-size: 0.875rem;"
+                        onclick="event.stopPropagation(); showAISpeciesImages('${pred.species_name}', '${pred.species_code}', ${i})">
+                    📸 View More Images
+                </button>
+
+                <!-- Expandable image gallery -->
+                <div id="ai-species-images-${i}" style="display: none; margin-top: 0.75rem; padding-top: 0.75rem; border-top: 1px solid rgba(217, 119, 87, 0.2);"></div>
+            </div>
+        `;
+    }
+
+    html += `
+            </div>
+
+            <button class="btn-secondary" style="margin-top: 1.5rem; width: 100%;" onclick="showIdentificationChoice()">
+                ← Use Manual Methods Instead
+            </button>
+        </div>
+    `;
+
+    content.innerHTML = html;
+
+    // Insert the crop canvas
+    if (cropCanvas) {
+        const insertedCanvas = document.getElementById('bird-crop-canvas-ai');
+        if (insertedCanvas) {
+            const insertedCtx = insertedCanvas.getContext('2d');
+            insertedCanvas.width = cropCanvas.width;
+            insertedCanvas.height = cropCanvas.height;
+            insertedCtx.drawImage(cropCanvas, 0, 0);
+        }
+    }
+
+    // Add hover effects
+    const style = document.createElement('style');
+    style.textContent = `
+        .ai-species-card:hover {
+            transform: translateY(-2px);
+            border-color: var(--orange-primary) !important;
+            box-shadow: 0 4px 16px rgba(217, 119, 87, 0.3);
+        }
+    `;
+    document.head.appendChild(style);
+
+    // Load Wikipedia images for each prediction
+    predictions.forEach(pred => {
+        loadAIBirdImage(pred.species_name, pred.species_code);
+    });
+}
+
+async function loadAIBirdImage(speciesName, speciesCode) {
+    const container = document.getElementById(`ai-bird-img-${speciesCode}`);
+    if (!container) return;
+
+    try {
+        const response = await fetch(`/api/species/images/${encodeURIComponent(speciesName)}?max=1&offset=0`);
+        const data = await response.json();
+
+        if (data.images && data.images.length > 0) {
+            // Handle both formats: plain URL strings or objects with url property
+            const imageUrl = data.images[0].url || data.images[0];
+            container.innerHTML = `
+                <img src="${imageUrl}"
+                     style="width: 100%; height: 200px; object-fit: cover; cursor: pointer;"
+                     onclick="event.stopPropagation(); window.open('${imageUrl}', '_blank')"
+                     onerror="this.parentElement.innerHTML='<div style=\\'padding: 2rem; color: var(--text-muted); font-size: 0.875rem;\\'>Image not available</div>'" />
+            `;
+        } else {
+            container.innerHTML = `
+                <div style="padding: 2rem; color: var(--text-muted); font-size: 0.875rem;">
+                    No reference image available
+                </div>
+            `;
+        }
+    } catch (error) {
+        console.error(`Error loading image for ${speciesName}:`, error);
+        container.innerHTML = `
+            <div style="padding: 2rem; color: var(--text-muted); font-size: 0.875rem;">
+                Failed to load image
+            </div>
+        `;
+    }
+}
+
+// Show more images for AI prediction species
+async function showAISpeciesImages(speciesName, speciesCode, cardIdx) {
+    const imagesDiv = document.getElementById(`ai-species-images-${cardIdx}`);
+
+    // Toggle visibility
+    if (imagesDiv.style.display === 'block') {
+        imagesDiv.style.display = 'none';
+        return;
+    }
+
+    imagesDiv.style.display = 'block';
+    imagesDiv.innerHTML = '<div style="text-align: center; padding: 1rem; color: var(--text-muted);">Loading more images...</div>';
+
+    try {
+        const response = await fetch(`/api/species/images/${encodeURIComponent(speciesName)}?max=6&offset=1`);
+        const data = await response.json();
+
+        if (!data.images || data.images.length === 0) {
+            imagesDiv.innerHTML = '<div style="text-align: center; color: var(--text-muted); padding: 1rem; font-size: 0.875rem;">No additional images found</div>';
+            return;
+        }
+
+        // Handle both formats: plain URL strings or objects with url property
+        const imageUrls = data.images.map(img => img.url || img);
+
+        imagesDiv.innerHTML = `
+            <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.5rem; margin-bottom: 0.75rem;">
+                ${imageUrls.map(url => `
+                    <img src="${url}"
+                         style="width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 6px; cursor: pointer;"
+                         onclick="event.stopPropagation(); window.open('${url}', '_blank')"
+                         onerror="this.style.display='none';">
+                `).join('')}
+            </div>
+            ${data.has_more ? `
+                <button class="btn-secondary"
+                        style="width: 100%; padding: 0.5rem; font-size: 0.875rem;"
+                        onclick="event.stopPropagation(); loadMoreAIImages('${speciesName}', ${cardIdx}, ${1 + imageUrls.length})">
+                    Load Even More Images
+                </button>
+            ` : ''}
+        `;
+    } catch (error) {
+        console.error(`Error loading images for ${speciesName}:`, error);
+        imagesDiv.innerHTML = '<div style="text-align: center; color: var(--text-muted); padding: 1rem; font-size: 0.875rem;">Error loading images</div>';
+    }
+}
+
+// Load more images for AI predictions
+async function loadMoreAIImages(speciesName, cardIdx, currentOffset) {
+    const imagesDiv = document.getElementById(`ai-species-images-${cardIdx}`);
+    const existingGrid = imagesDiv.querySelector('div[style*="grid"]');
+
+    if (!existingGrid) return;
+
+    try {
+        const response = await fetch(`/api/species/images/${encodeURIComponent(speciesName)}?max=6&offset=${currentOffset}`);
+        const data = await response.json();
+
+        if (data.images && data.images.length > 0) {
+            // Add new images to existing grid (handle both formats)
+            data.images.forEach(img => {
+                const imgUrl = img.url || img;
+                const imgElement = document.createElement('img');
+                imgElement.src = imgUrl;
+                imgElement.style.cssText = 'width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 6px; cursor: pointer;';
+                imgElement.onclick = (e) => {
+                    e.stopPropagation();
+                    window.open(imgUrl, '_blank');
+                };
+                imgElement.onerror = () => imgElement.style.display = 'none';
+                existingGrid.appendChild(imgElement);
+            });
+
+            // Update or remove "Load More" button
+            const loadMoreBtn = imagesDiv.querySelector('button');
+            if (loadMoreBtn) {
+                if (data.has_more) {
+                    loadMoreBtn.onclick = (e) => {
+                        e.stopPropagation();
+                        loadMoreAIImages(speciesName, cardIdx, currentOffset + data.images.length);
+                    };
+                } else {
+                    loadMoreBtn.remove();
+                }
+            }
+        }
+    } catch (error) {
+        console.error('Error loading more images:', error);
+    }
+}
+
+function selectSpeciesFromAI(speciesCode, speciesName) {
+    if (!selectedBoxId) return;
+
+    const selectedBox = boxes.find(b => b.id === selectedBoxId);
+    if (!selectedBox) return;
+
+    const boxNumber = boxes.indexOf(selectedBox) + 1;
+
+    // Assign species to the box
+    selectedBox.species = speciesCode;
+
+    // Save to backend
+    saveLabels();
+
+    // Show success message
+    const content = document.getElementById('classification-content');
+    content.innerHTML = `
+        <div class="classification-inner" style="text-align: center; padding: 3rem 2rem;">
+            <div style="font-size: 4rem; margin-bottom: 1rem;">✅</div>
+            <h3 style="color: var(--success); margin-bottom: 0.5rem; font-size: 1.5rem;">Species Assigned!</h3>
+            <p style="color: var(--text-secondary); margin-top: 0.5rem; font-size: 1rem;">
+                Bird #${boxNumber}: <strong style="color: var(--text-primary);">${speciesName}</strong>
+            </p>
+            <p style="color: var(--text-muted); font-size: 0.875rem; margin-top: 0.25rem;">
+                (${speciesCode})
+            </p>
+            <button class="btn-primary" style="margin-top: 2rem; padding: 0.875rem 2rem; font-size: 1rem;" onclick="closeClassificationPanel()">
+                Continue Annotating →
+            </button>
+        </div>
+    `;
+
+    // Update the canvas
+    redrawCanvas();
+}
+
+function closeClassificationPanel() {
+    selectedBoxId = null;
+    updateBoxCount();
+    redrawCanvas();
+}
+
+// ============================================================================
+// END AI CLASSIFICATION
+// ============================================================================
 
 // Show species list with images
 function showSpeciesList(containerId = 'classification-content') {
@@ -1963,6 +2648,10 @@ async function loadSpeciesImages(speciesName, maxImages, offset, cardIdx) {
 
         if (!response.ok) {
             console.error(`❌ HTTP error! status: ${response.status}`);
+            const thumbEl = document.getElementById(`species-thumb-${cardIdx}`);
+            if (thumbEl && offset === 0) {
+                thumbEl.innerHTML = `<div style="font-size: 0.75rem; color: var(--text-muted); padding: 0.5rem; text-align: center;">No image</div>`;
+            }
             return { images: [], has_more: false };
         }
 
@@ -1970,20 +2659,30 @@ async function loadSpeciesImages(speciesName, maxImages, offset, cardIdx) {
         console.log(`✓ Received ${data.images?.length || 0} images for "${speciesName}"`);
 
         if (data.images && data.images.length > 0) {
-            console.log('   First image URL:', data.images[0]);
+            console.log('   First image URL:', data.images[0].url || data.images[0]);
             const thumbEl = document.getElementById(`species-thumb-${cardIdx}`);
             if (thumbEl && offset === 0) {
-                thumbEl.innerHTML = `<img src="${data.images[0]}" style="width: 100%; height: 100%; object-fit: cover; border-radius: 8px;"
-                    onerror="console.error('Failed to load thumbnail:', this.src); this.style.display='none'; this.parentElement.textContent='No image';"
-                    onload="console.log('✓ Thumbnail loaded')">`;
+                const imageUrl = data.images[0].url || data.images[0];
+                thumbEl.innerHTML = `<img src="${imageUrl}"
+                    style="width: 100%; height: 100%; object-fit: cover; border-radius: 8px; cursor: pointer;"
+                    onclick="event.stopPropagation(); window.open('${imageUrl}', '_blank')"
+                    onerror="this.parentElement.innerHTML='<div style=\\'font-size: 0.75rem; color: var(--text-muted); padding: 0.5rem; text-align: center;\\'>No image</div>'">`;
             }
         } else {
             console.warn(`⚠️  No images returned for "${speciesName}"`);
+            const thumbEl = document.getElementById(`species-thumb-${cardIdx}`);
+            if (thumbEl && offset === 0) {
+                thumbEl.innerHTML = `<div style="font-size: 0.75rem; color: var(--text-muted); padding: 0.5rem; text-align: center;">No image</div>`;
+            }
         }
 
         return data;
     } catch (e) {
         console.error('❌ Error loading images:', e);
+        const thumbEl = document.getElementById(`species-thumb-${cardIdx}`);
+        if (thumbEl && offset === 0) {
+            thumbEl.innerHTML = `<div style="font-size: 0.75rem; color: var(--text-muted); padding: 0.5rem; text-align: center;">Error</div>`;
+        }
         return { images: [], has_more: false };
     }
 }
@@ -1991,61 +2690,96 @@ async function loadSpeciesImages(speciesName, maxImages, offset, cardIdx) {
 // Show species reference images
 async function showSpeciesImages(speciesName, cardIdx) {
     const imagesDiv = document.getElementById(`species-images-${cardIdx}`);
-    imagesDiv.style.display = 'block';
-    imagesDiv.innerHTML = '<div style="text-align: center; padding: 1rem;">Loading images...</div>';
 
-    const data = await loadSpeciesImages(speciesName, 5, 0, cardIdx);
-
-    if (data.images.length === 0) {
-        imagesDiv.innerHTML = '<div style="text-align: center; color: var(--text-muted); padding: 1rem;">No reference images found</div>';
+    // Toggle visibility
+    if (imagesDiv.style.display === 'block') {
+        imagesDiv.style.display = 'none';
         return;
     }
 
-    imagesDiv.innerHTML = `
-        <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 0.5rem; margin-bottom: 1rem;">
-            ${data.images.map(url => `
-                <img src="${url}" style="width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 8px; cursor: pointer;"
-                     onclick="window.open('${url}', '_blank')"
-                     onerror="this.style.display='none';">
-            `).join('')}
-        </div>
-        ${data.has_more ? `
-            <button class="btn-secondary" style="width: 100%; padding: 0.75rem; font-size: 0.875rem;" onclick="loadMoreImages('${speciesName}', ${cardIdx}, ${data.images.length})">
-                Load More Images
-            </button>
-        ` : ''}
-    `;
+    imagesDiv.style.display = 'block';
+    imagesDiv.innerHTML = '<div style="text-align: center; padding: 1rem; color: var(--text-muted);">Loading images...</div>';
+
+    try {
+        // Fetch more images (skip first one since it's already shown as thumbnail)
+        const response = await fetch(`/api/species/images/${encodeURIComponent(speciesName)}?max=9&offset=1`);
+        const data = await response.json();
+
+        if (!data.images || data.images.length === 0) {
+            imagesDiv.innerHTML = '<div style="text-align: center; color: var(--text-muted); padding: 1rem; font-size: 0.875rem;">No additional reference images found</div>';
+            return;
+        }
+
+        const imageUrls = data.images.map(img => img.url || img);
+
+        imagesDiv.innerHTML = `
+            <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.5rem; margin-bottom: 1rem;">
+                ${imageUrls.map(url => `
+                    <img src="${url}"
+                         style="width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 8px; cursor: pointer;"
+                         onclick="event.stopPropagation(); window.open('${url}', '_blank')"
+                         onerror="this.style.display='none';">
+                `).join('')}
+            </div>
+            ${data.has_more ? `
+                <button class="btn-secondary"
+                        style="width: 100%; padding: 0.75rem; font-size: 0.875rem;"
+                        onclick="event.stopPropagation(); loadMoreImages('${speciesName}', ${cardIdx}, ${1 + imageUrls.length})">
+                    Load More Images
+                </button>
+            ` : ''}
+        `;
+    } catch (error) {
+        console.error('Error loading images:', error);
+        imagesDiv.innerHTML = '<div style="text-align: center; color: var(--text-muted); padding: 1rem; font-size: 0.875rem;">Error loading images</div>';
+    }
 }
 
 // Load more images
 async function loadMoreImages(speciesName, cardIdx, currentOffset) {
     const imagesDiv = document.getElementById(`species-images-${cardIdx}`);
-    const data = await loadSpeciesImages(speciesName, 5, currentOffset, cardIdx);
-
-    if (data.images.length === 0) {
-        alert('No more images available');
-        return;
-    }
-
-    // Append new images
     const gridDiv = imagesDiv.querySelector('[style*="grid"]');
-    data.images.forEach(url => {
-        const img = document.createElement('img');
-        img.src = url;
-        img.style.cssText = 'width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 8px; cursor: pointer;';
-        img.onclick = () => window.open(url, '_blank');
-        img.onerror = () => img.style.display = 'none';
-        gridDiv.appendChild(img);
-    });
 
-    // Update load more button
-    const button = imagesDiv.querySelector('button');
-    if (button) {
-        if (data.has_more) {
-            button.onclick = () => loadMoreImages(speciesName, cardIdx, currentOffset + data.images.length);
-        } else {
-            button.remove();
+    if (!gridDiv) return;
+
+    try {
+        const response = await fetch(`/api/species/images/${encodeURIComponent(speciesName)}?max=9&offset=${currentOffset}`);
+        const data = await response.json();
+
+        if (!data.images || data.images.length === 0) {
+            const button = imagesDiv.querySelector('button');
+            if (button) button.remove();
+            return;
         }
+
+        // Append new images
+        data.images.forEach(imgData => {
+            const url = imgData.url || imgData;
+            const img = document.createElement('img');
+            img.src = url;
+            img.style.cssText = 'width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 8px; cursor: pointer;';
+            img.onclick = (e) => {
+                e.stopPropagation();
+                window.open(url, '_blank');
+            };
+            img.onerror = () => img.style.display = 'none';
+            gridDiv.appendChild(img);
+        });
+
+        // Update load more button
+        const button = imagesDiv.querySelector('button');
+        if (button) {
+            if (data.has_more) {
+                button.onclick = (e) => {
+                    e.stopPropagation();
+                    loadMoreImages(speciesName, cardIdx, currentOffset + data.images.length);
+                };
+            } else {
+                button.remove();
+            }
+        }
+    } catch (error) {
+        console.error('Error loading more images:', error);
     }
 }
 
@@ -2239,33 +2973,43 @@ function handleJumpKeyPress(event) {
     }
 }
 
-// Zoom controls
+// Zoom button controls (zoom towards center of viewport)
 function zoomIn() {
-    zoomLevel = Math.min(zoomLevel * 1.2, 5);  // Max 5x zoom
-    applyZoom();
+    const centerX = canvas.width / 2;
+    const centerY = canvas.height / 2;
+
+    const oldZoom = zoomLevel;
+    const newZoom = Math.min(zoomLevel * (ZOOM_STEP * 1.5), MAX_ZOOM); // Faster for buttons
+
+    if (newZoom === oldZoom) return;
+
+    // Zoom towards center
+    panOffsetX = centerX - (centerX - panOffsetX) * (newZoom / oldZoom);
+    panOffsetY = centerY - (centerY - panOffsetY) * (newZoom / oldZoom);
+
+    zoomLevel = newZoom;
+
+    updateZoomDisplay();
+    redrawCanvas();
 }
 
 function zoomOut() {
-    zoomLevel = Math.max(zoomLevel / 1.2, 0.5);  // Min 0.5x zoom
-    applyZoom();
-}
+    const centerX = canvas.width / 2;
+    const centerY = canvas.height / 2;
 
-function resetZoom() {
-    zoomLevel = 1;
-    applyZoom();
-}
+    const oldZoom = zoomLevel;
+    const newZoom = Math.max(zoomLevel / (ZOOM_STEP * 1.5), MIN_ZOOM); // Faster for buttons
 
-function applyZoom() {
-    // Update canvas scale
-    const container = canvas.parentElement;
-    const baseWidth = container.clientWidth;
-    const baseHeight = container.clientHeight;
+    if (newZoom === oldZoom) return;
 
-    canvas.style.transform = `scale(${zoomLevel})`;
-    canvas.style.transformOrigin = 'center center';
+    // Zoom towards center
+    panOffsetX = centerX - (centerX - panOffsetX) * (newZoom / oldZoom);
+    panOffsetY = centerY - (centerY - panOffsetY) * (newZoom / oldZoom);
 
-    // Update zoom level display
-    document.getElementById('zoom-level').textContent = Math.round(zoomLevel * 100) + '%';
+    zoomLevel = newZoom;
+
+    updateZoomDisplay();
+    redrawCanvas();
 }
 
 // Keyboard shortcuts
@@ -2277,6 +3021,7 @@ document.addEventListener('keydown', (e) => {
     if (e.key === 'd' && !e.shiftKey && !e.ctrlKey) selectTool('draw');
     if (e.key === 's' && !e.shiftKey && !e.ctrlKey) selectTool('ai');
     if (e.key === 'e' && !e.shiftKey && !e.ctrlKey) selectTool('edit');
+    if (e.key === 'h' && !e.shiftKey && !e.ctrlKey) selectTool('pan');
     if (e.key === 'r' && !e.shiftKey && !e.ctrlKey) resetZoom();
 
     // Save and continue: Ctrl+S (standard save shortcut)

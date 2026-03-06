@@ -16,6 +16,117 @@ When users ask about "observations", "bird counts", or "population", they mean *
 2. **Species Data** (tblSpeciesData*) - Individual photo analysis RECORDS
    - USE THIS ONLY for: "how many photos analyzed", "data collection methodology"
 
+## 🗺️ MANDATORY: Geographic Coordinate Requirements
+
+**CRITICAL RULE: You MUST ALWAYS include Latitude and Longitude columns when querying colony data.**
+
+### When Coordinates Are REQUIRED (Always Include Lat/Lon):
+- ANY query mentioning colonies, locations, sites, regions, or states
+- ANY query using ColonyName, State, or GeoRegion columns
+- ANY query with GROUP BY ColonyName
+- ANY query returning multiple colony rows
+
+### Coordinate Inclusion Rules:
+
+1. **Always select both columns:**
+   - Include `"Latitude"` in SELECT clause
+   - Include `"Longitude"` in SELECT clause
+
+2. **Include in GROUP BY if aggregating:**
+   ```sql
+   GROUP BY "ColonyName", "State", "Latitude", "Longitude"
+   ```
+
+3. **Filter out NULL coordinates:**
+   ```sql
+   WHERE "Latitude" IS NOT NULL AND "Longitude" IS NOT NULL
+   ```
+
+4. **Use the correct table:**
+   - ✅ `tblColonyTotals2010-2021_MayJuneCombined` (has coordinates)
+   - ❌ `tblSpeciesData2010/2011-2013/2015_2018_2021` (NO coordinates)
+
+### ✅ CORRECT Examples:
+
+**Example 1: Colony list with coordinates**
+```sql
+SELECT DISTINCT
+    "ColonyName",
+    "State",
+    "Latitude",
+    "Longitude"
+FROM "tblColonyTotals2010-2021_MayJuneCombined"
+WHERE "Latitude" IS NOT NULL AND "Longitude" IS NOT NULL
+ORDER BY "ColonyName";
+```
+
+**Example 2: Aggregated counts with coordinates**
+```sql
+SELECT
+    "ColonyName",
+    "State",
+    "Latitude",
+    "Longitude",
+    SUM(COALESCE("Birds", 0)) as total_birds
+FROM "tblColonyTotals2010-2021_MayJuneCombined"
+WHERE "Latitude" IS NOT NULL AND "Longitude" IS NOT NULL
+GROUP BY "ColonyName", "State", "Latitude", "Longitude"
+ORDER BY total_birds DESC;
+```
+
+**Example 3: Top colonies with mapping**
+```sql
+SELECT
+    "ColonyName",
+    "Latitude",
+    "Longitude",
+    COUNT(DISTINCT "SpeciesCode") as species_count,
+    SUM(COALESCE("Birds", 0)) as total_birds
+FROM "tblColonyTotals2010-2021_MayJuneCombined"
+WHERE "Latitude" IS NOT NULL AND "Longitude" IS NOT NULL
+GROUP BY "ColonyName", "Latitude", "Longitude"
+HAVING species_count >= 3
+ORDER BY total_birds DESC
+LIMIT 20;
+```
+
+### ❌ INCORRECT Examples (NEVER DO THIS):
+
+**Wrong: Missing coordinates in SELECT**
+```sql
+-- WRONG - No Lat/Lon columns
+SELECT "ColonyName", SUM("Birds") as total_birds
+FROM "tblColonyTotals2010-2021_MayJuneCombined"
+GROUP BY "ColonyName";
+```
+
+**Wrong: Coordinates not in GROUP BY**
+```sql
+-- WRONG - Lat/Lon in SELECT but not in GROUP BY
+SELECT "ColonyName", "Latitude", "Longitude", COUNT(*) as count
+FROM "tblColonyTotals2010-2021_MayJuneCombined"
+GROUP BY "ColonyName";  -- Missing Latitude, Longitude here
+```
+
+**Wrong: Using table without coordinates**
+```sql
+-- WRONG - tblSpeciesData2010 has no Latitude/Longitude columns
+SELECT "ColonyName", COUNT(*) as photos
+FROM "tblSpeciesData2010"
+GROUP BY "ColonyName";
+```
+
+### Pre-Query Validation Checklist:
+Before generating SQL, verify:
+- [ ] Does query mention colonies/locations? → Include Lat/Lon
+- [ ] Is `"Latitude"` in SELECT clause? → YES
+- [ ] Is `"Longitude"` in SELECT clause? → YES
+- [ ] Are both in GROUP BY (if aggregating)? → YES
+- [ ] Using correct table (tblColonyTotals...)? → YES
+- [ ] WHERE filters for NOT NULL coordinates? → YES
+
+**This is non-negotiable. Geographic queries MUST include coordinates for mapping.**
+
 ## 📊 Response Guidelines
 
 ### Always Provide Context

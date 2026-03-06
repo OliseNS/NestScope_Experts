@@ -715,3 +715,292 @@ def get_storm_impact_analysis(species_code: str) -> Dict[str, Any]:
         return r.json()
     except Exception as e:
         return {"error": str(e)}
+
+
+# ============================================================================
+# DATABASE VERSION CONTROL API FUNCTIONS
+# ============================================================================
+
+def get_version_history(limit: int = 50) -> Dict[str, Any]:
+    """
+    Get commit history for the database.
+
+    Shows all changes made to the database with timestamps and messages.
+
+    Args:
+        limit: Maximum number of commits to return (default: 50)
+
+    Returns:
+        Dictionary with success status and list of commits
+    """
+    from .config import API_BASE_URL
+
+    try:
+        response = requests.get(
+            f"{API_BASE_URL}/db/version/history",
+            params={"limit": limit},
+            timeout=10
+        )
+        response.raise_for_status()
+        return response.json()
+    except requests.exceptions.RequestException as e:
+        return {"success": False, "error": str(e)}
+
+
+def get_version_stats() -> Dict[str, Any]:
+    """
+    Get statistics about database version history.
+
+    Returns:
+        Dictionary with total commits, date range, database size, etc.
+    """
+    from .config import API_BASE_URL
+
+    try:
+        response = requests.get(f"{API_BASE_URL}/db/version/stats", timeout=10)
+        response.raise_for_status()
+        return response.json()
+    except requests.exceptions.RequestException as e:
+        return {"success": False, "error": str(e)}
+
+
+def get_version_diff(commit_hash: Optional[str] = None) -> Dict[str, Any]:
+    """
+    Get diff showing what changed in a specific commit.
+
+    Args:
+        commit_hash: Hash of commit to diff (default: latest changes)
+
+    Returns:
+        Dictionary with diff string
+    """
+    from .config import API_BASE_URL
+
+    try:
+        params = {}
+        if commit_hash:
+            params["commit_hash"] = commit_hash
+
+        response = requests.get(
+            f"{API_BASE_URL}/db/version/diff",
+            params=params,
+            timeout=10
+        )
+        response.raise_for_status()
+        return response.json()
+    except requests.exceptions.RequestException as e:
+        return {"success": False, "error": str(e)}
+
+
+def rollback_database(commit_hash: str, expert_email: str = "system") -> Dict[str, Any]:
+    """
+    Rollback database to a specific commit.
+
+    **WARNING**: This is a destructive operation. It will:
+    1. Create a safety snapshot
+    2. Restore database to the specified commit
+    3. Commit the rollback (preserving history)
+
+    Args:
+        commit_hash: Hash of commit to rollback to
+        expert_email: Email/username of expert performing rollback
+
+    Returns:
+        Dictionary with success status, snapshot path, new commit hash
+    """
+    from .config import API_BASE_URL
+
+    try:
+        response = requests.post(
+            f"{API_BASE_URL}/db/version/rollback",
+            json={"commit_hash": commit_hash, "expert_email": expert_email},
+            timeout=60  # Rollback can take time
+        )
+        response.raise_for_status()
+        return response.json()
+    except requests.exceptions.RequestException as e:
+        return {"success": False, "error": str(e)}
+
+
+def manual_version_commit(message: str, expert_email: str = "system") -> Dict[str, Any]:
+    """
+    Manually create a version control commit.
+
+    Useful for checkpointing database state at key moments.
+
+    Args:
+        message: Commit message
+        expert_email: Email/username of expert making the commit
+
+    Returns:
+        Dictionary with commit hash and timestamp
+    """
+    from .config import API_BASE_URL
+
+    try:
+        response = requests.post(
+            f"{API_BASE_URL}/db/version/commit",
+            params={"message": message, "expert_email": expert_email},
+            timeout=30
+        )
+        response.raise_for_status()
+        return response.json()
+    except requests.exceptions.RequestException as e:
+        return {"success": False, "error": str(e)}
+
+
+# ============================================================================
+# FLOOD DATA API FUNCTIONS
+# ============================================================================
+
+def get_flood_stations() -> Dict[str, Any]:
+    """
+    Get all NOAA flood monitoring stations in Louisiana coastal region.
+
+    Returns:
+        Dictionary with 'stations' list and 'count'
+    """
+    from .config import API_BASE_URL
+
+    try:
+        response = requests.get(f"{API_BASE_URL}/flood/stations", timeout=10)
+        response.raise_for_status()
+        return response.json()
+    except requests.exceptions.RequestException as e:
+        return {"stations": [], "count": 0, "error": str(e)}
+
+
+def get_flood_events(
+    station_id: Optional[str] = None,
+    year: Optional[int] = None,
+    min_severity: Optional[str] = None,
+    limit: int = 1000
+) -> Dict[str, Any]:
+    """
+    Query flood events from NOAA water level data.
+
+    Args:
+        station_id: Filter by specific station (e.g., "8761724")
+        year: Filter by year (e.g., 2012)
+        min_severity: Minimum severity ("minor", "moderate", "major")
+        limit: Maximum results (default: 1000)
+
+    Returns:
+        Dictionary with 'events' list, 'count', and 'filters'
+    """
+    from .config import API_BASE_URL
+
+    params = {"limit": limit}
+    if station_id:
+        params["station_id"] = station_id
+    if year:
+        params["year"] = year
+    if min_severity:
+        params["min_severity"] = min_severity
+
+    try:
+        response = requests.get(
+            f"{API_BASE_URL}/flood/events",
+            params=params,
+            timeout=15
+        )
+        response.raise_for_status()
+        return response.json()
+    except requests.exceptions.RequestException as e:
+        return {"events": [], "count": 0, "error": str(e)}
+
+
+def get_flood_summary(station_id: Optional[str] = None) -> Dict[str, Any]:
+    """
+    Get flood event summary statistics by year and severity.
+
+    Args:
+        station_id: Filter by specific station (optional)
+
+    Returns:
+        Dictionary with yearly summary of flood counts by severity level
+    """
+    from .config import API_BASE_URL
+
+    params = {}
+    if station_id:
+        params["station_id"] = station_id
+
+    try:
+        response = requests.get(
+            f"{API_BASE_URL}/flood/summary",
+            params=params,
+            timeout=10
+        )
+        response.raise_for_status()
+        return response.json()
+    except requests.exceptions.RequestException as e:
+        return {"summary": [], "error": str(e)}
+
+
+def calculate_flood_impact(
+    latitude: float,
+    longitude: float,
+    max_distance_km: float = 50,
+    year: Optional[int] = None
+) -> Dict[str, Any]:
+    """
+    Calculate flood impact for colonies near a geographic location.
+
+    Args:
+        latitude: Colony latitude
+        longitude: Colony longitude
+        max_distance_km: Search radius in kilometers (default: 50)
+        year: Filter events by year (optional)
+
+    Returns:
+        Dictionary with nearby_stations, flood_events, impact_score, severity_summary
+    """
+    from .config import API_BASE_URL
+
+    data = {
+        "latitude": latitude,
+        "longitude": longitude,
+        "max_distance_km": max_distance_km
+    }
+    if year:
+        data["year"] = year
+
+    try:
+        response = requests.post(
+            f"{API_BASE_URL}/flood/impact",
+            json=data,
+            timeout=15
+        )
+        response.raise_for_status()
+        return response.json()
+    except requests.exceptions.RequestException as e:
+        return {
+            "nearby_stations": [],
+            "flood_events": [],
+            "impact_score": 0,
+            "severity_summary": {"minor": 0, "moderate": 0, "major": 0},
+            "error": str(e)
+        }
+
+
+def get_flood_stats() -> Dict[str, Any]:
+    """
+    Get overall flood database statistics.
+
+    Returns:
+        Database stats including station count, event count, year range
+    """
+    from .config import API_BASE_URL
+
+    try:
+        response = requests.get(f"{API_BASE_URL}/flood/stats", timeout=10)
+        response.raise_for_status()
+        return response.json()
+    except requests.exceptions.RequestException as e:
+        return {
+            "station_count": 0,
+            "event_count": 0,
+            "year_range": (None, None),
+            "error": str(e)
+        }

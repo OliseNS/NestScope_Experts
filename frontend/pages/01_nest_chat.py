@@ -29,6 +29,14 @@ init_page(page_title="NestChat - NestScope", page_icon="💬", layout="wide")
 # Render shared header
 render_header(page_name="NestChat")
 
+# Fetch STAC data for map highlighting
+try:
+    from services.api_client import get_stac_summary
+    stac_data = get_stac_summary()
+    stac_colonies_list = [c["id"] for c in stac_data.get("colonies", [])]
+except Exception:
+    stac_colonies_list = []
+
 # ============================================================================
 # HELPER FUNCTIONS
 # ============================================================================
@@ -172,68 +180,76 @@ for message in st.session_state.messages:
         if "dataframe" in message and message["dataframe"] is not None:
             df = message["dataframe"]
 
-            # CRITICAL FIX: Reset index to avoid Streamlit's "Row index out of range" bug
+            # Reset index to avoid Streamlit bugs
             if not df.empty:
                 df = df.reset_index(drop=True)
+
             show_chart = message.get("show_chart", False)
             chart_type = message.get("chart_type")
             show_map = message.get("show_map", False)
-            is_single_location = message.get("is_single_location", False)
 
-            # Render single-location map (always show for single location with coords)
-            if is_single_location:
-                st.markdown("---")
-                st.markdown("### 📍 Location Map")
-                render_map(df, key=f"map_single_{id(message)}")
-                st.markdown("---")
+            # Enhanced coordinate detection for historical messages
+            cols_lower = [str(col).lower() for col in df.columns]
 
-            # Render tabs for multi-result visualizations (respect backend directives)
-            if show_chart or show_map:
-                tab_labels = []
+            # Flexible pattern matching
+            lat_patterns = ['latitude', 'lat']
+            lon_patterns = ['longitude', 'lon', 'lng', 'long']
 
-                if show_chart:
-                    tab_labels.append("📊 Data & Charts")
-                else:
-                    tab_labels.append("📋 Data Table")
+            has_lat = any(any(pattern in col for pattern in lat_patterns) for col in cols_lower)
+            has_lon = any(any(pattern in col for pattern in lon_patterns) for col in cols_lower)
+            has_coords = has_lat and has_lon
 
-                if show_map:
-                    tab_labels.append("🗺️ Map View")
+            # Force map if coordinates exist (override backend directive)
+            if has_coords and not df.empty:
+                show_map = True
 
+            # Build tab structure
+            tabs_to_render = []
+            if show_chart:
+                tabs_to_render.append(("data_chart", "📊 Data & Charts"))
+            else:
+                tabs_to_render.append(("data", "📋 Data Table"))
+
+            if show_map:
+                tabs_to_render.append(("map", "🗺️ Map View"))
+
+            # Render visualization
+            if len(tabs_to_render) > 1:
+                # Multiple tabs
+                tab_labels = [label for _, label in tabs_to_render]
                 tabs = st.tabs(tab_labels)
 
-                # Data/Chart Tab
-                with tabs[0]:
-                    st.dataframe(df, use_container_width=True)
+                for idx, (tab_type, _) in enumerate(tabs_to_render):
+                    with tabs[idx]:
+                        if tab_type in ["data", "data_chart"]:
+                            # Data table
+                            st.dataframe(df, use_container_width=True)
+                            csv = df.to_csv(index=False).encode('utf-8')
+                            st.download_button(
+                                label="📥 Download CSV",
+                                data=csv,
+                                file_name="bird_data_export.csv",
+                                mime="text/csv",
+                                key=f"download_hist_{id(message)}_{idx}"
+                            )
+                            # Chart if needed
+                            if tab_type == "data_chart" and chart_type:
+                                render_chart(df, chart_type, key_suffix=f"history_{id(message)}")
 
-                    csv = df.to_csv(index=False).encode('utf-8')
-                    st.download_button(
-                        label="📥 Download CSV",
-                        data=csv,
-                        file_name="bird_data_export.csv",
-                        mime="text/csv",
-                        key=f"download_{message.get('content', '')[:20]}_{id(message)}"
-                    )
-
-                    if show_chart and chart_type:
-                        render_chart(df, chart_type, key_suffix=f"history_{id(message)}")
-
-                # Map Tab
-                if show_map and len(tabs) > 1:
-                    with tabs[1]:
-                        render_map(df, key=f"map_history_{id(message)}")
-
+                        elif tab_type == "map":
+                            # Map
+                            render_map(df, key=f"map_history_{id(message)}", height=500, show_stac_data=True, stac_colonies_list=stac_colonies_list)
             else:
-                # Simple data table in expander (no visualization directive from backend)
+                # Single view - just data
                 with st.expander("View Source Data"):
                     st.dataframe(df, use_container_width=True)
-
                     csv = df.to_csv(index=False).encode('utf-8')
                     st.download_button(
                         label="📥 Download CSV",
                         data=csv,
                         file_name="bird_data_export.csv",
                         mime="text/csv",
-                        key=f"download_simple_{message.get('content', '')[:20]}_{id(message)}"
+                        key=f"download_simple_{id(message)}"
                     )
 
 # ============================================================================
@@ -623,6 +639,16 @@ if prompt:
                 st.session_state.messages.append({"role": "assistant", "content": answer})
                 st.stop()
 
+            # DEAD SIMPLE: If Latitude and Longitude columns exist, show map
+            has_lat = any('latitude' in str(col).lower() for col in df.columns)
+            has_lon = any('longitude' in str(col).lower() for col in df.columns)
+
+            if has_lat and has_lon and not df.empty:
+                show_map = True
+                print(f"✅ MAP ENABLED: Found Latitude and Longitude columns")
+            else:
+                print(f"ℹ️  No map: has_lat={has_lat}, has_lon={has_lon}, empty={df.empty}")
+
             response_data = {
                 "role": "assistant",
                 "content": answer,
@@ -632,68 +658,71 @@ if prompt:
                 "show_map": show_map
             }
 
-            # Detect if this is a single-location query (always show map for single location)
-            cols_lower = [str(col).lower() for col in df.columns]
-            has_lat = any('latit' in col for col in cols_lower)
-            has_lon = any('longi' in col or 'lng' in col for col in cols_lower)
-            is_single_location = not df.empty and len(df) == 1 and has_lat and has_lon
+            # Build tab structure
+            tabs_to_render = []
+            if show_chart:
+                tabs_to_render.append(("data_chart", "📊 Data & Charts"))
+            else:
+                tabs_to_render.append(("data", "📋 Data Table"))
 
-            response_data["is_single_location"] = is_single_location
+            # Debug: Always log map decision
+            print(f"🗺️  MAP DECISION: show_map={show_map}, df_empty={df.empty}")
+            print(f"   DataFrame columns: {list(df.columns)}")
 
-            # Render map for single-location queries (regardless of backend directive)
-            if is_single_location:
-                st.markdown("---")
-                st.markdown("### 📍 Location Map")
-                render_map(df, key=f"map_single_current_{id(response_data)}")
-                st.markdown("---")
+            if show_map:
+                tabs_to_render.append(("map", "🗺️ Map View"))
+                print(f"✅ Map tab ADDED to tabs_to_render")
+            else:
+                print(f"❌ Map tab NOT added (show_map=False)")
 
-            # Render visualizations based on BACKEND directives
-            if show_chart or show_map:
-                # Tabs for data, charts, and maps
-                tab_labels = []
-
-                if show_chart:
-                    tab_labels.append("📊 Data & Charts")
-                else:
-                    tab_labels.append("📋 Data Table")
-
-                if show_map:
-                    tab_labels.append("🗺️ Map View")
-
+            # Render visualization
+            if len(tabs_to_render) > 1:
+                # Multiple tabs
+                tab_labels = [label for _, label in tabs_to_render]
                 tabs = st.tabs(tab_labels)
 
-                # Data/Chart Tab
-                with tabs[0]:
-                    st.dataframe(df, use_container_width=True)
+                for idx, (tab_type, _) in enumerate(tabs_to_render):
+                    with tabs[idx]:
+                        if tab_type in ["data", "data_chart"]:
+                            # Data table
+                            st.dataframe(df, use_container_width=True)
+                            csv = df.to_csv(index=False).encode('utf-8')
+                            st.download_button(
+                                label="📥 Download CSV",
+                                data=csv,
+                                file_name="bird_data_export.csv",
+                                mime="text/csv",
+                                key=f"download_current_{idx}"
+                            )
+                            # Chart if needed
+                            if tab_type == "data_chart" and chart_type:
+                                render_chart(df, chart_type, key_suffix=f"current_{id(response_data)}")
 
-                    csv = df.to_csv(index=False).encode('utf-8')
-                    st.download_button(
-                        label="📥 Download CSV",
-                        data=csv,
-                        file_name="bird_data_export.csv",
-                        mime="text/csv",
-                    )
-
-                    if show_chart and chart_type:
-                        render_chart(df, chart_type, key_suffix=f"current_{id(response_data)}")
-
-                # Map Tab
-                if show_map and len(tabs) > 1:
-                    with tabs[1]:
-                        render_map(df, key=f"map_current_{id(response_data)}")
-
+                        elif tab_type == "map":
+                            # Map
+                            render_map(df, key=f"map_current_{id(response_data)}", height=500, show_stac_data=True, stac_colonies_list=stac_colonies_list)
             else:
-                # Simple data table (no visualization directive from backend)
+                # Single view - just data
                 with st.expander("View Source Data"):
                     st.dataframe(df, use_container_width=True)
-
                     csv = df.to_csv(index=False).encode('utf-8')
                     st.download_button(
                         label="📥 Download CSV",
                         data=csv,
                         file_name="bird_data_export.csv",
                         mime="text/csv",
+                        key="download_simple_current"
                     )
+
+            # LAYER 5: User-facing map troubleshooting (simplified)
+            if not show_map and 'ColonyName' in df.columns:
+                # Should have map but doesn't - system failure
+                with st.expander("🗺️ Why isn't there a map?", expanded=False):
+                    st.error("**System Issue:** This colony query should have included geographic coordinates.")
+                    st.markdown("**What you can try:**")
+                    st.markdown('- Rephrase with: "Show me [your question] **with locations**"')
+                    st.markdown('- Ask explicitly: "Map all colonies in [state]"')
+                    st.markdown('- Use keywords: "where are", "locations", "coordinates"')
 
             st.session_state.messages.append(response_data)
 

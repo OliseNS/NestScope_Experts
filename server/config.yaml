@@ -8,9 +8,9 @@ model:
   sql_max_tokens: 500
 
 agentic:
-  max_attempts: 10 # Number of retry attempts for agentic self-correction
+  max_attempts: 10 
   validation_temperature: 0.1 # Low temperature for strict validation
-  analysis_temperature: 0.3 # Moderate temperature for question analysis
+  analysis_temperature: 0.2 # Moderate temperature for question analysis
 
 database:
   default_path: data/bird_data_complete.db
@@ -25,13 +25,11 @@ cv:
   image_size: 1024
   default_fast_mode: true  # Start in fast mode by default
 
-  # Classification model paths
-  # Swift: Fast classifier (YOLOv8n-cls, 3.5MB, ~2x faster inference)
-  # Apex: Accurate classifier (YOLOv8s-cls, 12MB, better accuracy)
-  classifier_swift: models/classifier_swift.pt
-  classifier_apex: models/classifier_apex.pt
+  # Species Classification
+  classifier_swift: models/classifier_swift.onnx
+  classifier_apex: models/classifier_apex.onnx
   classifier_species: 25
-
+  classifier_confidence_threshold: 0.01  # Very low - always show best prediction
 api:
   host: 0.0.0.0
   port: 8000

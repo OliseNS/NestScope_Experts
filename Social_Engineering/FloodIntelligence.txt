@@ -1,0 +1,50 @@
+Research Scientist - Flood Intelligence
+Full TimeProfessional
+Baton Rouge, LA, Baton Rouge, LA, US
+TodayRequisition ID: 1149
+
+Research Scientist – Flood Intelligence
+
+The Water Institute is looking for an early career researcher to support the development of probabilistic, physics-based, data-informed frameworks to support current and future flood hazard quantification and situational awareness needs.  This role turns multi-modal data into actionable insights, leveraging diverse techniques including extreme value analysis, probabilistic modeling, AI, and foundation models. This role involves conducting frontier research and development in flood and disaster intelligence and requires proven expertise in physics-based modeling or probabilistic modeling, AI, and spatial analytics.
+
+Roles and Responsibilities:
+
+    Collect and fuse data from multi-modal data sources including NOAA gages, HURDAT2, NEXRAD, DEMs, social media, remote sensing
+    Develop impact and hazard metrics to quantify flood hazards, infrastructure exposure and impacts.
+    Build and maintain automated Python pipelines to collect, process, augment, and analyze multi-modal geospatial data
+    Implement extreme value analysis frameworks (POT/GPD, MLE, Bayesian inference)
+    Support development of multivariate joint probability models for compound flood drivers
+    Support creation of physics-based and data-driven nowcasting and short-term forecasting models (e.g., rainfall–runoff, surge, impacts)
+    Publish methods in technical memos and scientific papers
+    Work closely with modelers and the technical team to integrate probability models into automated workflows
+
+Required Qualifications:
+
+    Master or PhD’s degree in quantitative fields such as science or engineering with a foundation in flood or risk modeling and expertise in statistics, AI, and probabilistic modeling.
+    Graduate-level training in statistics, applied math, data science, hydrology, disaster risk and resilience, spatial analytics, or related fields
+    Strong background in extreme value theory (EVT), multivariate distributions (e.g., copulas, RSM), time-series modeling (e.g., transformers), probabilistic modeling (e.g., MCMC, JPM-OS).
+    Excellent programming skills (Python, Julia, R)
+    Experience with geospatial data processing and spatial analytics
+    Ability to quantify, interpret, and communicate uncertainty
+
+Desired Qualifications:
+
+    Familiarity with climate downscaling or reanalysis products
+    Strong background in AI for disaster risk and resilience application (e.g., foundation models for Earth).
+    Experience with flood modeling.
+    Ability to independently design, execute, and validate science-based solutions to complex, open-ended problems related to flood risk quantification over short- and long-term time horizons.
+
+Successful candidates will desire to continue expanding their knowledge and skills, be results-driven and self-motivated, and are capable of effective cross-disciplinary collaboration in a demanding, fast-paced environment. Responsibilities will reflect career stage and previous experience. Workload will vary from week to week, and candidates will be flexible, willing to occasionally work evenings, and travel for meetings and conferences.
+
+The Water Institute is an Equal Opportunity Employer. All qualified applicants will receive consideration for employment without regard to race, color, religion, sex, sexual orientation, gender identity, national origin, or protected veteran status and will not be discriminated against on the basis of disability.
+
+We are headquartered in Baton Rouge and the position will be located in Northern Virginia, or in Louisiana at our main office in Baton Rouge. The hiring pay for the position starts at $100,000 and a final determination is based on the skills, education, and/or experience of the successful candidate. We believe in the importance of pay equity and consider the internal equity of our current staff as part of any final offer. We also offer a generous benefits package for full-time exempt positions. 
+
+Unique Benefits of a Water Institute Career
+
+    Growth opportunity: We are always learning and developing new research methodologies and working with partners to solve problems. You will have the opportunity to engage in growing and leading research with ample opportunities to take ownership and flourish.
+    Flexibility: We understand that our team members have different needs and do our best to work with their schedules and provide benefits and resources to meet these needs.
+    Inclusive environment: We are committed to building an inclusive environment where all teammates feel comfortable and supported.
+    Fun! We love to keep things fun, both within our work and at company-wide events.
+    Work life balance: We are respectful of people’s boundaries and support that through Institute values so that our team has time to recharge and do their best work within the mission of the organization.
+    The Water Institute Values: Scientific Integrity, Excellence, Transdisciplinary Collaboration, Accountability, Diversity, Work/Life Balance, Respect, Impact

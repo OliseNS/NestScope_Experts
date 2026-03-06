@@ -24,6 +24,11 @@ from .api_client import (
     get_stac_dots,
     get_mosaic_preview,
     run_mosaic_inference,
+    get_version_history,
+    get_version_stats,
+    get_version_diff,
+    rollback_database,
+    manual_version_commit,
 )
 from .config import API_BASE_URL
 
@@ -49,5 +54,10 @@ __all__ = [
     'get_stac_dots',
     'get_mosaic_preview',
     'run_mosaic_inference',
+    'get_version_history',
+    'get_version_stats',
+    'get_version_diff',
+    'rollback_database',
+    'manual_version_commit',
     'API_BASE_URL'
 ]

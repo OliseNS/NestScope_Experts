@@ -234,6 +234,12 @@ cluster_visualization_*.png
 *.db-shm
 *.db-wal
 
+# Database version control (separate Git repo in data/ directory)
+# CRITICAL: Ignore this to prevent the database Git from being tracked by project Git
+data/.git/
+data/snapshots/
+data/*.sql
+
 # Scientific data formats
 *.mat  # MATLAB
 *.npy  # NumPy (already listed but reinforcing)
