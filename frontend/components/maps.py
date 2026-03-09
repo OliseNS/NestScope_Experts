@@ -136,24 +136,42 @@ def render_map(
                 'lon': z['longitude'],
                 'Colony': z['colony_name'],
                 'Risk Level': z['risk_level'],
-                'Risk Score': z['risk_score']
+                'Risk Score': z['risk_score'],
+                'Birds': z.get('birds', 0)
             } for z in risk_zones])
+
+            # Ensure all expected levels have colors
+            color_map = {
+                'CRITICAL': '#8B0000',  # Dark Red
+                'HIGH': '#FF0000',      # Red
+                'MODERATE': '#FFA500',  # Orange
+                'LOW': '#2E8B57'        # Sea Green
+            }
 
             fig = px.scatter_mapbox(
                 risk_df,
                 lat='lat',
                 lon='lon',
                 hover_name='Colony',
-                hover_data=['Risk Level', 'Risk Score'],
+                hover_data={
+                    'lat': False,
+                    'lon': False,
+                    'Risk Level': True,
+                    'Risk Score': ':.1f',
+                    'Birds': ':,'
+                },
                 color='Risk Level',
-                color_discrete_map={'CRITICAL': '#FF4444', 'HIGH': '#FF8C00', 'MODERATE': '#4CAF50'},
+                color_discrete_map=color_map,
+                size='Risk Score',
+                size_max=20,
                 zoom=6,
                 height=height
             )
 
             # Visible circle markers for risk zones
             fig.update_traces(
-                marker=dict(size=18, opacity=0.9)
+                marker=dict(opacity=0.8, allowoverlap=True),
+                selector=dict(type='scattermapbox')
             )
 
             center_lat = risk_df['lat'].mean()

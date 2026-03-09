@@ -317,3 +317,17 @@ Social_Engineering/vis/
 !VisionTrain/stac_dataset/*.md
 !Social_Engineering/*.py
 !Social_Engineering/*.md
+
+# ============================================================================
+# Training Datasets (ultimate, optimized, and visualization outputs)
+# ============================================================================
+# NewDataset directory and all training datasets
+NewDataset/
+ultimate_training_dataset_optimized/
+dataset_visualizations/
+
+# All images and labels directories (global catch-all)
+**/images/
+**/labels/
+**/dataset_vis/
+**/dataset_visualizations/
