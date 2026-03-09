@@ -1,0 +1,463 @@
+{% extends "base.html" %}
+
+{% block title %}Help & Guides - Nestperts{% endblock %}
+
+{% block extra_css %}
+<style>
+    .help-container {
+        max-width: 1200px;
+        margin: 0 auto;
+        padding: var(--space-8);
+    }
+
+    .help-hero {
+        text-align: center;
+        padding: var(--space-12) 0;
+        margin-bottom: var(--space-12);
+        background: linear-gradient(135deg, var(--accent-ocean), var(--accent-seagrass));
+        border-radius: var(--radius-xl);
+        color: white;
+    }
+
+    .help-hero h1 {
+        color: white;
+        font-size: var(--text-5xl);
+        margin-bottom: var(--space-4);
+    }
+
+    .help-hero-subtitle {
+        font-size: var(--text-xl);
+        opacity: 0.9;
+    }
+
+    .help-sections {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+        gap: var(--space-6);
+        margin-bottom: var(--space-12);
+    }
+
+    .help-section-card {
+        background: var(--surface-base);
+        border: 2px solid var(--surface-border);
+        border-radius: var(--radius-lg);
+        padding: var(--space-6);
+        transition: all var(--transition-base);
+    }
+
+    .help-section-card:hover {
+        border-color: var(--brand-primary);
+        transform: translateY(-4px);
+        box-shadow: var(--shadow-lg);
+    }
+
+    .help-section-icon {
+        font-size: var(--text-5xl);
+        margin-bottom: var(--space-4);
+    }
+
+    .help-section-title {
+        font-size: var(--text-2xl);
+        font-family: var(--font-display);
+        margin-bottom: var(--space-3);
+    }
+
+    .help-section-description {
+        color: var(--text-secondary);
+        margin-bottom: var(--space-4);
+        line-height: 1.7;
+    }
+
+    .help-section-links {
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-2);
+    }
+
+    .help-link {
+        display: flex;
+        align-items: center;
+        gap: var(--space-2);
+        color: var(--brand-primary);
+        text-decoration: none;
+        padding: var(--space-2);
+        border-radius: var(--radius-sm);
+        transition: all var(--transition-fast);
+        font-weight: 500;
+    }
+
+    .help-link:hover {
+        background: var(--surface-hover);
+        transform: translateX(4px);
+    }
+
+    .keyboard-shortcuts {
+        background: var(--surface-base);
+        border: 2px solid var(--surface-border);
+        border-radius: var(--radius-lg);
+        padding: var(--space-8);
+        margin-bottom: var(--space-12);
+    }
+
+    .keyboard-shortcuts-title {
+        font-size: var(--text-3xl);
+        font-family: var(--font-display);
+        margin-bottom: var(--space-6);
+        text-align: center;
+    }
+
+    .shortcuts-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+        gap: var(--space-6);
+    }
+
+    .shortcut-category {
+        margin-bottom: var(--space-4);
+    }
+
+    .shortcut-category-title {
+        font-size: var(--text-lg);
+        font-weight: 700;
+        color: var(--text-primary);
+        margin-bottom: var(--space-3);
+        padding-bottom: var(--space-2);
+        border-bottom: 2px solid var(--brand-primary);
+    }
+
+    .shortcut-item {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: var(--space-2) 0;
+    }
+
+    .shortcut-description {
+        color: var(--text-secondary);
+    }
+
+    .shortcut-key {
+        background: var(--bg-tertiary);
+        padding: var(--space-1) var(--space-3);
+        border-radius: var(--radius-sm);
+        font-family: 'SF Mono', Monaco, monospace;
+        font-size: var(--text-sm);
+        font-weight: 600;
+        color: var(--text-primary);
+        border: 1px solid var(--surface-border);
+    }
+
+    .faq {
+        margin-bottom: var(--space-12);
+    }
+
+    .faq-title {
+        font-size: var(--text-3xl);
+        font-family: var(--font-display);
+        text-align: center;
+        margin-bottom: var(--space-8);
+    }
+
+    .faq-item {
+        background: var(--surface-base);
+        border: 1px solid var(--surface-border);
+        border-radius: var(--radius-md);
+        margin-bottom: var(--space-3);
+        overflow: hidden;
+    }
+
+    .faq-question {
+        width: 100%;
+        padding: var(--space-4);
+        background: transparent;
+        border: none;
+        font-size: var(--text-lg);
+        font-weight: 600;
+        color: var(--text-primary);
+        text-align: left;
+        cursor: pointer;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        transition: all var(--transition-fast);
+    }
+
+    .faq-question:hover {
+        background: var(--surface-hover);
+    }
+
+    .faq-answer {
+        padding: 0 var(--space-4) var(--space-4);
+        color: var(--text-secondary);
+        line-height: 1.7;
+        display: none;
+    }
+
+    .faq-item.active .faq-answer {
+        display: block;
+    }
+
+    .faq-item.active .faq-icon {
+        transform: rotate(180deg);
+    }
+
+    .faq-icon {
+        transition: transform var(--transition-base);
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="help-container">
+    <!-- Hero -->
+    <div class="help-hero animate-fade-in">
+        <h1>Help & Documentation</h1>
+        <p class="help-hero-subtitle">Everything you need to master bird annotation with Nestperts</p>
+    </div>
+
+    <!-- Quick Start Sections -->
+    <div class="help-sections stagger-children">
+        <div class="help-section-card">
+            <div class="help-section-icon">🚀</div>
+            <h3 class="help-section-title">Getting Started</h3>
+            <p class="help-section-description">
+                Learn the basics of creating projects, uploading images, and assigning tasks to your team.
+            </p>
+            <div class="help-section-links">
+                <a href="#create-project" class="help-link">→ Creating your first project</a>
+                <a href="#upload-images" class="help-link">→ Uploading images and labels</a>
+                <a href="#assign-tasks" class="help-link">→ Assigning tasks to users</a>
+            </div>
+        </div>
+
+        <div class="help-section-card">
+            <div class="help-section-icon">✏️</div>
+            <h3 class="help-section-title">Annotation Tools</h3>
+            <p class="help-section-description">
+                Master the annotation interface with MobileSAM, manual drawing, and AI-assisted species classification.
+            </p>
+            <div class="help-section-links">
+                <a href="#drawing-boxes" class="help-link">→ Drawing bounding boxes</a>
+                <a href="#sam-segmentation" class="help-link">→ Using MobileSAM (AI segmentation)</a>
+                <a href="#species-identification" class="help-link">→ Identifying bird species</a>
+            </div>
+        </div>
+
+        <div class="help-section-card">
+            <div class="help-section-icon">📤</div>
+            <h3 class="help-section-title">Exporting Data</h3>
+            <p class="help-section-description">
+                Export your annotations in multiple formats for training models or geographic analysis.
+            </p>
+            <div class="help-section-links">
+                <a href="#export-yolo" class="help-link">→ YOLO format (model training)</a>
+                <a href="#export-coco" class="help-link">→ COCO format (research)</a>
+                <a href="#export-geojson" class="help-link">→ GeoJSON (geographic mapping)</a>
+            </div>
+        </div>
+
+        <div class="help-section-card">
+            <div class="help-section-icon">👥</div>
+            <h3 class="help-section-title">Team Collaboration</h3>
+            <p class="help-section-description">
+                Work with experts and non-experts to build high-quality training datasets faster.
+            </p>
+            <div class="help-section-links">
+                <a href="#invite-users" class="help-link">→ Inviting team members</a>
+                <a href="#track-progress" class="help-link">→ Tracking annotation progress</a>
+                <a href="#quality-control" class="help-link">→ Quality control workflows</a>
+            </div>
+        </div>
+    </div>
+
+    <!-- Keyboard Shortcuts -->
+    <div class="keyboard-shortcuts" id="keyboard-shortcuts">
+        <h2 class="keyboard-shortcuts-title">⌨️ Keyboard Shortcuts</h2>
+        <div class="shortcuts-grid">
+            <div class="shortcut-category">
+                <h4 class="shortcut-category-title">Navigation</h4>
+                <div class="shortcut-item">
+                    <span class="shortcut-description">Next image</span>
+                    <kbd class="shortcut-key">→</kbd>
+                </div>
+                <div class="shortcut-item">
+                    <span class="shortcut-description">Previous image</span>
+                    <kbd class="shortcut-key">←</kbd>
+                </div>
+                <div class="shortcut-item">
+                    <span class="shortcut-description">Save & next</span>
+                    <kbd class="shortcut-key">Enter</kbd>
+                </div>
+                <div class="shortcut-item">
+                    <span class="shortcut-description">Back to projects</span>
+                    <kbd class="shortcut-key">Esc</kbd>
+                </div>
+            </div>
+
+            <div class="shortcut-category">
+                <h4 class="shortcut-category-title">Annotation Tools</h4>
+                <div class="shortcut-item">
+                    <span class="shortcut-description">Draw box</span>
+                    <kbd class="shortcut-key">D</kbd>
+                </div>
+                <div class="shortcut-item">
+                    <span class="shortcut-description">AI segment (SAM)</span>
+                    <kbd class="shortcut-key">A</kbd>
+                </div>
+                <div class="shortcut-item">
+                    <span class="shortcut-description">Delete box</span>
+                    <kbd class="shortcut-key">Delete</kbd>
+                </div>
+                <div class="shortcut-item">
+                    <span class="shortcut-description">Undo</span>
+                    <kbd class="shortcut-key">Ctrl+Z</kbd>
+                </div>
+            </div>
+
+            <div class="shortcut-category">
+                <h4 class="shortcut-category-title">View Controls</h4>
+                <div class="shortcut-item">
+                    <span class="shortcut-description">Zoom in</span>
+                    <kbd class="shortcut-key">+</kbd>
+                </div>
+                <div class="shortcut-item">
+                    <span class="shortcut-description">Zoom out</span>
+                    <kbd class="shortcut-key">-</kbd>
+                </div>
+                <div class="shortcut-item">
+                    <span class="shortcut-description">Fit to screen</span>
+                    <kbd class="shortcut-key">F</kbd>
+                </div>
+                <div class="shortcut-item">
+                    <span class="shortcut-description">Toggle labels</span>
+                    <kbd class="shortcut-key">L</kbd>
+                </div>
+            </div>
+
+            <div class="shortcut-category">
+                <h4 class="shortcut-category-title">General</h4>
+                <div class="shortcut-item">
+                    <span class="shortcut-description">Toggle dark mode</span>
+                    <kbd class="shortcut-key">T</kbd>
+                </div>
+                <div class="shortcut-item">
+                    <span class="shortcut-description">Show shortcuts</span>
+                    <kbd class="shortcut-key">?</kbd>
+                </div>
+                <div class="shortcut-item">
+                    <span class="shortcut-description">Search species</span>
+                    <kbd class="shortcut-key">/</kbd>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- FAQ -->
+    <div class="faq">
+        <h2 class="faq-title">Frequently Asked Questions</h2>
+
+        <div class="faq-item">
+            <button class="faq-question" onclick="toggleFAQ(this)">
+                <span>How do I upload a folder of images?</span>
+                <span class="faq-icon">▼</span>
+            </button>
+            <div class="faq-answer">
+                <p>When creating a new project, click "Drop images or click to browse" and your browser will let you select an entire folder. You can upload images alone, or images with existing YOLO label files (.txt) to continue annotation work from another tool.</p>
+            </div>
+        </div>
+
+        <div class="faq-item">
+            <button class="faq-question" onclick="toggleFAQ(this)">
+                <span>What is MobileSAM and how do I use it?</span>
+                <span class="faq-icon">▼</span>
+            </button>
+            <div class="faq-answer">
+                <p>MobileSAM is an AI segmentation tool that automatically creates bounding boxes when you click on a bird. Press 'A' to activate SAM mode, then simply click on any bird in the image. The AI will detect the bird's outline and create a precise bounding box. This is much faster than manually drawing boxes.</p>
+            </div>
+        </div>
+
+        <div class="faq-item">
+            <button class="faq-question" onclick="toggleFAQ(this)">
+                <span>How do I export my annotations?</span>
+                <span class="faq-icon">▼</span>
+            </button>
+            <div class="faq-answer">
+                <p>From the project detail page, click "Export" and choose your format: YOLO (for training YOLO models), COCO (standard research format), or GeoJSON (for mapping with geographic coordinates). The export includes all completed annotations and can be filtered by user or date range.</p>
+            </div>
+        </div>
+
+        <div class="faq-item">
+            <button class="faq-question" onclick="toggleFAQ(this)">
+                <span>Can non-experts help with annotation?</span>
+                <span class="faq-icon">▼</span>
+            </button>
+            <div class="faq-answer">
+                <p>Yes! Nestperts is designed for both experts and non-experts. Non-experts can draw bounding boxes and use AI-assisted species classification, while experts can review and refine the annotations. Assign tasks based on skill level and track progress in real-time.</p>
+            </div>
+        </div>
+
+        <div class="faq-item">
+            <button class="faq-question" onclick="toggleFAQ(this)">
+                <span>What image formats are supported?</span>
+                <span class="faq-icon">▼</span>
+            </button>
+            <div class="faq-answer">
+                <p>Nestperts supports JPEG (.jpg, .jpeg) and PNG (.png) formats. For best results with drone imagery, use high-resolution JPEGs. Images are processed locally, so there's no file size limit.</p>
+            </div>
+        </div>
+
+        <div class="faq-item">
+            <button class="faq-question" onclick="toggleFAQ(this)">
+                <span>How is GeoJSON export different from YOLO?</span>
+                <span class="faq-icon">▼</span>
+            </button>
+            <div class="faq-answer">
+                <p>YOLO format (.txt files with normalized coordinates) is designed for training AI models. GeoJSON format includes geographic coordinates (latitude/longitude) and metadata, making it perfect for mapping bird colonies in GIS software or web maps. Use GeoJSON when you need to visualize data spatially.</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Contact Support -->
+    <div class="card" style="text-align: center; padding: var(--space-8);">
+        <h3 style="margin-bottom: var(--space-4);">Still Need Help?</h3>
+        <p style="color: var(--text-secondary); margin-bottom: var(--space-6); max-width: 600px; margin-left: auto; margin-right: auto;">
+            Our team is here to help you succeed with your annotation projects. Reach out with questions, feedback, or feature requests.
+        </p>
+        <div style="display: flex; gap: var(--space-4); justify-content: center;">
+            <a href="http://localhost:8501" class="btn btn-secondary">Back to NestScope</a>
+            <a href="mailto:support@nestperts.example" class="btn btn-primary">Contact Support</a>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    function toggleFAQ(button) {
+        const faqItem = button.closest('.faq-item');
+        const wasActive = faqItem.classList.contains('active');
+
+        // Close all FAQs
+        document.querySelectorAll('.faq-item').forEach(item => {
+            item.classList.remove('active');
+        });
+
+        // Open clicked FAQ if it wasn't already open
+        if (!wasActive) {
+            faqItem.classList.add('active');
+        }
+    }
+
+    // Keyboard shortcut to toggle dark mode
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 't' && !e.ctrlKey && !e.metaKey) {
+            const target = e.target;
+            // Don't trigger if typing in input/textarea
+            if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') {
+                return;
+            }
+            window.themeManager?.toggle();
+        }
+    });
+</script>
+{% endblock %}

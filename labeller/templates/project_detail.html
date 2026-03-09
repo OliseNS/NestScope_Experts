@@ -1,0 +1,722 @@
+{% extends "base.html" %}
+
+{% block title %}{{ project.name }} - Nestperts{% endblock %}
+
+{% block extra_css %}
+<style>
+    .project-detail-container {
+        max-width: 1600px;
+        margin: 0 auto;
+        padding: var(--space-8);
+    }
+
+    .project-header {
+        margin-bottom: var(--space-8);
+        padding-bottom: var(--space-6);
+        border-bottom: 2px solid var(--surface-border);
+    }
+
+    .project-header-top {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        margin-bottom: var(--space-4);
+    }
+
+    .project-title-section h1 {
+        font-size: var(--text-4xl);
+        margin-bottom: var(--space-2);
+    }
+
+    .project-description {
+        color: var(--text-secondary);
+        font-size: var(--text-lg);
+        line-height: 1.7;
+    }
+
+    .project-actions {
+        display: flex;
+        gap: var(--space-3);
+    }
+
+    .project-stats {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: var(--space-4);
+        margin-bottom: var(--space-8);
+    }
+
+    .project-content {
+        display: grid;
+        grid-template-columns: 2fr 1fr;
+        gap: var(--space-8);
+    }
+
+    .project-main {
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-6);
+    }
+
+    .project-sidebar {
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-6);
+    }
+
+    .section-card {
+        background: var(--surface-base);
+        border: 1px solid var(--surface-border);
+        border-radius: var(--radius-lg);
+        padding: var(--space-6);
+    }
+
+    .section-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: var(--space-4);
+    }
+
+    .section-title {
+        font-size: var(--text-xl);
+        font-family: var(--font-display);
+        margin: 0;
+    }
+
+    .user-list {
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-3);
+    }
+
+    .user-item {
+        display: flex;
+        align-items: center;
+        gap: var(--space-3);
+        padding: var(--space-3);
+        background: var(--bg-secondary);
+        border-radius: var(--radius-md);
+        transition: all var(--transition-fast);
+        cursor: pointer;
+    }
+
+    .user-item:hover {
+        background: var(--surface-hover);
+        transform: translateX(4px);
+    }
+
+    .user-avatar {
+        width: 48px;
+        height: 48px;
+        border-radius: var(--radius-full);
+        background: var(--brand-primary);
+        color: white;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: 700;
+        font-size: var(--text-lg);
+    }
+
+    .user-info {
+        flex: 1;
+    }
+
+    .user-name {
+        font-weight: 600;
+        color: var(--text-primary);
+        margin-bottom: var(--space-1);
+    }
+
+    .user-progress {
+        font-size: var(--text-sm);
+        color: var(--text-tertiary);
+    }
+
+    .user-stats {
+        text-align: right;
+    }
+
+    .user-count {
+        font-weight: 700;
+        color: var(--brand-primary);
+        font-size: var(--text-lg);
+    }
+
+    .user-label {
+        font-size: var(--text-xs);
+        color: var(--text-tertiary);
+    }
+
+    .image-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+        gap: var(--space-4);
+    }
+
+    .image-card {
+        aspect-ratio: 4/3;
+        border-radius: var(--radius-md);
+        overflow: hidden;
+        position: relative;
+        cursor: pointer;
+        transition: all var(--transition-base);
+    }
+
+    .image-card:hover {
+        transform: translateY(-4px);
+        box-shadow: var(--shadow-lg);
+    }
+
+    .image-card img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+    }
+
+    .image-card-overlay {
+        position: absolute;
+        inset: 0;
+        background: linear-gradient(to top, rgba(0,0,0,0.7), transparent);
+        display: flex;
+        flex-direction: column;
+        justify-content: flex-end;
+        padding: var(--space-3);
+        color: white;
+    }
+
+    .image-card-name {
+        font-size: var(--text-sm);
+        font-weight: 600;
+        margin-bottom: var(--space-1);
+    }
+
+    .image-card-status {
+        font-size: var(--text-xs);
+        display: flex;
+        align-items: center;
+        gap: var(--space-1);
+    }
+
+    .status-indicator {
+        width: 8px;
+        height: 8px;
+        border-radius: var(--radius-full);
+    }
+
+    .status-complete {
+        background: var(--success);
+    }
+
+    .status-pending {
+        background: var(--warning);
+    }
+
+    @media (max-width: 1024px) {
+        .project-content {
+            grid-template-columns: 1fr;
+        }
+
+        .project-sidebar {
+            order: -1;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="project-detail-container">
+    <!-- Project Header -->
+    <div class="project-header animate-fade-in">
+        <div class="project-header-top">
+            <div class="project-title-section">
+                <h1>{{ project.name }}</h1>
+                <p class="project-description">{{ project.description }}</p>
+            </div>
+            <div class="project-actions">
+                <button class="btn btn-secondary" onclick="exportFormat('yolo')">
+                    📤 Export
+                </button>
+                <button class="btn btn-primary" onclick="showAssignTaskModal()">
+                    + Assign Task
+                </button>
+                <button class="btn btn-secondary" onclick="showDeleteProjectModal()" style="background: rgba(220, 38, 38, 0.1); border-color: rgba(220, 38, 38, 0.3); color: #ef4444;">
+                    🗑️ Delete Project
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Project Stats -->
+    <div class="project-stats stagger-children">
+        <div class="stat-card">
+            <div class="stat-value">{{ project.total_images }}</div>
+            <div class="stat-label">Total Images</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value">{{ project.completed_images }}</div>
+            <div class="stat-label">Completed</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value">{{ project.total_annotations }}</div>
+            <div class="stat-label">Annotations</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value">{{ project.progress|int }}%</div>
+            <div class="stat-label">Progress</div>
+            <div class="progress" style="margin-top: var(--space-2);">
+                <div class="progress-bar" style="width: {{ project.progress }}%"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Content -->
+    <div class="project-content">
+        <!-- Main Content Area -->
+        <div class="project-main">
+            <!-- Images -->
+            <div class="section-card">
+                <div class="section-header">
+                    <h3 class="section-title">Images ({{ project.images | length }})</h3>
+                    <button class="btn btn-sm btn-ghost" onclick="toggleImageView()">
+                        Grid View
+                    </button>
+                </div>
+
+                <div class="image-grid" id="imageGrid">
+                    {% for image in project.images[:20] %}
+                    <div class="image-card" onclick="openImageModal('{{ image.name }}', '/project/{{ project.folder }}/image/{{ image.name }}')">
+                        <img src="/project/{{ project.folder }}/image/{{ image.name }}" alt="{{ image.name }}" loading="lazy">
+                        <div class="image-card-overlay">
+                            <div class="image-card-name">{{ image.name[:20] }}...</div>
+                            <div class="image-card-status">
+                                <span class="status-indicator {% if image.completed %}status-complete{% else %}status-pending{% endif %}"></span>
+                                {% if image.completed %}Completed{% else %}Pending{% endif %}
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+
+                {% if project.images | length > 20 %}
+                <div style="text-align: center; margin-top: var(--space-4);">
+                    <button class="btn btn-secondary" onclick="loadMoreImages()">
+                        Load More ({{ project.images | length - 20 }} remaining)
+                    </button>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Sidebar -->
+        <div class="project-sidebar">
+            <!-- Team Members -->
+            <div class="section-card">
+                <div class="section-header">
+                    <h3 class="section-title">Team ({{ project.users | length }})</h3>
+                    <button class="btn btn-sm btn-ghost" onclick="showAssignTaskModal()">
+                        + Add
+                    </button>
+                </div>
+
+                <div class="user-list">
+                    {% if project.users_detail %}
+                        {% for user in project.users_detail %}
+                        <div class="user-item" onclick="window.location.href='/project/{{ project.folder }}/editor/{{ user.username }}'">
+                            <div class="user-avatar">{{ user.username[0].upper() }}</div>
+                            <div class="user-info">
+                                <div class="user-name">{{ user.username }}</div>
+                                <div class="user-progress">
+                                    {{ user.completed }}/{{ user.assigned }} images
+                                </div>
+                            </div>
+                            <div class="user-stats">
+                                <div class="user-count">{{ user.annotations }}</div>
+                                <div class="user-label">annotations</div>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    {% else %}
+                        <div style="text-align: center; padding: var(--space-6); color: var(--text-tertiary);">
+                            <p style="margin-bottom: var(--space-2);">No team members yet</p>
+                            <button class="btn btn-sm btn-primary" onclick="showAssignTaskModal()">
+                                Assign First Task
+                            </button>
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Export Options -->
+            <div class="section-card">
+                <div class="section-header">
+                    <h3 class="section-title">Quick Actions</h3>
+                </div>
+
+                <div style="display: flex; flex-direction: column; gap: var(--space-2);">
+                    <button class="btn btn-secondary" onclick="exportFormat('yolo')">
+                        Download YOLO Format
+                    </button>
+                    <button class="btn btn-secondary" onclick="exportFormat('coco')">
+                        Download COCO Format
+                    </button>
+                    <button class="btn btn-secondary" onclick="exportFormat('geojson')">
+                        Download GeoJSON
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Delete Project Modal -->
+<div class="modal" id="deleteProjectModal">
+    <div class="modal-content" style="max-width: 500px;">
+        <div class="modal-header">
+            <h2 class="modal-title" style="color: #ef4444;">⚠️ Delete Project</h2>
+            <button class="modal-close" onclick="closeDeleteProjectModal()">&times;</button>
+        </div>
+        <div class="modal-body">
+            <div style="margin-bottom: var(--space-6);">
+                <p style="font-size: var(--text-lg); margin-bottom: var(--space-4);">
+                    Are you sure you want to <strong>permanently delete</strong> this project?
+                </p>
+
+                <div style="background: rgba(220, 38, 38, 0.1); border: 1px solid rgba(220, 38, 38, 0.3); border-radius: var(--radius-md); padding: var(--space-4); margin-bottom: var(--space-4);">
+                    <div style="font-weight: 600; margin-bottom: var(--space-2);">This will delete:</div>
+                    <ul style="margin-left: var(--space-5); color: var(--text-secondary);">
+                        <li>{{ project.total_images }} image(s)</li>
+                        <li>{{ project.total_annotations }} annotation(s)</li>
+                        <li>All user assignments</li>
+                        <li>Project metadata</li>
+                    </ul>
+                </div>
+
+                <p style="color: var(--text-tertiary); font-size: var(--text-sm);">
+                    <strong>This action cannot be undone.</strong> Consider exporting the project before deletion.
+                </p>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="deleteConfirmation">
+                    Type the project name to confirm: <strong>{{ project.name }}</strong>
+                </label>
+                <input
+                    type="text"
+                    id="deleteConfirmation"
+                    class="form-input"
+                    placeholder="Enter project name"
+                    autocomplete="off"
+                >
+            </div>
+
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" onclick="closeDeleteProjectModal()">Cancel</button>
+                <button type="button" class="btn btn-primary" onclick="confirmDeleteProject()" style="background: #ef4444; border-color: #ef4444;">
+                    Delete Project
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Assign Task Modal -->
+<div class="modal" id="assignTaskModal">
+    <div class="modal-content" style="max-width: 600px;">
+        <div class="modal-header">
+            <h2 class="modal-title">Assign Images</h2>
+            <button class="modal-close" onclick="closeAssignTaskModal()">&times;</button>
+        </div>
+        <div class="modal-body">
+            <form id="assignTaskForm" onsubmit="assignTask(event)">
+                <!-- User Selection -->
+                <div class="form-group">
+                    <label class="form-label" for="assignUser">Assign to User</label>
+                    <select id="assignUser" class="form-select" required>
+                        <option value="">Select user...</option>
+                        <!-- Will be populated dynamically -->
+                    </select>
+                    <p class="form-help">Select from global user list or create new</p>
+                </div>
+
+                <div class="form-group" id="newUserGroup" style="display: none;">
+                    <label class="form-label" for="newUserName">New User Name</label>
+                    <input type="text" id="newUserName" class="form-input" placeholder="Enter user name">
+                </div>
+
+                <!-- Assignment Stats -->
+                <div style="background: var(--bg-secondary); border-radius: var(--radius-md); padding: var(--space-4); margin-bottom: var(--space-4);">
+                    <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--space-3); text-align: center;">
+                        <div>
+                            <div style="font-size: var(--text-2xl); font-weight: 700; color: var(--brand-primary);" id="totalImagesCount">{{ project.total_images }}</div>
+                            <div style="font-size: var(--text-xs); color: var(--text-tertiary);">Total</div>
+                        </div>
+                        <div>
+                            <div style="font-size: var(--text-2xl); font-weight: 700; color: var(--warning);" id="assignedImagesCount">-</div>
+                            <div style="font-size: var(--text-xs); color: var(--text-tertiary);">Assigned</div>
+                        </div>
+                        <div>
+                            <div style="font-size: var(--text-2xl); font-weight: 700; color: var(--success);" id="unassignedImagesCount">-</div>
+                            <div style="font-size: var(--text-xs); color: var(--text-tertiary);">Unassigned</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Number of Images -->
+                <div class="form-group">
+                    <label class="form-label" for="numTasks">Number of Images to Assign</label>
+                    <input type="number" id="numTasks" class="form-input" value="10" min="1" required>
+                    <p class="form-help" id="assignHelp">Images will be randomly selected from unassigned pool</p>
+                </div>
+
+                <!-- Assignment Options -->
+                <div class="form-group">
+                    <label class="form-label">Assignment Options</label>
+                    <div style="display: flex; align-items: center; gap: var(--space-2); padding: var(--space-3); background: var(--bg-secondary); border-radius: var(--radius-md);">
+                        <input type="checkbox" id="allowReassign" style="width: auto; cursor: pointer;">
+                        <label for="allowReassign" style="margin: 0; cursor: pointer; font-size: var(--text-sm);">
+                            Allow reassignment (can assign images already assigned to others)
+                        </label>
+                    </div>
+                </div>
+
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" onclick="closeAssignTaskModal()">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Assign Images</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    const projectId = '{{ project.folder }}';
+    let allUsers = [];
+
+    // Load data on page load
+    document.addEventListener('DOMContentLoaded', () => {
+        loadAllUsers();
+        loadAssignmentStats();
+    });
+
+    async function loadAllUsers() {
+        try {
+            const response = await fetch('/api/users');
+            const data = await response.json();
+            allUsers = data.users || [];
+
+            // Populate user dropdown
+            const userSelect = document.getElementById('assignUser');
+            if (userSelect) {
+                // Clear existing options
+                userSelect.innerHTML = '<option value="">Select user...</option>';
+
+                // Add existing users
+                allUsers.forEach(user => {
+                    const option = document.createElement('option');
+                    option.value = user.name;
+                    const projectCount = user.projects ? user.projects.length : 0;
+                    option.textContent = `${user.name} (${projectCount} projects)`;
+                    userSelect.appendChild(option);
+                });
+
+                // Add "new user" option
+                const newOption = document.createElement('option');
+                newOption.value = 'new';
+                newOption.textContent = '+ Create New User';
+                userSelect.appendChild(newOption);
+            }
+        } catch (error) {
+            console.error('Error loading users:', error);
+        }
+    }
+
+    async function loadAssignmentStats() {
+        try {
+            const response = await fetch(`/api/projects/${projectId}/images/unassigned`);
+            const data = await response.json();
+
+            document.getElementById('assignedImagesCount').textContent = data.assigned_images || 0;
+            document.getElementById('unassignedImagesCount').textContent = data.unassigned_images || 0;
+
+            // Update help text
+            const helpText = document.getElementById('assignHelp');
+            if (helpText) {
+                if (data.unassigned_images > 0) {
+                    helpText.textContent = `${data.unassigned_images} unassigned images available. Images will be randomly selected.`;
+                    helpText.style.color = 'var(--success)';
+                } else {
+                    helpText.textContent = 'All images are assigned. Enable "Allow Reassignment" to assign more.';
+                    helpText.style.color = 'var(--warning)';
+                }
+            }
+        } catch (error) {
+            console.error('Error loading assignment stats:', error);
+        }
+    }
+
+    function showAssignTaskModal() {
+        document.getElementById('assignTaskModal').classList.add('active');
+        loadAssignmentStats(); // Refresh stats when opening modal
+    }
+
+    function closeAssignTaskModal() {
+        document.getElementById('assignTaskModal').classList.remove('active');
+    }
+
+    // Show new user input when "Add New User" is selected
+    document.getElementById('assignUser')?.addEventListener('change', function() {
+        const newUserGroup = document.getElementById('newUserGroup');
+        if (this.value === 'new') {
+            newUserGroup.style.display = 'block';
+            document.getElementById('newUserName').focus();
+        } else {
+            newUserGroup.style.display = 'none';
+        }
+    });
+
+    async function assignTask(event) {
+        event.preventDefault();
+
+        const userSelect = document.getElementById('assignUser');
+        let username = userSelect.value;
+
+        // Handle new user creation
+        if (username === 'new') {
+            const newUserName = document.getElementById('newUserName').value.trim();
+            if (!newUserName) {
+                showToast('Please enter a user name', 'error');
+                return;
+            }
+
+            // Create user first
+            try {
+                const createResponse = await fetchJSON('/api/users/create', {
+                    method: 'POST',
+                    body: JSON.stringify({ username: newUserName })
+                });
+
+                username = newUserName;
+                showToast(`User "${username}" created!`, 'success');
+            } catch (error) {
+                // Error shown by fetchJSON, but don't continue
+                return;
+            }
+        }
+
+        const numImages = parseInt(document.getElementById('numTasks').value);
+        const allowReassign = document.getElementById('allowReassign').checked;
+
+        try {
+            const result = await fetchJSON('/api/projects/assign-task', {
+                method: 'POST',
+                body: JSON.stringify({
+                    project_id: projectId,
+                    username: username,
+                    num_images: numImages,
+                    allow_reassign: allowReassign
+                })
+            });
+
+            const message = result.message || `Assigned ${result.assigned} image(s) to ${username}`;
+            showToast(message, 'success');
+
+            // Close modal and reload after delay
+            setTimeout(() => {
+                closeAssignTaskModal();
+                window.location.reload();
+            }, 1500);
+        } catch (error) {
+            // Error already shown by fetchJSON
+        }
+    }
+
+    async function exportFormat(format) {
+        try {
+            showToast(`Preparing ${format.toUpperCase()} export...`, 'info');
+
+            const response = await fetch(`/api/projects/${projectId}/export/${format}`);
+            const blob = await response.blob();
+
+            // Download file
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `${projectId}_${format}.zip`;
+            document.body.appendChild(a);
+            a.click();
+            window.URL.revokeObjectURL(url);
+            document.body.removeChild(a);
+
+            showToast('Export complete!', 'success');
+        } catch (error) {
+            showToast('Export failed: ' + error.message, 'error');
+        }
+    }
+
+    function openImageModal(imageName, imageUrl) {
+        // Open image in a new tab
+        window.open(imageUrl, '_blank');
+    }
+
+    // Delete project functions
+    function showDeleteProjectModal() {
+        document.getElementById('deleteProjectModal').classList.add('active');
+        document.getElementById('deleteConfirmation').value = '';
+        setTimeout(() => document.getElementById('deleteConfirmation').focus(), 100);
+    }
+
+    function closeDeleteProjectModal() {
+        document.getElementById('deleteProjectModal').classList.remove('active');
+        document.getElementById('deleteConfirmation').value = '';
+    }
+
+    async function confirmDeleteProject() {
+        const projectName = '{{ project.name }}';
+        const confirmation = document.getElementById('deleteConfirmation').value.trim();
+
+        // Check if confirmation matches
+        if (confirmation !== projectName) {
+            showToast('Project name does not match. Please type it exactly as shown.', 'error');
+            return;
+        }
+
+        try {
+            showToast('Deleting project...', 'info');
+
+            const response = await fetch(`/api/projects/${projectId}/delete`, {
+                method: 'DELETE'
+            });
+
+            const result = await response.json();
+
+            if (!response.ok) {
+                throw new Error(result.error || 'Failed to delete project');
+            }
+
+            showToast('✓ Project deleted successfully', 'success');
+
+            // Redirect to projects dashboard after short delay
+            setTimeout(() => {
+                window.location.href = '/';
+            }, 1500);
+
+        } catch (error) {
+            console.error('Delete project error:', error);
+            showToast('❌ ' + error.message, 'error');
+        }
+    }
+
+    // Close modals on background click
+    document.querySelectorAll('.modal').forEach(modal => {
+        modal.addEventListener('click', (e) => {
+            if (e.target === modal) {
+                modal.classList.remove('active');
+            }
+        });
+    });
+</script>
+{% endblock %}

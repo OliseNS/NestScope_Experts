@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test Image Loading</title>
+</head>
+<body>
+    <h1>Image Loading Test</h1>
+
+    <h2>Test 1: Direct URL (URL encoded)</h2>
+    <img src="/project/nestvision/image/10%20June%202010%20Camera%201%20Card%201%20471_x0_y2048.jpg"
+         style="max-width: 500px; border: 2px solid green;"
+         onload="console.log('✓ Test 1 loaded')"
+         onerror="console.error('✗ Test 1 failed')">
+
+    <h2>Test 2: JavaScript Image Object</h2>
+    <canvas id="test-canvas" width="500" height="400" style="border: 2px solid blue;"></canvas>
+
+    <h2>Console Output:</h2>
+    <div id="console" style="background: #000; color: #0f0; padding: 10px; font-family: monospace;"></div>
+
+    <script>
+        const consoleDiv = document.getElementById('console');
+        function log(msg) {
+            console.log(msg);
+            consoleDiv.innerHTML += msg + '<br>';
+        }
+
+        log('=== Starting Image Test ===');
+
+        // Test with JavaScript Image object
+        const imageUrl = '/project/nestvision/image/10%20June%202010%20Camera%201%20Card%201%20471_x0_y2048.jpg';
+        log('Image URL: ' + imageUrl);
+
+        const img = new Image();
+        img.crossOrigin = 'anonymous';
+
+        img.onload = function() {
+            log('✓ Image loaded: ' + img.naturalWidth + 'x' + img.naturalHeight);
+            const canvas = document.getElementById('test-canvas');
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(img, 0, 0, 500, 400);
+            log('✓ Drawn to canvas');
+        };
+
+        img.onerror = function(e) {
+            log('✗ Image failed to load');
+            log('Error: ' + JSON.stringify(e));
+        };
+
+        log('Setting img.src...');
+        img.src = imageUrl;
+    </script>
+</body>
+</html>
