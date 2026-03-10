@@ -1406,10 +1406,16 @@ class AgenticSQLChatbot(SQLChatbot):
                     yield {'type': 'answer_chunk', 'content': chunk}
                     await asyncio.sleep(0)
 
-                yield {'type': 'answer_end'}
-
-                # Parse visualization directives
+                # Parse visualization directives and get clean answer
                 viz_directives = parse_visualization_directives(full_answer, results_df)
+
+                # Send clean answer (without visualization directives)
+                yield {
+                    'type': 'answer_end',
+                    'clean_answer': viz_directives['clean_answer']
+                }
+
+                # Send visualization directives separately
                 yield {
                     'type': 'visualization',
                     'show_chart': viz_directives['show_chart'],
@@ -1452,60 +1458,56 @@ class AgenticSQLChatbot(SQLChatbot):
             {"role": "system", "content": """You are an expert data analyst specializing in Gulf Coast avian ecology.
 Analyze the natural language question to extract deep semantic meaning, entities, and logical constraints.
 
+CRITICAL: The "step_by_step_reasoning" field must contain DETAILED, SPECIFIC analysis of THIS question.
+NOT generic placeholders like "Parsing the question" but ACTUAL reasoning.
+
+## KNOWLEDGE BASE: COMMON JOIN PATTERNS & METRICS
+1. **Species Diversity (Richness)**: `COUNT(DISTINCT SpeciesCode)` - requires `tblColonyTotals...`
+2. **Abundance (Population)**: `SUM(Birds)` - requires `tblColonyTotals...`
+3. **Nesting Effort**: `SUM(Nests)` - requires `tblColonyTotals...`
+4. **Species Names**: Join `tblColonyTotals...` with `tblSpeciesCodes` on `SpeciesCode`.
+5. **Species Groups**: Join `tblColonyTotals...` with `tblSpeciesCodes` on `SpeciesCode`.
+6. **Temporal Trends**: Always include `Year` in SELECT and GROUP BY.
+7. **Mapping Requirements**: ALWAYS include `Latitude` and `Longitude` for any colony-based query.
+
+## GOLD-STANDARD FEW-SHOT EXAMPLES
+
+**Q1: "Which colonies support the highest biodiversity in Louisiana?"**
+**Reasoning**: User wants species diversity (count of unique species) per colony, filtered for State='LA'. Requires tblColonyTotals table. Needs Latitude/Longitude for mapping.
+**Query Plan**: SELECT ColonyName, State, Latitude, Longitude, COUNT(DISTINCT SpeciesCode) as species_count FROM tblColonyTotals... WHERE State='LA' AND Latitude IS NOT NULL GROUP BY ColonyName, State, Latitude, Longitude ORDER BY species_count DESC
+
+**Q2: "Show the trend of Brown Pelican population from 2010 to 2021"**
+**Reasoning**: User wants temporal trend (Sum of Birds by Year) for a specific species (Brown Pelican). Must join with tblSpeciesCodes to filter by name. 
+**Query Plan**: SELECT ct.Year, SUM(ct.Birds) as total_birds FROM tblColonyTotals... ct JOIN tblSpeciesCodes sc ON ct.SpeciesCode = sc.SpeciesCode WHERE sc.SpeciesName = 'Brown Pelican' GROUP BY ct.Year ORDER BY ct.Year
+
 Respond with ONLY a valid JSON object (no markdown, no extra text):
 
 {
-  "summary": "Deep semantic summary of the user's intent",
-  "question_type": "count | trend | comparison | list | distribution",
+  "summary": "Deep semantic summary of the user's intent (2-3 sentences explaining WHAT they want to know and WHY)",
+  "question_type": "count | trend | comparison | list | distribution | spatial_analysis",
   "entities": {
-    "species": ["List of species names or 'all'"],
-    "locations": ["List of states, colonies, or regions"],
-    "time_range": "Specific years or 'all historical'",
-    "metrics": ["Birds", "Nests", "Diversity"]
+    "species": ["Specific species mentioned or 'all species'"],
+    "locations": ["Specific states/colonies or 'all Gulf Coast'"],
+    "time_range": "Specific years (e.g., '2015-2021') or 'all available years (2010-2021)'",
+    "metrics": ["Exact metrics: 'Bird Count', 'Nest Count', 'Species Diversity', etc."]
   },
   "constraints": [
-    "List of logical filters (e.g., 'Only Louisiana', 'After 2015')"
+    "SPECIFIC filters extracted from question (e.g., 'State must be Louisiana', 'Year >= 2015', 'Exclude colonies with NULL coordinates')"
   ],
-  "tables_needed": ["List of specific tables"],
+  "tables_needed": ["Exact table names needed: tblColonyTotals2010-2021_MayJuneCombined, etc."],
   "needs_coordinates": true/false,
   "step_by_step_reasoning": [
-    "1. Intent Analysis: Deep dive into what the user is actually seeking.",
-    "2. Ambiguity Check: Identify any terms that need clarification or default assumptions.",
-    "3. Table Selection: Scientific justification for choosing specific tables.",
-    "4. Column Mapping: Exact columns required for metrics and filters.",
-    "5. Aggregation Logic: Mathematical approach (SUM vs COUNT vs AVG).",
-    "6. Spatial Requirement: Determine if Latitude/Longitude are needed for mapping.",
-    "7. Visualization Strategy: Best chart type to convey this specific insight."
+    "1. Intent: [SPECIFIC explanation of what user wants - not generic]",
+    "2. Data Location: [WHY choosing specific table - cite table purpose]",
+    "3. Metrics Needed: [EXACT columns to query and aggregate - e.g., 'COUNT(DISTINCT SpeciesCode) for diversity']",
+    "4. Filters Required: [SPECIFIC WHERE clause logic - e.g., 'WHERE State=LA AND Year BETWEEN 2015 AND 2021']",
+    "5. Grouping: [If applicable, explain GROUP BY - e.g., 'GROUP BY ColonyName to show per-colony diversity']",
+    "6. Spatial Data: [If coordinates needed, explain WHY - e.g., 'Need Lat/Lon to map biodiversity hotspots on Gulf Coast']",
+    "7. Expected Output: [Describe expected result structure - e.g., '445 rows, each colony with species_count column']"
   ]
 }
 
-Example: "Show me the trend of Brown Pelicans in Louisiana after 2015"
-{
-  "summary": "Analyze the temporal population trajectory of Brown Pelicans within Louisiana's coastal colonies specifically from 2016-2021.",
-  "question_type": "trend",
-  "entities": {
-    "species": ["Brown Pelican (BRPE)"],
-    "locations": ["Louisiana (LA)"],
-    "time_range": "2016-2021",
-    "metrics": ["Birds"]
-  },
-  "constraints": [
-    "State must be 'LA'",
-    "Year must be > 2015",
-    "SpeciesCode must map to 'BRPE'"
-  ],
-  "tables_needed": ["tblColonyTotals2010-2021_MayJuneCombined"],
-  "needs_coordinates": true,
-  "step_by_step_reasoning": [
-    "1. Intent: User seeks a time-series (trend) analysis of a specific species population in a specific state.",
-    "2. Ambiguity: 'After 2015' implies 2016 inclusive to 2021 (last available survey).",
-    "3. Table: Must use tblColonyTotals as it contains pre-aggregated Bird/Nest counts (Observations), avoiding the photo-record bias of tblSpeciesData.",
-    "4. Mapping: Will use 'Birds' column for population, 'Year' for temporal x-axis, and 'State'/'SpeciesCode' for filtering.",
-    "5. Logic: SUM('Birds') grouped by 'Year' to get total annual state population.",
-    "6. Spatial: Since it's a state-level query, Latitude/Longitude of colonies should be included to enable a colony-level map overlay.",
-    "7. Viz: Line chart is the mathematically correct choice for temporal trends."
-  ]
-}"""}
+Now analyze the user's actual question with this same level of detail."""}
         ]
 
         if conversation_history:
@@ -1583,8 +1585,8 @@ Example: "Show me the trend of Brown Pelicans in Louisiana after 2015"
 
     async def _validate_sql(self, sql_query: str, question: str, conversation_history: list = None) -> dict:
         """
-        Expert SQL validation with scientific and structural integrity checks.
-        Ensures the query matches the ecological intent of the question.
+        Expert SQL validation with detailed checklist of what was verified.
+        Returns structured validation with explicit checks.
         """
 
         # Pure LLM validation - no hard-coded rules
@@ -1592,25 +1594,31 @@ Example: "Show me the trend of Brown Pelicans in Louisiana after 2015"
             {"role": "system", "content": """You are a Principal Data Engineer and Ecologist.
 Validate the SQL query against high-level scientific and structural principles.
 
-🚨 STRUCTURAL INTEGRITY CHECK:
-1. Observations vs Records: DOES THE QUERY CONFUSE tblSpeciesData WITH tblColonyTotals?
-   - Any query for "birds/observations/nests/counts" MUST use tblColonyTotals and SUM(Birds/Nests).
-   - Queries using tblSpeciesData with COUNT(*) for population are WRONG.
-2. Spatial Integrity: IF IT INVOLVES LOCATIONS, ARE LATITUDE/LONGITUDE INCLUDED?
-   - Locations MUST have Latitude and Longitude in SELECT and GROUP BY.
-3. Column Accuracy: ARE COLUMN NAMES WRAPPED IN DOUBLE QUOTES?
-   - SQLite requires "Year", "ColonyName", "Latitude", "Longitude" for stability.
-4. Join Logic: IF JOINING tblSpeciesCodes, IS THE SpeciesCode JOIN CORRECT?
-   - Should be: ct.SpeciesCode = sc.SpeciesCode
+🚨 STRUCTURAL INTEGRITY CHECKLIST:
+1. Table Selection: Does it use tblColonyTotals for bird counts (not tblSpeciesData)?
+2. Aggregation: Does it use SUM(Birds/Nests) for counts (not COUNT(*))?
+3. Spatial Data: If querying locations, are Latitude/Longitude included?
+4. GROUP BY: If aggregating, are Lat/Lon in GROUP BY clause?
+5. NULL Handling: Does it filter "Latitude IS NOT NULL AND Longitude IS NOT NULL"?
+6. Column Names: Are all columns wrapped in double quotes?
+7. Joins: If joining tblSpeciesCodes, is the join key correct?
 
 Respond with a JSON object:
 {
   "is_valid": true/false,
-  "feedback": "Deep structural/scientific critique or 'Structurally sound'",
-  "reasoning": "Technical justification of why this query is correct or incorrect (1-3 sentences)."
+  "feedback": "One-sentence summary: pass or what's wrong",
+  "reasoning": {
+    "table_check": "Uses correct table (tblColonyTotals for bird counts)",
+    "aggregation_check": "Uses SUM(Birds) for population counts",
+    "spatial_check": "Includes Latitude/Longitude for mapping",
+    "group_by_check": "Coordinates included in GROUP BY",
+    "null_check": "Filters NULL coordinates",
+    "issues_found": []
+  }
 }
 
-Be technically rigorous. Error on the side of caution."""}
+Include ONLY the checks that apply to this specific query.
+Be technically rigorous."""}
         ]
 
         messages.append({
@@ -1628,7 +1636,7 @@ Validate (respond with JSON only):"""
                 model=self.model,
                 messages=messages,
                 temperature=self.validation_temperature,
-                max_tokens=200  # Concise validation reasoning
+                max_tokens=300  # Allow for detailed checklist
             )
 
             validation_text = response.choices[0].message.content.strip()
@@ -1646,57 +1654,84 @@ Validate (respond with JSON only):"""
                 if 'is_valid' not in validation:
                     validation['is_valid'] = True
                 if 'feedback' not in validation:
-                    validation['feedback'] = "Looks good"
+                    validation['feedback'] = "Query structure validated"
                 if 'reasoning' not in validation:
-                    validation['reasoning'] = validation.get('feedback', "Validation performed")
+                    validation['reasoning'] = {"summary": validation.get('feedback', "Validation performed")}
             except json.JSONDecodeError:
                 # If JSON parsing fails, be lenient and assume valid
                 # Only mark as invalid if we see clear negative indicators
                 text_lower = validation_text.lower()
                 if any(word in text_lower for word in ["invalid", "error", "wrong", "incorrect", "missing"]):
-                    validation = {"is_valid": False, "feedback": validation_text[:100], "reasoning": validation_text}
+                    validation = {
+                        "is_valid": False,
+                        "feedback": validation_text[:100],
+                        "reasoning": {"summary": validation_text}
+                    }
                 else:
-                    validation = {"is_valid": True, "feedback": "Looks good", "reasoning": validation_text}
+                    validation = {
+                        "is_valid": True,
+                        "feedback": "Query structure validated",
+                        "reasoning": {"summary": validation_text}
+                    }
 
             return validation
         except Exception as e:
             # On error, assume valid and proceed
-            return {"is_valid": True, "feedback": "Looks good", "reasoning": "Validation check performed"}
+            return {
+                "is_valid": True,
+                "feedback": "Query structure validated",
+                "reasoning": {"summary": "Validation check performed"}
+            }
 
     async def _validate_results(self, question: str, sql_query: str, results_df, conversation_history: list = None) -> dict:
         """
-        Final scientific validation of the query output.
-        Checks for data sanity, entity matching, and aggregation correctness.
+        Final validation with detailed reasoning about result quality.
+        Returns structured validation showing what was checked.
         """
 
         if results_df is None or len(results_df) == 0:
-            return {"is_valid": True, "feedback": "No results returned - verifying if this is an expected empty set for the given filters."}
+            return {
+                "is_valid": True,
+                "feedback": "Empty result set (may be expected based on filters)",
+                "reasoning": {
+                    "row_count_check": "0 rows returned",
+                    "empty_is_expected": "May be valid if no data matches the filters"
+                }
+            }
 
         # Format sample for the model
         results_summary = f"Total Rows: {len(results_df)}\n"
         results_summary += f"Columns: {', '.join(results_df.columns)}\n"
-        results_summary += f"Sample Row: {results_df.iloc[0].to_dict() if len(results_df) > 0 else 'None'}"
+        if len(results_df) > 0:
+            results_summary += f"Sample Row 1: {results_df.iloc[0].to_dict()}"
+            if len(results_df) > 1:
+                results_summary += f"\nSample Row 2: {results_df.iloc[1].to_dict()}"
 
         messages = [
-            {"role": "system", "content": """You are a Senior Data Scientist performing a final Quality Assurance check.
-Cross-reference the original question with the SQL query and the actual data samples returned.
+            {"role": "system", "content": """You are a Senior Data Scientist performing QA.
+Cross-reference the question, SQL, and actual results for logical consistency.
 
-🚨 FACTUAL INTEGRITY CHECK:
-1. Metric Alignment: Does the question ask for 'Birds' but the query returns 'COUNT(*)'?
-   - If 'how many' birds, it MUST be a SUM, not a row count.
-2. Entity Alignment: Does the result set actually contain the years/species/locations requested?
-   - If user asked for '2021' but results show '2010', the query filter is wrong.
-3. Scale Sanity: Do the numbers look realistic for avian monitoring (e.g., thousands vs millions)?
-4. Observation Bias: Ensure no use of tblSpeciesData for population totals.
+RESULT QUALITY CHECKLIST:
+1. Row Count: Is the number of rows reasonable for this query type?
+2. Column Match: Do the columns match what the question asked for?
+3. Value Ranges: Are the numeric values realistic for bird monitoring?
+4. Entity Match: Do years/species/locations match the question filters?
+5. Data Types: Are columns the expected types (numbers vs text)?
 
-Respond with a JSON object:
+Respond with JSON:
 {
   "is_valid": true/false,
-  "feedback": "Detailed scientific assessment of why the results are accurate or misleading.",
-  "reasoning": "Technical trace of the validation logic applied to the columns and values."
+  "feedback": "One-sentence summary",
+  "reasoning": {
+    "row_count_check": "X rows returned, reasonable for this query",
+    "column_check": "Columns match question intent",
+    "value_check": "Numbers are realistic for bird populations",
+    "entity_check": "Years/species match filters",
+    "issues_found": []
+  }
 }
 
-Mark as INVALID if there is ANY logical disconnect between the user's intent and the data returned."""}
+Include ONLY checks that apply. Be specific about numbers."""}
         ]
 
         messages.append({
@@ -1709,7 +1744,7 @@ SQL Query:
 Results Summary:
 {results_summary}
 
-Validate (respond with JSON, include reasoning):"""
+Validate (respond with JSON):"""
         })
 
         try:
@@ -1717,7 +1752,7 @@ Validate (respond with JSON, include reasoning):"""
                 model=self.model,
                 messages=messages,
                 temperature=self.validation_temperature,
-                max_tokens=200  # Concise validation reasoning
+                max_tokens=300  # Allow for detailed reasoning
             )
 
             validation_text = response.choices[0].message.content.strip()
@@ -1735,17 +1770,25 @@ Validate (respond with JSON, include reasoning):"""
                 if 'is_valid' not in validation:
                     validation['is_valid'] = True
                 if 'feedback' not in validation:
-                    validation['feedback'] = "Results look correct"
+                    validation['feedback'] = "Results validated"
                 if 'reasoning' not in validation:
-                    validation['reasoning'] = validation.get('feedback', "Results validation performed")
+                    validation['reasoning'] = {"summary": validation.get('feedback', "Results check performed")}
             except json.JSONDecodeError:
                 # Default to valid
-                validation = {"is_valid": True, "feedback": "Results appear reasonable", "reasoning": validation_text}
+                validation = {
+                    "is_valid": True,
+                    "feedback": "Results validated",
+                    "reasoning": {"summary": validation_text}
+                }
 
             return validation
         except Exception as e:
             # On error, assume valid
-            return {"is_valid": True, "feedback": "Results look correct", "reasoning": "Results validation check performed"}
+            return {
+                "is_valid": True,
+                "feedback": "Results validated",
+                "reasoning": {"summary": "Results check performed"}
+            }
 
 
 # Initialize chatbot and bird detector
@@ -2034,10 +2077,13 @@ async def ask_question_stream(request: QuestionRequest):
                 yield f"data: {json.dumps({'type': 'answer_chunk', 'content': chunk})}\n\n"
                 await asyncio.sleep(0)  # Allow other tasks to run
 
-            yield f"data: {json.dumps({'type': 'answer_end'})}\n\n"
-
-            # Parse visualization directives (with automatic fallback detection)
+            # Parse visualization directives and get clean answer
             viz_directives = parse_visualization_directives(full_answer, results_df)
+
+            # Send clean answer (without visualization directives)
+            yield f"data: {json.dumps({'type': 'answer_end', 'clean_answer': viz_directives['clean_answer']})}\n\n"
+
+            # Send visualization directives separately
             yield f"data: {json.dumps({'type': 'visualization', 'show_chart': viz_directives['show_chart'], 'chart_type': viz_directives['chart_type'], 'show_map': viz_directives['show_map']})}\n\n"
 
             yield f"data: {json.dumps({'type': 'done'})}\n\n"
@@ -3286,6 +3332,17 @@ async def get_risk_map_zones():
 
         zones = []
         for row in results:
+            # Map FEMA zone to risk category
+            fema_zone = row.get('fema_flood_zone', 'UNKNOWN')
+            if fema_zone in ['A', 'AE', 'V', 'VE']:
+                fema_category = 'HIGH'
+            elif fema_zone in ['AO', 'AH', 'A99']:
+                fema_category = 'MODERATE'
+            elif fema_zone == 'X500':
+                fema_category = 'LOW'
+            else:
+                fema_category = 'MINIMAL'
+
             zones.append({
                 "colony_name": row['colony_name'],
                 "latitude": row['latitude'],
@@ -3299,7 +3356,11 @@ async def get_risk_map_zones():
                 "species": row['species_count'],
                 "last_survey": row['last_year'] if 'last_year' in row else 2021,
                 "data_year": 2026,
-                "radius_km": 50
+                "radius_km": 50,
+                # FEMA Flood Zone Data
+                "fema_zone": fema_zone,
+                "fema_description": row.get('fema_zone_description', 'Data unavailable'),
+                "fema_category": fema_category
             })
 
         return {

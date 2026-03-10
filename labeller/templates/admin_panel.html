@@ -1,0 +1,812 @@
+{% extends "base.html" %}
+
+{% block title %}Admin Panel - Nestperts{% endblock %}
+
+{% block extra_css %}
+<style>
+    body {
+        background: linear-gradient(135deg, #1e1e1e 0%, #2a2a2a 100%);
+        min-height: 100vh;
+    }
+
+    .admin-container {
+        max-width: 1600px;
+        margin: 0 auto;
+        padding: 3rem 2rem;
+    }
+
+    /* Page Header */
+    .page-header {
+        margin-bottom: 3rem;
+    }
+
+    .page-title {
+        font-size: 2.5rem;
+        font-weight: 700;
+        color: #ffffff;
+        margin-bottom: 0.5rem;
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+    }
+
+    .page-subtitle {
+        font-size: 1.125rem;
+        color: rgba(255, 255, 255, 0.6);
+    }
+
+    /* Flash Messages */
+    .flash-messages {
+        margin-bottom: 2rem;
+    }
+
+    .flash-message {
+        padding: 1rem 1.5rem;
+        border-radius: 12px;
+        margin-bottom: 1rem;
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+        font-size: 0.9375rem;
+        animation: slideIn 0.3s ease-out;
+    }
+
+    @keyframes slideIn {
+        from {
+            transform: translateX(-20px);
+            opacity: 0;
+        }
+        to {
+            transform: translateX(0);
+            opacity: 1;
+        }
+    }
+
+    .flash-message.success {
+        background: rgba(86, 184, 151, 0.15);
+        border: 1px solid rgba(86, 184, 151, 0.3);
+        color: #56B897;
+    }
+
+    .flash-message.error {
+        background: rgba(252, 129, 129, 0.15);
+        border: 1px solid rgba(252, 129, 129, 0.3);
+        color: #fc8181;
+    }
+
+    /* Stats Grid */
+    .stats-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+        gap: 1.5rem;
+        margin-bottom: 3rem;
+    }
+
+    .stat-card {
+        background: linear-gradient(135deg, rgba(45, 45, 45, 0.9) 0%, rgba(35, 35, 35, 0.9) 100%);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 16px;
+        padding: 1.75rem;
+        position: relative;
+        overflow: hidden;
+        transition: all 0.3s ease;
+    }
+
+    .stat-card::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 3px;
+        background: linear-gradient(90deg, var(--accent-color) 0%, transparent 100%);
+    }
+
+    .stat-card:hover {
+        transform: translateY(-4px);
+        border-color: rgba(86, 184, 151, 0.3);
+        box-shadow: 0 12px 40px rgba(0, 0, 0, 0.4);
+    }
+
+    .stat-card.primary { --accent-color: #56B897; }
+    .stat-card.secondary { --accent-color: #7B68EE; }
+    .stat-card.tertiary { --accent-color: #FF6B9D; }
+    .stat-card.quaternary { --accent-color: #FFA500; }
+
+    .stat-label {
+        font-size: 0.8125rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.1em;
+        color: rgba(255, 255, 255, 0.6);
+        margin-bottom: 0.75rem;
+    }
+
+    .stat-value {
+        font-size: 2.5rem;
+        font-weight: 700;
+        color: #ffffff;
+        line-height: 1;
+        margin-bottom: 0.5rem;
+    }
+
+    .stat-description {
+        font-size: 0.875rem;
+        color: rgba(255, 255, 255, 0.5);
+    }
+
+    /* Section Cards */
+    .section-card {
+        background: rgba(45, 45, 45, 0.6);
+        backdrop-filter: blur(20px);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 20px;
+        padding: 2rem;
+        margin-bottom: 2rem;
+        transition: all 0.3s ease;
+    }
+
+    .section-card:hover {
+        border-color: rgba(86, 184, 151, 0.2);
+    }
+
+    .section-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 2rem;
+        padding-bottom: 1.5rem;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    .section-title {
+        font-size: 1.5rem;
+        font-weight: 600;
+        color: #ffffff;
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+    }
+
+    /* Forms */
+    .add-form {
+        display: grid;
+        grid-template-columns: 2fr 1fr auto;
+        gap: 1rem;
+        margin-bottom: 2rem;
+    }
+
+    .form-input {
+        padding: 0.875rem 1.25rem;
+        background: rgba(255, 255, 255, 0.05);
+        border: 1px solid rgba(255, 255, 255, 0.15);
+        border-radius: 12px;
+        color: #ffffff;
+        font-size: 0.9375rem;
+        transition: all 0.2s ease;
+    }
+
+    .form-input:focus {
+        outline: none;
+        border-color: #56B897;
+        background: rgba(255, 255, 255, 0.08);
+        box-shadow: 0 0 0 3px rgba(86, 184, 151, 0.1);
+    }
+
+    .form-input::placeholder {
+        color: rgba(255, 255, 255, 0.4);
+    }
+
+    .btn {
+        padding: 0.875rem 1.75rem;
+        border-radius: 12px;
+        font-weight: 600;
+        font-size: 0.9375rem;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        border: none;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        text-decoration: none;
+    }
+
+    .btn-primary {
+        background: linear-gradient(135deg, #56B897 0%, #4A9D7F 100%);
+        color: #ffffff;
+    }
+
+    .btn-primary:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 8px 24px rgba(86, 184, 151, 0.3);
+    }
+
+    .btn-danger {
+        background: linear-gradient(135deg, #fc8181 0%, #f56565 100%);
+        color: #ffffff;
+        padding: 0.5rem 1rem;
+        font-size: 0.8125rem;
+    }
+
+    .btn-danger:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 6px 20px rgba(252, 129, 129, 0.3);
+    }
+
+    /* Table */
+    .data-table {
+        width: 100%;
+        border-collapse: separate;
+        border-spacing: 0;
+    }
+
+    .data-table thead {
+        background: rgba(255, 255, 255, 0.03);
+    }
+
+    .data-table th {
+        padding: 1rem 1.5rem;
+        text-align: left;
+        font-size: 0.8125rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.1em;
+        color: rgba(255, 255, 255, 0.6);
+        border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    .data-table td {
+        padding: 1.25rem 1.5rem;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+        color: rgba(255, 255, 255, 0.9);
+        font-size: 0.9375rem;
+    }
+
+    .data-table tr:hover td {
+        background: rgba(86, 184, 151, 0.05);
+    }
+
+    .user-cell {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+    }
+
+    .user-avatar-wrapper-sm {
+        position: relative;
+        width: 40px;
+        height: 40px;
+        flex-shrink: 0;
+    }
+
+    .user-avatar-sm {
+        width: 40px;
+        height: 40px;
+        border-radius: 50%;
+        border: 2px solid #56B897;
+        object-fit: cover;
+        display: block;
+    }
+
+    .user-avatar-sm.hidden {
+        display: none;
+    }
+
+    .user-avatar-fallback-sm {
+        width: 40px;
+        height: 40px;
+        border-radius: 50%;
+        border: 2px solid #56B897;
+        background: linear-gradient(135deg, #56B897 0%, #4A9B7F 100%);
+        display: none;
+        align-items: center;
+        justify-content: center;
+        font-size: 0.875rem;
+        font-weight: 600;
+        color: #ffffff;
+        text-transform: uppercase;
+        letter-spacing: 0.02em;
+    }
+
+    .user-avatar-fallback-sm.visible {
+        display: flex;
+    }
+
+    .user-info {
+        display: flex;
+        flex-direction: column;
+    }
+
+    .user-info-name {
+        font-weight: 600;
+        color: #ffffff;
+    }
+
+    .user-info-email {
+        font-size: 0.8125rem;
+        color: rgba(255, 255, 255, 0.5);
+    }
+
+    /* Role Badge */
+    .role-badge {
+        display: inline-block;
+        padding: 0.375rem 0.875rem;
+        border-radius: 8px;
+        font-size: 0.75rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+    }
+
+    .role-badge.admin {
+        background: rgba(255, 215, 0, 0.15);
+        color: #FFD700;
+        border: 1px solid rgba(255, 215, 0, 0.3);
+    }
+
+    .role-badge.annotator {
+        background: rgba(123, 104, 238, 0.15);
+        color: #7B68EE;
+        border: 1px solid rgba(123, 104, 238, 0.3);
+    }
+
+    .role-badge.viewer {
+        background: rgba(255, 255, 255, 0.1);
+        color: rgba(255, 255, 255, 0.7);
+        border: 1px solid rgba(255, 255, 255, 0.2);
+    }
+
+    /* Permissions Indicators */
+    .permissions {
+        display: flex;
+        gap: 0.5rem;
+    }
+
+    .permission-dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        display: inline-block;
+    }
+
+    .permission-dot.active {
+        background: #56B897;
+        box-shadow: 0 0 8px rgba(86, 184, 151, 0.5);
+    }
+
+    .permission-dot.inactive {
+        background: rgba(255, 255, 255, 0.2);
+    }
+
+    .permission-label {
+        font-size: 0.75rem;
+        color: rgba(255, 255, 255, 0.5);
+        display: flex;
+        align-items: center;
+        gap: 0.375rem;
+    }
+
+    /* Role Select */
+    .role-select {
+        padding: 0.5rem 0.875rem;
+        background: rgba(255, 255, 255, 0.05);
+        border: 1px solid rgba(255, 255, 255, 0.15);
+        border-radius: 8px;
+        color: #ffffff;
+        font-size: 0.875rem;
+        cursor: pointer;
+        transition: all 0.2s ease;
+    }
+
+    .role-select:hover {
+        border-color: #56B897;
+        background: rgba(255, 255, 255, 0.08);
+    }
+
+    .role-select:focus {
+        outline: none;
+        border-color: #56B897;
+        box-shadow: 0 0 0 3px rgba(86, 184, 151, 0.1);
+    }
+
+    /* Empty State */
+    .empty-state {
+        text-align: center;
+        padding: 4rem 2rem;
+        color: rgba(255, 255, 255, 0.5);
+    }
+
+    .empty-icon {
+        font-size: 4rem;
+        margin-bottom: 1rem;
+        opacity: 0.3;
+    }
+
+    /* Responsive Design */
+    @media (max-width: 1400px) {
+        .stats-grid {
+            grid-template-columns: repeat(3, 1fr);
+        }
+    }
+
+    @media (max-width: 1024px) {
+        .admin-container {
+            padding: 2rem 1rem;
+        }
+
+        .add-form {
+            grid-template-columns: 1fr;
+        }
+
+        .stats-grid {
+            grid-template-columns: repeat(2, 1fr);
+        }
+
+        .page-title {
+            font-size: 2rem;
+        }
+
+        .section-card {
+            padding: 1.5rem;
+        }
+
+        .data-table {
+            font-size: 0.875rem;
+        }
+
+        .data-table th,
+        .data-table td {
+            padding: 1rem;
+        }
+    }
+
+    @media (max-width: 768px) {
+        .admin-container {
+            padding: 1.5rem 1rem;
+        }
+
+        .stats-grid {
+            grid-template-columns: 1fr;
+        }
+
+        .page-title {
+            font-size: 1.75rem;
+            flex-direction: column;
+            align-items: flex-start;
+            gap: 0.5rem;
+        }
+
+        .page-subtitle {
+            font-size: 1rem;
+        }
+
+        .section-card {
+            padding: 1rem;
+            border-radius: 16px;
+        }
+
+        .section-header {
+            flex-direction: column;
+            align-items: flex-start;
+            gap: 1rem;
+        }
+
+        .section-title {
+            font-size: 1.25rem;
+        }
+
+        /* Stack table horizontally on mobile */
+        .data-table {
+            display: block;
+            overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
+        }
+
+        .data-table thead {
+            display: none;
+        }
+
+        .data-table tbody,
+        .data-table tr,
+        .data-table td {
+            display: block;
+        }
+
+        .data-table tr {
+            margin-bottom: 1.5rem;
+            background: rgba(255, 255, 255, 0.03);
+            border-radius: 12px;
+            padding: 1rem;
+        }
+
+        .data-table td {
+            padding: 0.75rem 0;
+            border: none;
+            text-align: left;
+        }
+
+        .data-table td:before {
+            content: attr(data-label);
+            font-weight: 600;
+            color: rgba(255, 255, 255, 0.6);
+            display: block;
+            margin-bottom: 0.25rem;
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .user-cell {
+            margin-top: 0.5rem;
+        }
+
+        .permissions {
+            flex-wrap: wrap;
+        }
+
+        .add-form {
+            gap: 0.75rem;
+        }
+
+        .form-input {
+            padding: 0.75rem 1rem;
+        }
+
+        .btn {
+            padding: 0.75rem 1.5rem;
+        }
+    }
+
+    @media (max-width: 480px) {
+        .page-title {
+            font-size: 1.5rem;
+        }
+
+        .stat-card {
+            padding: 1.25rem;
+        }
+
+        .stat-value {
+            font-size: 2rem;
+        }
+
+        .user-avatar-sm {
+            width: 32px;
+            height: 32px;
+        }
+
+        .user-info-name {
+            font-size: 0.875rem;
+        }
+
+        .user-info-email {
+            font-size: 0.75rem;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="admin-container">
+    <!-- Page Header -->
+    <div class="page-header">
+        <h1 class="page-title">
+            <span>🔐</span>
+            Admin Panel
+        </h1>
+        <p class="page-subtitle">Manage users, roles, and permissions</p>
+    </div>
+
+    <!-- Flash Messages -->
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+        <div class="flash-messages">
+            {% for category, message in messages %}
+            <div class="flash-message {{ category }}">
+                <span>{% if category == 'success' %}✓{% else %}⚠{% endif %}</span>
+                <span>{{ message }}</span>
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+    {% endwith %}
+
+    <!-- Stats Grid -->
+    <div class="stats-grid">
+        <div class="stat-card primary">
+            <div class="stat-label">Approved Emails</div>
+            <div class="stat-value">{{ approved_emails|length }}</div>
+            <div class="stat-description">Users who can access</div>
+        </div>
+
+        <div class="stat-card secondary">
+            <div class="stat-label">Active Users</div>
+            <div class="stat-value">{{ users|length }}</div>
+            <div class="stat-description">Registered accounts</div>
+        </div>
+
+        <div class="stat-card tertiary">
+            <div class="stat-label">Total Logins</div>
+            <div class="stat-value">{{ total_logins }}</div>
+            <div class="stat-description">All-time sessions</div>
+        </div>
+
+        <div class="stat-card quaternary">
+            <div class="stat-label">Admins</div>
+            <div class="stat-value">{{ role_counts.admin }}</div>
+            <div class="stat-description">Full access users</div>
+        </div>
+    </div>
+
+    <!-- Approved Emails Section -->
+    <div class="section-card">
+        <div class="section-header">
+            <h2 class="section-title">
+                <span>📧</span>
+                Approved Emails
+            </h2>
+        </div>
+
+        <form method="POST" action="{{ url_for('admin_add_email') }}" class="add-form">
+            <input type="email" name="email" class="form-input" placeholder="user@example.com" required>
+            <input type="text" name="notes" class="form-input" placeholder="Notes (optional)">
+            <button type="submit" class="btn btn-primary">+ Add Email</button>
+        </form>
+
+        {% if approved_emails %}
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>Email Address</th>
+                    <th>Added By</th>
+                    <th>Date</th>
+                    <th>Notes</th>
+                    <th>Action</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for email in approved_emails %}
+                <tr>
+                    <td data-label="Email"><strong>{{ email.email }}</strong></td>
+                    <td data-label="Added By">{{ email.added_by or 'System' }}</td>
+                    <td data-label="Date">{{ email.added_at[:10] }}</td>
+                    <td data-label="Notes">{{ email.notes or '-' }}</td>
+                    <td data-label="Action">
+                        <form method="POST" action="{{ url_for('admin_remove_email') }}" style="display: inline;">
+                            <input type="hidden" name="email" value="{{ email.email }}">
+                            <button type="submit" class="btn btn-danger" onclick="return confirm('Remove {{ email.email }}?')">
+                                Remove
+                            </button>
+                        </form>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+        <div class="empty-state">
+            <div class="empty-icon">📭</div>
+            <p>No approved emails yet. Add your first one above!</p>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- Users & Roles Section -->
+    <div class="section-card">
+        <div class="section-header">
+            <h2 class="section-title">
+                <span>👥</span>
+                Users & Roles
+            </h2>
+        </div>
+
+        {% if users %}
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>User</th>
+                    <th>Role</th>
+                    <th>Permissions</th>
+                    <th>Last Login</th>
+                    <th>Logins</th>
+                    <th>Change Role</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for u in users %}
+                <tr>
+                    <td data-label="User">
+                        <div class="user-cell">
+                            <div class="user-avatar-wrapper-sm">
+                                <img src="{{ u.picture }}"
+                                     alt="{{ u.name }}"
+                                     class="user-avatar-sm"
+                                     onerror="handleAdminAvatarError(this)"
+                                     loading="lazy">
+                                <div class="user-avatar-fallback-sm">
+                                    {{ u.name[0] if u.name else 'U' }}
+                                </div>
+                            </div>
+                            <div class="user-info">
+                                <span class="user-info-name">{{ u.name }}</span>
+                                <span class="user-info-email">{{ u.email }}</span>
+                            </div>
+                        </div>
+                    </td>
+                    <td data-label="Role">
+                        <span class="role-badge {{ u.role }}">{{ u.role }}</span>
+                    </td>
+                    <td data-label="Permissions">
+                        <div class="permissions">
+                            <span class="permission-label" title="Can annotate">
+                                <span class="permission-dot {{ 'active' if u.can_annotate else 'inactive' }}"></span>
+                                Annotate
+                            </span>
+                            <span class="permission-label" title="Can edit DB">
+                                <span class="permission-dot {{ 'active' if u.can_edit_db else 'inactive' }}"></span>
+                                Edit DB
+                            </span>
+                            <span class="permission-label" title="Can manage users">
+                                <span class="permission-dot {{ 'active' if u.can_manage_users else 'inactive' }}"></span>
+                                Manage
+                            </span>
+                        </div>
+                    </td>
+                    <td data-label="Last Login">{{ u.last_login[:10] }}</td>
+                    <td data-label="Logins">{{ u.login_count }}</td>
+                    <td data-label="Change Role">
+                        {% if u.email != user.email %}
+                        <form method="POST" action="{{ url_for('admin_update_role') }}">
+                            <input type="hidden" name="email" value="{{ u.email }}">
+                            <select name="role" class="role-select" onchange="this.form.submit()">
+                                <option value="admin" {{ 'selected' if u.role == 'admin' else '' }}>Admin</option>
+                                <option value="annotator" {{ 'selected' if u.role == 'annotator' else '' }}>Annotator</option>
+                                <option value="viewer" {{ 'selected' if u.role == 'viewer' else '' }}>Viewer</option>
+                            </select>
+                        </form>
+                        {% else %}
+                        <span style="color: rgba(255,255,255,0.5); font-size: 0.875rem;">You</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+        <div class="empty-state">
+            <div class="empty-icon">👤</div>
+            <p>No users have logged in yet.</p>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    // Handle avatar image load failure in admin panel
+    function handleAdminAvatarError(img) {
+        console.log('Admin avatar image failed to load, showing fallback');
+        img.classList.add('hidden');
+        const fallback = img.nextElementSibling;
+        if (fallback && fallback.classList.contains('user-avatar-fallback-sm')) {
+            fallback.classList.add('visible');
+        }
+    }
+
+    // Preload all avatars and show fallbacks if they fail
+    document.addEventListener('DOMContentLoaded', function() {
+        const avatarImages = document.querySelectorAll('.user-avatar-sm');
+        avatarImages.forEach(function(img) {
+            if (!img.complete) {
+                img.addEventListener('error', function() {
+                    handleAdminAvatarError(this);
+                });
+            } else if (!img.naturalWidth) {
+                // Image loaded but has no dimensions (broken)
+                handleAdminAvatarError(img);
+            }
+        });
+    });
+</script>
+{% endblock %}

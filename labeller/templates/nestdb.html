@@ -819,10 +819,28 @@
                         💡 Tip: Press Enter or Ctrl+Enter to generate. Uses Claude Sonnet 4.6 with full database context.
                     </div>
                 </div>
+
+                <!-- AI Context Refresh Section -->
+                <div class="db-ai-assist" style="margin-top: var(--space-4); background: rgba(247, 144, 9, 0.05); border: 1px solid var(--db-warning);">
+                    <div class="db-ai-title">
+                        <span>🛠️</span>
+                        Advanced Settings & AI Context
+                    </div>
+                    <div style="font-size: var(--text-sm); color: var(--text-secondary); margin-bottom: var(--space-3);">
+                        Optimize AI accuracy by allowing the agent to explore the latest database schema and content.
+                        <strong style="color: var(--db-warning);">⚠️ Resource-intensive operation</strong> - use only when database structure has changed.
+                    </div>
+                    <button class="db-btn db-btn-secondary" onclick="triggerDatabaseExplorer()" id="btnExploreDB">
+                        <span>🕵️</span> Trigger Database Explorer Agent
+                    </button>
+                    <div id="explorerStatus" style="margin-top: var(--space-3); display: none;"></div>
+                </div>
+
                 <textarea
                     class="db-sql-textarea"
                     id="sqlEditor"
                     placeholder="SELECT * FROM your_table LIMIT 100;"
+                    style="margin-top: var(--space-4);"
                 ></textarea>
                 <div style="display: flex; gap: var(--space-2);">
                     <button class="db-btn db-btn-primary" onclick="executeSQL()">
@@ -1483,6 +1501,81 @@ function clearSQL() {
             Write a SQL query and click "Execute Query"
         </div>
     `;
+}
+
+// ============================================================================
+// DATABASE EXPLORER AGENT
+// ============================================================================
+async function triggerDatabaseExplorer() {
+    const btn = document.getElementById('btnExploreDB');
+    const statusDiv = document.getElementById('explorerStatus');
+
+    // Disable button and show loading
+    btn.disabled = true;
+    btn.innerHTML = '<span>⏳</span> Exploring...';
+    statusDiv.style.display = 'block';
+    statusDiv.innerHTML = `
+        <div style="background: var(--bg-primary); border: 1px solid var(--surface-border); border-radius: 8px; padding: 16px;">
+            <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 8px;">
+                <div class="db-spinner"></div>
+                <span style="color: var(--text-primary); font-weight: 600;">Agent exploring database...</span>
+            </div>
+            <div style="color: var(--text-tertiary); font-size: var(--text-sm);">
+                This may take 30-60 seconds. The agent is analyzing schema, relationships, and content.
+            </div>
+        </div>
+    `;
+
+    try {
+        const response = await fetch(`${API_BASE_URL}/db/explore`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+        });
+
+        const data = await response.json();
+
+        if (data.success) {
+            statusDiv.innerHTML = `
+                <div style="background: rgba(62, 207, 142, 0.1); border: 1px solid var(--db-accent); border-radius: 8px; padding: 16px;">
+                    <div style="color: var(--db-accent); font-weight: 600; margin-bottom: 8px;">
+                        ✓ ${data.message}
+                    </div>
+                    ${data.insights && data.insights.length > 0 ? `
+                        <div style="color: var(--text-secondary); font-size: var(--text-sm); margin-top: 12px;">
+                            <strong>💡 Agent Insights:</strong>
+                            <ul style="margin: 8px 0 0 20px; padding: 0;">
+                                ${data.insights.map(insight => `<li style="margin: 4px 0;">${insight}</li>`).join('')}
+                            </ul>
+                        </div>
+                    ` : ''}
+                </div>
+            `;
+            showToast('✓ Database exploration complete!', 'success');
+        } else {
+            statusDiv.innerHTML = `
+                <div style="background: rgba(240, 68, 56, 0.1); border: 1px solid var(--db-danger); border-radius: 8px; padding: 16px;">
+                    <div style="color: var(--db-danger); font-weight: 600;">
+                        ✗ Agent failed: ${data.error || 'Unknown error'}
+                    </div>
+                </div>
+            `;
+            showToast('Failed to explore database', 'error');
+        }
+    } catch (error) {
+        statusDiv.innerHTML = `
+            <div style="background: rgba(240, 68, 56, 0.1); border: 1px solid var(--db-danger); border-radius: 8px; padding: 16px;">
+                <div style="color: var(--db-danger); font-weight: 600;">
+                    ✗ Error: ${error.message}
+                </div>
+            </div>
+        `;
+        showToast('Error triggering database explorer', 'error');
+        console.error('Database explorer error:', error);
+    } finally {
+        // Re-enable button
+        btn.disabled = false;
+        btn.innerHTML = '<span>🕵️</span> Trigger Database Explorer Agent';
+    }
 }
 
 // ============================================================================

@@ -20,17 +20,52 @@ import numpy as np
 from pathlib import Path
 from datetime import datetime
 from werkzeug.utils import secure_filename
-from flask import Flask, render_template, request, jsonify, send_from_directory, send_file
+from flask import Flask, render_template, request, jsonify, send_from_directory, send_file, redirect, url_for, session, flash
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
 
 # Add project root to path
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
+# Import authentication module
+from labeller.auth import (
+    init_auth_db,
+    setup_oauth,
+    login_required,
+    admin_required,
+    api_login_required,
+    annotator_required,
+    api_annotator_required,
+    api_db_editor_required,
+    is_email_approved,
+    is_admin,
+    create_or_update_user,
+    add_approved_email,
+    remove_approved_email,
+    get_approved_emails,
+    get_all_users,
+    get_current_user,
+    add_admin,
+    get_user_permissions
+)
+
 app = Flask(__name__)
 app.config['MAX_CONTENT_LENGTH'] = None  # No upload limit
 app.config['MAX_FORM_MEMORY_SIZE'] = None  # No form memory limit
 app.config['UPLOAD_FOLDER'] = 'projects_data'
+
+# Security configuration for sessions
+app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', os.urandom(24).hex())
+
+# Initialize OAuth
+oauth, google = setup_oauth(app)
+
+# Initialize authentication database
+init_auth_db()
 
 # Configure request limits
 @app.before_request
@@ -207,10 +242,197 @@ def get_all_project_stats():
     }
 
 # ============================================================================
+# PUBLIC ROUTES (No Authentication Required)
+# ============================================================================
+
+@app.route('/health')
+def health():
+    """Health check endpoint for monitoring (no auth required)"""
+    from labeller.auth import AUTH_DB
+    import sqlite3
+
+    try:
+        # Check database connection
+        conn = sqlite3.connect(AUTH_DB)
+        cursor = conn.cursor()
+        cursor.execute('SELECT COUNT(*) FROM users')
+        user_count = cursor.fetchone()[0]
+        conn.close()
+
+        return jsonify({
+            'status': 'healthy',
+            'service': 'nestperts',
+            'port': 5000,
+            'users': user_count,
+            'authenticated': 'user' in session
+        })
+    except Exception as e:
+        return jsonify({
+            'status': 'unhealthy',
+            'error': str(e)
+        }), 500
+
+# ============================================================================
+# AUTHENTICATION ROUTES
+# ============================================================================
+
+@app.route('/login')
+def login():
+    """Show login page"""
+    error = request.args.get('error')
+    not_approved = request.args.get('not_approved')
+    return render_template('login.html', error=error, not_approved=not_approved)
+
+@app.route('/auth/google')
+def google_login():
+    """Redirect to Google for authentication"""
+    redirect_uri = url_for('google_callback', _external=True)
+    return google.authorize_redirect(redirect_uri)
+
+@app.route('/auth/google/callback')
+def google_callback():
+    """Handle Google OAuth callback"""
+    try:
+        # Get user info from Google
+        token = google.authorize_access_token()
+        user_info = token.get('userinfo')
+
+        if not user_info:
+            return redirect(url_for('login', error='Failed to get user information'))
+
+        email = user_info.get('email')
+        name = user_info.get('name')
+        picture = user_info.get('picture')
+
+        # Check if email is approved
+        if not is_email_approved(email):
+            return redirect(url_for('login', not_approved=email))
+
+        # Create or update user record
+        create_or_update_user(email, name, picture)
+
+        # Get user permissions
+        from labeller.auth import get_user_permissions
+        perms = get_user_permissions(email)
+
+        # Store user in session (like giving them a wristband)
+        session['user'] = {
+            'email': email,
+            'name': name,
+            'picture': picture,
+            'is_admin': is_admin(email),
+            'role': perms['role'],
+            'permissions': perms
+        }
+
+        # Redirect to the page they were trying to access (or home)
+        next_page = request.args.get('next', '/')
+        return redirect(next_page)
+
+    except Exception as e:
+        print(f"Auth error: {e}")
+        return redirect(url_for('login', error='Authentication failed'))
+
+@app.route('/logout')
+def logout():
+    """Log out user"""
+    session.pop('user', None)
+    return redirect(url_for('login'))
+
+@app.route('/admin')
+@admin_required
+def admin_panel():
+    """Admin panel for managing approved emails and user roles"""
+    from labeller.auth import get_all_users_with_roles
+    approved_emails = get_approved_emails()
+    users = get_all_users_with_roles()
+
+    total_logins = sum(u['login_count'] for u in users)
+
+    # Count users by role
+    role_counts = {'admin': 0, 'annotator': 0, 'viewer': 0}
+    for u in users:
+        role_counts[u['role']] = role_counts.get(u['role'], 0) + 1
+
+    return render_template('admin_panel.html',
+                         user=session['user'],
+                         approved_emails=approved_emails,
+                         users=users,
+                         total_logins=total_logins,
+                         role_counts=role_counts)
+
+@app.route('/admin/add-email', methods=['POST'])
+@admin_required
+def admin_add_email():
+    """Add an approved email"""
+    email = request.form.get('email', '').strip().lower()
+    notes = request.form.get('notes', '').strip()
+
+    if not email:
+        flash('Email is required', 'error')
+        return redirect(url_for('admin_panel'))
+
+    added_by = session['user']['email']
+    success = add_approved_email(email, added_by, notes)
+
+    if success:
+        flash(f'Added {email} to approved list', 'success')
+    else:
+        flash(f'{email} is already approved', 'error')
+
+    return redirect(url_for('admin_panel'))
+
+@app.route('/admin/remove-email', methods=['POST'])
+@admin_required
+def admin_remove_email():
+    """Remove an approved email"""
+    email = request.form.get('email', '').strip()
+
+    if not email:
+        flash('Email is required', 'error')
+        return redirect(url_for('admin_panel'))
+
+    # Don't allow removing your own email
+    if email == session['user']['email']:
+        flash('Cannot remove your own email', 'error')
+        return redirect(url_for('admin_panel'))
+
+    remove_approved_email(email)
+    flash(f'Removed {email} from approved list', 'success')
+
+    return redirect(url_for('admin_panel'))
+
+@app.route('/admin/update-role', methods=['POST'])
+@admin_required
+def admin_update_role():
+    """Update a user's role"""
+    from labeller.auth import update_user_role
+    email = request.form.get('email', '').strip()
+    new_role = request.form.get('role', '').strip()
+
+    if not email or not new_role:
+        flash('Email and role are required', 'error')
+        return redirect(url_for('admin_panel'))
+
+    # Don't allow changing your own role
+    if email == session['user']['email']:
+        flash('Cannot change your own role', 'error')
+        return redirect(url_for('admin_panel'))
+
+    success = update_user_role(email, new_role)
+    if success:
+        flash(f'Updated {email} to {new_role}', 'success')
+    else:
+        flash(f'Failed to update role', 'error')
+
+    return redirect(url_for('admin_panel'))
+
+# ============================================================================
 # ROUTES - MAIN PAGES
 # ============================================================================
 
 @app.route('/')
+@login_required
 def projects_dashboard():
     """Main projects dashboard"""
     projects = load_projects()
@@ -254,6 +476,7 @@ def projects_dashboard():
                          active_page='projects')
 
 @app.route('/project/<project_folder>')
+@login_required
 def project_detail(project_folder):
     """Project detail page with task management"""
     metadata = get_project(project_folder)
@@ -314,16 +537,19 @@ def project_detail(project_folder):
                          active_page='projects')
 
 @app.route('/help')
+@login_required
 def help_page():
     """Help and documentation page"""
     return render_template('help.html', active_page='help')
 
 @app.route('/nestdb')
+@login_required
 def nestdb_page():
     """NestDB - Supabase-inspired database management interface"""
     return render_template('nestdb.html', active_page='nestdb')
 
 @app.route('/users')
+@login_required
 def users_page():
     """Global users management page"""
     user_service = get_user_service()
@@ -367,6 +593,7 @@ def test_image():
 
 @app.route('/project/<project_folder>/editor/<username>')
 @app.route('/project/<project_folder>/editor/<username>/<int:image_index>')
+@login_required
 def editor(project_folder, username, image_index=0):
     """Expert annotation editor for a specific user in a project"""
     metadata = get_project(project_folder)
@@ -470,6 +697,7 @@ def editor(project_folder, username, image_index=0):
 # ============================================================================
 
 @app.route('/api/projects/create', methods=['POST'])
+@api_annotator_required  # Only annotators and admins can create projects
 def create_project():
     """Create a new project from a zip file with smart import detection"""
     import traceback
@@ -706,6 +934,7 @@ def create_project():
         return jsonify({'error': f'{type(e).__name__}: {str(e)}'}), 500
 
 @app.route('/api/projects/assign-task', methods=['POST'])
+@admin_required  # Only admins can assign tasks
 def assign_task():
     """
     Smart image assignment with random selection.
@@ -818,6 +1047,7 @@ def assign_task():
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/projects/<project_folder>/delete', methods=['DELETE'])
+@admin_required  # CRITICAL: Only admins can delete projects!
 def delete_project(project_folder):
     """
     Delete an entire project permanently.
@@ -1029,6 +1259,7 @@ def serve_image(filename):
     return jsonify({'error': 'Image not found'}), 404
 
 @app.route('/api/save_annotations', methods=['POST'])
+@api_annotator_required
 def save_annotations():
     """Save annotations for an image"""
     try:
@@ -1075,30 +1306,36 @@ def save_annotations():
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/users', methods=['GET'])
+@api_login_required
 def get_all_users():
-    """Get all users from global registry"""
+    """Get all authenticated users who can be assigned to tasks"""
     try:
-        user_service = get_user_service()
-        if user_service:
-            users = user_service.get_all_users()
-            return jsonify({'users': users})
-        else:
-            # Fallback: get users from all project states
-            all_users = set()
-            for project_folder in os.listdir(PROJECTS_DIR):
-                project_path = os.path.join(PROJECTS_DIR, project_folder)
-                if os.path.isdir(project_path):
-                    state = load_project_state(project_folder)
-                    all_users.update(state.get('users', {}).keys())
+        from labeller.auth import get_all_users_with_roles
 
-            users = [{'name': u, 'projects': []} for u in sorted(all_users)]
-            return jsonify({'users': users})
+        # Get all logged-in users from authentication system
+        auth_users = get_all_users_with_roles()
+
+        # Filter to only include annotators and admins (can annotate)
+        users = [
+            {
+                'name': u['name'],
+                'email': u['email'],
+                'picture': u['picture'],
+                'role': u['role'],
+                'can_annotate': u['can_annotate']
+            }
+            for u in auth_users
+            if u['can_annotate']  # Only users who can annotate
+        ]
+
+        return jsonify({'users': users})
 
     except Exception as e:
         print(f"Error getting users: {e}")
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/users/create', methods=['POST'])
+@admin_required  # Only admins can create users
 def create_user():
     """Create a new user in global registry"""
     try:
@@ -1132,6 +1369,7 @@ def create_user():
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/projects/<project_folder>/images/unassigned', methods=['GET'])
+@api_login_required  # Require authentication to view project info
 def get_unassigned_images(project_folder):
     """Get count of unassigned images in a project"""
     try:
@@ -1163,6 +1401,7 @@ def get_unassigned_images(project_folder):
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/delete_image', methods=['POST'])
+@api_annotator_required  # Only annotators and admins can delete images
 def delete_image():
     """
     Delete an image and its label from the project
@@ -1286,6 +1525,7 @@ def get_wikipedia_images_func(species_name, max_images=5, offset=0):
         return []
 
 @app.route('/api/sam_segment', methods=['POST'])
+@api_annotator_required
 def sam_segment():
     """
     Smart bird detection using YOLO detector (much faster than SAM)
@@ -1411,6 +1651,7 @@ def sam_segment():
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/classify_crop', methods=['POST'])
+@api_annotator_required
 def classify_crop():
     """Classify a bird crop using the species classifier"""
     try:

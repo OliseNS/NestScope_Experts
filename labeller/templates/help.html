@@ -1,11 +1,11 @@
 {% extends "base.html" %}
 
-{% block title %}Help & Guides - Nestperts{% endblock %}
+{% block title %}Help & Documentation - NestScope{% endblock %}
 
 {% block extra_css %}
 <style>
     .help-container {
-        max-width: 1200px;
+        max-width: 1400px;
         margin: 0 auto;
         padding: var(--space-8);
     }
@@ -30,110 +30,120 @@
         opacity: 0.9;
     }
 
-    .help-sections {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
-        gap: var(--space-6);
-        margin-bottom: var(--space-12);
+    .help-tabs {
+        display: flex;
+        gap: var(--space-2);
+        border-bottom: 2px solid var(--surface-border);
+        margin-bottom: var(--space-8);
+        overflow-x: auto;
     }
 
-    .help-section-card {
+    .help-tab {
+        padding: var(--space-3) var(--space-4);
+        background: transparent;
+        border: none;
+        border-bottom: 3px solid transparent;
+        cursor: pointer;
+        font-weight: 600;
+        color: var(--text-secondary);
+        transition: all var(--transition-fast);
+        white-space: nowrap;
+    }
+
+    .help-tab:hover {
+        color: var(--text-primary);
+        background: var(--surface-hover);
+    }
+
+    .help-tab.active {
+        color: var(--brand-primary);
+        border-bottom-color: var(--brand-primary);
+    }
+
+    .help-tab-content {
+        display: none;
+    }
+
+    .help-tab-content.active {
+        display: block;
+    }
+
+    .help-section {
         background: var(--surface-base);
-        border: 2px solid var(--surface-border);
+        border: 1px solid var(--surface-border);
         border-radius: var(--radius-lg);
         padding: var(--space-6);
-        transition: all var(--transition-base);
-    }
-
-    .help-section-card:hover {
-        border-color: var(--brand-primary);
-        transform: translateY(-4px);
-        box-shadow: var(--shadow-lg);
-    }
-
-    .help-section-icon {
-        font-size: var(--text-5xl);
-        margin-bottom: var(--space-4);
-    }
-
-    .help-section-title {
-        font-size: var(--text-2xl);
-        font-family: var(--font-display);
-        margin-bottom: var(--space-3);
-    }
-
-    .help-section-description {
-        color: var(--text-secondary);
-        margin-bottom: var(--space-4);
-        line-height: 1.7;
-    }
-
-    .help-section-links {
-        display: flex;
-        flex-direction: column;
-        gap: var(--space-2);
-    }
-
-    .help-link {
-        display: flex;
-        align-items: center;
-        gap: var(--space-2);
-        color: var(--brand-primary);
-        text-decoration: none;
-        padding: var(--space-2);
-        border-radius: var(--radius-sm);
-        transition: all var(--transition-fast);
-        font-weight: 500;
-    }
-
-    .help-link:hover {
-        background: var(--surface-hover);
-        transform: translateX(4px);
-    }
-
-    .keyboard-shortcuts {
-        background: var(--surface-base);
-        border: 2px solid var(--surface-border);
-        border-radius: var(--radius-lg);
-        padding: var(--space-8);
-        margin-bottom: var(--space-12);
-    }
-
-    .keyboard-shortcuts-title {
-        font-size: var(--text-3xl);
-        font-family: var(--font-display);
         margin-bottom: var(--space-6);
-        text-align: center;
     }
 
-    .shortcuts-grid {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-        gap: var(--space-6);
-    }
-
-    .shortcut-category {
+    .help-section h3 {
+        color: var(--brand-primary);
+        font-size: var(--text-2xl);
         margin-bottom: var(--space-4);
     }
 
-    .shortcut-category-title {
-        font-size: var(--text-lg);
-        font-weight: 700;
+    .help-section h4 {
         color: var(--text-primary);
+        font-size: var(--text-xl);
+        margin-top: var(--space-4);
         margin-bottom: var(--space-3);
-        padding-bottom: var(--space-2);
-        border-bottom: 2px solid var(--brand-primary);
     }
 
-    .shortcut-item {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        padding: var(--space-2) 0;
+    .help-section h5 {
+        color: var(--text-primary);
+        font-size: var(--text-lg);
+        margin-top: var(--space-3);
+        margin-bottom: var(--space-2);
     }
 
-    .shortcut-description {
+    .help-section p {
         color: var(--text-secondary);
+        line-height: 1.7;
+        margin-bottom: var(--space-3);
+    }
+
+    .help-section ul, .help-section ol {
+        color: var(--text-secondary);
+        line-height: 1.8;
+        margin-left: var(--space-6);
+        margin-bottom: var(--space-4);
+    }
+
+    .help-section li {
+        margin-bottom: var(--space-2);
+    }
+
+    .help-section code {
+        background: var(--bg-tertiary);
+        padding: 2px 6px;
+        border-radius: var(--radius-sm);
+        font-family: 'SF Mono', Monaco, monospace;
+        font-size: 0.9em;
+        color: var(--brand-primary);
+    }
+
+    .tip-box {
+        background: rgba(34, 139, 34, 0.1);
+        border-left: 4px solid #228B22;
+        padding: var(--space-4);
+        margin: var(--space-4) 0;
+        border-radius: var(--radius-sm);
+    }
+
+    .warning-box {
+        background: rgba(255, 193, 7, 0.1);
+        border-left: 4px solid #FFC107;
+        padding: var(--space-4);
+        margin: var(--space-4) 0;
+        border-radius: var(--radius-sm);
+    }
+
+    .info-box {
+        background: rgba(33, 150, 243, 0.1);
+        border-left: 4px solid #2196F3;
+        padding: var(--space-4);
+        margin: var(--space-4) 0;
+        border-radius: var(--radius-sm);
     }
 
     .shortcut-key {
@@ -146,64 +156,6 @@
         color: var(--text-primary);
         border: 1px solid var(--surface-border);
     }
-
-    .faq {
-        margin-bottom: var(--space-12);
-    }
-
-    .faq-title {
-        font-size: var(--text-3xl);
-        font-family: var(--font-display);
-        text-align: center;
-        margin-bottom: var(--space-8);
-    }
-
-    .faq-item {
-        background: var(--surface-base);
-        border: 1px solid var(--surface-border);
-        border-radius: var(--radius-md);
-        margin-bottom: var(--space-3);
-        overflow: hidden;
-    }
-
-    .faq-question {
-        width: 100%;
-        padding: var(--space-4);
-        background: transparent;
-        border: none;
-        font-size: var(--text-lg);
-        font-weight: 600;
-        color: var(--text-primary);
-        text-align: left;
-        cursor: pointer;
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        transition: all var(--transition-fast);
-    }
-
-    .faq-question:hover {
-        background: var(--surface-hover);
-    }
-
-    .faq-answer {
-        padding: 0 var(--space-4) var(--space-4);
-        color: var(--text-secondary);
-        line-height: 1.7;
-        display: none;
-    }
-
-    .faq-item.active .faq-answer {
-        display: block;
-    }
-
-    .faq-item.active .faq-icon {
-        transform: rotate(180deg);
-    }
-
-    .faq-icon {
-        transition: transform var(--transition-base);
-    }
 </style>
 {% endblock %}
 
@@ -211,301 +163,748 @@
 <div class="help-container">
     <!-- Hero -->
     <div class="help-hero animate-fade-in">
-        <h1>Help & Documentation</h1>
-        <p class="help-hero-subtitle">Everything you need to master bird annotation with Nestperts</p>
+        <h1>📚 NestScope Help & Documentation</h1>
+        <p class="help-hero-subtitle">Comprehensive guide to using the NestScope avian monitoring platform</p>
     </div>
 
-    <!-- Quick Start Sections -->
-    <div class="help-sections stagger-children">
-        <div class="help-section-card">
-            <div class="help-section-icon">🚀</div>
-            <h3 class="help-section-title">Getting Started</h3>
-            <p class="help-section-description">
-                Learn the basics of creating projects, uploading images, and assigning tasks to your team.
-            </p>
-            <div class="help-section-links">
-                <a href="#create-project" class="help-link">→ Creating your first project</a>
-                <a href="#upload-images" class="help-link">→ Uploading images and labels</a>
-                <a href="#assign-tasks" class="help-link">→ Assigning tasks to users</a>
-            </div>
-        </div>
-
-        <div class="help-section-card">
-            <div class="help-section-icon">✏️</div>
-            <h3 class="help-section-title">Annotation Tools</h3>
-            <p class="help-section-description">
-                Master the annotation interface with MobileSAM, manual drawing, and AI-assisted species classification.
-            </p>
-            <div class="help-section-links">
-                <a href="#drawing-boxes" class="help-link">→ Drawing bounding boxes</a>
-                <a href="#sam-segmentation" class="help-link">→ Using MobileSAM (AI segmentation)</a>
-                <a href="#species-identification" class="help-link">→ Identifying bird species</a>
-            </div>
-        </div>
-
-        <div class="help-section-card">
-            <div class="help-section-icon">📤</div>
-            <h3 class="help-section-title">Exporting Data</h3>
-            <p class="help-section-description">
-                Export your annotations in multiple formats for training models or geographic analysis.
-            </p>
-            <div class="help-section-links">
-                <a href="#export-yolo" class="help-link">→ YOLO format (model training)</a>
-                <a href="#export-coco" class="help-link">→ COCO format (research)</a>
-                <a href="#export-geojson" class="help-link">→ GeoJSON (geographic mapping)</a>
-            </div>
-        </div>
-
-        <div class="help-section-card">
-            <div class="help-section-icon">👥</div>
-            <h3 class="help-section-title">Team Collaboration</h3>
-            <p class="help-section-description">
-                Work with experts and non-experts to build high-quality training datasets faster.
-            </p>
-            <div class="help-section-links">
-                <a href="#invite-users" class="help-link">→ Inviting team members</a>
-                <a href="#track-progress" class="help-link">→ Tracking annotation progress</a>
-                <a href="#quality-control" class="help-link">→ Quality control workflows</a>
-            </div>
-        </div>
-
-        <div class="help-section-card">
-            <div class="help-section-icon">🗄️</div>
-            <h3 class="help-section-title">NestDB Database Manager</h3>
-            <p class="help-section-description">
-                Supabase-inspired database interface with AI query generation and full version control.
-            </p>
-            <div class="help-section-links">
-                <a href="#nestdb-browsing" class="help-link">→ Browsing and editing tables</a>
-                <a href="#nestdb-ai" class="help-link">→ AI-powered SQL generation</a>
-                <a href="#nestdb-versioning" class="help-link">→ Database version control</a>
-            </div>
-        </div>
+    <!-- Tabs -->
+    <div class="help-tabs">
+        <button class="help-tab active" onclick="switchTab('overview')">📖 Overview</button>
+        <button class="help-tab" onclick="switchTab('nestchat')">💬 NestChat</button>
+        <button class="help-tab" onclick="switchTab('nestvision')">🦅 NestVision</button>
+        <button class="help-tab" onclick="switchTab('nestdb')">🗄️ NestDB</button>
+        <button class="help-tab" onclick="switchTab('nestperts')">🧑‍🔬 Nestperts</button>
+        <button class="help-tab" onclick="switchTab('troubleshooting')">🔧 Troubleshooting</button>
+        <button class="help-tab" onclick="switchTab('technical')">📚 Technical Ref</button>
     </div>
 
-    <!-- Keyboard Shortcuts -->
-    <div class="keyboard-shortcuts" id="keyboard-shortcuts">
-        <h2 class="keyboard-shortcuts-title">⌨️ Keyboard Shortcuts</h2>
-        <div class="shortcuts-grid">
-            <div class="shortcut-category">
-                <h4 class="shortcut-category-title">Navigation</h4>
-                <div class="shortcut-item">
-                    <span class="shortcut-description">Next image</span>
-                    <kbd class="shortcut-key">→</kbd>
-                </div>
-                <div class="shortcut-item">
-                    <span class="shortcut-description">Previous image</span>
-                    <kbd class="shortcut-key">←</kbd>
-                </div>
-                <div class="shortcut-item">
-                    <span class="shortcut-description">Save & next</span>
-                    <kbd class="shortcut-key">Enter</kbd>
-                </div>
-                <div class="shortcut-item">
-                    <span class="shortcut-description">Back to projects</span>
-                    <kbd class="shortcut-key">Esc</kbd>
-                </div>
-            </div>
+    <!-- Tab Content -->
 
-            <div class="shortcut-category">
-                <h4 class="shortcut-category-title">Annotation Tools</h4>
-                <div class="shortcut-item">
-                    <span class="shortcut-description">Draw box</span>
-                    <kbd class="shortcut-key">D</kbd>
-                </div>
-                <div class="shortcut-item">
-                    <span class="shortcut-description">AI segment (SAM)</span>
-                    <kbd class="shortcut-key">A</kbd>
-                </div>
-                <div class="shortcut-item">
-                    <span class="shortcut-description">Delete box</span>
-                    <kbd class="shortcut-key">Delete</kbd>
-                </div>
-                <div class="shortcut-item">
-                    <span class="shortcut-description">Undo</span>
-                    <kbd class="shortcut-key">Ctrl+Z</kbd>
-                </div>
-            </div>
+    <!-- OVERVIEW TAB -->
+    <div id="overview" class="help-tab-content active">
+        <div class="help-section">
+            <h3>What is NestScope?</h3>
+            <p>NestScope is an AI-powered platform for Gulf Coast avian monitoring and analytics. It combines natural language processing, computer vision, and traditional database management to provide a complete toolkit for analyzing bird colony data from 2010-2021.</p>
+            <p>The platform covers five states (Texas, Louisiana, Mississippi, Alabama, and Florida) and includes data from hundreds of colonies and thousands of observations.</p>
+        </div>
 
-            <div class="shortcut-category">
-                <h4 class="shortcut-category-title">View Controls</h4>
-                <div class="shortcut-item">
-                    <span class="shortcut-description">Zoom in</span>
-                    <kbd class="shortcut-key">+</kbd>
-                </div>
-                <div class="shortcut-item">
-                    <span class="shortcut-description">Zoom out</span>
-                    <kbd class="shortcut-key">-</kbd>
-                </div>
-                <div class="shortcut-item">
-                    <span class="shortcut-description">Fit to screen</span>
-                    <kbd class="shortcut-key">F</kbd>
-                </div>
-                <div class="shortcut-item">
-                    <span class="shortcut-description">Toggle labels</span>
-                    <kbd class="shortcut-key">L</kbd>
-                </div>
-            </div>
+        <div class="help-section">
+            <h3>Platform Components</h3>
 
-            <div class="shortcut-category">
-                <h4 class="shortcut-category-title">NestDB (Database Manager)</h4>
-                <div class="shortcut-item">
-                    <span class="shortcut-description">Generate SQL query</span>
-                    <kbd class="shortcut-key">Enter</kbd>
-                </div>
-                <div class="shortcut-item">
-                    <span class="shortcut-description">Quick generate SQL</span>
-                    <kbd class="shortcut-key">Ctrl+Enter</kbd>
-                </div>
-                <div class="shortcut-item">
-                    <span class="shortcut-description">Save cell edit</span>
-                    <kbd class="shortcut-key">Enter</kbd>
-                </div>
-                <div class="shortcut-item">
-                    <span class="shortcut-description">Cancel cell edit</span>
-                    <kbd class="shortcut-key">Esc</kbd>
-                </div>
-            </div>
+            <h4>🦅 Core Modules</h4>
+            <ul>
+                <li><strong>NestChat</strong> - Natural language interface for querying bird data with AI-generated SQL</li>
+                <li><strong>NestVision</strong> - AI-powered bird detection and counting in aerial imagery</li>
+                <li><strong>NestDB</strong> - Database management interface with Git-based version control</li>
+                <li><strong>Nestperts</strong> - Expert annotation platform for training data creation</li>
+                <li><strong>Flood Intelligence</strong> - Multi-modal flood hazard monitoring</li>
+            </ul>
 
-            <div class="shortcut-category">
-                <h4 class="shortcut-category-title">General</h4>
-                <div class="shortcut-item">
-                    <span class="shortcut-description">Toggle dark mode</span>
-                    <kbd class="shortcut-key">T</kbd>
-                </div>
-                <div class="shortcut-item">
-                    <span class="shortcut-description">Show shortcuts</span>
-                    <kbd class="shortcut-key">?</kbd>
-                </div>
-                <div class="shortcut-item">
-                    <span class="shortcut-description">Search species</span>
-                    <kbd class="shortcut-key">/</kbd>
-                </div>
+            <h4>🎯 Key Features</h4>
+            <ul>
+                <li>Ask questions in plain English and get instant visualizations</li>
+                <li>Upload colony images for automatic bird detection and species classification</li>
+                <li>View and edit database records with full version control</li>
+                <li>Create expert-labeled datasets for model training with MobileSAM</li>
+                <li>Export data and images for external analysis in multiple formats</li>
+            </ul>
+        </div>
+
+        <div class="help-section">
+            <h3>Quick Start Workflow</h3>
+
+            <h4>For Data Analysis</h4>
+            <ol>
+                <li>Open <strong>NestChat</strong> from the main app (port 8501)</li>
+                <li>Ask a question like "How many birds were observed in Texas in 2020?"</li>
+                <li>Review the generated SQL query and results</li>
+                <li>Explore interactive charts and maps</li>
+                <li>Download results as CSV if needed</li>
+            </ol>
+
+            <h4>For Image Analysis</h4>
+            <ol>
+                <li>Open <strong>NestVision</strong> from the main app</li>
+                <li>Upload a colony image (JPEG, PNG, or TIFF)</li>
+                <li>Choose detection mode: Swift (fast) or Apex (accurate)</li>
+                <li>Click "Run Detection" and wait for results</li>
+                <li>Review detections and species breakdown with color-coded boxes</li>
+                <li>Download annotated images or send to Nestperts for refinement</li>
+            </ol>
+
+            <h4>For Database Management</h4>
+            <ol>
+                <li>Navigate to <strong>NestDB</strong> at <code>http://localhost:5000/nestdb</code></li>
+                <li>Browse tables in the Table Browser tab</li>
+                <li>Toggle Edit Mode to modify records</li>
+                <li>Changes are automatically versioned with Git</li>
+                <li>Use Version History to view or rollback changes</li>
+            </ol>
+        </div>
+
+        <div class="help-section">
+            <h3>Dataset Overview</h3>
+            <p>The NestScope database contains comprehensive Gulf Coast bird colony survey data:</p>
+            <ul>
+                <li><strong>Time Period:</strong> 2010-2021 (12 years of surveys)</li>
+                <li><strong>Geographic Coverage:</strong> Texas, Louisiana, Mississippi, Alabama, Florida</li>
+                <li><strong>Primary Species:</strong> 20+ seabird and wading bird species</li>
+                <li><strong>Observation Types:</strong> Bird counts, nest counts, colony locations</li>
+                <li><strong>Data Sources:</strong> Aerial surveys, ground surveys, photo documentation</li>
+            </ul>
+
+            <div class="tip-box">
+                <strong>💡 Tip:</strong> The main count data is in <code>tblColonyTotals2010-2021_MayJuneCombined</code>. This table contains pre-aggregated bird and nest counts for each colony, year, and species.
             </div>
+        </div>
+
+        <div class="help-section">
+            <h3>System Access</h3>
+            <ul>
+                <li><strong>Main App (Streamlit):</strong> <code>http://localhost:8501</code></li>
+                <li><strong>Nestperts & NestDB (Flask):</strong> <code>http://localhost:5000</code></li>
+                <li><strong>Backend API (FastAPI):</strong> <code>http://localhost:8000</code></li>
+            </ul>
+
+            <h4>Starting All Services</h4>
+            <p>Run this command from the project root:</p>
+            <code style="display: block; padding: var(--space-3); margin: var(--space-3) 0;">./run_app.sh</code>
+            <p>This launches all three services simultaneously with logging to <code>logs/</code> directory.</p>
         </div>
     </div>
 
-    <!-- FAQ -->
-    <div class="faq">
-        <h2 class="faq-title">Frequently Asked Questions</h2>
+    <!-- NESTCHAT TAB -->
+    <div id="nestchat" class="help-tab-content">
+        <div class="help-section">
+            <h3>NestChat - Natural Language Data Interface</h3>
+            <p>Ask questions in plain English and get instant answers with visualizations. NestChat uses AI to convert your questions into SQL queries and generate insights.</p>
 
-        <div class="faq-item">
-            <button class="faq-question" onclick="toggleFAQ(this)">
-                <span>How do I upload a folder of images?</span>
-                <span class="faq-icon">▼</span>
-            </button>
-            <div class="faq-answer">
-                <p>When creating a new project, click "Drop images or click to browse" and your browser will let you select an entire folder. You can upload images alone, or images with existing YOLO label files (.txt) to continue annotation work from another tool.</p>
+            <h4>How It Works</h4>
+            <ol>
+                <li><strong>You ask a question</strong> in natural language</li>
+                <li><strong>AI generates SQL</strong> based on database schema</li>
+                <li><strong>Query executes</strong> against SQLite database</li>
+                <li><strong>AI analyzes results</strong> and generates natural language answer</li>
+                <li><strong>Visualizations appear</strong> (charts, maps) based on data type</li>
+            </ol>
+
+            <div class="info-box">
+                <strong>ℹ️ Under the Hood:</strong> NestChat uses an enhanced metadata system that helps the AI understand the difference between bird counts (observations) and photo records, ensuring accurate responses.
             </div>
         </div>
 
-        <div class="faq-item">
-            <button class="faq-question" onclick="toggleFAQ(this)">
-                <span>What is MobileSAM and how do I use it?</span>
-                <span class="faq-icon">▼</span>
-            </button>
-            <div class="faq-answer">
-                <p>MobileSAM is an AI segmentation tool that automatically creates bounding boxes when you click on a bird. Press 'A' to activate SAM mode, then simply click on any bird in the image. The AI will detect the bird's outline and create a precise bounding box. This is much faster than manually drawing boxes.</p>
+        <div class="help-section">
+            <h3>Example Questions</h3>
+
+            <h4>Population & Trends</h4>
+            <ul>
+                <li>"How many Brown Pelicans were observed in 2020?"</li>
+                <li>"Show me the trend of Royal Tern populations from 2010 to 2021"</li>
+                <li>"Which species had the biggest population increase?"</li>
+                <li>"What were the total bird observations by year?"</li>
+            </ul>
+
+            <h4>Geographic Queries</h4>
+            <ul>
+                <li>"List all colonies in Louisiana"</li>
+                <li>"Which state has the most bird colonies?"</li>
+                <li>"Show me colony locations on a map"</li>
+                <li>"What colonies are between latitude 29 and 30?"</li>
+            </ul>
+
+            <h4>Species-Specific</h4>
+            <ul>
+                <li>"Where do Black Skimmers nest?"</li>
+                <li>"Show me all observations of Reddish Egrets"</li>
+                <li>"Which colonies have both pelicans and terns?"</li>
+                <li>"Compare nest counts vs bird counts for Royal Terns"</li>
+            </ul>
+
+            <div class="tip-box">
+                <strong>💡 Pro Tip:</strong> Be specific about whether you want bird counts or nest counts. For example: "How many Royal Tern NESTS were counted in 2020?"
             </div>
         </div>
 
-        <div class="faq-item">
-            <button class="faq-question" onclick="toggleFAQ(this)">
-                <span>How do I export my annotations?</span>
-                <span class="faq-icon">▼</span>
-            </button>
-            <div class="faq-answer">
-                <p>From the project detail page, click "Export" and choose your format: YOLO (for training YOLO models), COCO (standard research format), or GeoJSON (for mapping with geographic coordinates). The export includes all completed annotations and can be filtered by user or date range.</p>
+        <div class="help-section">
+            <h3>Understanding Visualizations</h3>
+
+            <p>NestChat automatically chooses the best visualization:</p>
+            <ul>
+                <li><strong>Line Charts:</strong> Time-series data (trends over years)</li>
+                <li><strong>Bar Charts:</strong> Comparisons (top colonies, species rankings)</li>
+                <li><strong>Maps:</strong> Geographic data (colony locations with coordinates)</li>
+                <li><strong>Tables:</strong> Detailed records and multi-column results</li>
+            </ul>
+
+            <h4>Interactive Features</h4>
+            <ul>
+                <li><strong>Hover:</strong> See exact values on charts</li>
+                <li><strong>Zoom:</strong> Click and drag to zoom into regions</li>
+                <li><strong>Pan:</strong> Move around on maps</li>
+                <li><strong>Download:</strong> Export charts as PNG or data as CSV</li>
+            </ul>
+        </div>
+    </div>
+
+    <!-- NESTVISION TAB -->
+    <div id="nestvision" class="help-tab-content">
+        <div class="help-section">
+            <h3>NestVision - AI Bird Detection & Counting</h3>
+            <p>Upload colony images and use computer vision to automatically detect and count birds with species classification.</p>
+
+            <h4>Detection Modes</h4>
+
+            <h5>🚀 Swift Mode (Default)</h5>
+            <ul>
+                <li><strong>Speed:</strong> ~3x faster than Apex</li>
+                <li><strong>Accuracy:</strong> Excellent for most images</li>
+                <li><strong>Use Case:</strong> Quick previews, real-time processing</li>
+                <li><strong>Model:</strong> <code>swift.onnx</code> (9.6 MB)</li>
+            </ul>
+
+            <h5>🎯 Apex Mode</h5>
+            <ul>
+                <li><strong>Speed:</strong> Slower but more thorough</li>
+                <li><strong>Accuracy:</strong> Best for small or distant birds</li>
+                <li><strong>Use Case:</strong> Final analysis, expert annotation</li>
+                <li><strong>Model:</strong> <code>apex.onnx</code> (37 MB)</li>
+            </ul>
+
+            <div class="info-box">
+                <strong>ℹ️ SAHI Processing:</strong> For large images (>1024px), NestVision automatically uses SAHI (Slicing Aided Hyper Inference) which slices the image into overlapping tiles for better detection of small birds.
             </div>
         </div>
 
-        <div class="faq-item">
-            <button class="faq-question" onclick="toggleFAQ(this)">
-                <span>Can non-experts help with annotation?</span>
-                <span class="faq-icon">▼</span>
-            </button>
-            <div class="faq-answer">
-                <p>Yes! Nestperts is designed for both experts and non-experts. Non-experts can draw bounding boxes and use AI-assisted species classification, while experts can review and refine the annotations. Assign tasks based on skill level and track progress in real-time.</p>
+        <div class="help-section">
+            <h3>Species Classification</h3>
+            <p>NestVision classifies detected birds into 7 species groups with color-coded bounding boxes:</p>
+
+            <ul>
+                <li><strong style="color: #FF1493;">COLOR_WADER</strong> (Pink): Roseate Spoonbills, Reddish Egrets</li>
+                <li><strong style="color: #2F4F4F;">DARK</strong> (Dark Gray): Cormorants</li>
+                <li><strong style="color: #D3D3D3;">GULL</strong> (Light Gray): Laughing Gulls, other gulls</li>
+                <li><strong style="color: #CD853F;">PELICAN</strong> (Tan): Brown Pelicans, White Pelicans</li>
+                <li><strong style="color: #FFD700;">SHOREBIRD</strong> (Gold): Black Skimmers, Oystercatchers</li>
+                <li><strong style="color: #FFFFFF;">TERN</strong> (White): Royal Terns, Sandwich Terns, Least Terns</li>
+                <li><strong style="color: #FAFAFA;">WHITE_WADER</strong> (Off-White): Great Egrets, Snowy Egrets, White Ibis</li>
+            </ul>
+
+            <div class="warning-box">
+                <strong>⚠️ Note:</strong> Classification is at the group level, not individual species. For precise species identification, use Nestperts for expert annotation.
             </div>
         </div>
 
-        <div class="faq-item">
-            <button class="faq-question" onclick="toggleFAQ(this)">
-                <span>What image formats are supported?</span>
-                <span class="faq-icon">▼</span>
-            </button>
-            <div class="faq-answer">
-                <p>Nestperts supports JPEG (.jpg, .jpeg) and PNG (.png) formats. For best results with drone imagery, use high-resolution JPEGs. Images are processed locally, so there's no file size limit.</p>
+        <div class="help-section">
+            <h3>Step-by-Step Workflow</h3>
+
+            <ol>
+                <li><strong>Upload Image:</strong> Click "Browse files" or drag and drop (JPEG, PNG, TIFF supported, max 200MB)</li>
+                <li><strong>Choose Mode:</strong> Select Swift (fast) or Apex (accurate)</li>
+                <li><strong>Adjust Threshold:</strong> Default 0.25 works for most images (lower = more detections)</li>
+                <li><strong>Run Detection:</strong> Click button and wait 10-60 seconds</li>
+                <li><strong>Review Results:</strong> See total count, species breakdown chart, and annotated image</li>
+                <li><strong>Export or Refine:</strong> Download image or send to Nestperts for expert correction</li>
+            </ol>
+
+            <div class="tip-box">
+                <strong>💡 Pro Tip:</strong> If you get too many false detections, increase the confidence threshold to 0.35-0.45. If birds are being missed, decrease it to 0.15-0.20.
             </div>
         </div>
 
-        <div class="faq-item">
-            <button class="faq-question" onclick="toggleFAQ(this)">
-                <span>How is GeoJSON export different from YOLO?</span>
-                <span class="faq-icon">▼</span>
-            </button>
-            <div class="faq-answer">
-                <p>YOLO format (.txt files with normalized coordinates) is designed for training AI models. GeoJSON format includes geographic coordinates (latitude/longitude) and metadata, making it perfect for mapping bird colonies in GIS software or web maps. Use GeoJSON when you need to visualize data spatially.</p>
+        <div class="help-section">
+            <h3>Best Practices</h3>
+
+            <h4>Image Quality</h4>
+            <ul>
+                <li><strong>Resolution:</strong> Higher resolution = better detection</li>
+                <li><strong>Lighting:</strong> Well-lit images work best</li>
+                <li><strong>Contrast:</strong> Birds should contrast with background</li>
+                <li><strong>Focus:</strong> Sharp images perform better than blurry</li>
+            </ul>
+
+            <h4>Camera Angle</h4>
+            <ul>
+                <li><strong>Overhead:</strong> Best for accurate counts</li>
+                <li><strong>Oblique:</strong> Works but may miss overlapping birds</li>
+                <li><strong>Ground-level:</strong> Challenging, consider manual counting</li>
+            </ul>
+        </div>
+    </div>
+
+    <!-- NESTDB TAB -->
+    <div id="nestdb" class="help-tab-content">
+        <div class="help-section">
+            <h3>NestDB - Database Management Interface</h3>
+            <p>Supabase-inspired interface for viewing, editing, and managing bird survey data with full Git-based version control.</p>
+
+            <h4>Accessing NestDB</h4>
+            <p>Navigate to: <code>http://localhost:5000/nestdb</code></p>
+            <p>Or click "NestDB" in the Expert Tools section of the sidebar in the main app.</p>
+        </div>
+
+        <div class="help-section">
+            <h3>Table Browser</h3>
+
+            <h4>Viewing Tables</h4>
+            <ol>
+                <li>Select a table from the dropdown</li>
+                <li>Data loads automatically (50 rows per page by default)</li>
+                <li>Use pagination controls to navigate pages</li>
+                <li>Adjust "Rows per page" for more/fewer results</li>
+            </ol>
+
+            <h4>Edit Mode</h4>
+            <ul>
+                <li><strong>View Mode (Default):</strong> Read-only display</li>
+                <li><strong>Edit Mode (Toggle ON):</strong> Click cells to edit values</li>
+            </ul>
+
+            <h4>Editing Data</h4>
+            <ol>
+                <li>Toggle Edit Mode ON</li>
+                <li>Click any cell to edit (except primary keys marked with 🔑)</li>
+                <li>Make changes to values</li>
+                <li>Click "Save Changes" button</li>
+                <li>Changes are automatically versioned (Git commit created)</li>
+            </ol>
+
+            <div class="warning-box">
+                <strong>⚠️ Important:</strong> Primary key columns (marked with 🔑) cannot be edited. They are set automatically or must be unique.
             </div>
         </div>
 
-        <div class="faq-item" id="nestdb-browsing">
-            <button class="faq-question" onclick="toggleFAQ(this)">
-                <span>How do I use NestDB to browse the database?</span>
-                <span class="faq-icon">▼</span>
-            </button>
-            <div class="faq-answer">
-                <p>NestDB provides a Supabase-inspired interface for exploring the bird observation database. Select any table from the left sidebar to view its data. You can click on any cell to edit it inline (press Enter to save, Esc to cancel). Use the search box to filter tables by name. The Data tab shows paginated rows (50 per page), and the Schema tab displays column types and constraints.</p>
+        <div class="help-section">
+            <h3>SQL Query Editor</h3>
+
+            <p>Execute custom SQL queries for advanced data exploration:</p>
+
+            <h4>Writing Queries</h4>
+            <ul>
+                <li>Use standard SQLite syntax</li>
+                <li>SELECT statements recommended (read-only by default)</li>
+                <li>Supports JOINs, subqueries, CTEs, aggregations</li>
+                <li>Comments allowed (-- single line, /* multi-line */)</li>
+            </ul>
+
+            <h4>Query History</h4>
+            <ul>
+                <li>Last 10 queries saved automatically</li>
+                <li>Click "Reuse" to load a previous query</li>
+                <li>Click "Remove" to delete from history</li>
+            </ul>
+
+            <div class="tip-box">
+                <strong>💡 Pro Tip:</strong> Copy queries from NestChat's SQL display and paste them here for modification and re-execution.
             </div>
         </div>
 
-        <div class="faq-item" id="nestdb-ai">
-            <button class="faq-question" onclick="toggleFAQ(this)">
-                <span>How does AI-powered SQL generation work in NestDB?</span>
-                <span class="faq-icon">▼</span>
-            </button>
-            <div class="faq-answer">
-                <p>In the SQL Editor tab, type what you want to query in plain English (e.g., "Show all birds observed in Texas during 2015"). The AI (Claude Sonnet 4.6) understands the full database schema and generates accurate SQL queries. A confirmation modal shows you the generated SQL before execution. You can review it, then click "Execute Query" to run it. Press Enter or Ctrl+Enter to generate queries quickly.</p>
-            </div>
-        </div>
+        <div class="help-section">
+            <h3>Version History (Git-Based)</h3>
 
-        <div class="faq-item" id="nestdb-versioning">
-            <button class="faq-question" onclick="toggleFAQ(this)">
-                <span>What is database version control and how do I use it?</span>
-                <span class="faq-icon">▼</span>
-            </button>
-            <div class="faq-answer">
-                <p>NestDB automatically tracks all database changes with Git-based version control. Every edit, insert, or query that modifies data is automatically committed. In the Version Control tab, you can view the complete change history, see diffs between versions, create manual checkpoints before major changes, and rollback to any previous state if needed. This ensures you never lose data and can always undo mistakes.</p>
-            </div>
-        </div>
+            <p>All database changes are tracked with Git version control:</p>
 
-        <div class="faq-item">
-            <button class="faq-question" onclick="toggleFAQ(this)">
-                <span>Can I edit database cells directly in NestDB?</span>
-                <span class="faq-icon">▼</span>
-            </button>
-            <div class="faq-answer">
-                <p>Yes! Click on any cell in the Data tab to edit it. An input field appears where you can modify the value. Press Enter to save changes or Esc to cancel. All changes are tracked in the version control system. Note: Changes are local only and won't affect the actual database unless connected to a write-enabled backend.</p>
+            <h4>Automatic Versioning</h4>
+            <ul>
+                <li>Every save creates a Git commit</li>
+                <li>Commit includes SQL dump of entire database</li>
+                <li>Timestamp and author recorded</li>
+                <li>Full audit trail maintained</li>
+            </ul>
+
+            <h4>Creating Manual Checkpoints</h4>
+            <ol>
+                <li>Enter your email (saved for future use)</li>
+                <li>Type a checkpoint description (e.g., "Before bulk species update")</li>
+                <li>Click "Save Checkpoint"</li>
+                <li>Checkpoint appears in commit timeline</li>
+            </ol>
+
+            <h4>Rolling Back</h4>
+            <ol>
+                <li>Expand the commit you want to restore</li>
+                <li>Click "Rollback Here" button</li>
+                <li>Read the warning carefully (undoes all changes after that commit)</li>
+                <li>Click "Confirm Rollback"</li>
+                <li>Database restored to that state</li>
+                <li>Safety snapshot created automatically</li>
+            </ol>
+
+            <div class="warning-box">
+                <strong>⚠️ Rollback Warning:</strong> Rolling back will undo ALL changes made after that commit. A safety snapshot is created, but use this feature carefully. Consider creating a manual checkpoint first.
             </div>
         </div>
     </div>
 
-    <!-- Contact Support -->
-    <div class="card" style="text-align: center; padding: var(--space-8);">
-        <h3 style="margin-bottom: var(--space-4);">Still Need Help?</h3>
-        <p style="color: var(--text-secondary); margin-bottom: var(--space-6); max-width: 600px; margin-left: auto; margin-right: auto;">
-            Our team is here to help you succeed with your annotation projects. Reach out with questions, feedback, or feature requests.
+    <!-- NESTPERTS TAB -->
+    <div id="nestperts" class="help-tab-content">
+        <div class="help-section">
+            <h3>Nestperts - Expert Species Training Platform</h3>
+            <p>Create expert-labeled datasets for training species classification models. Uses MobileSAM for interactive segmentation and supports multi-expert workflows.</p>
+
+            <h4>What is Nestperts?</h4>
+            <ul>
+                <li>Refining AI detections from NestVision</li>
+                <li>Creating ground-truth training datasets</li>
+                <li>Species-level identification (not just groups)</li>
+                <li>Multi-expert collaboration and validation</li>
+            </ul>
+
+            <h4>Accessing Nestperts</h4>
+            <p>Navigate to: <code>http://localhost:5000</code></p>
+            <p>Or click "Nestperts" in the Expert Tools section of the main app sidebar.</p>
+        </div>
+
+        <div class="help-section">
+            <h3>Annotation Workflow</h3>
+
+            <ol>
+                <li><strong>Select Image:</strong> Click thumbnail in gallery</li>
+                <li><strong>Review Existing Detections:</strong> Check if all birds are detected</li>
+                <li><strong>Add Missing Birds:</strong>
+                    <ul>
+                        <li>Press <kbd class="shortcut-key">A</kbd> for SAM mode</li>
+                        <li>Click on center of undetected bird</li>
+                        <li>MobileSAM generates segmentation mask</li>
+                        <li>Bounding box automatically created</li>
+                        <li>Assign species from dropdown</li>
+                    </ul>
+                </li>
+                <li><strong>Delete False Positives:</strong>
+                    <ul>
+                        <li>Click incorrect detection box</li>
+                        <li>Press <kbd class="shortcut-key">Delete</kbd> key</li>
+                    </ul>
+                </li>
+                <li><strong>Correct Species Labels:</strong>
+                    <ul>
+                        <li>Click on detection box</li>
+                        <li>Change species in dropdown</li>
+                        <li>Click "Update" to save</li>
+                    </ul>
+                </li>
+                <li><strong>Save Annotations:</strong>
+                    <ul>
+                        <li>Press <kbd class="shortcut-key">Enter</kbd> or click "Save"</li>
+                        <li>Labels saved in YOLO format</li>
+                        <li>Species metadata saved separately</li>
+                    </ul>
+                </li>
+            </ol>
+        </div>
+
+        <div class="help-section">
+            <h3>MobileSAM Segmentation</h3>
+
+            <h4>How It Works</h4>
+            <ol>
+                <li>You click on a bird</li>
+                <li>MobileSAM processes the image around that point</li>
+                <li>Generates a segmentation mask</li>
+                <li>Bounding box calculated from mask</li>
+                <li>5% padding added for better coverage</li>
+            </ol>
+
+            <h4>Two Detection Modes</h4>
+            <ul>
+                <li><strong>Fast Mode:</strong> 720x720 resolution, faster processing</li>
+                <li><strong>SAHI Mode:</strong> 1024x1024 resolution, better accuracy for small birds</li>
+            </ul>
+
+            <div class="tip-box">
+                <strong>💡 Tips:</strong> Click near the center of the bird. Avoid clicking on overlap between birds. Use SAHI mode for small or distant birds.
+            </div>
+        </div>
+
+        <div class="help-section">
+            <h3>Keyboard Shortcuts</h3>
+
+            <h4>Navigation</h4>
+            <ul>
+                <li><kbd class="shortcut-key">→</kbd> Next image</li>
+                <li><kbd class="shortcut-key">←</kbd> Previous image</li>
+                <li><kbd class="shortcut-key">Enter</kbd> Save & next</li>
+                <li><kbd class="shortcut-key">Esc</kbd> Back to projects</li>
+            </ul>
+
+            <h4>Annotation Tools</h4>
+            <ul>
+                <li><kbd class="shortcut-key">D</kbd> Draw box (manual mode)</li>
+                <li><kbd class="shortcut-key">A</kbd> AI segment (SAM mode)</li>
+                <li><kbd class="shortcut-key">Delete</kbd> Delete selected box</li>
+                <li><kbd class="shortcut-key">Ctrl+Z</kbd> Undo last action</li>
+            </ul>
+
+            <h4>View Controls</h4>
+            <ul>
+                <li><kbd class="shortcut-key">+</kbd> Zoom in</li>
+                <li><kbd class="shortcut-key">-</kbd> Zoom out</li>
+                <li><kbd class="shortcut-key">F</kbd> Fit to screen</li>
+                <li><kbd class="shortcut-key">L</kbd> Toggle labels visibility</li>
+            </ul>
+        </div>
+
+        <div class="help-section">
+            <h3>Data Output</h3>
+
+            <h4>YOLO Format Labels</h4>
+            <p>Saved in <code>labeller/nestvision/labels/</code>:</p>
+            <ul>
+                <li>One .txt file per image</li>
+                <li>Format: <code>class_id x_center y_center width height</code></li>
+                <li>Coordinates normalized to 0-1 range</li>
+                <li>Compatible with Ultralytics YOLO training</li>
+            </ul>
+
+            <h4>Species Metadata</h4>
+            <p>Saved in <code>labeller/nestvision/</code>:</p>
+            <ul>
+                <li><code>classes.txt</code>: List of species names</li>
+                <li><code>species_data.json</code>: Detailed species information</li>
+            </ul>
+        </div>
+    </div>
+
+    <!-- TROUBLESHOOTING TAB -->
+    <div id="troubleshooting" class="help-tab-content">
+        <div class="help-section">
+            <h3>Common Issues & Solutions</h3>
+
+            <h4>Page Won't Load</h4>
+            <p><strong>Solutions:</strong></p>
+            <ul>
+                <li>Check that all services are running: <code>./run_app.sh</code></li>
+                <li>Verify URLs: Main app (8501), Nestperts/NestDB (5000), API (8000)</li>
+                <li>Try hard refresh: <kbd class="shortcut-key">Ctrl+Shift+R</kbd> (Windows/Linux) or <kbd class="shortcut-key">Cmd+Shift+R</kbd> (Mac)</li>
+                <li>Check logs: <code>tail -f logs/server.log</code></li>
+            </ul>
+
+            <h4>"Backend Connection Failed"</h4>
+            <p><strong>Solutions:</strong></p>
+            <ul>
+                <li>Check backend health: <code>curl http://localhost:8000/health</code></li>
+                <li>View logs: <code>tail -f logs/server.log</code></li>
+                <li>Restart services: <code>./run_app.sh</code></li>
+                <li>Verify port 8000 is not blocked by firewall</li>
+            </ul>
+
+            <h4>NestChat "Query Failed"</h4>
+            <p><strong>Solutions:</strong></p>
+            <ul>
+                <li>Rephrase question more clearly and specifically</li>
+                <li>Check that table/column names exist in schema</li>
+                <li>Review generated SQL for errors</li>
+                <li>Verify <code>OPENROUTER_API_KEY</code> in <code>.env</code> file</li>
+            </ul>
+
+            <h4>NestVision Upload Fails</h4>
+            <p><strong>Solutions:</strong></p>
+            <ul>
+                <li>Check file size (max 200 MB)</li>
+                <li>Verify format (JPEG, PNG, or TIFF only)</li>
+                <li>Try renaming file (remove special characters)</li>
+                <li>Check available disk space</li>
+            </ul>
+
+            <h4>NestDB Changes Won't Save</h4>
+            <p><strong>Solutions:</strong></p>
+            <ul>
+                <li>Verify Edit Mode is toggled ON</li>
+                <li>Check you're not editing primary key columns</li>
+                <li>Ensure data type matches column type</li>
+                <li>Check logs for validation errors</li>
+            </ul>
+
+            <h4>MobileSAM Segmentation Fails</h4>
+            <p><strong>Solutions:</strong></p>
+            <ul>
+                <li>Verify <code>models/mobile_sam.pt</code> exists</li>
+                <li>Try clicking center of bird more precisely</li>
+                <li>Switch between Fast and SAHI modes</li>
+                <li>Restart Nestperts to clear cache</li>
+            </ul>
+        </div>
+
+        <div class="help-section">
+            <h3>Frequently Asked Questions</h3>
+
+            <h4>Can I use NestScope offline?</h4>
+            <p><strong>Answer:</strong> Partially. NestVision works offline once models are downloaded. NestChat requires OpenRouter API for LLM queries. NestDB and Nestperts work fully offline.</p>
+
+            <h4>How accurate is NestVision?</h4>
+            <p><strong>Answer:</strong> Accuracy varies by image quality and colony density. Typical accuracy is 85-95% for well-lit, overhead images of moderate-density colonies. Use Nestperts to verify and improve results.</p>
+
+            <h4>Can I add my own data to the database?</h4>
+            <p><strong>Answer:</strong> Yes! Use NestDB's Edit Mode to add new rows. Create a checkpoint before bulk additions. Follow existing schema structure.</p>
+
+            <h4>Is my data secure?</h4>
+            <p><strong>Answer:</strong> NestScope runs locally on your machine. No data sent to external servers except LLM API calls for NestChat (query text and results only). NestVision and NestDB are entirely local.</p>
+        </div>
+
+        <div class="help-section">
+            <h3>Getting Help</h3>
+
+            <h4>Log Files</h4>
+            <ul>
+                <li><code>logs/server.log</code> - FastAPI backend logs</li>
+                <li><code>logs/streamlit.log</code> - Frontend logs</li>
+                <li><code>logs/nestperts.log</code> - Flask app logs</li>
+            </ul>
+
+            <h4>System Health</h4>
+            <ul>
+                <li>Backend: <code>curl http://localhost:8000/health</code></li>
+                <li>API docs: <code>http://localhost:8000/docs</code></li>
+                <li>Check processes: <code>ps aux | grep python</code></li>
+            </ul>
+        </div>
+    </div>
+
+    <!-- TECHNICAL REFERENCE TAB -->
+    <div id="technical" class="help-tab-content">
+        <div class="help-section">
+            <h3>Technical Reference</h3>
+
+            <h4>System Architecture</h4>
+            <ul>
+                <li><strong>Frontend:</strong> Streamlit (port 8501)</li>
+                <li><strong>Backend:</strong> FastAPI (port 8000)</li>
+                <li><strong>Expert Tools:</strong> Flask (port 5000)</li>
+                <li><strong>Database:</strong> SQLite with Git version control</li>
+                <li><strong>CV Framework:</strong> ONNX Runtime</li>
+            </ul>
+
+            <h4>Models</h4>
+            <ul>
+                <li><strong>Detection (Swift):</strong> <code>models/swift.onnx</code> (9.6 MB) - Fast inference</li>
+                <li><strong>Detection (Apex):</strong> <code>models/apex.onnx</code> (37 MB) - High accuracy</li>
+                <li><strong>Classifier (Swift):</strong> <code>models/classifier_swift.onnx</code> (6 MB) - 7-class species groups</li>
+                <li><strong>Classifier (Apex):</strong> <code>models/classifier_apex.onnx</code> (21 MB) - 7-class species groups</li>
+                <li><strong>Segmentation:</strong> <code>models/mobile_sam.pt</code> (39 MB) - MobileSAM for Nestperts</li>
+            </ul>
+
+            <h4>API Endpoints (FastAPI - Port 8000)</h4>
+            <ul>
+                <li><code>GET /health</code> - Backend health check</li>
+                <li><code>GET /config</code> - Backend configuration</li>
+                <li><code>GET /schema</code> - Database schema</li>
+                <li><code>POST /ask</code> - NestChat query (non-streaming)</li>
+                <li><code>POST /ask/stream</code> - NestChat query (streaming)</li>
+                <li><code>POST /cv/inference</code> - Bird detection on image</li>
+                <li><code>GET /version/history</code> - Git commit history</li>
+                <li><code>POST /version/rollback</code> - Rollback to commit</li>
+            </ul>
+
+            <h4>Database Tables</h4>
+            <ul>
+                <li><code>tblColonyTotals2010-2021_MayJuneCombined</code> - Main aggregated bird/nest counts</li>
+                <li><code>tblSpeciesData2010/2011-2013/2015_2018_2021</code> - Photo record metadata</li>
+                <li><code>tblColonies</code> - Colony reference data</li>
+                <li><code>tblSpecies</code> - Species reference data</li>
+            </ul>
+
+            <h4>Configuration Files</h4>
+            <ul>
+                <li><code>server/config.yaml</code> - Team-wide configuration (version controlled)</li>
+                <li><code>.env</code> - Local secrets (NOT version controlled)</li>
+                <li><code>CLAUDE.md</code> - Project documentation for Claude Code</li>
+            </ul>
+        </div>
+
+        <div class="help-section">
+            <h3>Species Reference (30+ Species)</h3>
+
+            <h4>Pelicans</h4>
+            <ul>
+                <li>Brown Pelican - <em>Pelecanus occidentalis</em></li>
+                <li>American White Pelican - <em>Pelecanus erythrorhynchos</em></li>
+            </ul>
+
+            <h4>Cormorants & Anhingas</h4>
+            <ul>
+                <li>Double-crested Cormorant - <em>Phalacrocorax auritus</em></li>
+                <li>Neotropic Cormorant - <em>Phalacrocorax brasilianus</em></li>
+                <li>Anhinga - <em>Anhinga anhinga</em></li>
+            </ul>
+
+            <h4>Herons & Egrets</h4>
+            <ul>
+                <li>Great Egret - <em>Ardea alba</em></li>
+                <li>Snowy Egret - <em>Egretta thula</em></li>
+                <li>Reddish Egret - <em>Egretta rufescens</em></li>
+                <li>Cattle Egret - <em>Bubulcus ibis</em></li>
+                <li>Tricolored Heron - <em>Egretta tricolor</em></li>
+                <li>Little Blue Heron - <em>Egretta caerulea</em></li>
+            </ul>
+
+            <h4>Ibises & Spoonbills</h4>
+            <ul>
+                <li>White Ibis - <em>Eudocimus albus</em></li>
+                <li>White-faced Ibis - <em>Plegadis chihi</em></li>
+                <li>Roseate Spoonbill - <em>Platalea ajaja</em></li>
+            </ul>
+
+            <h4>Terns</h4>
+            <ul>
+                <li>Royal Tern - <em>Thalasseus maximus</em></li>
+                <li>Sandwich Tern - <em>Thalasseus sandvicensis</em></li>
+                <li>Least Tern - <em>Sternula antillarum</em></li>
+                <li>Caspian Tern - <em>Hydroprogne caspia</em></li>
+                <li>Forster's Tern - <em>Sterna forsteri</em></li>
+                <li>Common Tern - <em>Sterna hirundo</em></li>
+                <li>Gull-billed Tern - <em>Gelochelidon nilotica</em></li>
+                <li>Black Tern - <em>Chlidonias niger</em></li>
+            </ul>
+
+            <h4>Gulls</h4>
+            <ul>
+                <li>Laughing Gull - <em>Leucophaeus atricilla</em></li>
+                <li>Ring-billed Gull - <em>Larus delawarensis</em></li>
+                <li>Herring Gull - <em>Larus argentatus</em></li>
+            </ul>
+
+            <h4>Shorebirds & Others</h4>
+            <ul>
+                <li>Black Skimmer - <em>Rynchops niger</em></li>
+                <li>American Oystercatcher - <em>Haematopus palliatus</em></li>
+                <li>Magnificent Frigatebird - <em>Fregata magnificens</em></li>
+            </ul>
+        </div>
+    </div>
+
+    <!-- Back to App -->
+    <div class="card" style="text-align: center; padding: var(--space-8); margin-top: var(--space-8);">
+        <h3 style="margin-bottom: var(--space-4);">Ready to Get Started?</h3>
+        <p style="color: var(--text-secondary); margin-bottom: var(--space-6);">
+            Head back to NestScope and start exploring Gulf Coast bird data
         </p>
-        <div style="display: flex; gap: var(--space-4); justify-content: center;">
-            <a href="http://localhost:8501" class="btn btn-secondary">Back to NestScope</a>
-            <a href="mailto:support@nestperts.example" class="btn btn-primary">Contact Support</a>
-        </div>
+        <a href="http://localhost:8501" class="btn btn-primary">Open NestScope</a>
     </div>
 </div>
 {% endblock %}
 
 {% block extra_js %}
 <script>
+    function switchTab(tabName) {
+        // Hide all tab contents
+        document.querySelectorAll('.help-tab-content').forEach(content => {
+            content.classList.remove('active');
+        });
+
+        // Remove active class from all tabs
+        document.querySelectorAll('.help-tab').forEach(tab => {
+            tab.classList.remove('active');
+        });
+
+        // Show selected tab content
+        document.getElementById(tabName).classList.add('active');
+
+        // Add active class to clicked tab
+        event.target.classList.add('active');
+
+        // Scroll to top
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
     function toggleFAQ(button) {
         const faqItem = button.closest('.faq-item');
         const wasActive = faqItem.classList.contains('active');
@@ -525,7 +924,6 @@
     document.addEventListener('keydown', (e) => {
         if (e.key === 't' && !e.ctrlKey && !e.metaKey) {
             const target = e.target;
-            // Don't trigger if typing in input/textarea
             if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') {
                 return;
             }
