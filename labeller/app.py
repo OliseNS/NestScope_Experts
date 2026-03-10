@@ -318,6 +318,11 @@ def help_page():
     """Help and documentation page"""
     return render_template('help.html', active_page='help')
 
+@app.route('/nestdb')
+def nestdb_page():
+    """NestDB - Supabase-inspired database management interface"""
+    return render_template('nestdb.html', active_page='nestdb')
+
 @app.route('/users')
 def users_page():
     """Global users management page"""

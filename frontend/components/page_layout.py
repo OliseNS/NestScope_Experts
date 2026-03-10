@@ -100,8 +100,8 @@ def render_sidebar(active_page: str = "home"):
     # Brand Header
     render_sidebar_header()
 
-    # Navigation Section
-    render_sidebar_section("Navigation")
+    # Exploration tools Section
+    render_sidebar_section("Exploration tools")
 
     # Home button
     if st.button(
@@ -143,24 +143,21 @@ def render_sidebar(active_page: str = "home"):
     ):
         st.switch_page("pages/06_coastal_risk.py")
 
-    # NestDB button
-    if st.button(
-        "🗄️ NestDB",
-        use_container_width=True,
-        help="Database management interface",
-        type="primary" if active_page == "nestdb" else "secondary",
-        key="sb_nav_db"
-    ):
-        st.switch_page("pages/04_db_editor.py")
-
-    # Tools section
-    render_sidebar_section("Tools")
+    # Expert tools section
+    render_sidebar_section("Expert tools")
 
     st.link_button(
         "🧑‍🔬 Nestperts",
         "http://localhost:5000",
         use_container_width=True,
         help="Expert species training platform"
+    )
+
+    st.link_button(
+        "🗄️ NestDB",
+        "http://localhost:5000/nestdb",
+        use_container_width=True,
+        help="Database management interface"
     )
 
     # System Status section

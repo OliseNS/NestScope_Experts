@@ -268,6 +268,19 @@
                 <a href="#quality-control" class="help-link">→ Quality control workflows</a>
             </div>
         </div>
+
+        <div class="help-section-card">
+            <div class="help-section-icon">🗄️</div>
+            <h3 class="help-section-title">NestDB Database Manager</h3>
+            <p class="help-section-description">
+                Supabase-inspired database interface with AI query generation and full version control.
+            </p>
+            <div class="help-section-links">
+                <a href="#nestdb-browsing" class="help-link">→ Browsing and editing tables</a>
+                <a href="#nestdb-ai" class="help-link">→ AI-powered SQL generation</a>
+                <a href="#nestdb-versioning" class="help-link">→ Database version control</a>
+            </div>
+        </div>
     </div>
 
     <!-- Keyboard Shortcuts -->
@@ -331,6 +344,26 @@
                 <div class="shortcut-item">
                     <span class="shortcut-description">Toggle labels</span>
                     <kbd class="shortcut-key">L</kbd>
+                </div>
+            </div>
+
+            <div class="shortcut-category">
+                <h4 class="shortcut-category-title">NestDB (Database Manager)</h4>
+                <div class="shortcut-item">
+                    <span class="shortcut-description">Generate SQL query</span>
+                    <kbd class="shortcut-key">Enter</kbd>
+                </div>
+                <div class="shortcut-item">
+                    <span class="shortcut-description">Quick generate SQL</span>
+                    <kbd class="shortcut-key">Ctrl+Enter</kbd>
+                </div>
+                <div class="shortcut-item">
+                    <span class="shortcut-description">Save cell edit</span>
+                    <kbd class="shortcut-key">Enter</kbd>
+                </div>
+                <div class="shortcut-item">
+                    <span class="shortcut-description">Cancel cell edit</span>
+                    <kbd class="shortcut-key">Esc</kbd>
                 </div>
             </div>
 
@@ -413,6 +446,46 @@
             </button>
             <div class="faq-answer">
                 <p>YOLO format (.txt files with normalized coordinates) is designed for training AI models. GeoJSON format includes geographic coordinates (latitude/longitude) and metadata, making it perfect for mapping bird colonies in GIS software or web maps. Use GeoJSON when you need to visualize data spatially.</p>
+            </div>
+        </div>
+
+        <div class="faq-item" id="nestdb-browsing">
+            <button class="faq-question" onclick="toggleFAQ(this)">
+                <span>How do I use NestDB to browse the database?</span>
+                <span class="faq-icon">▼</span>
+            </button>
+            <div class="faq-answer">
+                <p>NestDB provides a Supabase-inspired interface for exploring the bird observation database. Select any table from the left sidebar to view its data. You can click on any cell to edit it inline (press Enter to save, Esc to cancel). Use the search box to filter tables by name. The Data tab shows paginated rows (50 per page), and the Schema tab displays column types and constraints.</p>
+            </div>
+        </div>
+
+        <div class="faq-item" id="nestdb-ai">
+            <button class="faq-question" onclick="toggleFAQ(this)">
+                <span>How does AI-powered SQL generation work in NestDB?</span>
+                <span class="faq-icon">▼</span>
+            </button>
+            <div class="faq-answer">
+                <p>In the SQL Editor tab, type what you want to query in plain English (e.g., "Show all birds observed in Texas during 2015"). The AI (Claude Sonnet 4.6) understands the full database schema and generates accurate SQL queries. A confirmation modal shows you the generated SQL before execution. You can review it, then click "Execute Query" to run it. Press Enter or Ctrl+Enter to generate queries quickly.</p>
+            </div>
+        </div>
+
+        <div class="faq-item" id="nestdb-versioning">
+            <button class="faq-question" onclick="toggleFAQ(this)">
+                <span>What is database version control and how do I use it?</span>
+                <span class="faq-icon">▼</span>
+            </button>
+            <div class="faq-answer">
+                <p>NestDB automatically tracks all database changes with Git-based version control. Every edit, insert, or query that modifies data is automatically committed. In the Version Control tab, you can view the complete change history, see diffs between versions, create manual checkpoints before major changes, and rollback to any previous state if needed. This ensures you never lose data and can always undo mistakes.</p>
+            </div>
+        </div>
+
+        <div class="faq-item">
+            <button class="faq-question" onclick="toggleFAQ(this)">
+                <span>Can I edit database cells directly in NestDB?</span>
+                <span class="faq-icon">▼</span>
+            </button>
+            <div class="faq-answer">
+                <p>Yes! Click on any cell in the Data tab to edit it. An input field appears where you can modify the value. Press Enter to save changes or Esc to cancel. All changes are tracked in the version control system. Note: Changes are local only and won't affect the actual database unless connected to a write-enabled backend.</p>
             </div>
         </div>
     </div>

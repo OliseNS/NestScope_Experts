@@ -1,6 +1,0 @@
-names:
-  0: Bird
-path: .
-test: images
-train: images
-val: images

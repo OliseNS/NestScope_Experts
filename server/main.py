@@ -2055,6 +2055,98 @@ async def ask_question_stream(request: QuestionRequest):
         }
     )
 
+@app.post("/nestdb/generate_query")
+async def nestdb_generate_query(request: QuestionRequest):
+    """
+    Generate SQL query for NestDB admin interface (NO read-only restrictions).
+
+    This endpoint is specifically for the NestDB admin interface where write operations
+    are allowed. Unlike /ask, this endpoint:
+    - Does NOT enforce read-only validation
+    - Returns ONLY the SQL query (does not execute)
+    - Allows INSERT, UPDATE, DELETE, CREATE, etc.
+
+    The frontend will display the query for user review before execution.
+    """
+    try:
+        # Update model if provided
+        if request.model:
+            chatbot.model = request.model
+
+        # Build messages for SQL generation (similar to generate_sql_query but without coordinate requirements)
+        messages = [
+            {"role": "system", "content": chatbot.system_prompt}
+        ]
+
+        # Inject metadata as context (only once at the start)
+        if chatbot.metadata and not request.conversation_history:
+            metadata_context = chatbot._format_metadata_context()
+            messages.append({"role": "system", "content": metadata_context})
+
+        # Add conversation history (last 3 exchanges)
+        if request.conversation_history:
+            for msg in request.conversation_history[-6:]:
+                messages.append(msg)
+
+        # Add the current question with NestDB-specific instructions
+        messages.append({
+            "role": "user",
+            "content": f"""Question: {request.question}
+
+INSTRUCTIONS FOR NESTDB ADMIN INTERFACE:
+1. Return ONLY the SQL query - no explanations, no markdown, no comments
+2. You can generate ANY valid SQL operation: SELECT, INSERT, UPDATE, DELETE, CREATE, ALTER, DROP, etc.
+3. This is an admin interface, so write operations are allowed
+4. Use exact column names from the schema (case-sensitive)
+5. For SQLite, use proper syntax (e.g., AUTOINCREMENT, not AUTO_INCREMENT)
+
+Generate the SQL query now:"""
+        })
+
+        try:
+            response = client.chat.completions.create(
+                model=chatbot.model,
+                messages=messages,
+                temperature=config['model']['sql_temperature'],
+                max_tokens=config['model']['sql_max_tokens']
+            )
+
+            sql_query = response.choices[0].message.content.strip()
+
+            # Clean up the query (remove markdown formatting if present)
+            if sql_query.startswith("```sql"):
+                sql_query = sql_query.split("```sql")[1].split("```")[0].strip()
+            elif sql_query.startswith("```"):
+                sql_query = sql_query.split("```")[1].split("```")[0].strip()
+
+            # Remove any remaining explanatory text before SQL keywords
+            sql_keywords = ['SELECT', 'WITH', 'INSERT', 'UPDATE', 'DELETE', 'CREATE', 'ALTER', 'DROP', 'PRAGMA']
+            for keyword in sql_keywords:
+                if keyword in sql_query.upper():
+                    idx = sql_query.upper().find(keyword)
+                    sql_query = sql_query[idx:].strip()
+                    break
+
+            # Detect if this is a write operation
+            query_upper = sql_query.strip().upper()
+            write_keywords = ['INSERT', 'UPDATE', 'DELETE', 'DROP', 'CREATE', 'ALTER', 'TRUNCATE', 'REPLACE']
+            is_write_operation = any(kw in query_upper for kw in write_keywords)
+
+            return {
+                "sql_query": sql_query,
+                "is_write_operation": is_write_operation
+            }
+
+        except Exception as e:
+            return {
+                "sql_query": f"-- Error generating query: {e}",
+                "is_write_operation": False,
+                "error": str(e)
+            }
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 @app.post("/ask/agentic/stream")
 async def ask_question_agentic_stream(request: QuestionRequest):
     """
