@@ -53,13 +53,32 @@ class ThemeManager {
     }
 
     setupToggleButtons() {
-        // Find all theme toggle buttons
-        document.querySelectorAll('.theme-toggle').forEach(button => {
-            button.addEventListener('click', () => this.toggle());
+        // Find all theme toggle switches
+        document.querySelectorAll('.theme-toggle').forEach(toggle => {
+            // Click handler
+            toggle.addEventListener('click', () => this.toggle());
+
+            // Keyboard support (Enter or Space to toggle)
+            toggle.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    this.toggle();
+                }
+            });
         });
     }
 
     updateToggleButtons() {
+        // Update track state (active class for dark mode)
+        document.querySelectorAll('.theme-toggle-track').forEach(track => {
+            if (this.theme === 'dark') {
+                track.classList.add('active');
+            } else {
+                track.classList.remove('active');
+            }
+        });
+
+        // Update emoji icon
         document.querySelectorAll('.theme-toggle-thumb').forEach(thumb => {
             if (this.theme === 'dark') {
                 thumb.textContent = '🌙';

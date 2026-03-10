@@ -30,6 +30,16 @@
             z-index: 1000;
         }
 
+        .navbar * {
+            max-width: 100%;
+        }
+
+        .navbar img {
+            max-width: 100%;
+            max-height: 100%;
+            object-fit: cover;
+        }
+
         .navbar-content {
             max-width: 1600px;
             margin: 0 auto;
@@ -61,6 +71,12 @@
         .navbar-brand-icon {
             font-size: 1.5rem;
             line-height: 1;
+            width: 1.5rem;
+            height: 1.5rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
         }
 
         /* Navigation Items */
@@ -134,28 +150,59 @@
             background: transparent;
         }
 
-        /* Theme Toggle */
+        /* Apple-style Theme Toggle Switch */
         .theme-toggle {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            width: 36px;
-            height: 36px;
-            border-radius: 8px;
-            background: rgba(255, 255, 255, 0.04);
-            border: 1px solid rgba(255, 255, 255, 0.08);
+            position: relative;
+            width: 51px;
+            height: 31px;
             cursor: pointer;
-            transition: all 0.2s ease;
-            padding: 0;
+            user-select: none;
+            flex-shrink: 0;
         }
 
-        .theme-toggle:hover {
-            background: rgba(255, 255, 255, 0.08);
-            border-color: rgba(255, 255, 255, 0.12);
+        .theme-toggle-track {
+            position: absolute;
+            inset: 0;
+            border-radius: 15.5px;
+            background: rgba(120, 120, 128, 0.32);
+            transition: background-color 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .theme-toggle-track.active {
+            background: #56B897;
         }
 
         .theme-toggle-thumb {
-            font-size: 1.125rem;
+            position: absolute;
+            top: 50%;
+            left: 2px;
+            transform: translateY(-50%);
+            width: 27px;
+            height: 27px;
+            border-radius: 50%;
+            background: #ffffff;
+            box-shadow: 0 3px 8px rgba(0, 0, 0, 0.15), 0 1px 1px rgba(0, 0, 0, 0.16);
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.875rem;
+        }
+
+        .theme-toggle-track.active .theme-toggle-thumb {
+            transform: translateX(20px) translateY(-50%);
+        }
+
+        .theme-toggle:hover .theme-toggle-track {
+            opacity: 0.9;
+        }
+
+        .theme-toggle:active .theme-toggle-thumb {
+            width: 30px;
+        }
+
+        .theme-toggle:active .theme-toggle-track.active .theme-toggle-thumb {
+            transform: translateX(17px) translateY(-50%);
         }
 
         /* User Menu */
@@ -185,12 +232,16 @@
             width: 28px;
             height: 28px;
             flex-shrink: 0;
+            overflow: hidden;
+            border-radius: 50%;
         }
 
         .user-avatar {
-            width: 28px;
-            height: 28px;
-            border-radius: 6px;
+            width: 100%;
+            height: 100%;
+            max-width: 28px;
+            max-height: 28px;
+            border-radius: 50%;
             border: 1.5px solid rgba(86, 184, 151, 0.5);
             object-fit: cover;
             display: block;
@@ -203,7 +254,7 @@
         .user-avatar-fallback {
             width: 28px;
             height: 28px;
-            border-radius: 6px;
+            border-radius: 50%;
             border: 1.5px solid rgba(86, 184, 151, 0.5);
             background: linear-gradient(135deg, #56B897 0%, #4A9B7F 100%);
             display: none;
@@ -493,9 +544,11 @@
 
                 <div class="nav-divider"></div>
 
-                <button class="theme-toggle" aria-label="Toggle theme">
-                    <span class="theme-toggle-thumb">🌙</span>
-                </button>
+                <div class="theme-toggle" role="button" tabindex="0" aria-label="Toggle theme">
+                    <div class="theme-toggle-track">
+                        <div class="theme-toggle-thumb">🌙</div>
+                    </div>
+                </div>
 
                 {% if session.user %}
                 <div class="user-menu">

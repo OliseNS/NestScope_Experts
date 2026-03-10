@@ -222,6 +222,115 @@
             order: -1;
         }
     }
+
+    /* Custom User Dropdown with Pictures */
+    .custom-dropdown {
+        position: relative;
+        width: 100%;
+    }
+
+    .custom-dropdown-selected {
+        display: flex;
+        align-items: center;
+        gap: var(--space-3);
+        padding: var(--space-3) var(--space-4);
+        background: var(--surface-base);
+        border: 1px solid var(--surface-border);
+        border-radius: var(--radius-md);
+        cursor: pointer;
+        transition: all var(--transition-fast);
+        min-height: 48px;
+    }
+
+    .custom-dropdown-selected:hover {
+        border-color: var(--brand-primary);
+        background: var(--bg-secondary);
+    }
+
+    .custom-dropdown-selected .placeholder {
+        color: var(--text-tertiary);
+    }
+
+    .custom-dropdown-selected.has-selection .placeholder {
+        color: var(--text-primary);
+    }
+
+    .custom-dropdown-selected img {
+        width: 32px;
+        height: 32px;
+        border-radius: var(--radius-full);
+        object-fit: cover;
+        border: 2px solid var(--surface-border);
+    }
+
+    .custom-dropdown-options {
+        position: absolute;
+        top: calc(100% + 4px);
+        left: 0;
+        right: 0;
+        background: var(--surface-base);
+        border: 1px solid var(--surface-border);
+        border-radius: var(--radius-md);
+        box-shadow: var(--shadow-lg);
+        max-height: 300px;
+        overflow-y: auto;
+        z-index: 1000;
+        display: none;
+    }
+
+    .custom-dropdown-options.active {
+        display: block;
+    }
+
+    .custom-dropdown-option {
+        display: flex;
+        align-items: center;
+        gap: var(--space-3);
+        padding: var(--space-3) var(--space-4);
+        cursor: pointer;
+        transition: all var(--transition-fast);
+    }
+
+    .custom-dropdown-option:hover {
+        background: var(--bg-secondary);
+    }
+
+    .custom-dropdown-option img {
+        width: 40px;
+        height: 40px;
+        border-radius: var(--radius-full);
+        object-fit: cover;
+        border: 2px solid var(--surface-border);
+        flex-shrink: 0;
+    }
+
+    .custom-dropdown-option .user-initial {
+        width: 40px;
+        height: 40px;
+        border-radius: var(--radius-full);
+        background: var(--brand-primary);
+        color: white;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: 700;
+        flex-shrink: 0;
+    }
+
+    .custom-dropdown-option-info {
+        flex: 1;
+    }
+
+    .custom-dropdown-option-name {
+        font-weight: 600;
+        color: var(--text-primary);
+        margin-bottom: 2px;
+    }
+
+    .custom-dropdown-option-meta {
+        font-size: var(--text-sm);
+        color: var(--text-tertiary);
+    }
 </style>
 {% endblock %}
 
@@ -324,7 +433,19 @@
                     {% if project.users_detail %}
                         {% for user in project.users_detail %}
                         <div class="user-item" onclick="window.location.href='/project/{{ project.folder }}/editor/{{ user.username }}'">
-                            <div class="user-avatar">{{ user.username[0].upper() }}</div>
+                            <!-- Avatar with fallback -->
+                            <div style="position: relative; width: 48px; height: 48px; flex-shrink: 0;">
+                                {% if user.picture %}
+                                <img
+                                    src="{{ user.picture }}"
+                                    alt="{{ user.username }}"
+                                    style="width: 48px; height: 48px; border-radius: var(--radius-full); object-fit: cover; border: 2px solid var(--surface-border);"
+                                    onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+                                <div class="user-avatar" style="display: none;">{{ user.username[0].upper() }}</div>
+                                {% else %}
+                                <div class="user-avatar">{{ user.username[0].upper() }}</div>
+                                {% endif %}
+                            </div>
                             <div class="user-info">
                                 <div class="user-name">{{ user.username }}</div>
                                 <div class="user-progress">
@@ -433,16 +554,20 @@
                 <!-- User Selection -->
                 <div class="form-group">
                     <label class="form-label" for="assignUser">Assign to User</label>
-                    <select id="assignUser" class="form-select" required>
-                        <option value="">Select user...</option>
-                        <!-- Will be populated dynamically -->
-                    </select>
-                    <p class="form-help">Select from global user list or create new</p>
-                </div>
-
-                <div class="form-group" id="newUserGroup" style="display: none;">
-                    <label class="form-label" for="newUserName">New User Name</label>
-                    <input type="text" id="newUserName" class="form-input" placeholder="Enter user name">
+                    <div id="userSelectContainer" style="position: relative;">
+                        <input type="hidden" id="assignUser" name="assignUser" required>
+                        <!-- Custom dropdown with user pictures -->
+                        <div id="customUserDropdown" class="custom-dropdown">
+                            <div class="custom-dropdown-selected" id="customUserDropdownSelected" onclick="toggleUserDropdown()">
+                                <span class="placeholder">Select user...</span>
+                            </div>
+                            <div class="custom-dropdown-options" id="userDropdownOptions">
+                                <!-- Will be populated dynamically -->
+                            </div>
+                        </div>
+                    </div>
+                    <p class="form-help">Select from authenticated users</p>
+                    <p id="userSelectError" class="form-help" style="color: var(--error); display: none;">Please select a user</p>
                 </div>
 
                 <!-- Assignment Stats -->
@@ -508,31 +633,103 @@
             const data = await response.json();
             allUsers = data.users || [];
 
-            // Populate user dropdown
-            const userSelect = document.getElementById('assignUser');
-            if (userSelect) {
-                // Clear existing options
-                userSelect.innerHTML = '<option value="">Select user...</option>';
+            // Populate custom dropdown with pictures
+            const dropdownOptions = document.getElementById('userDropdownOptions');
+            if (dropdownOptions) {
+                dropdownOptions.innerHTML = '';
 
-                // Add existing users
-                allUsers.forEach(user => {
-                    const option = document.createElement('option');
-                    option.value = user.name;
-                    const projectCount = user.projects ? user.projects.length : 0;
-                    option.textContent = `${user.name} (${projectCount} projects)`;
-                    userSelect.appendChild(option);
-                });
+                if (allUsers.length === 0) {
+                    dropdownOptions.innerHTML = `
+                        <div style="padding: var(--space-4); text-align: center; color: var(--text-tertiary);">
+                            No authenticated users available.<br>
+                            Users must sign in with Google OAuth.
+                        </div>
+                    `;
+                } else {
+                    allUsers.forEach(user => {
+                        const option = document.createElement('div');
+                        option.className = 'custom-dropdown-option';
+                        option.dataset.value = user.name;
+                        option.dataset.email = user.email;
+                        option.dataset.picture = user.picture || '';
 
-                // Add "new user" option
-                const newOption = document.createElement('option');
-                newOption.value = 'new';
-                newOption.textContent = '+ Create New User';
-                userSelect.appendChild(newOption);
+                        const projectCount = user.projects ? user.projects.length : 0;
+
+                        // Create avatar container with fallback
+                        const avatarHTML = user.picture
+                            ? `<div style="position: relative; width: 40px; height: 40px; flex-shrink: 0;">
+                                   <img src="${user.picture}" alt="${user.name}"
+                                        style="width: 40px; height: 40px; border-radius: var(--radius-full); object-fit: cover; border: 2px solid var(--surface-border);"
+                                        onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+                                   <div class="user-initial" style="display: none;">${user.name[0].toUpperCase()}</div>
+                               </div>`
+                            : `<div class="user-initial">${user.name[0].toUpperCase()}</div>`;
+
+                        option.innerHTML = `
+                            ${avatarHTML}
+                            <div class="custom-dropdown-option-info">
+                                <div class="custom-dropdown-option-name">${user.name}</div>
+                                <div class="custom-dropdown-option-meta">${projectCount} projects</div>
+                            </div>
+                        `;
+
+                        option.addEventListener('click', () => selectUser(user.name, user.picture));
+                        dropdownOptions.appendChild(option);
+                    });
+                }
             }
         } catch (error) {
             console.error('Error loading users:', error);
+            showToast('Failed to load users', 'error');
         }
     }
+
+    function toggleUserDropdown() {
+        const dropdown = document.getElementById('userDropdownOptions');
+        dropdown.classList.toggle('active');
+    }
+
+    function selectUser(name, picture) {
+        const selected = document.getElementById('customUserDropdownSelected');
+        const hiddenInput = document.getElementById('assignUser');
+        const errorMsg = document.getElementById('userSelectError');
+
+        // Create avatar with fallback
+        const avatarHTML = picture
+            ? `<div style="position: relative; width: 32px; height: 32px; flex-shrink: 0;">
+                   <img src="${picture}" alt="${name}"
+                        style="width: 32px; height: 32px; border-radius: var(--radius-full); object-fit: cover; border: 2px solid var(--surface-border);"
+                        onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+                   <div class="user-initial" style="display: none; width: 32px; height: 32px; font-size: var(--text-sm);">${name[0].toUpperCase()}</div>
+               </div>`
+            : `<div class="user-initial" style="width: 32px; height: 32px; font-size: var(--text-sm);">${name[0].toUpperCase()}</div>`;
+
+        // Update visual display
+        selected.classList.add('has-selection');
+        selected.innerHTML = `
+            ${avatarHTML}
+            <span class="placeholder">${name}</span>
+        `;
+
+        // Update hidden input for form submission
+        hiddenInput.value = name;
+
+        // Hide error message if visible
+        if (errorMsg) {
+            errorMsg.style.display = 'none';
+        }
+
+        // Close dropdown
+        document.getElementById('userDropdownOptions').classList.remove('active');
+    }
+
+    // Close dropdown when clicking outside
+    document.addEventListener('click', (e) => {
+        const dropdown = document.getElementById('customUserDropdown');
+        if (dropdown && !dropdown.contains(e.target)) {
+            document.getElementById('userDropdownOptions').classList.remove('active');
+        }
+    });
 
     async function loadAssignmentStats() {
         try {
@@ -560,6 +757,21 @@
 
     function showAssignTaskModal() {
         document.getElementById('assignTaskModal').classList.add('active');
+
+        // Reset form
+        const hiddenInput = document.getElementById('assignUser');
+        const selected = document.getElementById('customUserDropdownSelected');
+        const errorMsg = document.getElementById('userSelectError');
+
+        if (hiddenInput) hiddenInput.value = '';
+        if (selected) {
+            selected.classList.remove('has-selection');
+            selected.innerHTML = '<span class="placeholder">Select user...</span>';
+        }
+        if (errorMsg) errorMsg.style.display = 'none';
+
+        // Reload users in case new ones signed in
+        loadAllUsers();
         loadAssignmentStats(); // Refresh stats when opening modal
     }
 
@@ -567,52 +779,31 @@
         document.getElementById('assignTaskModal').classList.remove('active');
     }
 
-    // Show new user input when "Add New User" is selected
-    document.getElementById('assignUser')?.addEventListener('change', function() {
-        const newUserGroup = document.getElementById('newUserGroup');
-        if (this.value === 'new') {
-            newUserGroup.style.display = 'block';
-            document.getElementById('newUserName').focus();
-        } else {
-            newUserGroup.style.display = 'none';
-        }
-    });
-
     async function assignTask(event) {
         event.preventDefault();
 
-        const userSelect = document.getElementById('assignUser');
-        let username = userSelect.value;
+        const hiddenInput = document.getElementById('assignUser');
+        const username = hiddenInput.value;
+        const errorMsg = document.getElementById('userSelectError');
 
-        // Handle new user creation
-        if (username === 'new') {
-            const newUserName = document.getElementById('newUserName').value.trim();
-            if (!newUserName) {
-                showToast('Please enter a user name', 'error');
-                return;
+        // Custom validation
+        if (!username || username === '') {
+            if (errorMsg) {
+                errorMsg.style.display = 'block';
             }
-
-            // Create user first
-            try {
-                const createResponse = await fetchJSON('/api/users/create', {
-                    method: 'POST',
-                    body: JSON.stringify({ username: newUserName })
-                });
-
-                username = newUserName;
-                showToast(`User "${username}" created!`, 'success');
-            } catch (error) {
-                // Error shown by fetchJSON, but don't continue
-                return;
-            }
+            showToast('Please select a user', 'error');
+            return;
         }
 
         const numImages = parseInt(document.getElementById('numTasks').value);
         const allowReassign = document.getElementById('allowReassign').checked;
 
         try {
-            const result = await fetchJSON('/api/projects/assign-task', {
+            const response = await fetch('/api/projects/assign-task', {
                 method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
                 body: JSON.stringify({
                     project_id: projectId,
                     username: username,
@@ -620,6 +811,12 @@
                     allow_reassign: allowReassign
                 })
             });
+
+            const result = await response.json();
+
+            if (!response.ok) {
+                throw new Error(result.error || 'Failed to assign tasks');
+            }
 
             const message = result.message || `Assigned ${result.assigned} image(s) to ${username}`;
             showToast(message, 'success');
@@ -630,7 +827,8 @@
                 window.location.reload();
             }, 1500);
         } catch (error) {
-            // Error already shown by fetchJSON
+            console.error('Error assigning task:', error);
+            showToast('Error: ' + error.message, 'error');
         }
     }
 
