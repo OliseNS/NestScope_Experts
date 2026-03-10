@@ -478,6 +478,18 @@ def projects_dashboard():
     projects = load_projects()
     projects_list = []
 
+    # Get all auth users with their profile pictures
+    from labeller.auth import get_all_users_with_roles
+    auth_users_dict = {}
+    try:
+        all_auth_users = get_all_users_with_roles()
+        # Index by both email and name for flexible lookup
+        for u in all_auth_users:
+            auth_users_dict[u['email']] = u
+            auth_users_dict[u['name']] = u
+    except Exception as e:
+        print(f"Warning: Could not load auth users: {e}")
+
     for project_folder, metadata in projects.items():
         stats = calculate_project_stats(project_folder)
 
@@ -492,16 +504,33 @@ def projects_dashboard():
                 first_image = sorted(images)[0]
                 thumbnail_url = f'/project/{project_folder}/image/{first_image}'
 
-        # Load project state for user count
+        # Load project state for user count with profile pictures
         state = load_project_state(project_folder)
-        users = list(state.get('users', {}).keys())
+        user_keys = list(state.get('users', {}).keys())
+
+        # Build users list with name, email, and picture
+        users_with_pics = []
+        seen_emails = set()  # Track unique users to avoid duplicates
+        for user_key in user_keys:
+            # Skip if we've already added this user
+            if user_key in seen_emails:
+                continue
+            seen_emails.add(user_key)
+
+            # Try to find user in auth database
+            user_info = auth_users_dict.get(user_key, {})
+            users_with_pics.append({
+                'name': user_info.get('name', user_key),
+                'email': user_info.get('email', user_key),
+                'picture': user_info.get('picture')
+            })
 
         projects_list.append({
             'folder': project_folder,
             'name': metadata.get('name', project_folder.replace('_', ' ').title()),
             'description': metadata.get('description', ''),
             'created_at': metadata.get('created_at', datetime.now().isoformat()),
-            'users': users,
+            'users': users_with_pics,
             'total_images': stats['total_images'],
             'progress': stats['progress'],
             'thumbnail_url': thumbnail_url
@@ -626,9 +655,15 @@ def users_page():
             projects = get_all_projects()
             for proj in projects:
                 state = load_project_state(proj['folder'])
-                user_data = state.get('users', {}).get(user['name'], {})
+                # Try to find user by name first, then by email
+                user_data = state.get('users', {}).get(user['name'])
+                if not user_data:
+                    user_data = state.get('users', {}).get(user['email'])
 
-                if user_data:  # User has assignments in this project
+                if not user_data:
+                    user_data = {}
+
+                if user_data and (user_data.get('assigned') or user_data.get('completed')):  # User has actual assignments in this project
                     assigned = user_data.get('assigned', [])
                     completed = user_data.get('completed', [])
 

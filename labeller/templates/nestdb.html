@@ -381,16 +381,17 @@
 
 /* SQL EDITOR */
 .db-sql-editor {
-    flex: 1;
     display: flex;
     flex-direction: column;
     padding: var(--space-6);
     gap: var(--space-4);
+    overflow-y: auto;
+    height: calc(100vh - 64px);
 }
 
 .db-sql-textarea {
-    flex: 1;
-    min-height: 300px;
+    width: 100%;
+    height: 400px;
     padding: var(--space-4);
     background: var(--bg-tertiary);
     border: 1px solid var(--surface-border);
@@ -401,6 +402,9 @@
     resize: vertical;
     line-height: 1.6;
     transition: all var(--transition-fast);
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    overflow-wrap: break-word;
 }
 
 .db-sql-textarea:focus {
@@ -415,7 +419,8 @@
 }
 
 .db-sql-results {
-    flex: 1;
+    min-height: 400px;
+    max-height: 600px;
     overflow: auto;
     background: var(--bg-secondary);
     border: 1px solid var(--surface-border);
@@ -799,10 +804,37 @@
         <!-- TAB: SQL EDITOR -->
         <div class="db-tab-content" id="tabSQL">
             <div class="db-sql-editor">
+                <!-- Query Input Field -->
+                <div style="margin-bottom: var(--space-4);">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--space-2);">
+                        <h3 style="margin: 0; font-size: 14px; font-weight: 700; color: var(--text-primary);">📝 SQL Query Editor</h3>
+                        <span style="font-size: 12px; color: var(--text-tertiary);">Write or paste your SQL query below</span>
+                    </div>
+                    <textarea
+                        class="db-sql-textarea"
+                        id="sqlEditor"
+                        placeholder="SELECT * FROM your_table LIMIT 100;"
+                    ></textarea>
+                </div>
+
+                <!-- Execute Buttons -->
+                <div style="display: flex; gap: var(--space-2); margin-bottom: var(--space-6);">
+                    <button class="db-btn db-btn-primary" onclick="executeSQL()">
+                        ▶️ Execute Query
+                    </button>
+                    <button class="db-btn db-btn-secondary" onclick="clearSQL()">
+                        Clear
+                    </button>
+                </div>
+
+                <!-- AI Query Assistant -->
                 <div class="db-ai-assist">
                     <div class="db-ai-title">
                         <span>✨</span>
                         AI Query Assistant
+                    </div>
+                    <div style="font-size: var(--text-sm); color: var(--text-secondary); margin-bottom: var(--space-3);">
+                        Describe what you want to query in natural language, and the AI will generate SQL for you.
                     </div>
                     <div class="db-ai-input">
                         <input
@@ -816,7 +848,7 @@
                         </button>
                     </div>
                     <div style="font-size: var(--text-xs); color: var(--text-tertiary); margin-top: var(--space-2);">
-                        💡 Tip: Press Enter or Ctrl+Enter to generate. Uses Claude Sonnet 4.6 with full database context.
+                        💡 Tip: Press Enter to generate. Uses Claude Sonnet 4.6 with full database context.
                     </div>
                 </div>
 
@@ -824,7 +856,7 @@
                 <div class="db-ai-assist" style="margin-top: var(--space-4); background: rgba(247, 144, 9, 0.05); border: 1px solid var(--db-warning);">
                     <div class="db-ai-title">
                         <span>🛠️</span>
-                        Advanced Settings & AI Context
+                        Trigger Database Explorer
                     </div>
                     <div style="font-size: var(--text-sm); color: var(--text-secondary); margin-bottom: var(--space-3);">
                         Optimize AI accuracy by allowing the agent to explore the latest database schema and content.
@@ -836,23 +868,13 @@
                     <div id="explorerStatus" style="margin-top: var(--space-3); display: none;"></div>
                 </div>
 
-                <textarea
-                    class="db-sql-textarea"
-                    id="sqlEditor"
-                    placeholder="SELECT * FROM your_table LIMIT 100;"
-                    style="margin-top: var(--space-4);"
-                ></textarea>
-                <div style="display: flex; gap: var(--space-2);">
-                    <button class="db-btn db-btn-primary" onclick="executeSQL()">
-                        ▶️ Execute Query
-                    </button>
-                    <button class="db-btn db-btn-secondary" onclick="clearSQL()">
-                        Clear
-                    </button>
-                </div>
-                <div class="db-sql-results" id="sqlResults">
-                    <div style="color: var(--text-tertiary); text-align: center; padding: var(--space-8);">
-                        Write a SQL query and click "Execute Query"
+                <!-- Query Output Results -->
+                <div style="margin-top: var(--space-6);">
+                    <h3 style="margin: 0 0 var(--space-3) 0; font-size: 14px; font-weight: 700; color: var(--text-primary);">📊 Query Output</h3>
+                    <div class="db-sql-results" id="sqlResults">
+                        <div style="color: var(--text-tertiary); text-align: center; padding: var(--space-8);">
+                            Write a SQL query and click "Execute Query"
+                        </div>
                     </div>
                 </div>
             </div>
@@ -898,25 +920,63 @@
                 <div style="background: var(--bg-tertiary); border: 1px solid var(--surface-border); border-radius: 12px; padding: 20px; margin-bottom: 20px;">
                     <h3 style="margin: 0 0 12px 0; color: var(--text-primary); font-size: 16px;">💾 Create Manual Checkpoint</h3>
                     <p style="margin: 0 0 16px 0; color: var(--text-tertiary); font-size: 14px;">Mark important moments for easier rollback later</p>
-                    <div style="display: flex; gap: 12px;">
-                        <input
-                            type="text"
-                            id="checkpointMessage"
-                            placeholder="e.g., Before bulk species update"
-                            class="version-input"
-                            style="flex: 1;"
-                        />
-                        <input
-                            type="text"
-                            id="checkpointEmail"
-                            placeholder="your@email.com"
-                            class="version-input"
-                            style="width: 250px;"
-                        />
-                        <button class="db-btn db-btn-primary" onclick="createCheckpoint()">
-                            Create Checkpoint
-                        </button>
-                    </div>
+
+                    {% if session.user %}
+                        <!-- Current User Display -->
+                        <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 16px; padding: 12px; background: var(--bg-secondary); border-radius: 8px; border: 1px solid var(--surface-border);">
+                            <div style="position: relative; width: 40px; height: 40px; flex-shrink: 0;">
+                                <img src="{{ session.user.picture }}"
+                                     alt="{{ session.user.name }}"
+                                     class="checkpoint-user-avatar"
+                                     style="width: 40px; height: 40px; border-radius: 50%; border: 2px solid var(--db-accent); object-fit: cover; display: block;"
+                                     onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+                                <div class="checkpoint-user-fallback" style="width: 40px; height: 40px; border-radius: 50%; border: 2px solid var(--db-accent); background: linear-gradient(135deg, var(--db-accent) 0%, #2DB77A 100%); display: none; align-items: center; justify-content: center; font-size: 16px; font-weight: 700; color: white; text-transform: uppercase; position: absolute; top: 0; left: 0;">
+                                    {{ session.user.name[0] if session.user.name else 'U' }}
+                                </div>
+                            </div>
+                            <div style="flex: 1;">
+                                <div style="font-weight: 600; color: var(--text-primary); font-size: 14px;">{{ session.user.name }}</div>
+                                <div style="font-size: 12px; color: var(--text-tertiary);">{{ session.user.email }}</div>
+                            </div>
+                            {% if session.user.role %}
+                                <div style="padding: 4px 10px; background: rgba(62, 207, 142, 0.15); color: var(--db-accent); border-radius: 6px; font-size: 11px; font-weight: 700; text-transform: uppercase;">
+                                    {{ session.user.role }}
+                                </div>
+                            {% endif %}
+                        </div>
+
+                        {% if session.user.role == 'admin' or session.user.can_edit_db %}
+                            <!-- Checkpoint Form (for admins and users with DB edit permission) -->
+                            <div style="display: flex; gap: 12px;">
+                                <input
+                                    type="text"
+                                    id="checkpointMessage"
+                                    placeholder="e.g., Before bulk species update"
+                                    class="version-input"
+                                    style="flex: 1;"
+                                />
+                                <input type="hidden" id="currentUserEmail" value="{{ session.user.email }}">
+                                <button class="db-btn db-btn-primary" onclick="createCheckpoint()">
+                                    Create Checkpoint
+                                </button>
+                            </div>
+                        {% else %}
+                            <!-- Permission Denied Message -->
+                            <div style="padding: 12px 16px; background: rgba(247, 144, 9, 0.15); border: 1px solid var(--db-warning); border-radius: 8px; color: var(--db-warning); font-size: 14px; display: flex; align-items: center; gap: 10px;">
+                                <span style="font-size: 20px;">🔒</span>
+                                <div>
+                                    <strong>No Access</strong><br>
+                                    <span style="font-size: 13px; opacity: 0.9;">Your role ({{ session.user.role }}) does not have permission to commit database changes. Contact an admin for access.</span>
+                                </div>
+                            </div>
+                        {% endif %}
+                    {% else %}
+                        <!-- Not logged in -->
+                        <div style="padding: 12px 16px; background: rgba(240, 68, 56, 0.15); border: 1px solid var(--db-danger); border-radius: 8px; color: var(--db-danger); font-size: 14px;">
+                            <strong>Not Authenticated</strong><br>
+                            Please log in to create checkpoints.
+                        </div>
+                    {% endif %}
                 </div>
 
                 <!-- Version History -->
@@ -1707,10 +1767,16 @@ async function loadVersionHistory() {
 
 async function createCheckpoint() {
     const message = document.getElementById('checkpointMessage').value.trim();
-    const email = document.getElementById('checkpointEmail').value.trim();
+    const emailInput = document.getElementById('currentUserEmail');
+    const email = emailInput ? emailInput.value : 'system';
 
     if (!message) {
         showToast('Please enter a checkpoint description', 'error');
+        return;
+    }
+
+    if (!email || email === 'system') {
+        showToast('You must be logged in to create checkpoints', 'error');
         return;
     }
 
@@ -1722,7 +1788,7 @@ async function createCheckpoint() {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 message: message,
-                expert_email: email || 'system'
+                expert_email: email
             })
         });
 
@@ -1731,7 +1797,6 @@ async function createCheckpoint() {
         if (data.success) {
             showToast(`✓ Checkpoint created: ${data.commit_hash_short}`, 'success');
             document.getElementById('checkpointMessage').value = '';
-            document.getElementById('checkpointEmail').value = '';
             await loadVersionHistory();
             await loadVersionStats();
         } else {

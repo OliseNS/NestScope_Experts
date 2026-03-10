@@ -159,6 +159,21 @@
         font-weight: 600;
         font-size: var(--text-xs);
         border: 2px solid var(--surface-base);
+        position: relative;
+        overflow: hidden;
+    }
+
+    .project-card-assignee img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        position: absolute;
+        inset: 0;
+    }
+
+    .project-card-assignee-fallback {
+        position: relative;
+        z-index: 1;
     }
 
     .empty-state {
@@ -200,9 +215,11 @@
                 Collaborative bird species annotation for conservation research
             </p>
         </div>
+        {% if session.user and (session.user.role == 'admin' or session.user.can_edit_db) %}
         <button class="btn btn-primary btn-lg" onclick="showCreateProjectModal()">
             + Create Project
         </button>
+        {% endif %}
     </div>
 
     <!-- Stats -->
@@ -259,12 +276,17 @@
                 <div class="project-card-footer">
                     <div class="project-card-assignees">
                         {% for user in project.users[:3] %}
-                        <div class="project-card-assignee" title="{{ user }}">
-                            {{ user[0].upper() }}
+                        <div class="project-card-assignee" title="{{ user.name }} ({{ user.email }})">
+                            {% if user.picture %}
+                            <img src="{{ user.picture }}" alt="{{ user.name }}" onerror="this.style.display='none';">
+                            {% endif %}
+                            <span class="project-card-assignee-fallback">{{ user.name[0].upper() }}</span>
                         </div>
                         {% endfor %}
                         {% if project.users | length > 3 %}
-                        <div class="project-card-assignee">+{{ project.users | length - 3 }}</div>
+                        <div class="project-card-assignee" title="{{ project.users | length - 3 }} more users">
+                            <span class="project-card-assignee-fallback">+{{ project.users | length - 3 }}</span>
+                        </div>
                         {% endif %}
                     </div>
                     <span class="badge badge-primary">{{ project.progress|int }}% Complete</span>
@@ -278,11 +300,17 @@
         <div class="empty-state-icon">🦅</div>
         <h2 class="empty-state-title">No Projects Yet</h2>
         <p class="empty-state-description">
+            {% if session.user and (session.user.role == 'admin' or session.user.can_edit_db) %}
             Get started by creating your first annotation project. Upload images and assign tasks to your team.
+            {% else %}
+            No annotation projects are available at this time. Contact an admin to create projects.
+            {% endif %}
         </p>
+        {% if session.user and (session.user.role == 'admin' or session.user.can_edit_db) %}
         <button class="btn btn-primary btn-lg" onclick="showCreateProjectModal()">
             Create Your First Project
         </button>
+        {% endif %}
     </div>
     {% endif %}
 </div>
