@@ -331,6 +331,11 @@
         font-size: var(--text-sm);
         color: var(--text-tertiary);
     }
+
+    .btn-icon-danger:hover {
+        background: var(--error) !important;
+        color: white !important;
+    }
 </style>
 {% endblock %}
 
@@ -432,30 +437,42 @@
                 <div class="user-list">
                     {% if project.users_detail %}
                         {% for user in project.users_detail %}
-                        <div class="user-item" onclick="window.location.href='/project/{{ project.folder }}/editor/{{ user.username }}'">
-                            <!-- Avatar with fallback -->
-                            <div style="position: relative; width: 48px; height: 48px; flex-shrink: 0;">
-                                {% if user.picture %}
-                                <img
-                                    src="{{ user.picture }}"
-                                    alt="{{ user.username }}"
-                                    style="width: 48px; height: 48px; border-radius: var(--radius-full); object-fit: cover; border: 2px solid var(--surface-border);"
-                                    onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
-                                <div class="user-avatar" style="display: none;">{{ user.username[0].upper() }}</div>
-                                {% else %}
-                                <div class="user-avatar">{{ user.username[0].upper() }}</div>
-                                {% endif %}
-                            </div>
-                            <div class="user-info">
-                                <div class="user-name">{{ user.username }}</div>
-                                <div class="user-progress">
-                                    {{ user.completed }}/{{ user.assigned }} images
+                        <div class="user-item" style="cursor: pointer;" data-user-email="{{ user.email }}">
+                            <div style="display: flex; align-items: center; gap: var(--space-3); flex: 1;" onclick="window.location.href='/project/{{ project.folder }}/editor/{{ user.email }}'">
+                                <!-- Avatar with fallback -->
+                                <div style="position: relative; width: 48px; height: 48px; flex-shrink: 0;">
+                                    {% if user.picture %}
+                                    <img
+                                        src="{{ user.picture }}"
+                                        alt="{{ user.username }}"
+                                        style="width: 48px; height: 48px; border-radius: var(--radius-full); object-fit: cover; border: 2px solid var(--surface-border);"
+                                        onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+                                    <div class="user-avatar" style="display: none;">{{ user.username[0].upper() }}</div>
+                                    {% else %}
+                                    <div class="user-avatar">{{ user.username[0].upper() }}</div>
+                                    {% endif %}
+                                </div>
+                                <div class="user-info">
+                                    <div class="user-name">{{ user.username }}</div>
+                                    <div class="user-progress">
+                                        {{ user.completed }}/{{ user.assigned }} images
+                                    </div>
+                                </div>
+                                <div class="user-stats">
+                                    <div class="user-count">{{ user.annotations }}</div>
+                                    <div class="user-label">annotations</div>
                                 </div>
                             </div>
-                            <div class="user-stats">
-                                <div class="user-count">{{ user.annotations }}</div>
-                                <div class="user-label">annotations</div>
-                            </div>
+                            <!-- Remove button -->
+                            <button
+                                class="btn-icon-danger"
+                                onclick="event.stopPropagation(); removeUserFromProject('{{ user.email }}', '{{ user.username }}')"
+                                title="Remove user from project"
+                                style="flex-shrink: 0; width: 32px; height: 32px; border-radius: var(--radius-md); border: 1px solid var(--error); color: var(--error); background: transparent; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: all 0.2s;">
+                                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" style="pointer-events: none;">
+                                    <path d="M12 4L4 12M4 4l8 8" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                                </svg>
+                            </button>
                         </div>
                         {% endfor %}
                     {% else %}
@@ -653,7 +670,7 @@
                         option.dataset.email = user.email;
                         option.dataset.picture = user.picture || '';
 
-                        const projectCount = user.projects ? user.projects.length : 0;
+                        const projectCount = user.project_count || 0;
 
                         // Create avatar container with fallback
                         const avatarHTML = user.picture
@@ -673,7 +690,7 @@
                             </div>
                         `;
 
-                        option.addEventListener('click', () => selectUser(user.name, user.picture));
+                        option.addEventListener('click', () => selectUser(user.name, user.email, user.picture));
                         dropdownOptions.appendChild(option);
                     });
                 }
@@ -689,7 +706,7 @@
         dropdown.classList.toggle('active');
     }
 
-    function selectUser(name, picture) {
+    function selectUser(name, email, picture) {
         const selected = document.getElementById('customUserDropdownSelected');
         const hiddenInput = document.getElementById('assignUser');
         const errorMsg = document.getElementById('userSelectError');
@@ -704,15 +721,15 @@
                </div>`
             : `<div class="user-initial" style="width: 32px; height: 32px; font-size: var(--text-sm);">${name[0].toUpperCase()}</div>`;
 
-        // Update visual display
+        // Update visual display (show name)
         selected.classList.add('has-selection');
         selected.innerHTML = `
             ${avatarHTML}
             <span class="placeholder">${name}</span>
         `;
 
-        // Update hidden input for form submission
-        hiddenInput.value = name;
+        // Update hidden input with EMAIL (unique identifier)
+        hiddenInput.value = email;
 
         // Hide error message if visible
         if (errorMsg) {
@@ -783,11 +800,11 @@
         event.preventDefault();
 
         const hiddenInput = document.getElementById('assignUser');
-        const username = hiddenInput.value;
+        const userEmail = hiddenInput.value;
         const errorMsg = document.getElementById('userSelectError');
 
         // Custom validation
-        if (!username || username === '') {
+        if (!userEmail || userEmail === '') {
             if (errorMsg) {
                 errorMsg.style.display = 'block';
             }
@@ -806,7 +823,7 @@
                 },
                 body: JSON.stringify({
                     project_id: projectId,
-                    username: username,
+                    user_email: userEmail,
                     num_images: numImages,
                     allow_reassign: allowReassign
                 })
@@ -818,7 +835,10 @@
                 throw new Error(result.error || 'Failed to assign tasks');
             }
 
-            const message = result.message || `Assigned ${result.assigned} image(s) to ${username}`;
+            // Get user name from allUsers array for display
+            const user = allUsers.find(u => u.email === userEmail);
+            const userName = user ? user.name : userEmail;
+            const message = result.message || `Assigned ${result.assigned} image(s) to ${userName}`;
             showToast(message, 'success');
 
             // Close modal and reload after delay
@@ -828,6 +848,40 @@
             }, 1500);
         } catch (error) {
             console.error('Error assigning task:', error);
+            showToast('Error: ' + error.message, 'error');
+        }
+    }
+
+    async function removeUserFromProject(userEmail, userName) {
+        if (!confirm(`Remove ${userName} from this project?\n\nThis will unassign all their images but keep any labels they created.`)) {
+            return;
+        }
+
+        try {
+            const response = await fetch(`/api/projects/${projectId}/remove-user`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    user_email: userEmail
+                })
+            });
+
+            const result = await response.json();
+
+            if (!response.ok) {
+                throw new Error(result.error || 'Failed to remove user');
+            }
+
+            showToast(`Removed ${userName} from project`, 'success');
+
+            // Reload page after delay
+            setTimeout(() => {
+                window.location.reload();
+            }, 1000);
+        } catch (error) {
+            console.error('Error removing user:', error);
             showToast('Error: ' + error.message, 'error');
         }
     }
