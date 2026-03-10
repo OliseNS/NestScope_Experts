@@ -143,9 +143,7 @@ def render_map(
                 hover_name = None
                 hover_data = None
 
-            # Add a constant size column for all markers
-            df_map['marker_size'] = 1  # Very small constant size (like Google Maps pins)
-
+            # Use fixed-size markers (no size scaling like risk zones)
             fig = px.scatter_mapbox(
                 df_map,
                 lat=lat_col,
@@ -154,17 +152,15 @@ def render_map(
                 hover_data=hover_data,
                 zoom=7,
                 height=height,
-                size='marker_size',  # Use constant size column
-                size_max=8,  # Small maximum marker size (like typical map pins)
                 mapbox_style="open-street-map",
                 color_discrete_sequence=['#D97757']
             )
 
-            # Enhance marker visibility
+            # Set small, clean marker size to match Regional Colony Risk Distribution
             fig.update_traces(
                 marker=dict(
-                    opacity=0.9,
-                    sizemode='diameter'  # Use diameter for consistent sizing
+                    size=8,  # Fixed small size - matches risk zone markers
+                    opacity=0.9
                 )
             )
 
