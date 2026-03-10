@@ -83,7 +83,7 @@ def render_map(
                 color='Risk Level',
                 color_discrete_map=color_map,
                 size='Risk Score',
-                size_max=15,
+                size_max=10,  # Small size like typical map markers
                 zoom=7,
                 height=height,
                 mapbox_style="open-street-map"
@@ -112,15 +112,60 @@ def render_map(
             )
 
         else:
-            # Standard dataframe mapping
+            # Standard dataframe mapping with coordinate validation
+            # Validate that coordinates are numeric and not concatenated strings
+            import numpy as np
+
+            # Convert to numeric, coercing errors to NaN
+            df_map = df.copy()
+            df_map[lat_col] = pd.to_numeric(df_map[lat_col], errors='coerce')
+            df_map[lon_col] = pd.to_numeric(df_map[lon_col], errors='coerce')
+
+            # Filter out invalid coordinates
+            valid_mask = df_map[lat_col].notna() & df_map[lon_col].notna()
+            valid_mask &= (df_map[lat_col].abs() <= 90)  # Valid latitude range
+            valid_mask &= (df_map[lon_col].abs() <= 180)  # Valid longitude range
+            df_map = df_map[valid_mask]
+
+            if len(df_map) == 0:
+                st.error("❌ **Coordinate validation failed**: All coordinates are invalid or out of range.")
+                st.info("Coordinates must be numeric values (Latitude: -90 to 90, Longitude: -180 to 180)")
+                return
+
+            if len(df_map) < len(df):
+                st.warning(f"⚠️ {len(df) - len(df_map)} rows had invalid coordinates and were filtered out.")
+
+            # Create hover text with colony names if available
+            if 'ColonyName' in df_map.columns:
+                hover_name = 'ColonyName'
+                hover_data = {lat_col: ':.4f', lon_col: ':.4f'}
+            else:
+                hover_name = None
+                hover_data = None
+
+            # Add a constant size column for all markers
+            df_map['marker_size'] = 1  # Very small constant size (like Google Maps pins)
+
             fig = px.scatter_mapbox(
-                df,
+                df_map,
                 lat=lat_col,
                 lon=lon_col,
+                hover_name=hover_name,
+                hover_data=hover_data,
                 zoom=7,
                 height=height,
+                size='marker_size',  # Use constant size column
+                size_max=8,  # Small maximum marker size (like typical map pins)
                 mapbox_style="open-street-map",
                 color_discrete_sequence=['#D97757']
+            )
+
+            # Enhance marker visibility
+            fig.update_traces(
+                marker=dict(
+                    opacity=0.9,
+                    sizemode='diameter'  # Use diameter for consistent sizing
+                )
             )
 
         # Ensure interactivity

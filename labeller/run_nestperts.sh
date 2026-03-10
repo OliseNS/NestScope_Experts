@@ -5,14 +5,17 @@
 
 cd "$(dirname "$0")"
 
+# Use venv Python (go up one level to find .venv)
+PYTHON="../.venv/bin/python"
+
 # Check if waitress is installed, install if missing
-if ! python3 -c "import waitress" 2>/dev/null; then
+if ! $PYTHON -c "import waitress" 2>/dev/null; then
     echo "⚠️  Installing waitress for unlimited uploads..." >&2
-    pip install -q waitress 2>&1
+    ../.venv/bin/pip install -q waitress 2>&1
 fi
 
 # Run with waitress (no upload limits)
-python3 -c "
+$PYTHON -c "
 import sys
 sys.path.insert(0, '.')
 from waitress import serve

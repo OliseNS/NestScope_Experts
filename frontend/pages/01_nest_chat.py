@@ -545,24 +545,51 @@ if prompt:
                                 st.code(attempt_info['sql_query'], language="sql")
                                 st.markdown("")
 
-                            # SQL Validation (only show reasoning in collapsible if validation passed)
+                            # SQL Validation with detailed checklist (ALWAYS VISIBLE for judges)
                             if attempt_info['sql_validation_reasoning']:
                                 if attempt_num == 1:
                                     st.markdown("### ✅ Step 3: SQL Validation")
                                 else:
                                     st.markdown("### ✅ SQL Validation")
 
-                                if attempt_info['validation_passed']:
-                                    st.success("✓ Query validated and meets accuracy requirements")
-                                    # Show reasoning in a collapsible markdown section
-                                    reasoning = attempt_info['sql_validation_reasoning']
-                                    if isinstance(reasoning, dict) and 'reasoning' in reasoning:
-                                        reasoning = reasoning['reasoning']
-                                    if isinstance(reasoning, str):
-                                        with st.container():
-                                            st.markdown(f"<details><summary>View validation details</summary>{reasoning}</details>", unsafe_allow_html=True)
-                                else:
-                                    st.error(f"✗ Validation failed: {attempt_info['validation_feedback']}")
+                                reasoning = attempt_info['sql_validation_reasoning']
+
+                                # Display validation checklist prominently
+                                if isinstance(reasoning, dict):
+                                    # Check for nested 'reasoning' key
+                                    reasoning_details = reasoning.get('reasoning', reasoning)
+
+                                    if isinstance(reasoning_details, dict):
+                                        st.markdown("**Validation Checklist:**")
+                                        for check_name, check_result in reasoning_details.items():
+                                            if check_name not in ['issues_found', 'summary'] and check_result:
+                                                # Format check name nicely
+                                                display_name = check_name.replace('_', ' ').title()
+                                                st.markdown(f"✓ **{display_name}**: {check_result}")
+
+                                        if 'issues_found' in reasoning_details and reasoning_details['issues_found']:
+                                            st.markdown("**Issues Found:**")
+                                            for issue in reasoning_details['issues_found']:
+                                                st.error(f"⚠️ {issue}")
+
+                                        # Show overall status
+                                        if attempt_info['validation_passed']:
+                                            st.success("✓ **Overall**: All validation checks passed")
+                                        else:
+                                            st.error(f"✗ **Overall**: {attempt_info['validation_feedback']}")
+                                    else:
+                                        # Legacy string format
+                                        st.markdown(reasoning_details)
+                                        if attempt_info['validation_passed']:
+                                            st.success("✓ Validation passed")
+                                        else:
+                                            st.error(f"✗ {attempt_info['validation_feedback']}")
+                                elif isinstance(reasoning, str):
+                                    st.markdown(reasoning)
+                                    if attempt_info['validation_passed']:
+                                        st.success("✓ Validation passed")
+                                    else:
+                                        st.error(f"✗ {attempt_info['validation_feedback']}")
 
                                 st.markdown("")
 
@@ -575,24 +602,51 @@ if prompt:
                                 st.markdown(f"Retrieved **{attempt_info['rows_returned']} rows**")
                                 st.markdown("")
 
-                            # Results Validation (only show reasoning in collapsible if validation passed)
+                            # Results Validation with detailed checklist (ALWAYS VISIBLE for judges)
                             if attempt_info['results_validation_reasoning']:
                                 if attempt_num == 1:
                                     st.markdown("### 🔬 Step 5: Results Validation")
                                 else:
                                     st.markdown("### 🔬 Results Validation")
 
-                                if attempt_info['results_validation_passed']:
-                                    st.success("✓ Results validated and match the question")
-                                    # Show reasoning in a collapsible markdown section
-                                    reasoning = attempt_info['results_validation_reasoning']
-                                    if isinstance(reasoning, dict) and 'reasoning' in reasoning:
-                                        reasoning = reasoning['reasoning']
-                                    if isinstance(reasoning, str):
-                                        with st.container():
-                                            st.markdown(f"<details><summary>View validation details</summary>{reasoning}</details>", unsafe_allow_html=True)
-                                else:
-                                    st.error(f"✗ Results concern: {attempt_info['results_feedback']}")
+                                reasoning = attempt_info['results_validation_reasoning']
+
+                                # Display validation checklist prominently
+                                if isinstance(reasoning, dict):
+                                    # Check for nested 'reasoning' key
+                                    reasoning_details = reasoning.get('reasoning', reasoning)
+
+                                    if isinstance(reasoning_details, dict):
+                                        st.markdown("**Results Quality Checklist:**")
+                                        for check_name, check_result in reasoning_details.items():
+                                            if check_name not in ['issues_found', 'summary'] and check_result:
+                                                # Format check name nicely
+                                                display_name = check_name.replace('_', ' ').title()
+                                                st.markdown(f"✓ **{display_name}**: {check_result}")
+
+                                        if 'issues_found' in reasoning_details and reasoning_details['issues_found']:
+                                            st.markdown("**Issues Found:**")
+                                            for issue in reasoning_details['issues_found']:
+                                                st.error(f"⚠️ {issue}")
+
+                                        # Show overall status
+                                        if attempt_info['results_validation_passed']:
+                                            st.success("✓ **Overall**: Results validated and match the question")
+                                        else:
+                                            st.error(f"✗ **Overall**: {attempt_info['results_feedback']}")
+                                    else:
+                                        # Legacy string format
+                                        st.markdown(reasoning_details)
+                                        if attempt_info['results_validation_passed']:
+                                            st.success("✓ Results validated")
+                                        else:
+                                            st.error(f"✗ {attempt_info['results_feedback']}")
+                                elif isinstance(reasoning, str):
+                                    st.markdown(reasoning)
+                                    if attempt_info['results_validation_passed']:
+                                        st.success("✓ Results validated")
+                                    else:
+                                        st.error(f"✗ {attempt_info['results_feedback']}")
 
                                 st.markdown("")
 
@@ -606,6 +660,10 @@ if prompt:
                     answer_placeholder.markdown(answer + "▌")
 
                 elif event_type == 'answer_end':
+                    # Use clean answer if provided (without visualization directives)
+                    clean_answer = event.get('clean_answer')
+                    if clean_answer:
+                        answer = clean_answer  # Replace accumulated answer with cleaned version
                     # Remove cursor and show final answer
                     answer_placeholder.markdown(answer)
 

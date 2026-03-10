@@ -265,20 +265,7 @@ st.markdown("""
     </div>
 """, unsafe_allow_html=True)
 
-# Quick guide box
-st.markdown("""
-    <div class="context-panel" style="margin-bottom: 2rem;">
-        <div class="context-title">How to Use This Page</div>
-        <div style="font-family: 'Inter', sans-serif; font-size: 0.9rem; color: #CBD5E1; line-height: 1.7;">
-            <strong>1. Select a colony</strong> from the dropdown below to see real-time water level forecasts<br/>
-            <strong>2. View key metrics</strong> showing current surge, forecast peak, and risk levels<br/>
-            <strong>3. Check the water level chart</strong> to see observed levels (solid blue) vs forecast (dashed blue)<br/>
-            <strong>4. Scroll down to the map</strong> to see all colonies color-coded by risk level<br/>
-            <strong>5. Click colonies in the risk list</strong> (right side of map) to jump to their details<br/>
-            <strong>6. Click "Reset Map View"</strong> if you zoom/pan the map and want to return to default view
-        </div>
-    </div>
-""", unsafe_allow_html=True)
+# Removed "How to Use This Page" section - interface should be self-explanatory
 
 # ============================================================================
 # API & DATA UTILITIES

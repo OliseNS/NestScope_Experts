@@ -8,7 +8,7 @@ model:
   sql_max_tokens: 500
 
 agentic:
-  max_attempts: 10 
+  max_attempts: 3  # Maximum retry attempts for self-correction
   validation_temperature: 0.1 # Low temperature for strict validation
   analysis_temperature: 0.2 # Moderate temperature for question analysis
 
