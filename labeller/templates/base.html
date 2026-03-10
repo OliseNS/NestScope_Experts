@@ -14,17 +14,17 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/theme.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/components.css') }}">
 
-    <!-- Enhanced Navigation Styles -->
+    <!-- Clean Navigation Styles -->
     <style>
         * {
             font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif;
         }
 
         .navbar {
-            background: linear-gradient(135deg, #1e1e1e 0%, #2d2d2d 100%);
-            border-bottom: 1px solid rgba(86, 184, 151, 0.2);
+            background: #1a1a1a;
+            backdrop-filter: blur(12px);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.08);
             padding: 0;
-            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
             position: sticky;
             top: 0;
             z-index: 1000;
@@ -35,20 +35,23 @@
             margin: 0 auto;
             display: flex;
             align-items: center;
-            justify-content: space-between;
-            padding: 0 2rem;
-            height: 64px;
+            padding: 0 1.5rem;
+            height: 60px;
+            gap: 1.5rem;
         }
 
+        /* Brand Section */
         .navbar-brand {
             display: flex;
             align-items: center;
-            gap: 0.75rem;
+            gap: 0.625rem;
             text-decoration: none;
             font-weight: 600;
             font-size: 1.125rem;
             color: #ffffff;
-            transition: all 0.2s ease;
+            letter-spacing: -0.01em;
+            transition: color 0.2s ease;
+            flex-shrink: 0;
         }
 
         .navbar-brand:hover {
@@ -57,61 +60,105 @@
 
         .navbar-brand-icon {
             font-size: 1.5rem;
-            filter: drop-shadow(0 2px 4px rgba(86, 184, 151, 0.3));
+            line-height: 1;
         }
 
+        /* Navigation Items */
         .navbar-nav {
             display: flex;
             align-items: center;
-            gap: 0.5rem;
+            gap: 0.25rem;
             list-style: none;
             margin: 0;
             padding: 0;
         }
 
         .nav-link {
-            display: flex;
+            display: inline-flex;
             align-items: center;
-            padding: 0.625rem 1rem;
-            color: rgba(255, 255, 255, 0.8);
+            gap: 0.5rem;
+            padding: 0.5rem 0.875rem;
+            color: rgba(255, 255, 255, 0.7);
             text-decoration: none;
-            font-size: 0.9375rem;
+            font-size: 0.875rem;
             font-weight: 500;
-            border-radius: 8px;
-            transition: all 0.2s ease;
-            position: relative;
+            border-radius: 6px;
+            transition: all 0.15s ease;
+            white-space: nowrap;
         }
 
         .nav-link:hover {
             color: #ffffff;
-            background: rgba(86, 184, 151, 0.15);
+            background: rgba(255, 255, 255, 0.06);
         }
 
         .nav-link.active {
             color: #56B897;
-            background: rgba(86, 184, 151, 0.2);
+            background: rgba(86, 184, 151, 0.1);
         }
 
-        .nav-link.active::before {
-            content: '';
-            position: absolute;
-            bottom: -1px;
-            left: 50%;
-            transform: translateX(-50%);
-            width: 40px;
-            height: 2px;
-            background: #56B897;
-            border-radius: 2px 2px 0 0;
+        .nav-link svg {
+            width: 16px;
+            height: 16px;
+            opacity: 0.7;
+        }
+
+        .nav-link.active svg {
+            opacity: 1;
         }
 
         .nav-divider {
             width: 1px;
-            height: 24px;
-            background: rgba(255, 255, 255, 0.15);
+            height: 20px;
+            background: rgba(255, 255, 255, 0.1);
             margin: 0 0.5rem;
         }
 
-        /* User Dropdown Menu */
+        /* Right Actions */
+        .navbar-actions {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            margin-left: auto;
+            flex-shrink: 0;
+        }
+
+        .nav-link.external {
+            color: rgba(255, 255, 255, 0.6);
+            font-size: 0.8125rem;
+            padding: 0.375rem 0.75rem;
+        }
+
+        .nav-link.external:hover {
+            color: #56B897;
+            background: transparent;
+        }
+
+        /* Theme Toggle */
+        .theme-toggle {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 36px;
+            height: 36px;
+            border-radius: 8px;
+            background: rgba(255, 255, 255, 0.04);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            cursor: pointer;
+            transition: all 0.2s ease;
+            padding: 0;
+        }
+
+        .theme-toggle:hover {
+            background: rgba(255, 255, 255, 0.08);
+            border-color: rgba(255, 255, 255, 0.12);
+        }
+
+        .theme-toggle-thumb {
+            font-size: 1.125rem;
+        }
+
+        /* User Menu */
         .user-menu {
             position: relative;
         }
@@ -119,72 +166,112 @@
         .user-menu-trigger {
             display: flex;
             align-items: center;
-            gap: 0.75rem;
-            padding: 0.5rem 1rem;
-            border-radius: 12px;
+            gap: 0.625rem;
+            padding: 0.375rem 0.5rem 0.375rem 0.625rem;
+            border-radius: 8px;
             cursor: pointer;
-            transition: all 0.2s ease;
-            background: rgba(255, 255, 255, 0.05);
-            border: 1px solid rgba(255, 255, 255, 0.1);
+            transition: all 0.15s ease;
+            background: rgba(255, 255, 255, 0.04);
+            border: 1px solid rgba(255, 255, 255, 0.08);
         }
 
         .user-menu-trigger:hover {
-            background: rgba(255, 255, 255, 0.1);
-            border-color: rgba(86, 184, 151, 0.3);
+            background: rgba(255, 255, 255, 0.08);
+            border-color: rgba(255, 255, 255, 0.12);
+        }
+
+        .user-avatar-wrapper {
+            position: relative;
+            width: 28px;
+            height: 28px;
+            flex-shrink: 0;
         }
 
         .user-avatar {
-            width: 32px;
-            height: 32px;
-            border-radius: 50%;
-            border: 2px solid #56B897;
+            width: 28px;
+            height: 28px;
+            border-radius: 6px;
+            border: 1.5px solid rgba(86, 184, 151, 0.5);
             object-fit: cover;
+            display: block;
+        }
+
+        .user-avatar.hidden {
+            display: none;
+        }
+
+        .user-avatar-fallback {
+            width: 28px;
+            height: 28px;
+            border-radius: 6px;
+            border: 1.5px solid rgba(86, 184, 151, 0.5);
+            background: linear-gradient(135deg, #56B897 0%, #4A9B7F 100%);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.75rem;
+            font-weight: 600;
+            color: #ffffff;
+            text-transform: uppercase;
+            letter-spacing: 0.02em;
+        }
+
+        .user-avatar-fallback.visible {
+            display: flex;
+        }
+
+        .user-info {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
+            gap: 0.125rem;
         }
 
         .user-name {
             color: #ffffff;
-            font-size: 0.9375rem;
+            font-size: 0.8125rem;
             font-weight: 500;
-            max-width: 150px;
+            line-height: 1;
+            max-width: 120px;
             overflow: hidden;
             text-overflow: ellipsis;
             white-space: nowrap;
         }
 
         .user-role-badge {
-            font-size: 0.75rem;
-            padding: 0.125rem 0.5rem;
-            background: rgba(86, 184, 151, 0.2);
-            color: #56B897;
-            border-radius: 6px;
+            font-size: 0.6875rem;
+            color: rgba(86, 184, 151, 0.9);
             font-weight: 600;
             text-transform: uppercase;
-            letter-spacing: 0.05em;
+            letter-spacing: 0.03em;
+            line-height: 1;
         }
 
         .dropdown-icon {
-            width: 16px;
-            height: 16px;
-            stroke: rgba(255, 255, 255, 0.6);
+            width: 14px;
+            height: 14px;
+            stroke: rgba(255, 255, 255, 0.5);
             transition: transform 0.2s ease;
+            margin-left: 0.125rem;
         }
 
         .user-menu.active .dropdown-icon {
             transform: rotate(180deg);
         }
 
+        /* Dropdown Menu */
         .user-dropdown {
             position: absolute;
             top: calc(100% + 0.5rem);
             right: 0;
-            min-width: 240px;
-            background: #2d2d2d;
-            border: 1px solid rgba(86, 184, 151, 0.2);
-            border-radius: 12px;
-            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+            min-width: 220px;
+            background: #232323;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+            box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
             opacity: 0;
             visibility: hidden;
-            transform: translateY(-10px);
+            transform: translateY(-8px);
             transition: all 0.2s ease;
             overflow: hidden;
         }
@@ -196,20 +283,30 @@
         }
 
         .dropdown-header {
-            padding: 1rem;
-            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-            background: rgba(86, 184, 151, 0.05);
+            padding: 0.875rem 1rem;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+            background: rgba(255, 255, 255, 0.02);
         }
 
         .dropdown-user-name {
             font-weight: 600;
+            font-size: 0.9375rem;
             color: #ffffff;
             margin-bottom: 0.25rem;
         }
 
         .dropdown-user-email {
             font-size: 0.8125rem;
-            color: rgba(255, 255, 255, 0.6);
+            color: rgba(255, 255, 255, 0.5);
+        }
+
+        .dropdown-user-role {
+            margin-top: 0.5rem;
+            font-size: 0.6875rem;
+            color: #56B897;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
         }
 
         .dropdown-menu {
@@ -220,133 +317,93 @@
             display: flex;
             align-items: center;
             gap: 0.75rem;
-            padding: 0.75rem 1rem;
-            color: rgba(255, 255, 255, 0.9);
+            padding: 0.625rem 0.875rem;
+            color: rgba(255, 255, 255, 0.85);
             text-decoration: none;
-            border-radius: 8px;
-            transition: all 0.2s ease;
-            font-size: 0.9375rem;
+            border-radius: 6px;
+            transition: all 0.15s ease;
+            font-size: 0.875rem;
         }
 
         .dropdown-item:hover {
-            background: rgba(86, 184, 151, 0.15);
+            background: rgba(255, 255, 255, 0.08);
             color: #ffffff;
         }
 
         .dropdown-item.danger {
-            color: rgba(252, 129, 129, 0.9);
+            color: rgba(252, 129, 129, 0.85);
         }
 
         .dropdown-item.danger:hover {
-            background: rgba(252, 129, 129, 0.15);
+            background: rgba(252, 129, 129, 0.12);
             color: #fc8181;
         }
 
-        .dropdown-icon-left {
-            width: 18px;
-            height: 18px;
-            opacity: 0.7;
-        }
-
-        .theme-toggle {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            width: 40px;
-            height: 40px;
-            border-radius: 10px;
-            background: rgba(255, 255, 255, 0.05);
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            cursor: pointer;
-            transition: all 0.2s ease;
-            padding: 0;
-        }
-
-        .theme-toggle:hover {
-            background: rgba(255, 255, 255, 0.1);
-            border-color: rgba(86, 184, 151, 0.3);
-        }
-
-        .theme-toggle-thumb {
-            font-size: 1.25rem;
-            line-height: 1;
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            width: 100%;
-            height: 100%;
-            transition: transform 0.2s ease;
-        }
-
-        .theme-toggle:hover .theme-toggle-thumb {
-            transform: rotate(20deg);
+        .dropdown-item svg {
+            width: 16px;
+            height: 16px;
+            opacity: 0.6;
         }
 
         /* Responsive Design */
         @media (max-width: 1200px) {
             .navbar-content {
                 padding: 0 1rem;
+                gap: 1rem;
             }
 
             .nav-link span {
                 display: none;
             }
 
-            .nav-link {
-                padding: 0.625rem 0.75rem;
-            }
-
-            .user-name {
+            .nav-link.external span {
                 display: none;
             }
 
-            .user-role-badge {
+            .user-info {
                 display: none;
+            }
+
+            .user-menu-trigger {
+                padding: 0.375rem;
             }
         }
 
         @media (max-width: 768px) {
             .navbar-content {
-                flex-wrap: wrap;
                 height: auto;
-                padding: 0.75rem 1rem;
+                min-height: 56px;
+                flex-wrap: wrap;
+                padding: 0.625rem 1rem;
             }
 
             .navbar-nav {
-                flex-wrap: wrap;
+                order: 3;
+                width: 100%;
                 gap: 0.25rem;
+                padding-top: 0.5rem;
+            }
+
+            .navbar-actions {
+                order: 2;
             }
 
             .nav-link {
-                padding: 0.5rem;
-                font-size: 0.875rem;
+                padding: 0.5rem 0.625rem;
+                font-size: 0.8125rem;
+            }
+
+            .nav-link.external {
+                display: none;
             }
 
             .nav-divider {
                 display: none;
             }
 
-            .user-menu-trigger {
-                padding: 0.5rem;
-            }
-
             .user-dropdown {
-                right: -1rem;
+                right: 0;
                 min-width: 200px;
-            }
-
-            .dropdown-header {
-                padding: 0.75rem;
-            }
-
-            .theme-toggle {
-                width: 36px;
-                height: 36px;
-            }
-
-            .theme-toggle-thumb {
-                font-size: 1.125rem;
-                line-height: 36px;
             }
         }
 
@@ -359,15 +416,17 @@
                 font-size: 1.25rem;
             }
 
-            .nav-link {
-                padding: 0.5rem;
+            .theme-toggle {
+                width: 34px;
+                height: 34px;
             }
 
-            /* Stack navigation on very small screens */
             .navbar-nav {
-                width: 100%;
-                justify-content: space-between;
-                margin-top: 0.5rem;
+                justify-content: flex-start;
+            }
+
+            .nav-link {
+                flex: 0 0 auto;
             }
         }
     </style>
@@ -381,44 +440,84 @@
     <!-- Navigation -->
     <nav class="navbar">
         <div class="navbar-content">
+            <!-- Brand -->
             <a href="/" class="navbar-brand">
-                <span class="navbar-brand-icon">🦅</span>
+                <div class="navbar-brand-icon">🦅</div>
                 <span>Nestperts</span>
             </a>
 
+            <!-- Main Navigation -->
             <ul class="navbar-nav">
-                <li><a href="/" class="nav-link {% if active_page == 'projects' %}active{% endif %}">
-                    <span>Projects</span>
-                </a></li>
-                <li><a href="/users" class="nav-link {% if active_page == 'users' %}active{% endif %}">
-                    <span>Users</span>
-                </a></li>
-                <li><a href="/nestdb" class="nav-link {% if active_page == 'nestdb' %}active{% endif %}">
-                    <span>NestDB</span>
-                </a></li>
-                <li><a href="/help" class="nav-link {% if active_page == 'help' %}active{% endif %}">
-                    <span>Help</span>
-                </a></li>
-
-                <li class="nav-divider"></li>
-
-                <li><a href="http://localhost:8501" target="_blank" class="nav-link">
-                    <span>← Back to NestScope</span>
-                </a></li>
-
                 <li>
-                    <button class="theme-toggle" aria-label="Toggle theme">
-                        <div class="theme-toggle-thumb">🌙</div>
-                    </button>
+                    <a href="/" class="nav-link {% if active_page == 'projects' %}active{% endif %}">
+                        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/>
+                        </svg>
+                        <span>Projects</span>
+                    </a>
                 </li>
+                <li>
+                    <a href="/users" class="nav-link {% if active_page == 'users' %}active{% endif %}">
+                        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"/>
+                        </svg>
+                        <span>Users</span>
+                    </a>
+                </li>
+                <li>
+                    <a href="/nestdb" class="nav-link {% if active_page == 'nestdb' %}active{% endif %}">
+                        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4"/>
+                        </svg>
+                        <span>NestDB</span>
+                    </a>
+                </li>
+                <li>
+                    <a href="/help" class="nav-link {% if active_page == 'help' %}active{% endif %}">
+                        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                        </svg>
+                        <span>Help</span>
+                    </a>
+                </li>
+            </ul>
+
+            <!-- Right Actions -->
+            <div class="navbar-actions">
+                <a href="http://localhost:8501" target="_blank" class="nav-link external">
+                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"/>
+                    </svg>
+                    <span>Back to NestScope</span>
+                </a>
+
+                <div class="nav-divider"></div>
+
+                <button class="theme-toggle" aria-label="Toggle theme">
+                    <span class="theme-toggle-thumb">🌙</span>
+                </button>
 
                 {% if session.user %}
-                <li class="user-menu">
+                <div class="user-menu">
                     <div class="user-menu-trigger" onclick="toggleUserMenu()">
-                        <img src="{{ session.user.picture }}" alt="{{ session.user.name }}" class="user-avatar">
-                        <span class="user-name">{{ session.user.name }}</span>
+                        <div class="user-avatar-wrapper">
+                            <img src="{{ session.user.picture }}"
+                                 alt="{{ session.user.name }}"
+                                 class="user-avatar"
+                                 onerror="handleAvatarError(this)"
+                                 loading="lazy">
+                            <div class="user-avatar-fallback" data-initials="{{ session.user.name[0] if session.user.name else 'U' }}">
+                                {{ session.user.name[0] if session.user.name else 'U' }}
+                            </div>
+                        </div>
+                        <div class="user-info">
+                            <span class="user-name">{{ session.user.name }}</span>
+                            {% if session.user.role %}
+                            <span class="user-role-badge">{{ session.user.role }}</span>
+                            {% endif %}
+                        </div>
                         <svg class="dropdown-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
                         </svg>
                     </div>
                     <div class="user-dropdown">
@@ -426,32 +525,30 @@
                             <div class="dropdown-user-name">{{ session.user.name }}</div>
                             <div class="dropdown-user-email">{{ session.user.email }}</div>
                             {% if session.user.role %}
-                            <div style="margin-top: 0.5rem;">
-                                <span class="user-role-badge">{{ session.user.role }}</span>
-                            </div>
+                            <div class="dropdown-user-role">{{ session.user.role }}</div>
                             {% endif %}
                         </div>
                         <div class="dropdown-menu">
                             {% if session.user.is_admin %}
                             <a href="/admin" class="dropdown-item">
-                                <svg class="dropdown-icon-left" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path>
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/>
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
                                 </svg>
                                 Admin Panel
                             </a>
                             {% endif %}
                             <a href="{{ url_for('logout') }}" class="dropdown-item danger">
-                                <svg class="dropdown-icon-left" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path>
+                                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/>
                                 </svg>
                                 Logout
                             </a>
                         </div>
                     </div>
-                </li>
+                </div>
                 {% endif %}
-            </ul>
+            </div>
         </div>
     </nav>
 
@@ -461,11 +558,34 @@
             menu.classList.toggle('active');
         }
 
+        // Handle avatar image load failure
+        function handleAvatarError(img) {
+            console.log('Avatar image failed to load, showing fallback');
+            img.classList.add('hidden');
+            const fallback = img.nextElementSibling;
+            if (fallback && fallback.classList.contains('user-avatar-fallback')) {
+                fallback.classList.add('visible');
+            }
+        }
+
         // Close dropdown when clicking outside
         document.addEventListener('click', function(event) {
             const menu = document.querySelector('.user-menu');
             if (menu && !menu.contains(event.target)) {
                 menu.classList.remove('active');
+            }
+        });
+
+        // Preload avatar and show fallback if it fails
+        document.addEventListener('DOMContentLoaded', function() {
+            const avatarImg = document.querySelector('.user-avatar');
+            if (avatarImg && !avatarImg.complete) {
+                avatarImg.addEventListener('error', function() {
+                    handleAvatarError(this);
+                });
+            } else if (avatarImg && !avatarImg.naturalWidth) {
+                // Image loaded but has no dimensions (broken)
+                handleAvatarError(avatarImg);
             }
         });
     </script>

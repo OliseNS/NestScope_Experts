@@ -151,7 +151,7 @@ with col2:
 
 st.markdown("<div style='height: 2rem;'></div>", unsafe_allow_html=True)
 
-# Third feature card for NestDB
+# Second row of feature cards
 col3, col4 = st.columns(2, gap="large")
 
 with col3:
@@ -230,6 +230,69 @@ with col4:
 
 st.markdown("<div style='height: 2rem;'></div>", unsafe_allow_html=True)
 
+# Third row - NestMap
+col5, col6 = st.columns(2, gap="large")
+
+with col5:
+    st.markdown("""
+    <div style="
+        background: #2D2D2D;
+        border: 1px solid #404040;
+        border-radius: 12px;
+        padding: 1.75rem;
+        height: 100%;
+        transition: all 0.2s ease;
+    " onmouseover="this.style.borderColor='#D97757'; this.style.background='#333';" onmouseout="this.style.borderColor='#404040'; this.style.background='#2D2D2D';">
+        <div style="
+            display: inline-block;
+            background: rgba(217, 119, 87, 0.15);
+            border-radius: 8px;
+            padding: 0.5rem 0.75rem;
+            margin-bottom: 1rem;
+        ">
+            <span style="font-size: 1.5rem;">🗺️</span>
+        </div>
+        <h3 style="color: #E5E5E5; margin: 0 0 0.75rem 0; font-size: 1.25rem; font-weight: 600;">NestMap</h3>
+        <p style="color: #A0A0A0; font-size: 0.875rem; line-height: 1.6; margin-bottom: 1.25rem;">
+            Geographic intelligence with expert-validated bird locations and aerial imagery
+        </p>
+        <ul style="color: #E5E5E5; font-size: 0.875rem; line-height: 1.8; margin-left: 1.25rem; padding-left: 0;">
+            <li>STAC catalog integration</li>
+            <li>Expert-dotted bird locations</li>
+            <li>COG mosaic visualization</li>
+            <li>Species distribution maps</li>
+        </ul>
+        <div style="margin-top: 1rem; padding-top: 1rem; border-top: 1px solid #404040;">
+            <p style="font-size: 0.75rem; color: #888; margin: 0;">
+                ⚡ Water Institute STAC data
+            </p>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+with col6:
+    # Empty column for symmetry, or add future features here
+    st.markdown("""
+    <div style="
+        background: #2D2D2D;
+        border: 1px solid #404040;
+        border-radius: 12px;
+        padding: 1.75rem;
+        height: 100%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        opacity: 0.5;
+    ">
+        <div style="text-align: center; color: #666;">
+            <div style="font-size: 3rem; margin-bottom: 1rem;">🚀</div>
+            <p style="font-size: 0.875rem; margin: 0;">More features coming soon!</p>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+st.markdown("<div style='height: 2rem;'></div>", unsafe_allow_html=True)
+
 # Dataset metrics - Google Cloud style
 st.markdown("""
     <div style="
@@ -242,15 +305,40 @@ st.markdown("""
     ">Dataset Overview</div>
 """, unsafe_allow_html=True)
 
-metric_col1, metric_col2, metric_col3, metric_col4 = st.columns(4)
-with metric_col1:
-    st.metric("Years", "2010-2021")
-with metric_col2:
-    st.metric("States", "5")
-with metric_col3:
-    st.metric("Species", "20+")
-with metric_col4:
-    st.metric("Observations", "100K+")
+# Fetch real database statistics
+try:
+    from services import get_stats_from_backend
+    stats = get_stats_from_backend()
+
+    if stats.get("success", True):  # Assume success if field not present
+        min_year = stats.get("min_year", 2010)
+        max_year = stats.get("max_year", 2021)
+        total_colonies = stats.get("total_colonies", 0)
+        total_species = stats.get("total_species", 0)
+        total_records = stats.get("total_observations", 0)
+
+        metric_col1, metric_col2, metric_col3, metric_col4 = st.columns(4)
+        with metric_col1:
+            st.metric("Years", f"{min_year}-{max_year}")
+        with metric_col2:
+            st.metric("Colonies", f"{total_colonies:,}")
+        with metric_col3:
+            st.metric("Species", f"{total_species}+")
+        with metric_col4:
+            st.metric("Records", f"{total_records:,}")
+    else:
+        raise Exception("Stats fetch returned error")
+except Exception as e:
+    # Fallback to placeholder values if stats fetch fails
+    metric_col1, metric_col2, metric_col3, metric_col4 = st.columns(4)
+    with metric_col1:
+        st.metric("Years", "2010-2021")
+    with metric_col2:
+        st.metric("Colonies", "100+")
+    with metric_col3:
+        st.metric("Species", "20+")
+    with metric_col4:
+        st.metric("Records", "100K+")
 
 st.markdown("<div style='height: 2rem;'></div>", unsafe_allow_html=True)
 
@@ -276,8 +364,9 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
-# System Management Section
-st.markdown("<div style='height: 3rem;'></div>", unsafe_allow_html=True)
+st.markdown("<div style='height: 2.5rem;'></div>", unsafe_allow_html=True)
+
+# Project Information
 st.markdown("""
     <div style="
         font-size: 0.6875rem;
@@ -286,21 +375,50 @@ st.markdown("""
         letter-spacing: 0.08em;
         color: #A0A0A0;
         margin-bottom: 1rem;
-    ">System Management</div>
+    ">About the Project</div>
 """, unsafe_allow_html=True)
 
-with st.expander("🛠️ Advanced Settings & AI Context"):
-    st.write("Optimize AI accuracy by allowing the agent to explore the latest database schema and content.")
-    
-    if st.button("🕵️ Trigger Database Explorer Agent", use_container_width=True):
-        with st.spinner("Agent exploring database and refreshing context..."):
-            from services import explore_database
-            result = explore_database()
-            
-            if result.get("success"):
-                st.success(result["message"])
-                if result.get("insights"):
-                    st.info("💡 **Agent Insights:**\n" + "\n".join([f"- {i}" for i in result["insights"]]))
-                st.balloons()
-            else:
-                st.error(f"Agent failed: {result.get('error')}")
+st.markdown("""
+<div style="background: #2D2D2D; border: 1px solid #404040; border-radius: 12px; padding: 1.75rem;">
+    <div style="color: #E5E5E5; font-size: 0.875rem; line-height: 1.8; margin-bottom: 1rem;">
+        <strong style="color: #D97757; font-size: 1rem;">NestScope</strong> is an AI-powered platform for Gulf Coast avian monitoring and conservation intelligence.
+    </div>
+    <div style="color: #A0A0A0; font-size: 0.8125rem; line-height: 1.7;">
+        <p style="margin: 0 0 0.75rem 0;">
+            📊 <strong style="color: #E5E5E5;">Data Coverage:</strong> Comprehensive bird colony surveys across Texas, Louisiana, Mississippi, Alabama, and Florida (2010-2021)
+        </p>
+        <p style="margin: 0 0 0.75rem 0;">
+            🤖 <strong style="color: #E5E5E5;">AI-Powered:</strong> Natural language queries, computer vision detection, and species classification
+        </p>
+        <p style="margin: 0 0 0.75rem 0;">
+            🗺️ <strong style="color: #E5E5E5;">Geographic Intelligence:</strong> STAC catalog integration with expert-validated bird locations and COG mosaics
+        </p>
+        <p style="margin: 0 0 0;">
+            🏆 <strong style="color: #E5E5E5;">DevDays 2026:</strong> Built for The Water Institute's hackathon (March 20, 2026)
+        </p>
+    </div>
+    <div style="margin-top: 1.25rem; padding-top: 1.25rem; border-top: 1px solid #404040;">
+        <p style="font-size: 0.75rem; color: #888; margin: 0;">
+            💡 <strong>Need Help?</strong> Use the sidebar navigation to explore features, or visit the Help page for detailed documentation.
+        </p>
+    </div>
+</div>
+""", unsafe_allow_html=True)
+
+st.markdown("<div style='height: 3rem;'></div>", unsafe_allow_html=True)
+
+# Footer
+st.markdown("""
+    <div style="
+        text-align: center;
+        padding: 1.5rem;
+        color: #666;
+        font-size: 0.75rem;
+        border-top: 1px solid #404040;
+        margin-top: 2rem;
+    ">
+        <p style="margin: 0;">
+            NestScope © 2026 | Gulf Coast Avian Monitoring Platform
+        </p>
+    </div>
+""", unsafe_allow_html=True)
