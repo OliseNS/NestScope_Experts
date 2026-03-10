@@ -4,8 +4,14 @@
 
 {% block extra_css %}
 <style>
-    body {
+    /* Theme-responsive admin panel */
+    [data-theme="dark"] body {
         background: linear-gradient(135deg, #1e1e1e 0%, #2a2a2a 100%);
+        min-height: 100vh;
+    }
+
+    [data-theme="light"] body {
+        background: linear-gradient(135deg, #f5f0e8 0%, #fdfbf7 100%);
         min-height: 100vh;
     }
 
@@ -23,7 +29,7 @@
     .page-title {
         font-size: 2.5rem;
         font-weight: 700;
-        color: #ffffff;
+        color: var(--text-primary);
         margin-bottom: 0.5rem;
         display: flex;
         align-items: center;
@@ -32,7 +38,7 @@
 
     .page-subtitle {
         font-size: 1.125rem;
-        color: rgba(255, 255, 255, 0.6);
+        color: var(--text-secondary);
     }
 
     /* Flash Messages */
@@ -83,8 +89,8 @@
     }
 
     .stat-card {
-        background: linear-gradient(135deg, rgba(45, 45, 45, 0.9) 0%, rgba(35, 35, 35, 0.9) 100%);
-        border: 1px solid rgba(255, 255, 255, 0.1);
+        background: var(--surface-base);
+        border: 1px solid var(--surface-border);
         border-radius: 16px;
         padding: 1.75rem;
         position: relative;
@@ -125,21 +131,21 @@
     .stat-value {
         font-size: 2.5rem;
         font-weight: 700;
-        color: #ffffff;
+        color: var(--text-primary);
         line-height: 1;
         margin-bottom: 0.5rem;
     }
 
     .stat-description {
         font-size: 0.875rem;
-        color: rgba(255, 255, 255, 0.5);
+        color: var(--text-tertiary);
     }
 
     /* Section Cards */
     .section-card {
-        background: rgba(45, 45, 45, 0.6);
+        background: var(--surface-base);
         backdrop-filter: blur(20px);
-        border: 1px solid rgba(255, 255, 255, 0.1);
+        border: 1px solid var(--surface-border);
         border-radius: 20px;
         padding: 2rem;
         margin-bottom: 2rem;
@@ -162,7 +168,7 @@
     .section-title {
         font-size: 1.5rem;
         font-weight: 600;
-        color: #ffffff;
+        color: var(--text-primary);
         display: flex;
         align-items: center;
         gap: 0.75rem;
@@ -178,10 +184,10 @@
 
     .form-input {
         padding: 0.875rem 1.25rem;
-        background: rgba(255, 255, 255, 0.05);
-        border: 1px solid rgba(255, 255, 255, 0.15);
+        background: var(--surface-hover);
+        border: 1px solid var(--surface-border);
         border-radius: 12px;
-        color: #ffffff;
+        color: var(--text-primary);
         font-size: 0.9375rem;
         transition: all 0.2s ease;
     }
@@ -241,7 +247,7 @@
     }
 
     .data-table thead {
-        background: rgba(255, 255, 255, 0.03);
+        background: var(--bg-secondary);
     }
 
     .data-table th {
@@ -251,14 +257,14 @@
         font-weight: 600;
         text-transform: uppercase;
         letter-spacing: 0.1em;
-        color: rgba(255, 255, 255, 0.6);
-        border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        color: var(--text-tertiary);
+        border-bottom: 1px solid var(--surface-border);
     }
 
     .data-table td {
         padding: 1.25rem 1.5rem;
-        border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-        color: rgba(255, 255, 255, 0.9);
+        border-bottom: 1px solid var(--surface-border);
+        color: var(--text-primary);
         font-size: 0.9375rem;
     }
 
@@ -319,12 +325,12 @@
 
     .user-info-name {
         font-weight: 600;
-        color: #ffffff;
+        color: var(--text-primary);
     }
 
     .user-info-email {
         font-size: 0.8125rem;
-        color: rgba(255, 255, 255, 0.5);
+        color: var(--text-tertiary);
     }
 
     /* Role Badge */
@@ -389,10 +395,10 @@
     /* Role Select */
     .role-select {
         padding: 0.5rem 0.875rem;
-        background: rgba(255, 255, 255, 0.05);
-        border: 1px solid rgba(255, 255, 255, 0.15);
+        background: var(--surface-hover);
+        border: 1px solid var(--surface-border);
         border-radius: 8px;
-        color: #ffffff;
+        color: var(--text-primary);
         font-size: 0.875rem;
         cursor: pointer;
         transition: all 0.2s ease;

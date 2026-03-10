@@ -278,20 +278,20 @@
             display: flex;
             align-items: center;
             gap: 12px;
-            background: rgba(255, 255, 255, 0.95);
+            background: rgba(0, 0, 0, 0.9);
             backdrop-filter: blur(10px);
             padding: 12px 24px;
             border-radius: 50px;
-            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
             font-size: 14px;
-            color: #1e1e1e;
+            color: #ffffff;
             z-index: 10;
-            border: 1px solid rgba(83, 124, 138, 0.2);
+            border: 1px solid rgba(255, 255, 255, 0.1);
         }
 
         .attribution-text {
             font-weight: 500;
-            color: #2a2520;
+            color: #ffffff;
         }
 
         .attribution-logo {
@@ -301,7 +301,7 @@
         }
 
         .attribution-by {
-            color: #5c5247;
+            color: #7BABAE;
             font-weight: 600;
             margin-left: 4px;
         }
@@ -358,7 +358,7 @@
         {% if not_approved %}
         <div style="margin-top: 20px; padding: 15px; background: rgba(255, 165, 0, 0.15); border: 1px solid rgba(255, 165, 0, 0.3); border-radius: 12px; border-left: 4px solid #FFA500;">
             <strong style="color: #FFA500;">Email Not Approved</strong>
-            <p style="color: rgba(255, 255, 255, 0.7); margin-top: 8px; font-size: 14px;">
+            <p style="color: rgba(30, 30, 30, 0.8); margin-top: 8px; font-size: 14px;">
                 Your email ({{ not_approved }}) is not on the approved list. Contact the admin to request access.
             </p>
         </div>
