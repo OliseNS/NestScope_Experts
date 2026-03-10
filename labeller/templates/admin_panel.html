@@ -710,6 +710,7 @@
                     <th>Last Login</th>
                     <th>Logins</th>
                     <th>Change Role</th>
+                    <th>Actions</th>
                 </tr>
             </thead>
             <tbody>
@@ -766,6 +767,18 @@
                         </form>
                         {% else %}
                         <span style="color: rgba(255,255,255,0.5); font-size: 0.875rem;">You</span>
+                        {% endif %}
+                    </td>
+                    <td data-label="Actions">
+                        {% if u.email != user.email %}
+                        <form method="POST" action="{{ url_for('admin_delete_user') }}" style="display: inline;">
+                            <input type="hidden" name="email" value="{{ u.email }}">
+                            <button type="submit" class="btn btn-danger" onclick="return confirm('Permanently delete {{ u.name }} ({{ u.email }})? This will remove them from the database and revoke their access.')">
+                                Delete
+                            </button>
+                        </form>
+                        {% else %}
+                        <span style="color: rgba(255,255,255,0.5); font-size: 0.875rem;">—</span>
                         {% endif %}
                     </td>
                 </tr>

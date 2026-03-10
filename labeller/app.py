@@ -50,7 +50,8 @@ from labeller.auth import (
     get_all_users,
     get_current_user,
     add_admin,
-    get_user_permissions
+    get_user_permissions,
+    delete_user
 )
 
 app = Flask(__name__)
@@ -424,6 +425,29 @@ def admin_update_role():
         flash(f'Updated {email} to {new_role}', 'success')
     else:
         flash(f'Failed to update role', 'error')
+
+    return redirect(url_for('admin_panel'))
+
+@app.route('/admin/delete-user', methods=['POST'])
+@admin_required
+def admin_delete_user():
+    """Delete a user completely"""
+    email = request.form.get('email', '').strip()
+
+    if not email:
+        flash('Email is required', 'error')
+        return redirect(url_for('admin_panel'))
+
+    # Don't allow deleting yourself
+    if email == session['user']['email']:
+        flash('Cannot delete your own account', 'error')
+        return redirect(url_for('admin_panel'))
+
+    success = delete_user(email)
+    if success:
+        flash(f'Deleted user {email}', 'success')
+    else:
+        flash(f'Failed to delete user', 'error')
 
     return redirect(url_for('admin_panel'))
 

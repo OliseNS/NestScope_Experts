@@ -339,6 +339,24 @@ def update_user_role(email, new_role):
     conn.close()
     return True
 
+def delete_user(email):
+    """Delete a user completely from the system"""
+    conn = sqlite3.connect(AUTH_DB)
+    cursor = conn.cursor()
+
+    # Delete from users table
+    cursor.execute('DELETE FROM users WHERE email = ?', (email,))
+
+    # Delete from admin_users table if exists
+    cursor.execute('DELETE FROM admin_users WHERE email = ?', (email,))
+
+    # Optionally remove from approved_emails (so they can't log back in)
+    cursor.execute('DELETE FROM approved_emails WHERE email = ?', (email,))
+
+    conn.commit()
+    conn.close()
+    return True
+
 def get_all_users_with_roles():
     """Get all registered users with their roles and permissions"""
     conn = sqlite3.connect(AUTH_DB)
