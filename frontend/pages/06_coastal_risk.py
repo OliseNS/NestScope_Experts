@@ -309,31 +309,56 @@ def find_nearest_station(lat, lon):
 
 @st.cache_data(ttl=300)
 def get_live_project_data():
-    """Fetch colony data from API"""
-    try:
-        priorities = requests.get(f"{API_BASE_URL}/api/risk/priority_list", params={"limit": 500}).json()
-        zones_api = requests.get(f"{API_BASE_URL}/api/risk/map_zones").json()
+    """Fetch colony data from API with retry logic"""
+    import time
 
-        z_map = {z['colony_name']: z for z in zones_api['zones']}
-        data = []
-        for p in priorities['priorities']:
-            if p['colony_name'] in z_map:
-                p.update({
-                    'latitude': z_map[p['colony_name']]['latitude'],
-                    'longitude': z_map[p['colony_name']]['longitude']
-                })
-                score = p['risk_score']
-                if score > 75: level = "CRITICAL"
-                elif score > 50: level = "HIGH"
-                elif score > 25: level = "MODERATE"
-                else: level = "LOW"
-                p['risk_level'] = level
-                data.append(p)
+    max_retries = 3
+    retry_delay = 1  # Start with 1 second
 
-        return pd.DataFrame(data), zones_api['zones']
-    except Exception as e:
-        st.error(f"⚠️ API Error: {e}")
-        return pd.DataFrame(), []
+    for attempt in range(max_retries):
+        try:
+            priorities = requests.get(
+                f"{API_BASE_URL}/api/risk/priority_list",
+                params={"limit": 500},
+                timeout=10
+            ).json()
+
+            zones_api = requests.get(
+                f"{API_BASE_URL}/api/risk/map_zones",
+                timeout=10
+            ).json()
+
+            z_map = {z['colony_name']: z for z in zones_api['zones']}
+            data = []
+            for p in priorities['priorities']:
+                if p['colony_name'] in z_map:
+                    p.update({
+                        'latitude': z_map[p['colony_name']]['latitude'],
+                        'longitude': z_map[p['colony_name']]['longitude']
+                    })
+                    score = p['risk_score']
+                    if score > 75: level = "CRITICAL"
+                    elif score > 50: level = "HIGH"
+                    elif score > 25: level = "MODERATE"
+                    else: level = "LOW"
+                    p['risk_level'] = level
+                    data.append(p)
+
+            return pd.DataFrame(data), zones_api['zones']
+
+        except requests.exceptions.ConnectionError as e:
+            if attempt < max_retries - 1:
+                time.sleep(retry_delay)
+                retry_delay *= 2  # Exponential backoff
+                continue
+            else:
+                st.warning(f"⚠️ Backend server not responding. Please ensure the backend is running at {API_BASE_URL}")
+                st.info("💡 Start the backend with: `python -m uvicorn server.main:app --reload`")
+                return pd.DataFrame(), []
+
+        except Exception as e:
+            st.error(f"⚠️ API Error: {e}")
+            return pd.DataFrame(), []
 
 @st.cache_data(ttl=300)
 def fetch_noaa_data(station_id, product='predictions', hours=48, lookback=24):
@@ -403,9 +428,17 @@ def fetch_historical_percentiles(station_id, days=180):
 # LOAD DATA
 # ============================================================================
 
+# Add refresh button for cached data
+col1, col2 = st.columns([6, 1])
+with col2:
+    if st.button("🔄 Refresh Data", help="Clear cache and reload data from backend"):
+        st.cache_data.clear()
+        st.rerun()
+
 df_priorities, raw_zones = get_live_project_data()
 if df_priorities.empty:
     st.warning("⚠️ Waiting for data services to initialize...")
+    st.info("💡 If the backend is running, click '🔄 Refresh Data' above to retry")
     st.stop()
 
 # ============================================================================

@@ -33,6 +33,49 @@ init_page(page_title="NestDB - NestScope", page_icon="🗄️", layout="wide")
 # Render shared header
 render_header(page_name="NestDB")
 
+# Add custom CSS for proper scrolling in tabs
+st.markdown("""
+<style>
+    /* Fix tab content scrolling */
+    .stTabs [data-baseweb="tab-panel"] {
+        max-height: calc(100vh - 200px);
+        overflow-y: auto;
+        overflow-x: hidden;
+        padding-right: 0.5rem;
+    }
+
+    /* Ensure expanders within tabs are scrollable */
+    .stTabs [data-baseweb="tab-panel"] .streamlit-expanderContent {
+        max-height: none;
+    }
+
+    /* Add padding at bottom of tab content so last items aren't hidden */
+    .stTabs [data-baseweb="tab-panel"] > div {
+        padding-bottom: 3rem;
+    }
+
+    /* Improve scrollbar visibility in tab panels */
+    .stTabs [data-baseweb="tab-panel"]::-webkit-scrollbar {
+        width: 10px;
+    }
+
+    .stTabs [data-baseweb="tab-panel"]::-webkit-scrollbar-track {
+        background: var(--claude-bg);
+        border-radius: 5px;
+    }
+
+    .stTabs [data-baseweb="tab-panel"]::-webkit-scrollbar-thumb {
+        background: #4A4A4A;
+        border-radius: 5px;
+        border: 2px solid var(--claude-bg);
+    }
+
+    .stTabs [data-baseweb="tab-panel"]::-webkit-scrollbar-thumb:hover {
+        background: #5A5A5A;
+    }
+</style>
+""", unsafe_allow_html=True)
+
 # ============================================================================
 # SESSION STATE INITIALIZATION
 # ============================================================================
@@ -54,6 +97,16 @@ if "db_edited_data" not in st.session_state:
 
 if "db_show_add_row" not in st.session_state:
     st.session_state.db_show_add_row = False
+
+# Version control session state
+if "vc_expert_email" not in st.session_state:
+    st.session_state.vc_expert_email = ""
+
+if "vc_search_query" not in st.session_state:
+    st.session_state.vc_search_query = ""
+
+if "vc_quick_checkpoint" not in st.session_state:
+    st.session_state.vc_quick_checkpoint = False
 
 # ============================================================================
 # SIDEBAR
@@ -652,9 +705,19 @@ with tab4:
         <div class="title-card">
             <h3>Database Version History</h3>
             <p>
-                All database changes are automatically tracked. View history and rollback to any previous state.
+                All database changes are automatically tracked. Create checkpoints, view history, and rollback to any previous state.
             </p>
         </div>
+    """, unsafe_allow_html=True)
+
+    # Powered by GitHub badge
+    st.markdown("""
+        <p style="font-size: 0.75rem; color: #888; margin-top: 0.5rem; margin-bottom: 1rem;">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="#888" xmlns="http://www.w3.org/2000/svg" style="vertical-align: middle; margin-right: 4px;">
+                <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/>
+            </svg>
+            Powered by <strong>Git</strong> version control
+        </p>
     """, unsafe_allow_html=True)
 
     # Fetch version control stats
@@ -664,81 +727,92 @@ with tab4:
         st.error(f"Version control unavailable: {stats.get('error', 'Unknown error')}")
         st.stop()
 
-    # Display version control statistics
-    st.markdown("### 📊 Version Control Statistics")
+    # ========================================================================
+    # QUICK CHECKPOINT SECTION (Prominently at Top)
+    # ========================================================================
 
-    col1, col2, col3, col4 = st.columns(4)
+    st.markdown("### 💾 Quick Checkpoint")
 
-    with col1:
+    # Two-column layout: Quick save on left, stats on right
+    col_left, col_right = st.columns([2, 1])
+
+    with col_left:
+        # Compact checkpoint creation
+        checkpoint_col1, checkpoint_col2 = st.columns([3, 1])
+
+        with checkpoint_col1:
+            checkpoint_message = st.text_input(
+                "Checkpoint description",
+                placeholder="e.g., Before bulk species update",
+                key="quick_checkpoint_message",
+                label_visibility="collapsed",
+                value="" if not st.session_state.vc_quick_checkpoint else st.session_state.get("last_checkpoint_msg", "")
+            )
+
+        with checkpoint_col2:
+            if st.button("💾 Save Checkpoint", type="primary", use_container_width=True, key="quick_checkpoint_btn"):
+                if not checkpoint_message:
+                    st.warning("Please enter a description")
+                else:
+                    # Use remembered email
+                    with st.spinner("Creating checkpoint..."):
+                        result = manual_version_commit(
+                            checkpoint_message,
+                            st.session_state.vc_expert_email or "system"
+                        )
+
+                        if result.get("success"):
+                            st.success(f"✅ Checkpoint `{result.get('commit_hash_short', 'N/A')}` created!")
+                            st.session_state.vc_quick_checkpoint = True
+                            st.session_state.last_checkpoint_msg = ""
+                            st.rerun()
+                        else:
+                            st.error(f"Failed: {result.get('error', 'Unknown error')}")
+
+        # Email input (remembered across checkpoints)
+        expert_email_input = st.text_input(
+            "Your email (saved for future checkpoints)",
+            placeholder="expert@email.com",
+            value=st.session_state.vc_expert_email,
+            key="expert_email_input_quick",
+            help="Your email is remembered so you don't have to type it every time"
+        )
+
+        # Update session state when email changes
+        if expert_email_input != st.session_state.vc_expert_email:
+            st.session_state.vc_expert_email = expert_email_input
+
+    with col_right:
+        # Mini stats display
         st.metric(
             "Total Commits",
             f"{stats.get('total_commits', 0):,}",
-            help="Total number of database changes tracked"
+            help="All tracked changes"
         )
-
-    with col2:
         st.metric(
             "Database Size",
-            f"{stats.get('database_size_mb', 0):.2f} MB",
-            help="Current size of the database file"
-        )
-
-    with col3:
-        st.metric(
-            "Snapshots",
-            stats.get('snapshot_count', 0),
-            help="Number of safety snapshots created"
-        )
-
-    with col4:
-        st.metric(
-            "First Commit",
-            stats.get('first_commit_date', 'N/A')[:10] if stats.get('first_commit_date') else 'N/A',
-            help="Date of first tracked change"
+            f"{stats.get('database_size_mb', 0):.1f} MB",
+            help="Current database size"
         )
 
     st.markdown("---")
 
-    # Manual commit section
-    st.markdown("### 💾 Create Checkpoint")
-    with st.expander("📌 Create Manual Checkpoint", expanded=False):
-        st.caption("Mark important moments for easier rollback later")
+    # ========================================================================
+    # COMMIT HISTORY SECTION (Enhanced)
+    # ========================================================================
 
-        checkpoint_message = st.text_input(
-            "Checkpoint description",
-            placeholder="e.g., Before bulk species update",
-            key="checkpoint_message"
-        )
+    st.markdown("### 📜 Commit Timeline")
 
-        expert_email = st.text_input(
-            "Your email (for audit trail)",
-            placeholder="expert@email.com",
-            key="checkpoint_email"
-        )
-
-        if st.button("Create Checkpoint", type="primary"):
-            if not checkpoint_message:
-                st.warning("Please enter a checkpoint description")
-            else:
-                with st.spinner("Creating checkpoint..."):
-                    result = manual_version_commit(checkpoint_message, expert_email or "system")
-
-                    if result.get("success"):
-                        st.success(f"✅ Checkpoint created: {result.get('commit_hash_short', 'N/A')}")
-                        st.rerun()
-                    else:
-                        st.error(f"❌ Failed to create checkpoint: {result.get('error', 'Unknown error')}")
-
-    st.markdown("---")
-
-    # Commit history section
-    st.markdown("### 📜 Commit History")
-
-    # Controls for history view
-    col1, col2 = st.columns([3, 1])
+    # Controls: search and limit
+    col1, col2, col3 = st.columns([2, 1, 1])
 
     with col1:
-        st.caption("Recent database changes (newest first)")
+        search_query = st.text_input(
+            "Search commits",
+            placeholder="Search by message, author, or hash...",
+            key="vc_search_input",
+            label_visibility="collapsed"
+        )
 
     with col2:
         history_limit = st.selectbox(
@@ -748,6 +822,9 @@ with tab4:
             key="history_limit",
             label_visibility="collapsed"
         )
+
+    with col3:
+        st.caption(f"📊 {stats.get('snapshot_count', 0)} snapshots")
 
     # Fetch commit history
     with st.spinner("Loading version history..."):
@@ -762,42 +839,87 @@ with tab4:
     if not commits:
         st.info("No commits found. Make some database changes to see version history.")
     else:
-        # Display commits
-        for idx, commit in enumerate(commits):
-            with st.expander(
-                f"[{commit['hash_short']}] {commit['date']} - {commit['message'][:80]}{'...' if len(commit['message']) > 80 else ''}",
-                expanded=(idx == 0)  # Expand first commit by default
-            ):
-                # Commit details
-                st.markdown(f"""
-                **Hash:** `{commit['hash_short']}`
-                **Author:** {commit['author']}
-                **Date:** {commit['date']}
-                **Message:** {commit['message']}
-                """)
+        # Filter commits based on search query
+        if search_query:
+            filtered_commits = [
+                c for c in commits
+                if search_query.lower() in c['message'].lower()
+                or search_query.lower() in c['author'].lower()
+                or search_query.lower() in c['hash_short'].lower()
+            ]
 
-                # Action buttons
-                col1, col2, col3 = st.columns([1, 1, 1])
+            if not filtered_commits:
+                st.warning(f"No commits found matching '{search_query}'")
+                filtered_commits = commits
+        else:
+            filtered_commits = commits
 
-                with col1:
-                    if st.button(f"🔍 View Diff", key=f"view_diff_{commit['hash_short']}", use_container_width=True):
+        st.caption(f"Showing {len(filtered_commits)} of {len(commits)} commits")
+
+        # Display commits with enhanced UI
+        for idx, commit in enumerate(filtered_commits):
+            # Determine if this is the current version
+            is_current = (idx == 0 and not search_query)
+
+            # Color-code based on position
+            if is_current:
+                emoji = "🟢"
+                badge = "CURRENT"
+            elif idx < 5:
+                emoji = "🔵"
+                badge = ""
+            else:
+                emoji = "⚪"
+                badge = ""
+
+            # Build expander title
+            title = f"{emoji} `{commit['hash_short']}` · {commit['date'][:16]} · {commit['message'][:60]}{'...' if len(commit['message']) > 60 else ''}"
+            if badge:
+                title = f"{badge} {title}"
+
+            with st.expander(title, expanded=(idx == 0 and not search_query)):
+                # Commit metadata
+                meta_col1, meta_col2 = st.columns([2, 1])
+
+                with meta_col1:
+                    st.markdown(f"""
+**Message:** {commit['message']}
+**Author:** {commit['author']}
+**Date:** {commit['date']}
+                    """)
+
+                with meta_col2:
+                    st.code(commit['hash_short'], language=None)
+                    if is_current:
+                        st.success("Current version")
+
+                st.markdown("---")
+
+                # Action buttons (cleaner layout)
+                action_col1, action_col2, action_col3 = st.columns(3)
+
+                with action_col1:
+                    if st.button("🔍 View Changes", key=f"view_diff_{commit['hash_short']}", use_container_width=True):
                         st.session_state[f"show_diff_{commit['hash_short']}"] = True
                         st.rerun()
 
-                with col2:
-                    # Only show rollback for commits that aren't the most recent
-                    if idx > 0:
-                        if st.button(f"↩️ Rollback to Here", key=f"rollback_{commit['hash_short']}", use_container_width=True, type="secondary"):
+                with action_col2:
+                    if not is_current:
+                        if st.button("↩️ Rollback Here", key=f"rollback_{commit['hash_short']}", use_container_width=True, type="secondary"):
                             st.session_state[f"confirm_rollback_{commit['hash_short']}"] = True
                             st.rerun()
                     else:
-                        st.button(f"↩️ Rollback to Here", key=f"rollback_{commit['hash_short']}_disabled", use_container_width=True, disabled=True, help="This is the current version")
+                        st.button("↩️ Rollback Here", key=f"rollback_{commit['hash_short']}_disabled", use_container_width=True, disabled=True, help="Already at this version")
 
-                with col3:
-                    st.button(f"📋 Copy Hash", key=f"copy_{commit['hash_short']}", use_container_width=True, disabled=True, help="Copy feature coming soon")
+                with action_col3:
+                    # Copy hash to clipboard (using a workaround)
+                    if st.button("📋 Copy Hash", key=f"copy_{commit['hash_short']}", use_container_width=True):
+                        st.code(commit['hash'], language=None)
+                        st.caption("Full hash displayed above ↑")
 
                 # Show diff if requested
                 if st.session_state.get(f"show_diff_{commit['hash_short']}", False):
+                    st.markdown("---")
                     with st.spinner("Loading diff..."):
                         diff_response = get_version_diff(commit_hash=commit['hash'])
 
@@ -806,11 +928,21 @@ with tab4:
 
                             if diff_text:
                                 st.markdown("**SQL Changes:**")
-                                st.code(diff_text, language="diff")
-                            else:
-                                st.info("No changes to display (empty diff)")
 
-                            if st.button(f"Hide Diff", key=f"hide_diff_{commit['hash_short']}"):
+                                # Show a preview of the diff (first 50 lines)
+                                diff_lines = diff_text.split('\n')
+                                if len(diff_lines) > 50:
+                                    st.code('\n'.join(diff_lines[:50]), language="diff")
+                                    st.caption(f"Showing first 50 lines of {len(diff_lines)} total")
+
+                                    if st.button("Show Full Diff", key=f"show_full_diff_{commit['hash_short']}"):
+                                        st.code(diff_text, language="diff")
+                                else:
+                                    st.code(diff_text, language="diff")
+                            else:
+                                st.info("No changes to display")
+
+                            if st.button("Hide Changes", key=f"hide_diff_{commit['hash_short']}", type="secondary"):
                                 st.session_state[f"show_diff_{commit['hash_short']}"] = False
                                 st.rerun()
                         else:
@@ -818,30 +950,31 @@ with tab4:
 
                 # Rollback confirmation
                 if st.session_state.get(f"confirm_rollback_{commit['hash_short']}", False):
+                    st.markdown("---")
                     st.warning(f"""
-                    ⚠️ **WARNING: Rollback will undo all changes after commit `{commit['hash_short']}`**
+⚠️ **WARNING: This will undo all changes after commit `{commit['hash_short']}`**
 
-                    A safety snapshot will be created. Are you sure?
+A safety snapshot will be created automatically. The rollback will be recorded as a new commit.
                     """)
 
-                    expert_email_rollback = st.text_input(
-                        "Your email (for audit trail)",
-                        placeholder="expert@email.com",
-                        key=f"rollback_email_{commit['hash_short']}"
-                    )
+                    # Count how many commits will be affected
+                    commits_to_undo = idx
+                    if commits_to_undo > 0:
+                        st.error(f"This will undo **{commits_to_undo} commit(s)**")
 
-                    col1, col2, col3 = st.columns([1, 1, 1])
+                    rollback_col1, rollback_col2 = st.columns([1, 1])
 
-                    with col1:
-                        if st.button(f"✅ Yes, Rollback", key=f"confirm_rollback_yes_{commit['hash_short']}", type="primary"):
+                    with rollback_col1:
+                        if st.button("✅ Confirm Rollback", key=f"confirm_rollback_yes_{commit['hash_short']}", type="primary", use_container_width=True):
                             with st.spinner("Rolling back database... This may take a minute."):
                                 rollback_result = rollback_database(
                                     commit_hash=commit['hash'],
-                                    expert_email=expert_email_rollback or "system"
+                                    expert_email=st.session_state.vc_expert_email or "system"
                                 )
 
                                 if rollback_result.get("success"):
-                                    st.success(f"✅ Rollback successful! Snapshot: `{rollback_result.get('snapshot_path', 'N/A')}`")
+                                    st.success(f"✅ Rollback successful!")
+                                    st.caption(f"Snapshot saved: `{rollback_result.get('snapshot_path', 'N/A')}`")
 
                                     # Clear confirmation state
                                     st.session_state[f"confirm_rollback_{commit['hash_short']}"] = False
@@ -850,8 +983,8 @@ with tab4:
                                 else:
                                     st.error(f"❌ Rollback failed: {rollback_result.get('error', 'Unknown error')}")
 
-                    with col2:
-                        if st.button(f"❌ Cancel", key=f"confirm_rollback_no_{commit['hash_short']}"):
+                    with rollback_col2:
+                        if st.button("❌ Cancel", key=f"confirm_rollback_no_{commit['hash_short']}", use_container_width=True):
                             st.session_state[f"confirm_rollback_{commit['hash_short']}"] = False
                             st.rerun()
 

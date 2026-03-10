@@ -57,9 +57,14 @@ docs/**/*.pdf
 docs/**/*.mp4
 docs/**/*.mov
 
-# Root-level models directory - DO NOT COMMIT MODELS
-models/
-models/**/*
+# Root-level models directory
+# NOTE: ONNX models and mobile_sam.pt are tracked for deployment
+# Ignore everything first, then add exceptions below
+models/*
+# But keep these model files
+!models/*.onnx
+!models/mobile_sam.pt
+!models/.gitkeep
 
 # Jupyter Notebooks
 .ipynb_checkpoints/
@@ -129,6 +134,10 @@ cluster_visualization_*.png
 *.safetensors
 *.msgpack
 *.bin
+
+# EXCEPTIONS: Allow production models in models/ directory
+!models/*.pt
+!models/*.onnx
 
 # Large archive files
 *.zip
@@ -232,6 +241,9 @@ cluster_visualization_*.png
 *.sqlite3
 *.db-shm
 *.db-wal
+
+# EXCEPTION: Allow the main bird data database
+!data/bird_data_complete.db
 
 # Database version control (separate Git repo in data/ directory)
 # CRITICAL: Ignore this to prevent the database Git from being tracked by project Git

@@ -143,6 +143,19 @@ def render_sidebar(active_page: str = "home"):
     ):
         st.switch_page("pages/06_coastal_risk.py")
 
+    # Resources section
+    render_sidebar_section("Resources")
+
+    # Help & Documentation button
+    if st.button(
+        "❓ Help & Documentation",
+        use_container_width=True,
+        help="Comprehensive guide to using NestScope",
+        type="primary" if active_page == "help" else "secondary",
+        key="sb_nav_help"
+    ):
+        st.switch_page("pages/07_help.py")
+
     # Expert tools section
     render_sidebar_section("Expert tools")
 
