@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Theme Toggle Demo</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/theme.css') }}">
+    <style>
+        body {
+            padding: 4rem 2rem;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            gap: 3rem;
+        }
+
+        .demo-container {
+            text-align: center;
+            max-width: 600px;
+        }
+
+        h1 {
+            margin-bottom: 1rem;
+            color: var(--text-primary);
+        }
+
+        .description {
+            color: var(--text-secondary);
+            margin-bottom: 2rem;
+            line-height: 1.6;
+        }
+
+        .toggle-showcase {
+            display: flex;
+            justify-content: center;
+            padding: 3rem;
+            background: var(--bg-secondary);
+            border-radius: var(--radius-lg);
+            border: 1px solid var(--surface-border);
+        }
+
+        /* Copy of the new theme toggle styles */
+        .theme-toggle {
+            position: relative;
+            width: 64px;
+            height: 32px;
+            cursor: pointer;
+            user-select: none;
+            flex-shrink: 0;
+            outline: none;
+        }
+
+        .theme-toggle-track {
+            position: absolute;
+            inset: 0;
+            border-radius: 16px;
+            background: #0f1419;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            overflow: hidden;
+        }
+
+        .theme-toggle-track.active {
+            background: #ffffff;
+            border-color: rgba(0, 0, 0, 0.1);
+        }
+
+        .theme-toggle-icons {
+            position: absolute;
+            inset: 0;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 6px;
+            pointer-events: none;
+        }
+
+        .theme-icon {
+            width: 16px;
+            height: 16px;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            z-index: 1;
+        }
+
+        .theme-icon-sun {
+            stroke: rgba(255, 255, 255, 0.3);
+        }
+
+        .theme-icon-moon {
+            stroke: #ffffff;
+        }
+
+        .theme-toggle-track.active .theme-icon-sun {
+            stroke: rgba(0, 0, 0, 0.7);
+        }
+
+        .theme-toggle-track.active .theme-icon-moon {
+            stroke: rgba(0, 0, 0, 0.3);
+        }
+
+        .theme-toggle-thumb {
+            position: absolute;
+            top: 4px;
+            left: 4px;
+            width: 24px;
+            height: 24px;
+            border-radius: 12px;
+            background: #1a1f26;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            z-index: 2;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .theme-toggle-track.active .theme-toggle-thumb {
+            transform: translateX(32px);
+            background: #e5e5e5;
+        }
+
+        .theme-toggle-thumb .theme-icon-active {
+            width: 14px;
+            height: 14px;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .theme-toggle-thumb .theme-icon-moon-active {
+            stroke: #ffffff;
+        }
+
+        .theme-toggle-track.active .theme-toggle-thumb .theme-icon-sun-active {
+            stroke: rgba(0, 0, 0, 0.9);
+        }
+
+        .theme-toggle:hover .theme-toggle-track {
+            border-color: rgba(255, 255, 255, 0.2);
+        }
+
+        .theme-toggle-track.active:hover {
+            border-color: rgba(0, 0, 0, 0.2);
+        }
+
+        .theme-toggle:focus-visible .theme-toggle-track {
+            outline: 2px solid var(--brand-primary);
+            outline-offset: 2px;
+        }
+
+        .theme-toggle:active .theme-toggle-thumb {
+            width: 28px;
+        }
+
+        .theme-toggle:active .theme-toggle-track.active .theme-toggle-thumb {
+            transform: translateX(28px);
+        }
+
+        .feature-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 1.5rem;
+            margin-top: 3rem;
+        }
+
+        .feature-card {
+            padding: 1.5rem;
+            background: var(--surface-base);
+            border: 1px solid var(--surface-border);
+            border-radius: var(--radius-md);
+            transition: all 0.2s ease;
+        }
+
+        .feature-card:hover {
+            transform: translateY(-2px);
+            box-shadow: var(--shadow-md);
+        }
+
+        .feature-icon {
+            font-size: 2rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .feature-title {
+            font-weight: 600;
+            color: var(--text-primary);
+            margin-bottom: 0.5rem;
+        }
+
+        .feature-description {
+            font-size: 0.875rem;
+            color: var(--text-secondary);
+            line-height: 1.5;
+        }
+    </style>
+    <script src="{{ url_for('static', filename='js/theme.js') }}"></script>
+</head>
+<body>
+    <div class="demo-container">
+        <h1>Modern Theme Toggle</h1>
+        <p class="description">
+            A sleek, animated theme switcher inspired by modern UI design principles.
+            Click the toggle below to switch between dark and light modes!
+        </p>
+
+        <div class="toggle-showcase">
+            <div class="theme-toggle" role="button" tabindex="0" aria-label="Toggle theme">
+                <div class="theme-toggle-track">
+                    <div class="theme-toggle-icons">
+                        <svg class="theme-icon theme-icon-sun" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.5">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M12 3v2.25m6.364.386l-1.591 1.591M21 12h-2.25m-.386 6.364l-1.591-1.591M12 18.75V21m-4.773-4.227l-1.591 1.591M5.25 12H3m4.227-4.773L5.636 5.636M15.75 12a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0z"/>
+                        </svg>
+                        <svg class="theme-icon theme-icon-moon" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.5">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M21.752 15.002A9.718 9.718 0 0118 15.75c-5.385 0-9.75-4.365-9.75-9.75 0-1.33.266-2.597.748-3.752A9.753 9.753 0 003 11.25C3 16.635 7.365 21 12.75 21a9.753 9.753 0 009.002-5.998z"/>
+                        </svg>
+                    </div>
+                    <div class="theme-toggle-thumb">
+                        <svg class="theme-icon-active theme-icon-moon-active" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.5">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M21.752 15.002A9.718 9.718 0 0118 15.75c-5.385 0-9.75-4.365-9.75-9.75 0-1.33.266-2.597.748-3.752A9.753 9.753 0 003 11.25C3 16.635 7.365 21 12.75 21a9.753 9.753 0 009.002-5.998z"/>
+                        </svg>
+                        <svg class="theme-icon-active theme-icon-sun-active" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.5" style="display: none;">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M12 3v2.25m6.364.386l-1.591 1.591M21 12h-2.25m-.386 6.364l-1.591-1.591M12 18.75V21m-4.773-4.227l-1.591 1.591M5.25 12H3m4.227-4.773L5.636 5.636M15.75 12a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0z"/>
+                        </svg>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="feature-grid">
+            <div class="feature-card">
+                <div class="feature-icon">✨</div>
+                <div class="feature-title">Smooth Animations</div>
+                <div class="feature-description">
+                    Fluid transitions powered by cubic-bezier easing for a premium feel
+                </div>
+            </div>
+
+            <div class="feature-card">
+                <div class="feature-icon">🎨</div>
+                <div class="feature-title">SVG Icons</div>
+                <div class="feature-description">
+                    Crisp, scalable Lucide-style icons that look perfect at any size
+                </div>
+            </div>
+
+            <div class="feature-card">
+                <div class="feature-icon">♿</div>
+                <div class="feature-title">Fully Accessible</div>
+                <div class="feature-description">
+                    ARIA labels, keyboard support (Tab + Enter/Space), and focus states
+                </div>
+            </div>
+
+            <div class="feature-card">
+                <div class="feature-icon">💾</div>
+                <div class="feature-title">Persistent</div>
+                <div class="feature-description">
+                    Your theme preference is saved to localStorage and remembered
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

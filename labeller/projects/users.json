@@ -1,12 +1,14 @@
 {
   "users": [
     {
-      "name": "Olisemeka",
-      "created_at": "2026-03-09T18:08:45.266424",
-      "projects": [],
+      "name": "Olisemeka Nmarkwe",
+      "created_at": "2026-03-10T02:53:25.048926",
+      "projects": [
+        "nestvision"
+      ],
       "total_completed": 0,
       "total_annotations": 0
     }
   ],
-  "created_at": "2026-03-09T18:08:17.774934"
+  "created_at": "2026-03-10T02:28:48.805370"
 }

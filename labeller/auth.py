@@ -41,7 +41,8 @@ def init_auth_db():
             picture TEXT,
             first_login TEXT,
             last_login TEXT,
-            login_count INTEGER DEFAULT 1
+            login_count INTEGER DEFAULT 1,
+            role TEXT DEFAULT 'viewer'
         )
     ''')
 
@@ -52,6 +53,29 @@ def init_auth_db():
             added_at TEXT
         )
     ''')
+
+    # Table: permissions (defines what each role can do)
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS permissions (
+            role TEXT PRIMARY KEY,
+            can_annotate INTEGER DEFAULT 0,
+            can_edit_db INTEGER DEFAULT 0,
+            can_manage_users INTEGER DEFAULT 0,
+            description TEXT
+        )
+    ''')
+
+    # Insert default permissions if table is empty
+    cursor.execute('SELECT COUNT(*) FROM permissions')
+    if cursor.fetchone()[0] == 0:
+        cursor.executemany('''
+            INSERT INTO permissions (role, can_annotate, can_edit_db, can_manage_users, description)
+            VALUES (?, ?, ?, ?, ?)
+        ''', [
+            ('admin', 1, 1, 1, 'Full access to all features'),
+            ('annotator', 1, 0, 0, 'Can annotate images'),
+            ('viewer', 0, 0, 0, 'Read-only access')
+        ])
 
     conn.commit()
     conn.close()

@@ -142,6 +142,22 @@ def get_project(project_folder):
             return json.load(f)
     return None
 
+def get_all_projects():
+    """Get list of all projects with folder name and metadata"""
+    projects_dict = load_projects()
+    projects_list = []
+
+    for folder_name, metadata in projects_dict.items():
+        project = {
+            'folder': folder_name,
+            'name': metadata.get('name', folder_name.replace('_', ' ').title()),
+            'description': metadata.get('description', ''),
+            'created_at': metadata.get('created_at', '')
+        }
+        projects_list.append(project)
+
+    return projects_list
+
 def load_project_state(project_folder):
     """Load project_state.json for user assignments"""
     project_path = os.path.join(PROJECTS_DIR, project_folder)
@@ -526,6 +542,16 @@ def project_detail(project_folder):
 
     # Load project state for user details
     state = load_project_state(project_folder)
+
+    # Get user profile pictures from auth database
+    from labeller.auth import get_all_users_with_roles
+    auth_users = {}
+    try:
+        all_auth_users = get_all_users_with_roles()
+        auth_users = {u['name']: u for u in all_auth_users}
+    except Exception as e:
+        print(f"Warning: Could not load auth users: {e}")
+
     users_detail = []
     for username, user_data in state.get('users', {}).items():
         assigned = user_data.get('assigned', [])
@@ -541,8 +567,14 @@ def project_detail(project_folder):
                     lines = [line.strip() for line in f if line.strip()]
                     user_annotations += len(lines)
 
+        # Get user picture from auth database
+        user_picture = None
+        if username in auth_users:
+            user_picture = auth_users[username].get('picture')
+
         users_detail.append({
             'username': username,
+            'picture': user_picture,
             'assigned': len(assigned),
             'completed': len(completed),
             'annotations': user_annotations
@@ -575,36 +607,63 @@ def nestdb_page():
 @app.route('/users')
 @login_required
 def users_page():
-    """Global users management page"""
-    user_service = get_user_service()
+    """Global users management page - shows authenticated users via Google OAuth"""
+    from labeller.auth import get_all_users_with_roles
+
     users_list = []
 
-    if user_service:
-        all_users = user_service.get_all_users()
+    try:
+        # Get authenticated users from auth database
+        auth_users = get_all_users_with_roles()
 
         # Enhance with project details
-        for user in all_users:
+        for user in auth_users:
             user_projects = []
-            for proj_folder in user.get('projects', []):
-                state = load_project_state(proj_folder)
+            total_completed = 0
+            total_annotations = 0
+
+            # Scan all projects to find this user's contributions
+            projects = get_all_projects()
+            for proj in projects:
+                state = load_project_state(proj['folder'])
                 user_data = state.get('users', {}).get(user['name'], {})
 
-                project_info = {
-                    'folder': proj_folder,
-                    'name': proj_folder.replace('_', ' ').title(),
-                    'assigned': len(user_data.get('assigned', [])),
-                    'completed': len(user_data.get('completed', []))
-                }
-                user_projects.append(project_info)
+                if user_data:  # User has assignments in this project
+                    assigned = user_data.get('assigned', [])
+                    completed = user_data.get('completed', [])
+
+                    project_info = {
+                        'folder': proj['folder'],
+                        'name': proj['name'],
+                        'assigned': len(assigned),
+                        'completed': len(completed)
+                    }
+                    user_projects.append(project_info)
+                    total_completed += len(completed)
+
+                    # Count annotations from completed images
+                    for img_name in completed:
+                        label_file = os.path.join(PROJECTS_DIR, proj['folder'], 'labels', f"{os.path.splitext(img_name)[0]}.txt")
+                        if os.path.exists(label_file):
+                            with open(label_file, 'r') as f:
+                                total_annotations += len(f.readlines())
 
             users_list.append({
                 'name': user['name'],
-                'created_at': user.get('created_at', ''),
+                'email': user['email'],
+                'picture': user.get('picture'),
+                'role': user['role'],
+                'first_login': user.get('first_login', ''),
                 'projects': user_projects,
                 'total_projects': len(user_projects),
-                'total_completed': user.get('total_completed', 0),
-                'total_annotations': user.get('total_annotations', 0)
+                'total_completed': total_completed,
+                'total_annotations': total_annotations
             })
+
+    except Exception as e:
+        print(f"Error loading users: {e}")
+        import traceback
+        traceback.print_exc()
 
     return render_template('users_page.html',
                          users=users_list,
@@ -958,7 +1017,7 @@ def create_project():
         return jsonify({'error': f'{type(e).__name__}: {str(e)}'}), 500
 
 @app.route('/api/projects/assign-task', methods=['POST'])
-@admin_required  # Only admins can assign tasks
+@login_required  # Any authenticated user can assign tasks
 def assign_task():
     """
     Smart image assignment with random selection.
@@ -1359,38 +1418,16 @@ def get_all_users():
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/users/create', methods=['POST'])
-@admin_required  # Only admins can create users
+@admin_required  # Only admins can access this endpoint
 def create_user():
-    """Create a new user in global registry"""
-    try:
-        data = request.json
-        username = data.get('username')
-
-        if not username:
-            return jsonify({'error': 'Username required'}), 400
-
-        # Clean username
-        username = username.strip()
-        if not username:
-            return jsonify({'error': 'Username cannot be empty'}), 400
-
-        user_service = get_user_service()
-        if user_service:
-            try:
-                user = user_service.create_user(username)
-                return jsonify({
-                    'success': True,
-                    'user': user
-                })
-            except ValueError as e:
-                return jsonify({'error': str(e)}), 400
-        else:
-            return jsonify({'error': 'User service not available'}), 500
-
-    except Exception as e:
-        import traceback
-        print(f"Error creating user: {traceback.format_exc()}")
-        return jsonify({'error': str(e)}), 500
+    """
+    DEPRECATED: Manual user creation is disabled.
+    Users are automatically created when they sign in with Google OAuth.
+    """
+    return jsonify({
+        'error': 'Manual user creation is disabled',
+        'message': 'Users are automatically created when they sign in with Google OAuth. Please direct users to sign in at /login.'
+    }), 403
 
 @app.route('/api/projects/<project_folder>/images/unassigned', methods=['GET'])
 @api_login_required  # Require authentication to view project info
