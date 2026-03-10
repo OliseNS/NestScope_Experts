@@ -67,7 +67,7 @@ body {
 }
 
 .navbar-link:hover {
-    color: #CC785C;
+    color: #537C8A;
     background: rgba(204, 120, 92, 0.1);
 }
 
@@ -128,8 +128,8 @@ body {
 
 .tab-btn.active {
     background: #1e1e1e;
-    color: #CC785C;
-    border-bottom-color: #CC785C;
+    color: #537C8A;
+    border-bottom-color: #537C8A;
 }
 
 .tab-content {
@@ -219,9 +219,9 @@ body {
 }
 
 .tool-btn.active {
-    background: #CC785C;
+    background: #537C8A;
     color: white;
-    border-color: #CC785C;
+    border-color: #537C8A;
 }
 
 .tool-btn:hover:not(.active) {
@@ -249,7 +249,7 @@ body {
 }
 
 .class-item.active {
-    border-color: #CC785C;
+    border-color: #537C8A;
     background: #333;
 }
 
@@ -281,7 +281,7 @@ button {
 }
 
 .btn-primary {
-    background: #CC785C;
+    background: #537C8A;
     color: white;
     width: 100%;
 }
@@ -353,7 +353,7 @@ input[type="text"] {
 
 input:focus {
     outline: none;
-    border-color: #CC785C;
+    border-color: #537C8A;
 }
 
 select {
@@ -369,7 +369,7 @@ select {
 
 select:focus {
     outline: none;
-    border-color: #CC785C;
+    border-color: #537C8A;
 }
 
 /* ============================================================================
@@ -414,7 +414,7 @@ select:focus {
 
 .edit-icon:hover {
     opacity: 1;
-    color: #CC785C;
+    color: #537C8A;
 }
 
 /* ============================================================================
@@ -440,7 +440,7 @@ select:focus {
 .spinner {
     border: 4px solid rgba(255,255,255,0.3);
     border-radius: 50%;
-    border-top: 4px solid #CC785C;
+    border-top: 4px solid #537C8A;
     width: 30px;
     height: 30px;
     animation: spin 1s linear infinite;
@@ -487,7 +487,7 @@ select:focus {
 }
 
 .bbox-item.selected {
-    border-color: #CC785C;
+    border-color: #537C8A;
     background: #333;
 }
 
@@ -560,7 +560,7 @@ select:focus {
     position: fixed;
     bottom: 20px;
     right: 20px;
-    background: #CC785C;
+    background: #537C8A;
     color: white;
     padding: 12px 20px;
     border-radius: 6px;

@@ -212,7 +212,7 @@
 
 .nav-link.active {
     color: var(--brand-primary);
-    background: rgba(217, 119, 87, 0.1);
+    background: rgba(83, 124, 138, 0.1);
 }
 
 /* ============================================================================
@@ -250,7 +250,7 @@
 .form-textarea:focus {
     outline: none;
     border-color: var(--brand-primary);
-    box-shadow: 0 0 0 3px rgba(217, 119, 87, 0.1);
+    box-shadow: 0 0 0 3px rgba(83, 124, 138, 0.1);
 }
 
 .form-input:disabled,
@@ -368,7 +368,7 @@
 }
 
 .badge-primary {
-    background: rgba(217, 119, 87, 0.15);
+    background: rgba(83, 124, 138, 0.15);
     color: var(--brand-primary);
 }
 
@@ -478,7 +478,7 @@
 
 .dropzone.active {
     border-color: var(--brand-primary);
-    background: rgba(217, 119, 87, 0.05);
+    background: rgba(83, 124, 138, 0.05);
 }
 
 .dropzone-icon {

@@ -65,7 +65,7 @@
         }
 
         .navbar-brand:hover {
-            color: #56B897;
+            color: #7BABAE;
         }
 
         .navbar-brand-icon {
@@ -109,8 +109,8 @@
         }
 
         .nav-link.active {
-            color: #56B897;
-            background: rgba(86, 184, 151, 0.1);
+            color: #7BABAE;
+            background: rgba(123, 171, 174, 0.1);
         }
 
         .nav-link svg {
@@ -146,7 +146,7 @@
         }
 
         .nav-link.external:hover {
-            color: #56B897;
+            color: #7BABAE;
             background: transparent;
         }
 
@@ -169,7 +169,7 @@
         }
 
         .theme-toggle-track.active {
-            background: #56B897;
+            background: #7BABAE;
         }
 
         .theme-toggle-thumb {
@@ -242,7 +242,7 @@
             max-width: 28px;
             max-height: 28px;
             border-radius: 50%;
-            border: 1.5px solid rgba(86, 184, 151, 0.5);
+            border: 1.5px solid rgba(123, 171, 174, 0.5);
             object-fit: cover;
             display: block;
         }
@@ -255,8 +255,8 @@
             width: 28px;
             height: 28px;
             border-radius: 50%;
-            border: 1.5px solid rgba(86, 184, 151, 0.5);
-            background: linear-gradient(135deg, #56B897 0%, #4A9B7F 100%);
+            border: 1.5px solid rgba(123, 171, 174, 0.5);
+            background: linear-gradient(135deg, #7BABAE 0%, #6AA6B7 100%);
             display: none;
             align-items: center;
             justify-content: center;
@@ -291,7 +291,7 @@
 
         .user-role-badge {
             font-size: 0.6875rem;
-            color: rgba(86, 184, 151, 0.9);
+            color: rgba(123, 171, 174, 0.9);
             font-weight: 600;
             text-transform: uppercase;
             letter-spacing: 0.03em;
@@ -354,7 +354,7 @@
         .dropdown-user-role {
             margin-top: 0.5rem;
             font-size: 0.6875rem;
-            color: #56B897;
+            color: #7BABAE;
             font-weight: 600;
             text-transform: uppercase;
             letter-spacing: 0.05em;
@@ -478,6 +478,69 @@
 
             .nav-link {
                 flex: 0 0 auto;
+            }
+        }
+
+        /* Attribution Footer */
+        .attribution-footer {
+            position: fixed;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            background: rgba(26, 26, 26, 0.95);
+            backdrop-filter: blur(10px);
+            padding: 10px 20px;
+            border-radius: 50px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+            font-size: 13px;
+            color: rgba(255, 255, 255, 0.7);
+            z-index: 50;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .attribution-text {
+            font-weight: 500;
+            color: rgba(255, 255, 255, 0.6);
+        }
+
+        .attribution-logo {
+            height: 24px;
+            width: auto;
+            vertical-align: middle;
+            filter: brightness(1.2);
+        }
+
+        .attribution-by {
+            color: #7BABAE;
+            font-weight: 600;
+            margin-left: 2px;
+        }
+
+        @media (max-width: 768px) {
+            .attribution-footer {
+                bottom: 15px;
+                padding: 8px 16px;
+                font-size: 11px;
+                gap: 8px;
+            }
+
+            .attribution-logo {
+                height: 20px;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .attribution-footer {
+                bottom: 10px;
+                padding: 6px 14px;
+                font-size: 10px;
+            }
+
+            .attribution-logo {
+                height: 18px;
             }
         }
     </style>
@@ -647,6 +710,13 @@
     <main>
         {% block content %}{% endblock %}
     </main>
+
+    <!-- Attribution Footer -->
+    <div class="attribution-footer">
+        <span class="attribution-text">Made For</span>
+        <img src="https://thewaterinstitute.org/images/img-logo.png" alt="The Water Institute" class="attribution-logo">
+        <span class="attribution-by">by Team SONA</span>
+    </div>
 
     <!-- Toast Notifications Container -->
     <div id="toast-container" style="position: fixed; top: 80px; right: 20px; z-index: 300;"></div>
