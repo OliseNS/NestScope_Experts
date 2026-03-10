@@ -901,7 +901,15 @@
                     <div style="display: flex; justify-content: space-between; align-items: center;">
                         <div>
                             <h3 style="margin: 0 0 8px 0; color: var(--db-accent); font-size: 18px;">📊 Version Control Stats</h3>
-                            <p style="margin: 0; color: var(--text-tertiary); font-size: 14px;">All database changes are automatically tracked</p>
+                            <p style="margin: 0 0 12px 0; color: var(--text-tertiary); font-size: 14px;">All database changes are automatically tracked</p>
+                            <!-- Powered by GitHub -->
+                            <div style="display: flex; align-items: center; gap: 6px; color: var(--text-tertiary); font-size: 12px;">
+                                <span>Powered by</span>
+                                <svg height="16" width="16" viewBox="0 0 16 16" fill="currentColor" style="opacity: 0.7;">
+                                    <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"></path>
+                                </svg>
+                                <a href="https://github.com" target="_blank" rel="noopener" style="color: var(--db-accent); text-decoration: none; font-weight: 600;">GitHub</a>
+                            </div>
                         </div>
                         <div style="display: flex; gap: 30px;">
                             <div style="text-align: center;">
@@ -927,16 +935,15 @@
                             <div style="position: relative; width: 40px; height: 40px; flex-shrink: 0;">
                                 <img src="{{ session.user.picture }}"
                                      alt="{{ session.user.name }}"
-                                     class="checkpoint-user-avatar"
                                      style="width: 40px; height: 40px; border-radius: 50%; border: 2px solid var(--db-accent); object-fit: cover; display: block;"
                                      onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
-                                <div class="checkpoint-user-fallback" style="width: 40px; height: 40px; border-radius: 50%; border: 2px solid var(--db-accent); background: linear-gradient(135deg, var(--db-accent) 0%, #2DB77A 100%); display: none; align-items: center; justify-content: center; font-size: 16px; font-weight: 700; color: white; text-transform: uppercase; position: absolute; top: 0; left: 0;">
+                                <div style="width: 40px; height: 40px; border-radius: 50%; border: 2px solid var(--db-accent); background: linear-gradient(135deg, var(--db-accent) 0%, #2DB77A 100%); display: none; align-items: center; justify-content: center; font-size: 16px; font-weight: 700; color: white; text-transform: uppercase; position: absolute; top: 0; left: 0;">
                                     {{ session.user.name[0] if session.user.name else 'U' }}
                                 </div>
                             </div>
-                            <div style="flex: 1;">
-                                <div style="font-weight: 600; color: var(--text-primary); font-size: 14px;">{{ session.user.name }}</div>
-                                <div style="font-size: 12px; color: var(--text-tertiary);">{{ session.user.email }}</div>
+                            <div style="flex: 1; min-width: 0;">
+                                <div style="font-weight: 600; color: var(--text-primary); font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{{ session.user.name }}</div>
+                                <div style="font-size: 12px; color: var(--text-tertiary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{{ session.user.email }}</div>
                             </div>
                             {% if session.user.role %}
                                 <div style="padding: 4px 10px; background: rgba(62, 207, 142, 0.15); color: var(--db-accent); border-radius: 6px; font-size: 11px; font-weight: 700; text-transform: uppercase;">
@@ -956,6 +963,8 @@
                                     style="flex: 1;"
                                 />
                                 <input type="hidden" id="currentUserEmail" value="{{ session.user.email }}">
+                                <input type="hidden" id="currentUserName" value="{{ session.user.name }}">
+                                <input type="hidden" id="currentUserPicture" value="{{ session.user.picture }}">
                                 <button class="db-btn db-btn-primary" onclick="createCheckpoint()">
                                     Create Checkpoint
                                 </button>
@@ -1406,7 +1415,7 @@ async function executeSQL() {
         const response = await fetch(`${API_BASE_URL}/db/query`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ query })
+            body: JSON.stringify({ sql_query: query })
         });
 
         const data = await response.json();
@@ -1727,27 +1736,74 @@ async function loadVersionHistory() {
                 return;
             }
 
-            container.innerHTML = data.commits.map((commit, idx) => `
-                <div style="background: var(--bg-primary); border: 1px solid var(--surface-border); border-radius: 8px; padding: 16px; margin-bottom: 12px;">
-                    <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 12px;">
-                        <div style="flex: 1;">
-                            <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 8px;">
-                                <code style="background: var(--bg-tertiary); padding: 4px 8px; border-radius: 4px; font-size: 12px; color: var(--db-accent);">${commit.hash_short}</code>
-                                <span style="color: var(--text-tertiary); font-size: 12px;">${commit.date}</span>
-                            </div>
-                            <div style="color: var(--text-primary); font-weight: 600; margin-bottom: 4px;">${commit.message}</div>
-                            <div style="color: var(--text-tertiary); font-size: 12px;">by ${commit.author}</div>
+            container.innerHTML = data.commits.map((commit, idx) => {
+                // Build detailed info section if details exist
+                let detailsHtml = '';
+                if (commit.details && Object.keys(commit.details).length > 0) {
+                    const detailItems = Object.entries(commit.details).map(([key, value]) => {
+                        // Format query with syntax highlighting
+                        if (key === 'query' && value) {
+                            const shortQuery = value.length > 100 ? value.substring(0, 100) + '...' : value;
+                            return `
+                                <div style="margin-bottom: 8px;">
+                                    <div style="font-weight: 600; color: var(--text-secondary); margin-bottom: 4px; font-size: 11px; text-transform: uppercase;">${key}:</div>
+                                    <code style="background: var(--bg-tertiary); padding: 8px; border-radius: 4px; font-size: 11px; display: block; color: var(--db-accent); word-break: break-all; white-space: pre-wrap;">${shortQuery}</code>
+                                </div>
+                            `;
+                        } else {
+                            return `
+                                <div style="margin-bottom: 4px;">
+                                    <span style="font-weight: 600; color: var(--text-secondary); font-size: 11px; text-transform: uppercase;">${key}:</span>
+                                    <span style="color: var(--text-primary); font-size: 12px; margin-left: 8px;">${value}</span>
+                                </div>
+                            `;
+                        }
+                    }).join('');
+
+                    detailsHtml = `
+                        <div id="details-${idx}" style="display: none; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--surface-border);">
+                            ${detailItems}
                         </div>
-                        <div style="display: flex; gap: 8px;">
-                            ${idx > 0 ? `
-                                <button class="db-btn db-btn-secondary" style="padding: 6px 12px; height: 32px; font-size: 12px;" onclick="confirmRollback('${commit.hash}', '${commit.hash_short}')">
-                                    ↩️ Rollback
-                                </button>
-                            ` : ''}
+                        <button onclick="toggleDetails(${idx})"
+                                style="margin-top: 8px; background: none; border: none; color: var(--db-accent); cursor: pointer; font-size: 12px; padding: 0; display: flex; align-items: center; gap: 4px;">
+                            <span id="toggle-icon-${idx}">▶</span> Show Details
+                        </button>
+                    `;
+                }
+
+                return `
+                    <div style="background: var(--bg-primary); border: 1px solid var(--surface-border); border-radius: 8px; padding: 16px; margin-bottom: 12px;">
+                        <div style="display: flex; justify-content: space-between; align-items: start; gap: 16px;">
+                            ${commit.picture ? `
+                                <img src="${commit.picture}"
+                                     alt="${commit.author}"
+                                     style="width: 40px; height: 40px; border-radius: 50%; border: 2px solid var(--db-accent); object-fit: cover; flex-shrink: 0;"
+                                     onerror="this.style.display='none';">
+                            ` : `
+                                <div style="width: 40px; height: 40px; border-radius: 50%; border: 2px solid var(--surface-border); background: var(--bg-tertiary); display: flex; align-items: center; justify-content: center; font-size: 16px; font-weight: 700; color: var(--text-tertiary); text-transform: uppercase; flex-shrink: 0;">
+                                    ${commit.author[0] || 'S'}
+                                </div>
+                            `}
+                            <div style="flex: 1; min-width: 0;">
+                                <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 8px; flex-wrap: wrap;">
+                                    <code style="background: var(--bg-tertiary); padding: 4px 8px; border-radius: 4px; font-size: 12px; color: var(--db-accent);">${commit.hash_short}</code>
+                                    <span style="color: var(--text-tertiary); font-size: 12px;">${commit.date}</span>
+                                </div>
+                                <div style="color: var(--text-primary); font-weight: 600; margin-bottom: 4px;">${commit.message}</div>
+                                <div style="color: var(--text-tertiary); font-size: 12px;">by ${commit.author}</div>
+                                ${detailsHtml}
+                            </div>
+                            <div style="display: flex; gap: 8px; flex-shrink: 0;">
+                                ${idx > 0 ? `
+                                    <button class="db-btn db-btn-secondary" style="padding: 6px 12px; height: 32px; font-size: 12px;" onclick="confirmRollback('${commit.hash}', '${commit.hash_short}')">
+                                        ↩️ Rollback
+                                    </button>
+                                ` : ''}
+                            </div>
                         </div>
                     </div>
-                </div>
-            `).join('');
+                `;
+            }).join('');
         } else {
             container.innerHTML = `
                 <div style="text-align: center; padding: 40px; color: var(--db-danger);">
@@ -1768,7 +1824,12 @@ async function loadVersionHistory() {
 async function createCheckpoint() {
     const message = document.getElementById('checkpointMessage').value.trim();
     const emailInput = document.getElementById('currentUserEmail');
+    const nameInput = document.getElementById('currentUserName');
+    const pictureInput = document.getElementById('currentUserPicture');
+
     const email = emailInput ? emailInput.value : 'system';
+    const name = nameInput ? nameInput.value : '';
+    const picture = pictureInput ? pictureInput.value : '';
 
     if (!message) {
         showToast('Please enter a checkpoint description', 'error');
@@ -1788,22 +1849,44 @@ async function createCheckpoint() {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 message: message,
-                expert_email: email
+                expert_email: email,
+                expert_name: name,
+                expert_picture: picture
             })
         });
 
         const data = await response.json();
 
         if (data.success) {
-            showToast(`✓ Checkpoint created: ${data.commit_hash_short}`, 'success');
-            document.getElementById('checkpointMessage').value = '';
-            await loadVersionHistory();
-            await loadVersionStats();
+            if (data.no_changes) {
+                showToast('⚠️ No changes to commit - database is unchanged', 'warning');
+            } else {
+                showToast(`✓ Checkpoint created: ${data.commit_hash_short}`, 'success');
+                document.getElementById('checkpointMessage').value = '';
+                await loadVersionHistory();
+                await loadVersionStats();
+            }
         } else {
             showToast('Failed to create checkpoint: ' + (data.error || 'Unknown error'), 'error');
         }
     } catch (error) {
         showToast('Error creating checkpoint: ' + error.message, 'error');
+    }
+}
+
+function toggleDetails(idx) {
+    const detailsDiv = document.getElementById(`details-${idx}`);
+    const icon = document.getElementById(`toggle-icon-${idx}`);
+    const button = icon.parentElement;
+
+    if (detailsDiv.style.display === 'none') {
+        detailsDiv.style.display = 'block';
+        icon.textContent = '▼';
+        button.childNodes[1].textContent = ' Hide Details';
+    } else {
+        detailsDiv.style.display = 'none';
+        icon.textContent = '▶';
+        button.childNodes[1].textContent = ' Show Details';
     }
 }
 

@@ -42,13 +42,14 @@ class DatabaseVersionControl:
     - Example diff: "+INSERT INTO observations VALUES (12345, 'Brown Pelican', 5000);"
     """
 
-    def __init__(self, db_path: str, expert_email: str = "system"):
+    def __init__(self, db_path: str, expert_email: str = "system", expert_name: str = None):
         """
         Initialize version control for a database.
 
         Args:
             db_path: Path to SQLite database file (e.g., data/bird_data_complete.db)
             expert_email: Email/username of the expert making changes (for commit attribution)
+            expert_name: Full name of the expert (optional, extracted from email if not provided)
         """
         self.db_path = Path(db_path).resolve()
         self.db_dir = self.db_path.parent
@@ -56,6 +57,7 @@ class DatabaseVersionControl:
         self.sql_dump_path = self.db_dir / f"{self.db_name}.sql"
         self.snapshot_dir = self.db_dir / "snapshots"
         self.expert_email = expert_email
+        self.expert_name = expert_name or self._extract_name_from_email(expert_email)
 
         # Ensure database exists
         if not self.db_path.exists():
@@ -106,6 +108,25 @@ class DatabaseVersionControl:
 
             print("Git repository initialized successfully")
 
+    def _extract_name_from_email(self, email: str) -> str:
+        """
+        Extract a display name from an email address.
+
+        Examples:
+            "olisemeka.nmarkwe@selu.edu" → "Olisemeka Nmarkwe"
+            "system" → "NestScope System"
+        """
+        if email == "system":
+            return "NestScope System"
+
+        # Get part before @
+        local_part = email.split('@')[0]
+
+        # Replace dots and underscores with spaces, then title case
+        name = local_part.replace('.', ' ').replace('_', ' ').title()
+
+        return name
+
     def _export_db_to_sql(self) -> bool:
         """
         Export SQLite database to SQL dump file.
@@ -139,7 +160,7 @@ class DatabaseVersionControl:
             print(f"Failed to export database: {e}")
             return False
 
-    def commit(self, message: str, details: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    def commit(self, message: str, details: Optional[Dict[str, Any]] = None, skip_timestamp: bool = False, expert_picture: Optional[str] = None) -> Dict[str, Any]:
         """
         Commit current database state to Git with descriptive message.
 
@@ -149,6 +170,7 @@ class DatabaseVersionControl:
         Args:
             message: Human-readable commit message (e.g., "Updated 5 Brown Pelican counts")
             details: Optional dict with additional context (table, rows_affected, operation, etc.)
+            skip_timestamp: If True, don't prepend timestamp to message (for manual checkpoints)
 
         Returns:
             Dictionary with success status, commit hash, and timestamp
@@ -197,19 +219,40 @@ class DatabaseVersionControl:
 
             # Step 3: Build commit message with metadata
             timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            commit_msg = f"[{timestamp}] {message}"
+
+            # For manual checkpoints, skip timestamp prefix (it's redundant with Git's own timestamp)
+            if skip_timestamp:
+                commit_msg = message
+            else:
+                commit_msg = f"[{timestamp}] {message}"
 
             if details:
                 commit_msg += f"\n\nDetails:"
                 for key, value in details.items():
                     commit_msg += f"\n  {key}: {value}"
 
-            commit_msg += f"\n\nExpert: {self.expert_email}"
+            # Add expert attribution
+            commit_msg += f"\n\nExpert: {self.expert_name}"
+            if self.expert_email != "system":
+                commit_msg += f" <{self.expert_email}>"
 
-            # Step 4: Commit to Git
+            # Store expert picture URL in commit message for display in history
+            if expert_picture:
+                commit_msg += f"\nPicture: {expert_picture}"
+
+            # Step 4: Set Git author to expert for this commit
+            # This overrides the default "NestScope System" for manual checkpoints
+            env = os.environ.copy()
+            env['GIT_AUTHOR_NAME'] = self.expert_name
+            env['GIT_AUTHOR_EMAIL'] = self.expert_email
+            env['GIT_COMMITTER_NAME'] = self.expert_name
+            env['GIT_COMMITTER_EMAIL'] = self.expert_email
+
+            # Step 5: Commit to Git
             result = subprocess.run(
                 ["git", "commit", "-m", commit_msg],
                 cwd=self.db_dir,
+                env=env,
                 check=False,  # Don't raise exception immediately, we'll handle errors manually
                 capture_output=True,
                 text=True
@@ -267,7 +310,7 @@ class DatabaseVersionControl:
             limit: Maximum number of commits to return (default: 50)
 
         Returns:
-            List of commit dictionaries with hash, message, author, date
+            List of commit dictionaries with hash, message, author, date, picture (if available)
 
         Educational Note:
         This is equivalent to "git log" but parsed into a Python-friendly format.
@@ -296,13 +339,57 @@ class DatabaseVersionControl:
 
                 parts = line.split('|', 3)
                 if len(parts) == 4:
-                    commits.append({
-                        "hash": parts[0],
-                        "hash_short": parts[0][:8],
+                    commit_hash = parts[0]
+                    commit_data = {
+                        "hash": commit_hash,
+                        "hash_short": commit_hash[:8],
                         "author": parts[1],
                         "date": parts[2],
                         "message": parts[3]
-                    })
+                    }
+
+                    # Extract full commit message body with details
+                    try:
+                        # Get full commit message body
+                        body_result = subprocess.run(
+                            ["git", "show", "-s", "--format=%b", commit_hash],
+                            cwd=self.db_dir,
+                            capture_output=True,
+                            text=True,
+                            check=True
+                        )
+
+                        # Parse the body for structured details
+                        body_text = body_result.stdout.strip()
+                        commit_data["details"] = {}
+                        commit_data["full_message"] = body_text
+
+                        # Extract structured details (operation, table, rows_affected, query, etc.)
+                        current_section = None
+                        for body_line in body_text.split('\n'):
+                            if body_line.startswith('Details:'):
+                                current_section = 'details'
+                                continue
+                            elif body_line.startswith('Expert:'):
+                                current_section = None
+                                continue
+                            elif body_line.startswith('Picture: '):
+                                commit_data["picture"] = body_line.replace('Picture: ', '').strip()
+                                continue
+
+                            # Parse detail lines (e.g., "  operation: SQL_QUERY")
+                            if current_section == 'details' and ':' in body_line:
+                                key_value = body_line.strip().split(':', 1)
+                                if len(key_value) == 2:
+                                    key = key_value[0].strip()
+                                    value = key_value[1].strip()
+                                    commit_data["details"][key] = value
+                    except:
+                        # If parsing fails, at least we have the basic message
+                        commit_data["details"] = {}
+                        commit_data["full_message"] = ""
+
+                    commits.append(commit_data)
 
             return commits
 

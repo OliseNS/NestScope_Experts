@@ -20,12 +20,17 @@ import cv2
 import base64
 import httpx
 import yaml
+import logging
 from server.cv_tools.inference import BirdDetector, get_example_images
 from server.db_version import DatabaseVersionControl
 from server.flood_tools.flood_database import FloodDatabase
 from server.flood_tools.noaa_client import NOAAClient
 from server.services.risk_intelligence import RiskIntelligenceService
 from server.services.db_explorer import DatabaseExplorer
+
+# Initialize logger
+logger = logging.getLogger(__name__)
+logging.basicConfig(level=logging.INFO)
 
 # Initialize risk intelligence service
 _risk_service = None
@@ -194,7 +199,14 @@ class RowInsertResponse(BaseModel):
     error: Optional[str] = None
     version_commit: Optional[str] = None  # Git commit hash if versioning is active
 
-# Version Control Response Models
+# Version Control Request/Response Models
+class VersionCommitRequest(BaseModel):
+    """Request for manually creating a version control commit"""
+    message: str
+    expert_email: str = "system"
+    expert_name: Optional[str] = None
+    expert_picture: Optional[str] = None
+
 class VersionCommit(BaseModel):
     """Represents a single Git commit in version history"""
     hash: str
@@ -202,6 +214,9 @@ class VersionCommit(BaseModel):
     author: str
     date: str
     message: str
+    details: Optional[Dict[str, Any]] = {}
+    full_message: Optional[str] = ""
+    picture: Optional[str] = None
 
 class VersionHistoryResponse(BaseModel):
     """Response for /db/version/history endpoint"""
@@ -2773,6 +2788,118 @@ async def get_tables():
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.post("/db/query", response_model=CustomSQLResponse)
+async def execute_query(request: CustomSQLRequest):
+    """
+    Execute a SQL query on the database (for NestDB admin interface).
+
+    This endpoint allows admins to execute any SQL query including write operations.
+    Write operations (INSERT, UPDATE, DELETE, etc.) are automatically committed to version control.
+
+    Args:
+        request: CustomSQLRequest with sql_query
+
+    Returns:
+        CustomSQLResponse with results or error
+
+    Educational Note:
+    Unlike /ask which is read-only for safety, this endpoint allows full database access
+    because it's protected by authentication in the Flask app (only logged-in admins can access NestDB).
+    """
+    try:
+        query = request.sql_query.strip()
+
+        if not query:
+            return CustomSQLResponse(
+                success=False,
+                results=None,
+                results_count=0,
+                error="Query cannot be empty"
+            )
+
+        # Detect if this is a write operation
+        query_upper = query.upper()
+        write_keywords = ['INSERT', 'UPDATE', 'DELETE', 'DROP', 'CREATE', 'ALTER', 'TRUNCATE', 'REPLACE']
+        is_write_operation = any(query_upper.strip().startswith(kw) for kw in write_keywords)
+
+        # Use read-write connection (not read-only like NestChat)
+        conn = sqlite3.connect(DB_PATH, check_same_thread=False)
+        cursor = conn.cursor()
+
+        try:
+            # Execute the query
+            cursor.execute(query)
+
+            # For write operations, commit and track in version control
+            if is_write_operation:
+                conn.commit()
+                rows_affected = cursor.rowcount
+
+                # Commit to version control
+                if db_version_control:
+                    try:
+                        commit_result = db_version_control.commit(
+                            message=f"Query executed via NestDB: {query[:100]}{'...' if len(query) > 100 else ''}",
+                            details={
+                                "operation": "SQL_QUERY",
+                                "query": query,
+                                "rows_affected": rows_affected,
+                                "interface": "NestDB"
+                            }
+                        )
+                        logger.info(f"Version control commit: {commit_result}")
+                    except Exception as vc_error:
+                        logger.warning(f"Version control commit failed: {vc_error}")
+
+                conn.close()
+
+                return CustomSQLResponse(
+                    success=True,
+                    results=None,
+                    results_count=rows_affected,
+                    error=None
+                )
+
+            # For read operations (SELECT, etc.), return results
+            else:
+                columns = [description[0] for description in cursor.description] if cursor.description else []
+                rows = cursor.fetchall()
+
+                # Convert rows to list of dicts
+                results = []
+                for row in rows:
+                    row_dict = {}
+                    for i, col in enumerate(columns):
+                        row_dict[col] = row[i]
+                    results.append(row_dict)
+
+                conn.close()
+
+                return CustomSQLResponse(
+                    success=True,
+                    results=results,
+                    results_count=len(results),
+                    error=None
+                )
+
+        except Exception as e:
+            conn.rollback()
+            conn.close()
+            return CustomSQLResponse(
+                success=False,
+                results=None,
+                results_count=0,
+                error=f"Query execution failed: {str(e)}"
+            )
+
+    except Exception as e:
+        return CustomSQLResponse(
+            success=False,
+            results=None,
+            results_count=0,
+            error=f"Failed to process query: {str(e)}"
+        )
+
 @app.get("/db/table/{table_name}", response_model=TableDataResponse)
 async def get_table_data(table_name: str, page: int = 1, page_size: int = 50):
     """
@@ -3282,7 +3409,7 @@ async def rollback_database(request: VersionRollbackRequest):
         )
 
 @app.post("/db/version/commit")
-async def manual_commit(message: str, expert_email: str = "system"):
+async def manual_commit(request: VersionCommitRequest):
     """
     Manually create a version control commit.
 
@@ -3290,8 +3417,7 @@ async def manual_commit(message: str, expert_email: str = "system"):
     Normally commits happen automatically after database writes.
 
     Args:
-        message: Commit message
-        expert_email: Email/username of expert making the commit
+        request: Contains commit message and expert_email
 
     Returns:
         Commit hash and timestamp
@@ -3303,10 +3429,18 @@ async def manual_commit(message: str, expert_email: str = "system"):
         }
 
     try:
-        # Update expert email
-        db_version_control.expert_email = expert_email
+        # Update expert info for this commit
+        db_version_control.expert_email = request.expert_email
+        if request.expert_name:
+            db_version_control.expert_name = request.expert_name
 
-        result = db_version_control.commit(message)
+        # Pass skip_timestamp=True for manual checkpoints (timestamp is redundant with Git's own)
+        result = db_version_control.commit(
+            request.message,
+            skip_timestamp=True,
+            expert_picture=request.expert_picture
+        )
+
         return result
     except Exception as e:
         return {

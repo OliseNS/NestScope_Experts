@@ -654,8 +654,41 @@ def help_page():
 @app.route('/nestdb')
 @login_required
 def nestdb_page():
-    """NestDB - Supabase-inspired database management interface"""
-    return render_template('nestdb.html', active_page='nestdb')
+    """
+    NestDB - Supabase-inspired database management interface
+
+    SECURITY: Query execution requires admin or database editor permissions.
+    We check permissions here and pass them to the frontend for UI control.
+
+    Educational Note:
+    Two-layer security:
+    1. Flask checks if user CAN access NestDB interface
+    2. FastAPI backend validates each query execution
+    This prevents unauthorized database modifications.
+    """
+    # Get current user's permissions
+    user_email = session['user']['email']
+    permissions = get_user_permissions(user_email)
+
+    # Check if user has database editing permission
+    if not permissions.get('can_edit_db', False):
+        return '''
+        <html>
+        <head><title>Access Denied</title></head>
+        <body style="font-family: system-ui; padding: 2rem; max-width: 600px; margin: 0 auto;">
+            <h1>🔒 Access Denied</h1>
+            <p>You need <strong>database editor</strong> or <strong>admin</strong> permissions to access NestDB.</p>
+            <p><a href="/" style="color: #D97757;">← Back to Home</a></p>
+        </body>
+        </html>
+        ''', 403
+
+    return render_template(
+        'nestdb.html',
+        active_page='nestdb',
+        can_edit_db=True,
+        is_admin=is_admin(user_email)
+    )
 
 @app.route('/users')
 @login_required
