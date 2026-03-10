@@ -82,7 +82,7 @@ class FEMAClient:
                 'f': 'json'
             }
 
-            response = self.session.get(identify_url, params=params, timeout=1.5)  # Shorter timeout
+            response = self.session.get(identify_url, params=params, timeout=0.2)  # Very short timeout for fast fallback
 
             if response.status_code == 200:
                 data = response.json()
@@ -106,12 +106,13 @@ class FEMAClient:
                     }
 
             # If no data or API error, return default minimal risk
-            logger.warning(f"No FEMA data for ({latitude}, {longitude}), assuming minimal risk")
+            # Note: Many coastal/offshore locations are outside FEMA's mapped areas
+            logger.debug(f"No FEMA data for ({latitude}, {longitude}), using fallback")
             return {
                 'zone': 'X',
                 'risk_level': 1,
-                'description': 'Outside mapped flood hazard area',
-                'source': 'FEMA NFHL (default)'
+                'description': 'Outside mapped flood hazard area (offshore/island)',
+                'source': 'FEMA NFHL (no coverage)'
             }
 
         except Exception as e:

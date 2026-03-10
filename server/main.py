@@ -3343,6 +3343,17 @@ async def get_risk_map_zones():
 
         zones = []
         for row in results:
+            # Map FEMA zone to risk category
+            fema_zone = row.get('fema_flood_zone', 'UNKNOWN')
+            if fema_zone in ['A', 'AE', 'V', 'VE']:
+                fema_category = 'HIGH'
+            elif fema_zone in ['AO', 'AH', 'A99']:
+                fema_category = 'MODERATE'
+            elif fema_zone == 'X500':
+                fema_category = 'LOW'
+            else:
+                fema_category = 'MINIMAL'
+
             zones.append({
                 "colony_name": row['colony_name'],
                 "latitude": row['latitude'],
@@ -3356,7 +3367,11 @@ async def get_risk_map_zones():
                 "species": row['species_count'],
                 "last_survey": row['last_year'] if 'last_year' in row else 2021,
                 "data_year": 2026,
-                "radius_km": 50
+                "radius_km": 50,
+                # FEMA Flood Zone Data
+                "fema_zone": fema_zone,
+                "fema_description": row.get('fema_zone_description', 'Data unavailable'),
+                "fema_category": fema_category
             })
 
         return {

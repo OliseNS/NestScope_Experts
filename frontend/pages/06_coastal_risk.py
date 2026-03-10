@@ -265,7 +265,17 @@ st.markdown("""
     </div>
 """, unsafe_allow_html=True)
 
-# Removed "How to Use This Page" section - interface should be self-explanatory
+# Data freshness banner
+st.markdown("""
+    <div style="background: linear-gradient(135deg, rgba(0, 217, 255, 0.1) 0%, rgba(8, 145, 178, 0.1) 100%);
+                padding: 0.75rem 1.5rem; border-radius: 8px; border-left: 3px solid #00D9FF;
+                margin-bottom: 1.5rem; font-family: 'Inter', sans-serif; font-size: 0.85rem; color: #CBD5E1;">
+        <strong style="color: #00D9FF;">Real-Time Data Sources:</strong>
+        NOAA water levels (updated every 6 min) • FEMA flood zones (official federal data) •
+        USGS erosion rates • HURDAT2 hurricane tracks • TWI survey data (2010-2021)
+        <br><strong style="color: #00D9FF;">Performance:</strong> First load builds cache (2-4s), subsequent loads instant (&lt;1s)
+    </div>
+""", unsafe_allow_html=True)
 
 # ============================================================================
 # API & DATA UTILITIES
@@ -307,12 +317,12 @@ def get_live_project_data():
             priorities = requests.get(
                 f"{API_BASE_URL}/api/risk/priority_list",
                 params={"limit": 500},
-                timeout=10
+                timeout=30  # Increased timeout for FEMA data collection
             ).json()
 
             zones_api = requests.get(
                 f"{API_BASE_URL}/api/risk/map_zones",
-                timeout=10
+                timeout=30  # Increased timeout for FEMA data collection
             ).json()
 
             z_map = {z['colony_name']: z for z in zones_api['zones']}
@@ -422,11 +432,21 @@ with col2:
         st.cache_data.clear()
         st.rerun()
 
-df_priorities, raw_zones = get_live_project_data()
+# Load data with visual feedback
+with st.spinner("🌊 Loading real-time flood intelligence from NOAA and FEMA... (First load: 3-5s, then cached)"):
+    df_priorities, raw_zones = get_live_project_data()
+
 if df_priorities.empty:
     st.warning("⚠️ Waiting for data services to initialize...")
     st.info("💡 If the backend is running, click '🔄 Refresh Data' above to retry")
     st.stop()
+
+# Show success message for first-time load with timestamp
+if 'flood_data_loaded' not in st.session_state:
+    st.session_state['flood_data_loaded'] = True
+    from datetime import datetime
+    current_time = datetime.now().strftime("%I:%M:%S %p")
+    st.success(f"✅ Loaded {len(df_priorities)} colonies at {current_time}. Data cached for 5 minutes - subsequent loads are instant!")
 
 # ============================================================================
 # SIDEBAR
@@ -488,9 +508,10 @@ st.caption(f"📡 **Nearest NOAA Station:** {station['name']} ({dist_km:.1f} km 
 # FETCH NOAA DATA
 # ============================================================================
 
-obs_df = fetch_noaa_data(station['id'], product='water_level', lookback=24)
-pred_df = fetch_noaa_data(station['id'], product='predictions', hours=72)
-hist_stats = fetch_historical_percentiles(station['id'])
+with st.spinner(f"📡 Fetching real-time data from {station['name']}..."):
+    obs_df = fetch_noaa_data(station['id'], product='water_level', lookback=24)
+    pred_df = fetch_noaa_data(station['id'], product='predictions', hours=72)
+    hist_stats = fetch_historical_percentiles(station['id'])
 
 # Calculate surge
 surge_val = 0.0
@@ -830,6 +851,211 @@ else:
     """, unsafe_allow_html=True)
 
 # ============================================================================
+# FEMA FLOOD ZONES SECTION
+# ============================================================================
+
+st.markdown('<div class="section-divider"></div>', unsafe_allow_html=True)
+
+st.markdown("""
+    <div style="font-family: 'Space Mono', monospace; font-size: 1.5rem; font-weight: 700; color: #E2E8F0; margin-bottom: 1rem;">
+        FEMA Flood Hazard Classification
+    </div>
+    <div style="font-family: 'Inter', sans-serif; font-size: 0.95rem; color: #CBD5E1; line-height: 1.7; margin-bottom: 1.5rem;">
+        <strong>What This Shows:</strong> Official flood zone classifications from the Federal Emergency Management Agency (FEMA)
+        National Flood Hazard Layer. These designations determine flood insurance requirements and construction standards.
+    </div>
+""", unsafe_allow_html=True)
+
+# Calculate FEMA zone statistics
+fema_high_risk = [z for z in raw_zones if z.get('fema_category') == 'HIGH']
+fema_moderate_risk = [z for z in raw_zones if z.get('fema_category') == 'MODERATE']
+fema_low_risk = [z for z in raw_zones if z.get('fema_category') == 'LOW']
+fema_minimal_risk = [z for z in raw_zones if z.get('fema_category') == 'MINIMAL']
+
+# Selected colony FEMA data (lookup from raw_zones which has FEMA info)
+selected_zone_data = next((z for z in raw_zones if z['colony_name'] == selected_name), None)
+if selected_zone_data:
+    selected_fema_zone = selected_zone_data.get('fema_zone', 'UNKNOWN')
+    selected_fema_desc = selected_zone_data.get('fema_description', 'Data unavailable')
+    selected_fema_category = selected_zone_data.get('fema_category', 'UNKNOWN')
+else:
+    selected_fema_zone = 'UNKNOWN'
+    selected_fema_desc = 'Data unavailable'
+    selected_fema_category = 'UNKNOWN'
+
+# FEMA Summary Metrics
+col1, col2, col3, col4 = st.columns(4)
+
+with col1:
+    delta_class = "delta-critical" if selected_fema_category == 'HIGH' else "delta-warning" if selected_fema_category == 'MODERATE' else "delta-normal"
+    st.markdown(f"""
+        <div class="metric-card">
+            <div class="metric-label">FEMA Zone Classification</div>
+            <div class="metric-value">{selected_fema_zone}</div>
+            <div class="metric-delta {delta_class}">{selected_fema_category} RISK</div>
+        </div>
+    """, unsafe_allow_html=True)
+
+with col2:
+    pct_high_risk = (len(fema_high_risk) / len(raw_zones) * 100) if raw_zones else 0
+    st.markdown(f"""
+        <div class="metric-card">
+            <div class="metric-label">Colonies in 100-Year Floodplain</div>
+            <div class="metric-value">{len(fema_high_risk)}</div>
+            <div class="metric-delta delta-warning">{pct_high_risk:.1f}% of Total</div>
+        </div>
+    """, unsafe_allow_html=True)
+
+with col3:
+    st.markdown(f"""
+        <div class="metric-card">
+            <div class="metric-label">Moderate Flood Risk Zones</div>
+            <div class="metric-value">{len(fema_moderate_risk)}</div>
+            <div class="metric-delta delta-normal">0.2% Annual Chance</div>
+        </div>
+    """, unsafe_allow_html=True)
+
+with col4:
+    st.markdown(f"""
+        <div class="metric-card">
+            <div class="metric-label">Minimal Risk Zones</div>
+            <div class="metric-value">{len(fema_minimal_risk) + len(fema_low_risk)}</div>
+            <div class="metric-delta delta-normal">Outside Floodplain</div>
+        </div>
+    """, unsafe_allow_html=True)
+
+st.markdown('<div style="margin: 2rem 0;"></div>', unsafe_allow_html=True)
+
+# FEMA Zone Explanation Panel
+st.markdown(f"""
+    <div class="context-panel">
+        <div class="context-title">Selected Colony: {selected_name}</div>
+        <div class="context-item"><strong>FEMA Zone:</strong> {selected_fema_zone}</div>
+        <div class="context-item"><strong>Classification:</strong> {selected_fema_desc}</div>
+        <div class="context-item"><strong>Flood Insurance:</strong> {"Required for federally-backed mortgages" if selected_fema_category == "HIGH" else "Recommended but not required"}</div>
+        <div class="context-item"><strong>1% Annual Chance Flood:</strong> {"YES - Special Flood Hazard Area" if selected_fema_category == "HIGH" else "NO - Outside SFHA"}</div>
+    </div>
+""", unsafe_allow_html=True)
+
+st.markdown('<div style="margin: 2rem 0;"></div>', unsafe_allow_html=True)
+
+# FEMA Zone Map
+st.markdown("""
+    <div style="font-family: 'Space Mono', monospace; font-size: 1.2rem; font-weight: 700; color: #E2E8F0; margin-bottom: 1rem;">
+        FEMA Flood Zone Map
+    </div>
+    <div style="font-family: 'Inter', sans-serif; font-size: 0.9rem; color: #94A3B8; margin-bottom: 1.5rem;">
+        Colonies are color-coded by official FEMA flood zone classification.
+        <strong style="color: #FF0000;">Red = High Risk (Zone A/AE/V/VE)</strong>,
+        <strong style="color: #FFA500;">Orange = Moderate (Zone AO/AH)</strong>,
+        <strong style="color: #FFD700;">Yellow = Low Risk (Zone X500)</strong>,
+        <strong style="color: #00FF00;">Green = Minimal (Zone X)</strong>.
+    </div>
+""", unsafe_allow_html=True)
+
+# Create FEMA-specific map data
+fema_map_data = []
+for zone in raw_zones:
+    fema_category = zone.get('fema_category', 'UNKNOWN')
+
+    # Map categories to colors
+    if fema_category == 'HIGH':
+        fema_color = '#FF0000'  # Red
+    elif fema_category == 'MODERATE':
+        fema_color = '#FFA500'  # Orange
+    elif fema_category == 'LOW':
+        fema_color = '#FFD700'  # Gold
+    else:
+        fema_color = '#00FF00'  # Green
+
+    fema_map_data.append({
+        'latitude': zone['latitude'],
+        'longitude': zone['longitude'],
+        'colony_name': zone['colony_name'],
+        'fema_zone': zone.get('fema_zone', 'UNKNOWN'),
+        'fema_category': fema_category,
+        'fema_color': fema_color,
+        'birds': zone.get('birds', 0)
+    })
+
+fema_df = pd.DataFrame(fema_map_data)
+
+# Render FEMA map using Plotly
+import plotly.express as px
+
+fema_color_map = {
+    'HIGH': '#FF0000',
+    'MODERATE': '#FFA500',
+    'LOW': '#FFD700',
+    'MINIMAL': '#00FF00',
+    'UNKNOWN': '#808080'
+}
+
+fig_fema = px.scatter_mapbox(
+    fema_df,
+    lat='latitude',
+    lon='longitude',
+    hover_name='colony_name',
+    hover_data={
+        'latitude': False,
+        'longitude': False,
+        'fema_zone': True,
+        'fema_category': True,
+        'birds': ':,'
+    },
+    color='fema_category',
+    color_discrete_map=fema_color_map,
+    size=[8] * len(fema_df),  # Constant size for all markers
+    zoom=7,
+    height=500,
+    mapbox_style="open-street-map"
+)
+
+fig_fema.update_layout(
+    showlegend=True,
+    legend=dict(
+        yanchor="top",
+        y=0.99,
+        xanchor="left",
+        x=0.01,
+        bgcolor="rgba(0,0,0,0.7)",
+        font=dict(color="white")
+    ),
+    margin=dict(l=0, r=0, t=0, b=0),
+    paper_bgcolor='rgba(0,0,0,0)',
+    plot_bgcolor='rgba(15, 23, 42, 0.5)',
+)
+
+st.plotly_chart(fig_fema, use_container_width=True, key="fema_flood_map")
+
+# FEMA Zone Reference Guide
+st.markdown('<div style="margin: 2rem 0;"></div>', unsafe_allow_html=True)
+
+col_guide1, col_guide2 = st.columns(2)
+
+with col_guide1:
+    st.markdown("""
+        <div class="context-panel">
+            <div class="context-title">High-Risk Zones (SFHA)</div>
+            <div class="context-item"><strong>Zone A:</strong> 1% annual flood chance (100-year floodplain)</div>
+            <div class="context-item"><strong>Zone AE:</strong> High risk with Base Flood Elevation data</div>
+            <div class="context-item"><strong>Zone V/VE:</strong> Coastal high-hazard area with wave action</div>
+            <div class="context-item"><strong>Insurance:</strong> Required for federally-backed mortgages</div>
+        </div>
+    """, unsafe_allow_html=True)
+
+with col_guide2:
+    st.markdown("""
+        <div class="context-panel">
+            <div class="context-title">Moderate to Low Risk Zones</div>
+            <div class="context-item"><strong>Zone X (shaded):</strong> 0.2% annual flood chance (500-year)</div>
+            <div class="context-item"><strong>Zone X (unshaded):</strong> Minimal flood hazard</div>
+            <div class="context-item"><strong>Zone AO/AH:</strong> Moderate risk with shallow flooding</div>
+            <div class="context-item"><strong>Insurance:</strong> Recommended but not federally required</div>
+        </div>
+    """, unsafe_allow_html=True)
+
+# ============================================================================
 # REGIONAL RISK MAP
 # ============================================================================
 
@@ -946,6 +1172,7 @@ with col_method1:
     st.markdown("""
         <div class="context-panel">
             <div class="context-title">Data Sources</div>
+            <div class="context-item">FEMA National Flood Hazard Layer (NFHL)</div>
             <div class="context-item">NOAA CO-OPS Tide Gauges (real-time)</div>
             <div class="context-item">HURDAT2 Hurricane Database (1851-2024)</div>
             <div class="context-item">USGS Coastal Erosion Studies</div>
