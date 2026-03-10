@@ -9,9 +9,9 @@
     <link href="https://fonts.googleapis.com/css2?family=Crimson+Pro:wght@400;600;700&family=DM+Sans:wght@400;500;700&display=swap" rel="stylesheet">
     <style>
         :root {
-            --orange-primary: #D97757;
-            --orange-light: #e8b896;
-            --orange-dark: #c5654a;
+            --orange-primary: #537C8A;
+            --orange-light: #CEE9F4;
+            --orange-dark: #456773;
             --bg-dark: #1a1614;
             --surface: #2a2421;
             --surface-light: #3a3431;
@@ -42,7 +42,7 @@
         /* Top Bar */
         .top-bar {
             background: var(--surface);
-            border-bottom: 1px solid rgba(217, 119, 87, 0.2);
+            border-bottom: 1px solid rgba(83, 124, 138, 0.2);
             padding: 0.75rem 1.5rem;
             display: flex;
             justify-content: space-between;
@@ -103,7 +103,7 @@
 
         .nav-btn {
             background: var(--surface-light);
-            border: 2px solid rgba(217, 119, 87, 0.3);
+            border: 2px solid rgba(83, 124, 138, 0.3);
             color: var(--text-primary);
             width: 36px;
             height: 36px;
@@ -125,7 +125,7 @@
 
         .jump-input {
             background: var(--surface-light);
-            border: 2px solid rgba(217, 119, 87, 0.3);
+            border: 2px solid rgba(83, 124, 138, 0.3);
             color: var(--text-primary);
             width: 60px;
             height: 36px;
@@ -166,7 +166,7 @@
         /* Left Sidebar - Tools */
         .left-sidebar {
             background: var(--surface);
-            border-right: 1px solid rgba(217, 119, 87, 0.2);
+            border-right: 1px solid rgba(83, 124, 138, 0.2);
             display: flex;
             flex-direction: column;
             overflow-y: auto;
@@ -174,7 +174,7 @@
 
         .sidebar-section {
             padding: 1.5rem;
-            border-bottom: 1px solid rgba(217, 119, 87, 0.1);
+            border-bottom: 1px solid rgba(83, 124, 138, 0.1);
         }
 
         .section-title {
@@ -207,7 +207,7 @@
 
         .tool-btn:hover {
             border-color: var(--orange-primary);
-            background: rgba(217, 119, 87, 0.1);
+            background: rgba(83, 124, 138, 0.1);
         }
 
         .tool-btn.active {
@@ -344,7 +344,7 @@
             backdrop-filter: blur(10px);
             padding: 1rem;
             border-radius: 12px;
-            border: 1px solid rgba(217, 119, 87, 0.3);
+            border: 1px solid rgba(83, 124, 138, 0.3);
             font-size: 0.875rem;
             z-index: 10;
         }
@@ -361,7 +361,7 @@
         .zoom-btn {
             background: rgba(42, 36, 33, 0.9);
             backdrop-filter: blur(10px);
-            border: 1px solid rgba(217, 119, 87, 0.3);
+            border: 1px solid rgba(83, 124, 138, 0.3);
             color: var(--text-primary);
             width: 40px;
             height: 40px;
@@ -383,7 +383,7 @@
         /* Right Sidebar - Species Classification */
         .right-sidebar {
             background: var(--surface);
-            border-left: 1px solid rgba(217, 119, 87, 0.2);
+            border-left: 1px solid rgba(83, 124, 138, 0.2);
             display: flex;
             flex-direction: column;
             overflow: hidden;
@@ -445,7 +445,7 @@
 
         .answer-option {
             background: var(--surface-light);
-            border: 2px solid rgba(217, 119, 87, 0.2);
+            border: 2px solid rgba(83, 124, 138, 0.2);
             padding: 1rem;
             border-radius: 10px;
             cursor: pointer;
@@ -458,7 +458,7 @@
 
         .answer-option:hover {
             border-color: var(--orange-primary);
-            background: rgba(217, 119, 87, 0.1);
+            background: rgba(83, 124, 138, 0.1);
             transform: translateX(4px);
         }
 
@@ -551,7 +551,7 @@
 
         .action-footer {
             padding: 1.5rem;
-            border-top: 1px solid rgba(217, 119, 87, 0.2);
+            border-top: 1px solid rgba(83, 124, 138, 0.2);
         }
 
         .btn-primary {
@@ -571,7 +571,7 @@
         .btn-primary:hover {
             background: var(--orange-dark);
             transform: translateY(-2px);
-            box-shadow: 0 4px 12px rgba(217, 119, 87, 0.4);
+            box-shadow: 0 4px 12px rgba(83, 124, 138, 0.4);
         }
 
         .btn-primary:disabled {
@@ -582,7 +582,7 @@
 
         .btn-secondary {
             background: var(--surface-light);
-            border: 2px solid rgba(217, 119, 87, 0.3);
+            border: 2px solid rgba(83, 124, 138, 0.3);
             color: var(--text-primary);
             padding: 0.875rem;
             border-radius: 10px;
@@ -597,7 +597,7 @@
 
         .btn-secondary:hover {
             border-color: var(--orange-primary);
-            background: rgba(217, 119, 87, 0.1);
+            background: rgba(83, 124, 138, 0.1);
         }
 
         /* Empty State */
@@ -735,7 +735,7 @@
                     </div>
                 </div>
                 <!-- Box count display below preview -->
-                <div style="padding: 0.75rem 1.5rem; text-align: center; color: var(--text-muted); font-size: 0.875rem; border-top: 1px solid rgba(217, 119, 87, 0.2);">
+                <div style="padding: 0.75rem 1.5rem; text-align: center; color: var(--text-muted); font-size: 0.875rem; border-top: 1px solid rgba(83, 124, 138, 0.2);">
                     <span id="box-count">0</span> birds detected
                 </div>
             </div>
@@ -759,8 +759,8 @@
 
             <div class="canvas-overlay">
                 <div><strong>Tool:</strong> <span id="current-tool">Draw</span></div>
-                <div><strong>Zoom:</strong> <span id="zoom-level">100%</span> <button onclick="resetZoom()" style="background: rgba(217, 119, 87, 0.2); border: 1px solid rgba(217, 119, 87, 0.4); color: #fff; padding: 0.125rem 0.5rem; border-radius: 4px; font-size: 0.75rem; cursor: pointer; margin-left: 0.5rem;">Reset</button></div>
-                <div style="margin-top: 0.5rem; padding-top: 0.5rem; border-top: 1px solid rgba(217, 119, 87, 0.3); font-size: 0.75rem; color: var(--text-muted);">
+                <div><strong>Zoom:</strong> <span id="zoom-level">100%</span> <button onclick="resetZoom()" style="background: rgba(83, 124, 138, 0.2); border: 1px solid rgba(83, 124, 138, 0.4); color: #fff; padding: 0.125rem 0.5rem; border-radius: 4px; font-size: 0.75rem; cursor: pointer; margin-left: 0.5rem;">Reset</button></div>
+                <div style="margin-top: 0.5rem; padding-top: 0.5rem; border-top: 1px solid rgba(83, 124, 138, 0.3); font-size: 0.75rem; color: var(--text-muted);">
                     <div><strong>Wheel</strong> → Zoom to cursor</div>
                     <div><strong>H or Space+Drag</strong> → Pan</div>
                     <div><strong>Delete</strong> → Remove box</div>
@@ -1414,7 +1414,7 @@ function drawDragRect() {
     const width = currentX - startX;
     const height = currentY - startY;
 
-    ctx.strokeStyle = '#D97757';
+    ctx.strokeStyle = '#537C8A';
     ctx.lineWidth = 3 / zoomLevel;
     ctx.setLineDash([5 / zoomLevel, 5 / zoomLevel]);
     ctx.strokeRect(startX, startY, width, height);
@@ -1520,14 +1520,14 @@ function redrawCanvas() {
             ctx.strokeStyle = '#FFA500';  // Orange for hovered (edit mode only)
             ctx.lineWidth = scaledLineWidth;
         } else {
-            ctx.strokeStyle = '#D97757';  // Default orange
+            ctx.strokeStyle = '#537C8A';  // Default orange
             ctx.lineWidth = scaledLineWidth;
         }
         ctx.strokeRect(x, y, w, h);
 
         // Draw label if species identified
         if (box.species) {
-            ctx.fillStyle = 'rgba(217, 119, 87, 0.9)';
+            ctx.fillStyle = 'rgba(83, 124, 138, 0.9)';
             const text = box.species;
             const fontSize = 14 / zoomLevel;
             ctx.font = `${fontSize}px DM Sans, sans-serif`;
@@ -1718,7 +1718,7 @@ function updatePreview(centerX, centerY, label = 'Drawing') {
                 const isSelected = (currentTool === 'edit') && (selectedBoxId === box.id);
                 const isHovered = (currentTool === 'edit') && (hoveredBoxId === box.id);
 
-                previewCtx.strokeStyle = isSelected ? '#7cb342' : (isHovered ? '#FFA500' : '#D97757');
+                previewCtx.strokeStyle = isSelected ? '#7cb342' : (isHovered ? '#FFA500' : '#537C8A');
                 previewCtx.lineWidth = isSelected || isHovered ? 3 : 2;
                 previewCtx.setLineDash([]);
                 previewCtx.strokeRect(previewBoxX, previewBoxY, previewBoxW, previewBoxH);
@@ -1743,7 +1743,7 @@ function updatePreview(centerX, centerY, label = 'Drawing') {
                 const previewDrawH = (drawBottom - drawTop) * scale;
 
                 // Draw with dashed orange line
-                previewCtx.strokeStyle = '#D97757';
+                previewCtx.strokeStyle = '#537C8A';
                 previewCtx.lineWidth = 3;
                 previewCtx.setLineDash([5, 5]);
                 previewCtx.strokeRect(previewDrawX, previewDrawY, previewDrawW, previewDrawH);
@@ -1755,7 +1755,7 @@ function updatePreview(centerX, centerY, label = 'Drawing') {
         const centerPreviewX = PREVIEW_SIZE / 2;
         const centerPreviewY = PREVIEW_SIZE / 2;
 
-        previewCtx.strokeStyle = '#D97757';
+        previewCtx.strokeStyle = '#537C8A';
         previewCtx.lineWidth = 2;
         previewCtx.setLineDash([4, 4]);
 
@@ -1837,7 +1837,7 @@ function updatePreviewForBox(box) {
 
                 // Highlight the selected box
                 const isSelected = (otherBox.id === box.id);
-                previewCtx.strokeStyle = isSelected ? '#7cb342' : '#D97757';
+                previewCtx.strokeStyle = isSelected ? '#7cb342' : '#537C8A';
                 previewCtx.lineWidth = isSelected ? 3 : 2;
                 previewCtx.setLineDash([]);
                 previewCtx.strokeRect(previewBoxX, previewBoxY, previewBoxW, previewBoxH);
@@ -1899,7 +1899,7 @@ function updateOverlay() {
         if (!statusDiv) {
             statusDiv = document.createElement('div');
             statusDiv.className = 'box-status';
-            statusDiv.style.cssText = 'margin-top: 0.5rem; padding-top: 0.5rem; border-top: 1px solid rgba(217, 119, 87, 0.3); font-weight: 600; color: var(--orange-primary);';
+            statusDiv.style.cssText = 'margin-top: 0.5rem; padding-top: 0.5rem; border-top: 1px solid rgba(83, 124, 138, 0.3); font-weight: 600; color: var(--orange-primary);';
             overlay.insertBefore(statusDiv, overlay.children[2]);  // Insert before shortcuts
         }
         statusDiv.textContent = `Selected: ${statusText}`;
@@ -1978,11 +1978,11 @@ function showIdentificationChoice() {
 
     const content = document.getElementById('classification-content');
     content.innerHTML = `
-        <div style="background: var(--surface-light); border-bottom: 1px solid rgba(217, 119, 87, 0.2);">
+        <div style="background: var(--surface-light); border-bottom: 1px solid rgba(83, 124, 138, 0.2);">
             <div style="aspect-ratio: 1; display: flex; align-items: center; justify-content: center; overflow: hidden;">
                 <canvas id="bird-crop-canvas" style="max-width: 100%; max-height: 100%;"></canvas>
             </div>
-            <div style="padding: 0.75rem; text-align: center; background: rgba(217, 119, 87, 0.1);">
+            <div style="padding: 0.75rem; text-align: center; background: rgba(83, 124, 138, 0.1);">
                 <div style="font-size: 0.875rem; color: var(--text-muted);">Identifying</div>
                 <div style="font-size: 1.125rem; font-weight: 700; color: var(--orange-primary);">Bird #${boxNumber}</div>
             </div>
@@ -2079,7 +2079,7 @@ async function showSearchUI() {
                 type="text"
                 id="species-search"
                 placeholder="Type species name or code (e.g., LAGU)..."
-                style="width: 100%; padding: 0.875rem; background: var(--surface-light); border: 2px solid rgba(217, 119, 87, 0.3); border-radius: 8px; color: var(--text-primary); font-size: 1rem; font-family: 'DM Sans', sans-serif; margin-bottom: 1rem;"
+                style="width: 100%; padding: 0.875rem; background: var(--surface-light); border: 2px solid rgba(83, 124, 138, 0.3); border-radius: 8px; color: var(--text-primary); font-size: 1rem; font-family: 'DM Sans', sans-serif; margin-bottom: 1rem;"
                 oninput="handleSearchInput(this.value)"
             />
 
@@ -2337,7 +2337,7 @@ async function showAIPredictions(predictions, boxNumber) {
 
         html += `
             <div class="ai-species-card" onclick="selectSpeciesFromAI('${pred.species_code}', '${pred.species_name}')"
-                 style="background: var(--surface-light); border: 2px solid rgba(217, 119, 87, 0.2); border-radius: 12px; padding: 1rem; cursor: pointer; transition: all 0.3s;">
+                 style="background: var(--surface-light); border: 2px solid rgba(83, 124, 138, 0.2); border-radius: 12px; padding: 1rem; cursor: pointer; transition: all 0.3s;">
 
                 <div style="display: flex; gap: 1rem; align-items: center; margin-bottom: 1rem;">
                     <!-- Rank badge -->
@@ -2379,7 +2379,7 @@ async function showAIPredictions(predictions, boxNumber) {
                 </button>
 
                 <!-- Expandable image gallery -->
-                <div id="ai-species-images-${i}" style="display: none; margin-top: 0.75rem; padding-top: 0.75rem; border-top: 1px solid rgba(217, 119, 87, 0.2);"></div>
+                <div id="ai-species-images-${i}" style="display: none; margin-top: 0.75rem; padding-top: 0.75rem; border-top: 1px solid rgba(83, 124, 138, 0.2);"></div>
             </div>
         `;
     }
@@ -2412,7 +2412,7 @@ async function showAIPredictions(predictions, boxNumber) {
         .ai-species-card:hover {
             transform: translateY(-2px);
             border-color: var(--orange-primary) !important;
-            box-shadow: 0 4px 16px rgba(217, 119, 87, 0.3);
+            box-shadow: 0 4px 16px rgba(83, 124, 138, 0.3);
         }
     `;
     document.head.appendChild(style);
@@ -2650,7 +2650,7 @@ function showSpeciesList(containerId = 'classification-content') {
                     </button>
                 </div>
             </div>
-            <div id="species-images-${idx}" style="display: none; margin-top: 1rem; border-top: 1px solid rgba(217, 119, 87, 0.2); padding-top: 1rem;"></div>
+            <div id="species-images-${idx}" style="display: none; margin-top: 1rem; border-top: 1px solid rgba(83, 124, 138, 0.2); padding-top: 1rem;"></div>
         `;
         listContainer.appendChild(speciesDiv);
 

@@ -88,7 +88,7 @@ function createBulkOperationsHeader() {
         </select>
         <button id="bulk-apply-btn" style="
             padding: 6px 16px;
-            background: #CC785C;
+            background: #537C8A;
             color: white;
             border: none;
             border-radius: 4px;
@@ -121,10 +121,10 @@ function createBulkOperationsHeader() {
 
     // Hover effect for button
     applyBtn.addEventListener('mouseenter', () => {
-        applyBtn.style.background = '#B86A4C';
+        applyBtn.style.background = '#456773';
     });
     applyBtn.addEventListener('mouseleave', () => {
-        applyBtn.style.background = '#CC785C';
+        applyBtn.style.background = '#537C8A';
     });
 
     return header;

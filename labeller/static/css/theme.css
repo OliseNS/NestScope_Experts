@@ -4,10 +4,10 @@
  */
 
 :root {
-    /* Brand Colors - Claude Orange */
-    --brand-primary: #D97757;
-    --brand-primary-hover: #c5654a;
-    --brand-primary-light: #e8b896;
+    /* Brand Colors - The Water Institute Teal */
+    --brand-primary: #537C8A;
+    --brand-primary-hover: #456773;
+    --brand-primary-light: #CEE9F4;
 
     /* Semantic Colors */
     --success: #4a9d5f;
@@ -98,10 +98,10 @@
     --overlay-heavy: rgba(42, 37, 32, 0.75);
 
     /* Nature Accents */
-    --accent-ocean: #4a7f9d;
-    --accent-seagrass: #6b8e4e;
-    --accent-sunset: #d97757;
-    --accent-shell: #e8dcc9;
+    --accent-ocean: #537C8A;
+    --accent-seagrass: #779373;
+    --accent-coastal: #7BABAE;
+    --accent-shell: #CEE9F4;
 }
 
 /* Dark Mode - Deep Ocean Theme */
@@ -137,8 +137,8 @@
     /* Nature Accents */
     --accent-ocean: #6ba3c7;
     --accent-seagrass: #8db068;
-    --accent-sunset: #e8b896;
-    --accent-shell: #d4c9b5;
+    --accent-coastal: #7BABAE;
+    --accent-shell: #CEE9F4;
 
     /* Enhanced Shadows for Dark Mode */
     --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.3);
