@@ -1459,8 +1459,26 @@ class AgenticSQLChatbot(SQLChatbot):
 Analyze the natural language question to extract deep semantic meaning, entities, and logical constraints.
 
 CRITICAL: The "step_by_step_reasoning" field must contain DETAILED, SPECIFIC analysis of THIS question.
-NOT generic placeholders like "Parsing the question" but ACTUAL reasoning like:
-"User wants species diversity count per colony (COUNT DISTINCT SpeciesCode) grouped by ColonyName, requiring tblColonyTotals table with Latitude/Longitude for mapping biodiversity hotspots"
+NOT generic placeholders like "Parsing the question" but ACTUAL reasoning.
+
+## KNOWLEDGE BASE: COMMON JOIN PATTERNS & METRICS
+1. **Species Diversity (Richness)**: `COUNT(DISTINCT SpeciesCode)` - requires `tblColonyTotals...`
+2. **Abundance (Population)**: `SUM(Birds)` - requires `tblColonyTotals...`
+3. **Nesting Effort**: `SUM(Nests)` - requires `tblColonyTotals...`
+4. **Species Names**: Join `tblColonyTotals...` with `tblSpeciesCodes` on `SpeciesCode`.
+5. **Species Groups**: Join `tblColonyTotals...` with `tblSpeciesCodes` on `SpeciesCode`.
+6. **Temporal Trends**: Always include `Year` in SELECT and GROUP BY.
+7. **Mapping Requirements**: ALWAYS include `Latitude` and `Longitude` for any colony-based query.
+
+## GOLD-STANDARD FEW-SHOT EXAMPLES
+
+**Q1: "Which colonies support the highest biodiversity in Louisiana?"**
+**Reasoning**: User wants species diversity (count of unique species) per colony, filtered for State='LA'. Requires tblColonyTotals table. Needs Latitude/Longitude for mapping.
+**Query Plan**: SELECT ColonyName, State, Latitude, Longitude, COUNT(DISTINCT SpeciesCode) as species_count FROM tblColonyTotals... WHERE State='LA' AND Latitude IS NOT NULL GROUP BY ColonyName, State, Latitude, Longitude ORDER BY species_count DESC
+
+**Q2: "Show the trend of Brown Pelican population from 2010 to 2021"**
+**Reasoning**: User wants temporal trend (Sum of Birds by Year) for a specific species (Brown Pelican). Must join with tblSpeciesCodes to filter by name. 
+**Query Plan**: SELECT ct.Year, SUM(ct.Birds) as total_birds FROM tblColonyTotals... ct JOIN tblSpeciesCodes sc ON ct.SpeciesCode = sc.SpeciesCode WHERE sc.SpeciesName = 'Brown Pelican' GROUP BY ct.Year ORDER BY ct.Year
 
 Respond with ONLY a valid JSON object (no markdown, no extra text):
 
@@ -1486,35 +1504,6 @@ Respond with ONLY a valid JSON object (no markdown, no extra text):
     "5. Grouping: [If applicable, explain GROUP BY - e.g., 'GROUP BY ColonyName to show per-colony diversity']",
     "6. Spatial Data: [If coordinates needed, explain WHY - e.g., 'Need Lat/Lon to map biodiversity hotspots on Gulf Coast']",
     "7. Expected Output: [Describe expected result structure - e.g., '445 rows, each colony with species_count column']"
-  ]
-}
-
-Example Input: "Show me the number of different species at each colony"
-
-Example Output:
-{
-  "summary": "User wants to calculate species diversity (richness) at each bird colony across the entire Gulf Coast dataset, revealing which colonies support the most diverse avian communities. This will show biodiversity hotspots for conservation prioritization.",
-  "question_type": "spatial_analysis",
-  "entities": {
-    "species": ["all species"],
-    "locations": ["all Gulf Coast colonies"],
-    "time_range": "all available years (2010-2021)",
-    "metrics": ["Species Diversity Count"]
-  },
-  "constraints": [
-    "Must exclude colonies without valid coordinates (Latitude/Longitude IS NOT NULL)",
-    "Must count only distinct species per colony (COUNT DISTINCT SpeciesCode)",
-    "Must group by ColonyName to get per-colony counts"
-  ],
-  "tables_needed": ["tblColonyTotals2010-2021_MayJuneCombined"],
-  "needs_coordinates": true,
-    "1. Intent: User wants to quantify biodiversity at each colony by counting how many different species have been observed there across all years. This reveals which colonies are biodiversity 'hotspots' that should be prioritized for conservation.",
-    "2. Data Location: tblColonyTotals2010-2021_MayJuneCombined contains pre-aggregated bird counts with SpeciesCode for each colony-year observation. This is the correct table (NOT tblSpeciesData which has photo records, not bird counts).",
-    "3. Metrics Needed: COUNT(DISTINCT SpeciesCode) to count unique species per colony. Also include SUM(Birds) to show total bird abundance for context.",
-    "4. Filters Required: WHERE Latitude IS NOT NULL AND Longitude IS NOT NULL to ensure all colonies can be mapped.",
-    "5. Grouping: GROUP BY ColonyName, State, Latitude, Longitude to get one row per colony with its diversity count. Must include Lat/Lon in GROUP BY since they're in SELECT.",
-    "6. Spatial Data: Absolutely need Latitude/Longitude because this is a spatial biodiversity analysis - we want to MAP where the diversity hotspots are located geographically along the Gulf Coast.",
-    "7. Expected Output: ~445 rows (one per colony), ordered by species_count DESC to show highest diversity colonies first. Will show as both a data table AND an interactive map with colony locations."
   ]
 }
 

@@ -31,6 +31,7 @@ def init_page(page_title: str, page_icon: str = "🦅", layout: str = "wide"):
 
     # Hide Streamlit's default page navigation more aggressively
     # Also fix header z-index to not block UI elements
+    # Ensure background matches Claude Code theme
     st.markdown("""
     <style>
         /* CRITICAL: Hide Streamlit's default page nav immediately */
@@ -40,29 +41,40 @@ def init_page(page_title: str, page_icon: str = "🦅", layout: str = "wide"):
             min-height: 0 !important;
         }
 
+        /* Force Claude Code background color */
+        .stApp, [data-testid="stAppViewContainer"], .main {
+            background-color: #1e1e1e !important;
+        }
+
+        [data-testid="stAppViewContainer"] > section:first-child {
+            background-color: #1e1e1e !important;
+        }
+
         /* Fixed header - REDUCED z-index to not block publish button */
         .fixed-header {
             position: fixed;
             top: 0;
             left: 0;
             right: 0;
-            background: #1E1E1E;
-            border-bottom: 1px solid #333;
+            background: #1e1e1e;
+            border-bottom: 1px solid rgba(86, 184, 151, 0.2);
             padding: 0.75rem 1.5rem;
             display: flex;
             align-items: center;
             gap: 0.75rem;
-            z-index: 100;  /* Reduced from 999999 */
+            z-index: 100;
         }
 
         /* Push main content down to account for fixed header */
         .main .block-container {
             padding-top: 4rem;
+            background-color: #1e1e1e !important;
         }
 
         /* Ensure sidebar is below header */
         [data-testid="stSidebar"] {
             padding-top: 3.5rem;
+            background-color: #1e1e1e !important;
         }
     </style>
     """, unsafe_allow_html=True)

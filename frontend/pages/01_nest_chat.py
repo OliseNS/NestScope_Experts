@@ -6,6 +6,7 @@ import streamlit as st
 import pandas as pd
 import random
 import requests
+from datetime import datetime
 
 # Import from modular structure
 from services import (
@@ -15,6 +16,8 @@ from services import (
     get_backend_config
 )
 from components import render_chart, render_map, init_page, render_header, render_sidebar
+from utils.bookmarks import get_all_bookmarks, save_bookmark, delete_bookmark, get_bookmark
+import json
 
 # API configuration
 API_BASE_URL = "http://localhost:8000"
@@ -28,6 +31,15 @@ init_page(page_title="NestChat - NestScope", page_icon="💬", layout="wide")
 
 # Render shared header
 render_header(page_name="NestChat")
+
+# Handle Loading Bookmarks
+if "load_bookmark_id" in st.session_state:
+    bookmark_id = st.session_state.load_bookmark_id
+    bookmark_data = get_bookmark(bookmark_id)
+    if bookmark_data:
+        st.session_state.messages = bookmark_data["messages"]
+        st.toast(f"✅ Loaded bookmark: {bookmark_data['title']}", icon="📖")
+    del st.session_state.load_bookmark_id
 
 # Fetch STAC data for map highlighting
 try:
@@ -58,6 +70,16 @@ def build_conversation_history():
                 "content": msg["content"]
             })
     return history
+
+def export_chat_history_json():
+    """Convert chat history to JSON for download."""
+    serializable_messages = []
+    for msg in st.session_state.messages:
+        msg_copy = msg.copy()
+        if "dataframe" in msg_copy and msg_copy["dataframe"] is not None:
+            msg_copy["dataframe"] = msg_copy["dataframe"].to_dict(orient="records")
+        serializable_messages.append(msg_copy)
+    return json.dumps(serializable_messages, indent=2)
 
 # ============================================================================
 # SESSION STATE INITIALIZATION
@@ -90,8 +112,55 @@ with st.sidebar:
     # Render shared navigation and tools
     render_sidebar(active_page="nestchat")
 
-    # Quick Prompts Section (NestChat-specific)
+    # Chat Actions Section
     from components import render_sidebar_section
+    render_sidebar_section("Chat Controls")
+    
+    col1, col2 = st.columns(2)
+    with col1:
+        if st.button("🗑️ Clear", use_container_width=True, help="Clear current chat session"):
+            st.session_state.messages = []
+            st.rerun()
+    with col2:
+        if st.session_state.messages:
+            if st.button("🔖 Save", use_container_width=True, help="Bookmark this chat"):
+                # Get first user message as title
+                title = "Untitled Chat"
+                for msg in st.session_state.messages:
+                    if msg["role"] == "user":
+                        title = msg["content"][:30] + ("..." if len(msg["content"]) > 30 else "")
+                        break
+                save_bookmark(title, st.session_state.messages)
+                st.toast("✅ Chat bookmarked!", icon="🔖")
+                st.rerun()
+
+    if st.session_state.messages:
+        chat_json = export_chat_history_json()
+        st.download_button(
+            label="📥 Download Chat (JSON)",
+            data=chat_json,
+            file_name=f"nestchat_history_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json",
+            mime="application/json",
+            use_container_width=True
+        )
+
+    # Saved Bookmarks Section
+    bookmarks = get_all_bookmarks()
+    if bookmarks:
+        render_sidebar_section("Saved Chats")
+        for b in reversed(bookmarks):
+            col_b1, col_b2 = st.columns([0.8, 0.2])
+            with col_b1:
+                if st.button(f"📖 {b['title']}", key=f"load_{b['id']}", use_container_width=True, help=f"Saved on {b['timestamp'][:10]}"):
+                    st.session_state.load_bookmark_id = b["id"]
+                    st.rerun()
+            with col_b2:
+                if st.button("🗑️", key=f"del_{b['id']}", help="Delete bookmark"):
+                    delete_bookmark(b["id"])
+                    st.toast("🗑️ Bookmark deleted")
+                    st.rerun()
+
+    # Quick Prompts Section (NestChat-specific)
     render_sidebar_section("Quick Examples")
 
     examples = [

@@ -1,6 +1,13 @@
 # NestScope - AI-Powered Gulf Coast Avian Monitoring Platform
 # Main requirements file for the entire project
 # Version pinning is handled by uv.lock - this file specifies dependencies only
+#
+# AUTHENTICATION SETUP:
+# Nestperts uses Google OAuth for authentication. After installing these packages:
+# 1. Get OAuth credentials from Google Cloud Console
+# 2. Add GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, and SECRET_KEY to .env
+# 3. Run: python labeller/setup_auth.py
+# See AUTH_SETUP.md for detailed instructions
 
 # ============================================================================
 # CORE WEB FRAMEWORKS
@@ -12,6 +19,9 @@ uvicorn[standard]
 # Flask for Nestperts labelling app
 Flask
 Werkzeug
+
+# Flask session management (included with Flask, but listed explicitly)
+# itsdangerous  # Already a Flask dependency for session signing
 
 # Streamlit frontend
 streamlit
@@ -82,6 +92,15 @@ pydeck  # High-performance map visualization with deck.gl
 
 # Progress bars
 tqdm
+
+# ============================================================================
+# AUTHENTICATION & SECURITY
+# ============================================================================
+# OAuth 2.0 client library for Google authentication
+authlib
+
+# Cryptography library for secure token handling (authlib dependency)
+cryptography
 
 # ============================================================================
 # UTILITIES
