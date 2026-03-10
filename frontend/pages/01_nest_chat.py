@@ -134,7 +134,13 @@ try:
     backend_config = get_backend_config()
     model_name = backend_config.get("model", {}).get("name", "Unknown")
     st.markdown(
-        f'<p style="font-size: 0.8rem; color: #888; margin-top: -0.5rem; margin-bottom: 1rem;">⚡ Powered by <code style="background: #2d2d2d; padding: 2px 6px; border-radius: 3px; color: #D97757;">{model_name}</code></p>',
+        f'''<p style="font-size: 0.8rem; color: #888; margin-top: -0.5rem; margin-bottom: 1rem;">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="vertical-align: middle; margin-right: 4px;">
+            <rect x="2" y="2" width="20" height="20" rx="4" fill="#D97757"/>
+            <path d="M7 12h10M12 7v10" stroke="white" stroke-width="2" stroke-linecap="round"/>
+        </svg>
+        Powered by <code style="background: #2d2d2d; padding: 2px 6px; border-radius: 3px; color: #D97757;">{model_name}</code>
+        </p>''',
         unsafe_allow_html=True
     )
 except Exception:

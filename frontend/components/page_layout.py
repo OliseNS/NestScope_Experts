@@ -95,15 +95,21 @@ def render_sidebar(active_page: str = "home"):
     Args:
         active_page: Current page identifier ("home", "nestchat", "nestvision", "nestdb", "status")
     """
-    # Navigation Section
-    render_sidebar_section("Navigation")
+    from .sidebar import render_sidebar_header
+    
+    # Brand Header
+    render_sidebar_header()
+
+    # Exploration tools Section
+    render_sidebar_section("Exploration tools")
 
     # Home button
     if st.button(
         "🏠 Home",
         use_container_width=True,
         help="Return to home page",
-        type="primary" if active_page == "home" else "secondary"
+        type="primary" if active_page == "home" else "secondary",
+        key="sb_nav_home"
     ):
         st.switch_page("app.py")
 
@@ -112,7 +118,8 @@ def render_sidebar(active_page: str = "home"):
         "💬 NestChat",
         use_container_width=True,
         help="Natural language data queries",
-        type="primary" if active_page == "nestchat" else "secondary"
+        type="primary" if active_page == "nestchat" else "secondary",
+        key="sb_nav_chat"
     ):
         st.switch_page("pages/01_nest_chat.py")
 
@@ -121,7 +128,8 @@ def render_sidebar(active_page: str = "home"):
         "🦅 NestVision",
         use_container_width=True,
         help="AI bird detection & counting",
-        type="primary" if active_page == "nestvision" else "secondary"
+        type="primary" if active_page == "nestvision" else "secondary",
+        key="sb_nav_vision"
     ):
         st.switch_page("pages/02_nest_vision.py")
 
@@ -130,27 +138,39 @@ def render_sidebar(active_page: str = "home"):
         "🌊 Flood Intelligence",
         use_container_width=True,
         help="Automated multi-modal flood hazard monitoring",
-        type="primary" if active_page == "coastal_risk" else "secondary"
+        type="primary" if active_page == "coastal_risk" else "secondary",
+        key="sb_nav_flood"
     ):
         st.switch_page("pages/06_coastal_risk.py")
 
-    # NestDB button
-    if st.button(
-        "🗄️ NestDB",
-        use_container_width=True,
-        help="Database management interface",
-        type="primary" if active_page == "nestdb" else "secondary"
-    ):
-        st.switch_page("pages/04_db_editor.py")
+    # Resources section
+    render_sidebar_section("Resources")
 
-    # Tools section
-    render_sidebar_section("Tools")
+    # Help & Documentation button
+    if st.button(
+        "❓ Help & Documentation",
+        use_container_width=True,
+        help="Comprehensive guide to using NestScope",
+        type="primary" if active_page == "help" else "secondary",
+        key="sb_nav_help"
+    ):
+        st.switch_page("pages/07_help.py")
+
+    # Expert tools section
+    render_sidebar_section("Expert tools")
 
     st.link_button(
         "🧑‍🔬 Nestperts",
         "http://localhost:5000",
         use_container_width=True,
         help="Expert species training platform"
+    )
+
+    st.link_button(
+        "🗄️ NestDB",
+        "http://localhost:5000/nestdb",
+        use_container_width=True,
+        help="Database management interface"
     )
 
     # System Status section

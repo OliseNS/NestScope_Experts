@@ -53,12 +53,12 @@ A three-tier processing infrastructure combining:
 
 ### Why We'll Win
 
-1. ✅ **Real customer**: The Water Institute staff are judges (Derek, Jessica)
-2. ✅ **Proven need**: They explicitly requested this in the challenge description
-3. ✅ **Unique niche**: Edge deployment (not just cloud AI like other teams)
-4. ✅ **Physical component**: Jetson Nano hardware (Dustin's advice)
-5. ✅ **Business model**: Clear path to $1.2M revenue in 5 years
-6. ✅ **Conservation impact**: Unlock data for endangered species protection
+1.  **Real customer**: The Water Institute staff are judges (Derek, Jessica)
+2.  **Proven need**: They explicitly requested this in the challenge description
+3.  **Unique niche**: Edge deployment (not just cloud AI like other teams)
+4.  **Physical component**: Jetson Nano hardware (Dustin's advice)
+5.  **Business model**: Clear path to $1.2M revenue in 5 years
+6.  **Conservation impact**: Unlock data for endangered species protection
 
 ---
 
@@ -152,7 +152,7 @@ A three-tier processing infrastructure combining:
 **Performance Metrics (Current - Cloud Deployment):**
 - Inference time: ~2-5 seconds per image (CPU)
 - Inference time: ~0.5-1 second per image (GPU)
-- Detection accuracy: Not formally benchmarked yet ⚠️
+- Detection accuracy: Not formally benchmarked yet 
 - Confidence threshold: 0.25 (default)
 
 **Inference Modes:**
@@ -183,7 +183,7 @@ A three-tier processing infrastructure combining:
 - Read-only database (security)
 - Query validation (blocks INSERT/UPDATE/DELETE)
 
-**Accuracy:** Not formally validated against ground truth ⚠️
+**Accuracy:** Not formally validated against ground truth 
 
 #### Component 3: Nestperts (Expert Annotation Platform)
 
@@ -198,7 +198,7 @@ A three-tier processing infrastructure combining:
 - Bounding box correction tools
 - Multi-expert annotation workflow
 
-**Integration:** Exports YOLO training data but **not yet connected to model retraining pipeline** ⚠️
+**Integration:** Exports YOLO training data but **not yet connected to model retraining pipeline** 
 
 ### Proposed Edge Deployment Architecture
 
@@ -305,23 +305,23 @@ POST /api/ingest/jetson-output
 
 **Critical Pre-Demo Tasks:**
 
-1. ✅ **Accuracy Benchmark** (Derek's reliability concern)
+1.  **Accuracy Benchmark** (Derek's reliability concern)
    - Compare NestScope detections vs. manually dotted images
    - Calculate precision, recall, F1 score, mAP@50
    - Test on diverse colony types (pelicans, terns, mixed species)
    - Document failure cases (dense vegetation, poor lighting)
 
-2. ✅ **NestChat SQL Accuracy** (Jessica's validation point)
+2.  **NestChat SQL Accuracy** (Jessica's validation point)
    - Create test suite of 50 common questions
    - Validate generated SQL against ground truth
    - Measure query success rate (target: >90%)
 
-3. ✅ **Jetson Nano Performance** (if pursuing edge deployment)
+3.  **Jetson Nano Performance** (if pursuing edge deployment)
    - Benchmark YOLOv8n on real aerial survey images
    - Measure throughput, latency, memory usage
    - Test batch processing pipeline
 
-4. ⚠️ **End-to-End Integration Test**
+4.  **End-to-End Integration Test**
    - SD card images → Jetson processing → GIS export → QGIS import
    - Verify georeferencing accuracy (<1 meter target)
 
@@ -439,12 +439,12 @@ Two Water Institute staff are judges. We have insider validation of the problem 
 - **Jessica Henkel:** Director of Research Operations / Director of RESTORE Act Center of Excellence
 
 **Pain Points:**
-1. ✅ Manual dotting bottleneck (acknowledged in challenge description)
-2. ✅ Need for faster data access (stakeholder meetings, grant proposals)
-3. ✅ Limited budget (conservation funding is constrained)
-4. ✅ Public transparency requirements (Deepwater Horizon oversight)
-5. ⚠️ Reliability concerns (Derek's feedback)
-6. ⚠️ Integration with existing systems (NOAA DIVER, CPRA CIMS)
+1.  Manual dotting bottleneck (acknowledged in challenge description)
+2.  Need for faster data access (stakeholder meetings, grant proposals)
+3.  Limited budget (conservation funding is constrained)
+4.  Public transparency requirements (Deepwater Horizon oversight)
+5.  Reliability concerns (Derek's feedback)
+6.  Integration with existing systems (NOAA DIVER, CPRA CIMS)
 
 **Buying Process:**
 - **Decision Makers:** Executive Director, Research Directors
@@ -693,7 +693,7 @@ Two Water Institute staff are judges. We have insider validation of the problem 
 
 ## Strategic Recommendations
 
-### Recommendation 1: ✅ Pursue Jetson Nano Demo (with Caveats)
+### Recommendation 1:  Pursue Jetson Nano Demo (with Caveats)
 
 **Rationale:**
 - Physical hardware differentiates from cloud-only solutions (Dustin's advice validated)
@@ -722,7 +722,7 @@ Two Water Institute staff are judges. We have insider validation of the problem 
 **Demo Script (30 seconds):**
 > "This is a Jetson Nano—a $150 computer that runs on 10 watts of power. After a survey flight, the biologist inserts the SD card here [gesture], and our software processes thousands of images overnight. By morning, they have bird counts and GIS-ready data. No internet required, no cloud costs, deployable anywhere."
 
-### Recommendation 2: ✅ Create Validation Report Immediately
+### Recommendation 2:  Create Validation Report Immediately
 
 **Rationale:**
 - Addresses Derek Dohler's #1 concern about reliability
@@ -744,7 +744,7 @@ Two Water Institute staff are judges. We have insider validation of the problem 
 
 **Distribution:** Include in pitch deck, bring printed copies to demo day, email to judges post-presentation
 
-### Recommendation 3: ✅ Emphasize Partnership with Colibri, Not Replacement
+### Recommendation 3:  Emphasize Partnership with Colibri, Not Replacement
 
 **Rationale:**
 - Colibri is established incumbent with relationships
@@ -757,7 +757,7 @@ Two Water Institute staff are judges. We have insider validation of the problem 
 
 **Outreach:** Consider contacting Colibri pre-demo to gauge partnership interest (could be powerful endorsement)
 
-### Recommendation 4: ✅ Lead with Impact Story, Not Technology
+### Recommendation 4:  Lead with Impact Story, Not Technology
 
 **Rationale:**
 - Judges are conservationists first, technologists second
@@ -777,7 +777,7 @@ Two Water Institute staff are judges. We have insider validation of the problem 
 **Opening Line:**
 > "Imagine spending $5 million to collect data, then leaving 95% of it unanalyzed because you can't afford to look at it. That's the reality of Gulf Coast avian monitoring today. NestScope changes this."
 
-### Recommendation 5: ⚠️ De-Emphasize Species Classification (For Now)
+### Recommendation 5:  De-Emphasize Species Classification (For Now)
 
 **Rationale:**
 - Current model does NOT do species classification (just generic "bird")
@@ -790,7 +790,7 @@ Two Water Institute staff are judges. We have insider validation of the problem 
 
 **Future Capability:** Show Nestperts platform as the path to species classification via active learning
 
-### Recommendation 6: ✅ Create One-Page Handout for Judges
+### Recommendation 6:  Create One-Page Handout for Judges
 
 **Content:**
 - **Problem:** 385,000 unanalyzed images, $13M manual cost
@@ -806,7 +806,7 @@ Two Water Institute staff are judges. We have insider validation of the problem 
 
 **Distribution:** Hand to every judge after presentation, leave extras at booth
 
-### Recommendation 7: ✅ Practice Pitch 20+ Times
+### Recommendation 7:  Practice Pitch 20+ Times
 
 **Rationale:**
 - Presentation polish was Jessica's explicit feedback
@@ -921,7 +921,7 @@ Two Water Institute staff are judges. We have insider validation of the problem 
 - [ ] Review judge feedback from semifinals (if applicable)
 - [ ] Finalize talking points for each judge's concerns
 
-**Thursday, March 20: DEMO DAY** 🎯
+**Thursday, March 20: DEMO DAY** 
 - [ ] Arrive 1 hour early to set up
 - [ ] Test all equipment one final time
 - [ ] Mingle with judges before presentations (build rapport)
@@ -950,15 +950,15 @@ Two Water Institute staff are judges. We have insider validation of the problem 
 4. **Answer his question directly:** "Here's Dr. Sarah Chen, she uses this for..."
 
 **Red Flags to Avoid:**
-- ❌ Overpromising accuracy
-- ❌ Dismissing his concerns as trivial
-- ❌ Pure technology focus without use case
+-  Overpromising accuracy
+-  Dismissing his concerns as trivial
+-  Pure technology focus without use case
 
 **Green Flags:**
-- ✅ Quantitative validation metrics
-- ✅ Failure case analysis
-- ✅ Clear customer persona
-- ✅ Comparison to existing methods
+-  Quantitative validation metrics
+-  Failure case analysis
+-  Clear customer persona
+-  Comparison to existing methods
 
 #### Jessica Henkel (The Water Institute) - The Pragmatist
 
@@ -975,15 +975,15 @@ Two Water Institute staff are judges. We have insider validation of the problem 
 4. **Highlight AWS integration:** "We researched your existing architecture..."
 
 **Red Flags to Avoid:**
-- ❌ Sloppy presentation (she noticed this in feedback)
-- ❌ Demo-only with no product vision
-- ❌ Ignoring her expert annotation feedback
+-  Sloppy presentation (she noticed this in feedback)
+-  Demo-only with no product vision
+-  Ignoring her expert annotation feedback
 
 **Green Flags:**
-- ✅ Polished, professional presentation
-- ✅ Nestperts platform demo
-- ✅ Clear product roadmap
-- ✅ Integration story
+-  Polished, professional presentation
+-  Nestperts platform demo
+-  Clear product roadmap
+-  Integration story
 
 #### Mikala Streeter (Wild Oasis) - The Champion
 
@@ -1000,15 +1000,15 @@ Two Water Institute staff are judges. We have insider validation of the problem 
 4. **Emphasize environmental justice:** "Data transparency builds trust"
 
 **Red Flags to Avoid:**
-- ❌ Pure technology jargon
-- ❌ Forgetting the human element
-- ❌ Academic exercise without real-world application
+-  Pure technology jargon
+-  Forgetting the human element
+-  Academic exercise without real-world application
 
 **Green Flags:**
-- ✅ Emotional storytelling
-- ✅ Community impact emphasis
-- ✅ Ease-of-use demonstration
-- ✅ Conservation outcomes focus
+-  Emotional storytelling
+-  Community impact emphasis
+-  Ease-of-use demonstration
+-  Conservation outcomes focus
 
 ### Winning the Room: Psychological Tactics
 
@@ -1125,19 +1125,19 @@ Two Water Institute staff are judges. We have insider validation of the problem 
 ### Body Language and Stage Presence
 
 **Dos:**
-- ✅ Stand confidently (open posture, shoulders back)
-- ✅ Make eye contact with all judges, not just one
-- ✅ Smile when talking about impact (conveys passion)
-- ✅ Use hand gestures to emphasize key points
-- ✅ Slow down for important numbers ($13M, 100x, 95%)
-- ✅ Pause after big reveals (let it land)
+-  Stand confidently (open posture, shoulders back)
+-  Make eye contact with all judges, not just one
+-  Smile when talking about impact (conveys passion)
+-  Use hand gestures to emphasize key points
+-  Slow down for important numbers ($13M, 100x, 95%)
+-  Pause after big reveals (let it land)
 
 **Don'ts:**
-- ❌ Fidgeting or swaying (conveys nervousness)
-- ❌ Reading directly from slides (breaks connection)
-- ❌ Apologizing for demo glitches (stay confident)
-- ❌ Speaking in monotone (boring)
-- ❌ Rushing through (shows lack of preparation)
+-  Fidgeting or swaying (conveys nervousness)
+-  Reading directly from slides (breaks connection)
+-  Apologizing for demo glitches (stay confident)
+-  Speaking in monotone (boring)
+-  Rushing through (shows lack of preparation)
 
 ---
 

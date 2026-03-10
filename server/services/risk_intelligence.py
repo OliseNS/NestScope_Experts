@@ -133,7 +133,7 @@ class RiskIntelligenceService:
             elif risk_score > 50:
                 level, color, action = "HIGH", "#FFA500", "Structural Reinforcement Needed"
             elif risk_score > 25:
-                level, color, action = "MEDIUM", "#FFFF00", "Enhanced Monitoring"
+                level, color, action = "MODERATE", "#FFFF00", "Enhanced Monitoring"
             else:
                 level, color, action = "LOW", "#00FF00", "Routine Maintenance"
 

@@ -170,10 +170,11 @@ CLIENT_PID=$!
 # Wait a bit for Streamlit to start
 sleep 3
 
-# Start Nestperts Flask app in background
-echo -e "${GREEN}Starting Nestperts app on http://localhost:5000${NC}"
-$PYTHON_CMD labeller/app.py --data labeller/nestvision > logs/nestperts.log 2>&1 &
+# Start Nestperts V2 Flask app in background with unlimited uploads
+echo -e "${GREEN}Starting Nestperts V2 app on http://localhost:5000 (unlimited uploads)${NC}"
+cd labeller && bash run_nestperts.sh > ../logs/nestperts.log 2>&1 &
 LABELLER_PID=$!
+cd ..
 
 # Wait a bit for Nestperts to start
 sleep 2
@@ -183,7 +184,7 @@ echo -e "${GREEN}✓ NestScope is running!${NC}"
 echo -e "${BLUE}================================${NC}"
 echo -e "\n${GREEN}FastAPI Server:${NC}  http://localhost:8000"
 echo -e "${GREEN}Streamlit App:${NC}   http://localhost:8501"
-echo -e "${GREEN}Nestperts App:${NC}   http://localhost:5000"
+echo -e "${GREEN}Nestperts V2:${NC}    http://localhost:5000"
 echo -e "${GREEN}API Docs:${NC}        http://localhost:8000/docs"
 echo -e "\n${YELLOW}Logs:${NC}"
 echo -e "  Server:    tail -f logs/server.log"

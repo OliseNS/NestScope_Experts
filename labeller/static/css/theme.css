@@ -1,0 +1,311 @@
+/**
+ * Nestperts - Coastal Scientific Interface Theme
+ * Nature-inspired color system with dark/light modes
+ */
+
+:root {
+    /* Brand Colors - Claude Orange */
+    --brand-primary: #D97757;
+    --brand-primary-hover: #c5654a;
+    --brand-primary-light: #e8b896;
+
+    /* Semantic Colors */
+    --success: #4a9d5f;
+    --warning: #d4a02f;
+    --error: #c74a4a;
+    --info: #4a7f9d;
+
+    /* Typography Scale */
+    --font-display: 'Merriweather', Georgia, serif;
+    --font-body: 'Work Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+
+    --text-xs: 0.75rem;
+    --text-sm: 0.875rem;
+    --text-base: 1rem;
+    --text-lg: 1.125rem;
+    --text-xl: 1.25rem;
+    --text-2xl: 1.5rem;
+    --text-3xl: 2rem;
+    --text-4xl: 2.5rem;
+    --text-5xl: 3.5rem;
+
+    /* Spacing Scale */
+    --space-1: 0.25rem;
+    --space-2: 0.5rem;
+    --space-3: 0.75rem;
+    --space-4: 1rem;
+    --space-5: 1.25rem;
+    --space-6: 1.5rem;
+    --space-8: 2rem;
+    --space-10: 2.5rem;
+    --space-12: 3rem;
+    --space-16: 4rem;
+    --space-20: 5rem;
+
+    /* Border Radius */
+    --radius-sm: 6px;
+    --radius-md: 10px;
+    --radius-lg: 16px;
+    --radius-xl: 24px;
+    --radius-full: 9999px;
+
+    /* Shadows */
+    --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.08);
+    --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.12);
+    --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.16);
+    --shadow-xl: 0 16px 48px rgba(0, 0, 0, 0.24);
+
+    /* Transitions */
+    --transition-fast: 150ms cubic-bezier(0.4, 0, 0.2, 1);
+    --transition-base: 250ms cubic-bezier(0.4, 0, 0.2, 1);
+    --transition-slow: 400ms cubic-bezier(0.4, 0, 0.2, 1);
+
+    /* Z-index Scale */
+    --z-dropdown: 100;
+    --z-modal: 200;
+    --z-toast: 300;
+    --z-tooltip: 400;
+}
+
+/* Light Mode (Default) - Coastal Beach Theme */
+[data-theme="light"] {
+    /* Backgrounds - Beach Sand & Sky */
+    --bg-primary: #fdfbf7;
+    --bg-secondary: #f5f0e8;
+    --bg-tertiary: #ebe3d5;
+    --bg-elevated: #ffffff;
+
+    /* Surfaces */
+    --surface-base: #ffffff;
+    --surface-hover: #f9f6f1;
+    --surface-active: #f0ebe2;
+    --surface-border: rgba(101, 87, 68, 0.15);
+
+    /* Text - Driftwood & Charcoal */
+    --text-primary: #2a2520;
+    --text-secondary: #5c5247;
+    --text-tertiary: #7f7669;
+    --text-disabled: #a8a095;
+    --text-inverse: #fdfbf7;
+
+    /* Interactive States */
+    --interactive-base: var(--brand-primary);
+    --interactive-hover: var(--brand-primary-hover);
+    --interactive-active: #b35838;
+
+    /* Overlay */
+    --overlay: rgba(42, 37, 32, 0.5);
+    --overlay-heavy: rgba(42, 37, 32, 0.75);
+
+    /* Nature Accents */
+    --accent-ocean: #4a7f9d;
+    --accent-seagrass: #6b8e4e;
+    --accent-sunset: #d97757;
+    --accent-shell: #e8dcc9;
+}
+
+/* Dark Mode - Deep Ocean Theme */
+[data-theme="dark"] {
+    /* Backgrounds - Deep Ocean */
+    --bg-primary: #0f1419;
+    --bg-secondary: #1a1f26;
+    --bg-tertiary: #252b35;
+    --bg-elevated: #2a3139;
+
+    /* Surfaces */
+    --surface-base: #1a1f26;
+    --surface-hover: #252b35;
+    --surface-active: #2f3844;
+    --surface-border: rgba(255, 255, 255, 0.1);
+
+    /* Text - Moonlight & Sea Foam */
+    --text-primary: #e8e6e3;
+    --text-secondary: #b8b5b0;
+    --text-tertiary: #8a8680;
+    --text-disabled: #5c5954;
+    --text-inverse: #0f1419;
+
+    /* Interactive States */
+    --interactive-base: var(--brand-primary);
+    --interactive-hover: var(--brand-primary-light);
+    --interactive-active: #e8b896;
+
+    /* Overlay */
+    --overlay: rgba(15, 20, 25, 0.6);
+    --overlay-heavy: rgba(15, 20, 25, 0.85);
+
+    /* Nature Accents */
+    --accent-ocean: #6ba3c7;
+    --accent-seagrass: #8db068;
+    --accent-sunset: #e8b896;
+    --accent-shell: #d4c9b5;
+
+    /* Enhanced Shadows for Dark Mode */
+    --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.3);
+    --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.4);
+    --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.5);
+    --shadow-xl: 0 16px 48px rgba(0, 0, 0, 0.6);
+}
+
+/* Global Resets & Base Styles */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+html {
+    font-size: 16px;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+    font-family: var(--font-body);
+    font-size: var(--text-base);
+    line-height: 1.6;
+    color: var(--text-primary);
+    background: var(--bg-primary);
+    transition: background var(--transition-slow), color var(--transition-slow);
+}
+
+/* Typography */
+h1, h2, h3, h4, h5, h6 {
+    font-family: var(--font-display);
+    font-weight: 600;
+    line-height: 1.2;
+    color: var(--text-primary);
+}
+
+h1 { font-size: var(--text-5xl); margin-bottom: var(--space-6); }
+h2 { font-size: var(--text-4xl); margin-bottom: var(--space-5); }
+h3 { font-size: var(--text-3xl); margin-bottom: var(--space-4); }
+h4 { font-size: var(--text-2xl); margin-bottom: var(--space-3); }
+h5 { font-size: var(--text-xl); margin-bottom: var(--space-3); }
+h6 { font-size: var(--text-lg); margin-bottom: var(--space-2); }
+
+p {
+    margin-bottom: var(--space-4);
+    color: var(--text-secondary);
+    line-height: 1.7;
+}
+
+a {
+    color: var(--interactive-base);
+    text-decoration: none;
+    transition: color var(--transition-fast);
+}
+
+a:hover {
+    color: var(--interactive-hover);
+}
+
+/* Utility Classes */
+.text-primary { color: var(--text-primary) !important; }
+.text-secondary { color: var(--text-secondary) !important; }
+.text-tertiary { color: var(--text-tertiary) !important; }
+.text-brand { color: var(--brand-primary) !important; }
+
+.bg-surface { background: var(--surface-base); }
+.bg-elevated { background: var(--bg-elevated); }
+
+.shadow-sm { box-shadow: var(--shadow-sm); }
+.shadow-md { box-shadow: var(--shadow-md); }
+.shadow-lg { box-shadow: var(--shadow-lg); }
+
+.rounded-sm { border-radius: var(--radius-sm); }
+.rounded-md { border-radius: var(--radius-md); }
+.rounded-lg { border-radius: var(--radius-lg); }
+.rounded-xl { border-radius: var(--radius-xl); }
+
+/* Animations */
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(8px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+@keyframes slideIn {
+    from {
+        opacity: 0;
+        transform: translateX(-16px);
+    }
+    to {
+        opacity: 1;
+        transform: translateX(0);
+    }
+}
+
+@keyframes pulse {
+    0%, 100% {
+        opacity: 1;
+    }
+    50% {
+        opacity: 0.6;
+    }
+}
+
+.animate-fade-in {
+    animation: fadeIn var(--transition-base) ease-out;
+}
+
+.animate-slide-in {
+    animation: slideIn var(--transition-base) ease-out;
+}
+
+/* Stagger animation delays for children */
+.stagger-children > * {
+    animation: fadeIn var(--transition-slow) ease-out backwards;
+}
+
+.stagger-children > *:nth-child(1) { animation-delay: 0ms; }
+.stagger-children > *:nth-child(2) { animation-delay: 80ms; }
+.stagger-children > *:nth-child(3) { animation-delay: 160ms; }
+.stagger-children > *:nth-child(4) { animation-delay: 240ms; }
+.stagger-children > *:nth-child(5) { animation-delay: 320ms; }
+.stagger-children > *:nth-child(6) { animation-delay: 400ms; }
+
+/* Scrollbar Styling */
+::-webkit-scrollbar {
+    width: 12px;
+    height: 12px;
+}
+
+::-webkit-scrollbar-track {
+    background: var(--bg-secondary);
+}
+
+::-webkit-scrollbar-thumb {
+    background: var(--surface-border);
+    border-radius: var(--radius-full);
+    border: 2px solid var(--bg-secondary);
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: var(--text-tertiary);
+}
+
+/* Focus Styles */
+:focus-visible {
+    outline: 2px solid var(--brand-primary);
+    outline-offset: 2px;
+}
+
+/* Selection */
+::selection {
+    background: var(--brand-primary);
+    color: white;
+}
+
+/* Print Styles */
+@media print {
+    body {
+        background: white;
+        color: black;
+    }
+}

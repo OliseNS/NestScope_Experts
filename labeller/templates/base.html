@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Nestperts - Annotation Platform{% endblock %}</title>
+
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Merriweather:wght@400;700;900&family=Work+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+    <!-- Styles -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/theme.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/components.css') }}">
+    {% block extra_css %}{% endblock %}
+
+    <!-- Theme (load immediately to prevent flash) -->
+    <script src="{{ url_for('static', filename='js/theme.js') }}"></script>
+</head>
+<body>
+    <!-- Navigation -->
+    <nav class="navbar">
+        <div class="navbar-content">
+            <a href="/" class="navbar-brand">
+                <span class="navbar-brand-icon">🦅</span>
+                <span>Nestperts</span>
+            </a>
+
+            <ul class="navbar-nav">
+                <li><a href="/" class="nav-link {% if active_page == 'projects' %}active{% endif %}">Projects</a></li>
+                <li><a href="/users" class="nav-link {% if active_page == 'users' %}active{% endif %}">Users</a></li>
+                <li><a href="/nestdb" class="nav-link {% if active_page == 'nestdb' %}active{% endif %}">NestDB</a></li>
+                <li><a href="/help" class="nav-link {% if active_page == 'help' %}active{% endif %}">Help</a></li>
+                <li><a href="http://localhost:8501" target="_blank" class="nav-link">← Back to NestScope</a></li>
+                <li>
+                    <button class="theme-toggle" aria-label="Toggle theme">
+                        <div class="theme-toggle-thumb">🌙</div>
+                    </button>
+                </li>
+            </ul>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <main>
+        {% block content %}{% endblock %}
+    </main>
+
+    <!-- Toast Notifications Container -->
+    <div id="toast-container" style="position: fixed; top: 80px; right: 20px; z-index: 300;"></div>
+
+    <!-- Common Scripts -->
+    <script>
+        // Utility: Show toast notification
+        function showToast(message, type = 'info') {
+            const container = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+            toast.className = `card shadow-lg animate-slide-in`;
+            toast.style.cssText = `
+                margin-bottom: var(--space-3);
+                padding: var(--space-4);
+                min-width: 300px;
+                border-left: 4px solid var(--${type === 'success' ? 'success' : type === 'error' ? 'error' : 'info'});
+            `;
+            toast.textContent = message;
+
+            container.appendChild(toast);
+
+            setTimeout(() => {
+                toast.style.animation = 'fadeIn var(--transition-base) ease-out reverse';
+                setTimeout(() => toast.remove(), 250);
+            }, 3000);
+        }
+
+        // Utility: Fetch wrapper with error handling
+        async function fetchJSON(url, options = {}) {
+            try {
+                const response = await fetch(url, {
+                    ...options,
+                    headers: {
+                        'Content-Type': 'application/json',
+                        ...options.headers
+                    }
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+
+                return await response.json();
+            } catch (error) {
+                console.error('Fetch error:', error);
+                showToast(error.message, 'error');
+                throw error;
+            }
+        }
+    </script>
+
+    {% block extra_js %}{% endblock %}
+</body>
+</html>

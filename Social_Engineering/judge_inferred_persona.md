@@ -110,7 +110,7 @@ The Community Resilience Center works to "enhance and expand climate resilience 
 
 ### 5. **Geographic Alignment**
 The Water Institute focuses on the Mississippi River Delta and Gulf Coast. NestScope covers:
-- 🗺️ Texas, Louisiana, Mississippi, Alabama, Florida (2010-2021)
+- 🗺 Texas, Louisiana, Mississippi, Alabama, Florida (2010-2021)
 - 📍 Hundreds of colonies across the exact region The Water Institute serves
 - 🌊 Coastal and barrier island habitats critical for storm protection research
 
@@ -184,16 +184,16 @@ The key is **appropriate use**: NestScope accelerates the *process* of getting a
 
 The Water Institute works on "interconnected environmental and social challenges." Environmental justice requires data accessibility. Currently:
 
-- ❌ **Data silos**: Only SQL experts can query databases
-- ❌ **Black boxes**: Communities don't understand how scientists get numbers
-- ❌ **Gatekeeping**: Every data request goes through bottlenecks
+-  **Data silos**: Only SQL experts can query databases
+-  **Black boxes**: Communities don't understand how scientists get numbers
+-  **Gatekeeping**: Every data request goes through bottlenecks
 
 NestScope enables:
 
-- ✅ **Transparency**: Anyone can see the SQL query that produced results
-- ✅ **Reproducibility**: Share the question, get the same answer
-- ✅ **Empowerment**: Community scientists can explore data independently
-- ✅ **Education**: Non-experts learn what questions are answerable
+-  **Transparency**: Anyone can see the SQL query that produced results
+-  **Reproducibility**: Share the question, get the same answer
+-  **Empowerment**: Community scientists can explore data independently
+-  **Education**: Non-experts learn what questions are answerable
 
 This aligns perfectly with The Water Institute's vision of *"a future where all of humanity can adapt and thrive alongside nature in a changing world."*
 

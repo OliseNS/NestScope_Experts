@@ -93,21 +93,21 @@ A pilot implementation is available for Queen Bess Island (Louisiana, 2023) demo
 
 ### What They're Building
 
-✅ Better georeferencing workflow
-✅ GIS-based dotting interface
-✅ Web GIS frontend for data access
-✅ Integration with NAIP orthoimagery
-✅ Self-service query tools
+ Better georeferencing workflow
+ GIS-based dotting interface
+ Web GIS frontend for data access
+ Integration with NAIP orthoimagery
+ Self-service query tools
 
 ### What They're NOT Building (But Need)
 
-❌ **Automated bird detection** (still manual dotting in GIS)
-❌ **Real-time processing** (still post-survey workflow)
-❌ **AI-powered species classification**
-❌ **Edge deployment** (in-field processing)
-❌ **Batch processing of 350,000+ undotted images**
-❌ **Quality control automation**
-❌ **Anomaly detection** (unusual population changes)
+ **Automated bird detection** (still manual dotting in GIS)
+ **Real-time processing** (still post-survey workflow)
+ **AI-powered species classification**
+ **Edge deployment** (in-field processing)
+ **Batch processing of 350,000+ undotted images**
+ **Quality control automation**
+ **Anomaly detection** (unusual population changes)
 
 ---
 

@@ -736,6 +736,10 @@
                     Save & Continue
                     <div style="font-size: 0.75rem; opacity: 0.8; margin-top: 0.25rem;">(Ctrl+S)</div>
                 </button>
+                <button class="btn-secondary" onclick="deleteCurrentImage()" title="Delete low-quality image (Shift+Delete)" style="font-size: 0.875rem; background: rgba(220, 38, 38, 0.15); border-color: rgba(220, 38, 38, 0.4); color: #ef4444; margin-top: 0.5rem;">
+                    🗑️ Delete Image
+                    <div style="font-size: 0.75rem; opacity: 0.8; margin-top: 0.25rem;">(Shift+Delete)</div>
+                </button>
             </div>
         </aside>
 
@@ -750,6 +754,7 @@
                     <div><strong>Wheel</strong> → Zoom to cursor</div>
                     <div><strong>H or Space+Drag</strong> → Pan</div>
                     <div><strong>Delete</strong> → Remove box</div>
+                    <div><strong>Shift+Delete</strong> → Delete image</div>
                     <div><strong>Ctrl+S</strong> → Save & next</div>
                 </div>
             </div>
@@ -782,26 +787,28 @@
 
     <script>
 // Initialize from Flask template
+const PROJECT_ID = {{ project_id | tojson | safe }};
 const USERNAME = {{ username | tojson | safe }};
 const IMAGE_NAME = {{ image_name | tojson | safe }};
 const IMAGE_URL = {{ image_url | tojson | safe }};
 const CURRENT_INDEX = {{ current_index }};
 const TOTAL_IMAGES = {{ total_images }};
-const PREV_INDEX = {{ prev_index }};
-const NEXT_INDEX = {{ next_index }};
+const PREV_INDEX = {{ prev_index | tojson | safe }};
+const NEXT_INDEX = {{ next_index | tojson | safe }};
 const EXISTING_BOXES = {{ boxes | tojson | safe }};
 const SPECIES_DATA = {{ species_list | tojson | safe }};
 const QUESTION_TREE = {{ questions | tojson | safe }};
 
 // Debug logging
-console.log('Editor initialized:', {
-    username: USERNAME,
-    image: IMAGE_NAME,
-    imageUrl: IMAGE_URL,
-    index: `${CURRENT_INDEX}/${TOTAL_IMAGES}`,
-    boxes: EXISTING_BOXES.length,
-    species: SPECIES_DATA.length
-});
+console.log('=== EDITOR INITIALIZATION ===');
+console.log('Username:', USERNAME);
+console.log('Project ID:', PROJECT_ID);
+console.log('Image name:', IMAGE_NAME);
+console.log('Image URL:', IMAGE_URL);
+console.log('Current index:', CURRENT_INDEX, '/', TOTAL_IMAGES);
+console.log('Existing boxes:', EXISTING_BOXES.length);
+console.log('Species data:', SPECIES_DATA.length);
+console.log('==============================');
 
 // Global state
 let canvas, ctx;
@@ -898,9 +905,11 @@ function initCanvas() {
 
     imageObj.onerror = function(e) {
         console.error(`✗ Failed to load image: ${IMAGE_URL}`);
-        alert(`Error loading image: ${IMAGE_NAME}\n\nCheck the browser console for details.`);
+        console.error('Error event:', e);
+        alert(`Error loading image: ${IMAGE_NAME}\n\nURL: ${IMAGE_URL}\n\nCheck the browser console for details.`);
     };
 
+    console.log('Setting imageObj.src to:', IMAGE_URL);
     imageObj.src = IMAGE_URL;
 }
 
@@ -1429,6 +1438,7 @@ async function handleSAMClick(x, y) {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
+                project_id: PROJECT_ID,
                 image_name: IMAGE_NAME,
                 points: [[x, y]]
             })
@@ -2191,6 +2201,7 @@ async function runAIClassification() {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
+                project_id: PROJECT_ID,
                 image_name: IMAGE_NAME,  // Use the JavaScript variable
                 bbox: {
                     x_center: selectedBox.x_center,
@@ -2829,7 +2840,16 @@ function deleteBox(boxId) {
 }
 
 // Show toast notification
-function showToast(message) {
+function showToast(message, type = 'info') {
+    // Determine border color based on type
+    const borderColors = {
+        'success': '#7cb342',
+        'error': '#ef4444',
+        'info': 'var(--orange-primary)',
+        'warning': '#fbbf24'
+    };
+    const borderColor = borderColors[type] || borderColors['info'];
+
     // Create toast element
     const toast = document.createElement('div');
     toast.style.cssText = `
@@ -2841,7 +2861,7 @@ function showToast(message) {
         color: var(--text-primary);
         padding: 1rem 1.5rem;
         border-radius: 12px;
-        border: 2px solid var(--orange-primary);
+        border: 2px solid ${borderColor};
         font-weight: 600;
         z-index: 10000;
         animation: slideInRight 0.3s ease-out;
@@ -2909,10 +2929,11 @@ async function saveOnly() {
             boxes: yoloBoxes.length
         });
 
-        const response = await fetch('/api/save_annotation', {
+        const response = await fetch('/api/save_annotations', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
+                project_id: PROJECT_ID,
                 image_name: IMAGE_NAME,
                 boxes: yoloBoxes,
                 username: USERNAME
@@ -2948,20 +2969,66 @@ async function saveAndNext() {
     }
 }
 
+// Delete current image (for low-quality images)
+// Fast deletion without confirmation for quick purging of bad images
+async function deleteCurrentImage() {
+    try {
+        // Show deletion in progress
+        showToast('🗑️ Deleting image...', 'info');
+
+        const response = await fetch('/api/delete_image', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                project_id: PROJECT_ID,
+                image_name: IMAGE_NAME,
+                username: USERNAME
+            })
+        });
+
+        const result = await response.json();
+
+        if (result.success) {
+            showToast('✓ Deleted: ' + IMAGE_NAME, 'success');
+
+            // Navigate immediately to next image (fast purging workflow)
+            setTimeout(() => {
+                if (NEXT_INDEX !== null) {
+                    window.location.href = `/project/${PROJECT_ID}/editor/${USERNAME}/${NEXT_INDEX}`;
+                } else if (PREV_INDEX !== null) {
+                    window.location.href = `/project/${PROJECT_ID}/editor/${USERNAME}/${PREV_INDEX}`;
+                } else {
+                    // No more images, go back to dashboard
+                    window.location.href = `/project/${PROJECT_ID}`;
+                }
+            }, 500); // Faster navigation for quick purging
+        } else {
+            showToast('❌ Delete failed: ' + (result.error || 'Unknown error'), 'error');
+        }
+    } catch (error) {
+        console.error('Delete error:', error);
+        showToast('❌ Delete error: ' + error.message, 'error');
+    }
+}
+
 // Navigation
 function navigateToNext() {
-    window.location.href = `/editor/${USERNAME}/${NEXT_INDEX}`;
+    if (NEXT_INDEX !== null) {
+        window.location.href = `/project/${PROJECT_ID}/editor/${USERNAME}/${NEXT_INDEX}`;
+    }
 }
 
 function navigateToPrev() {
-    window.location.href = `/editor/${USERNAME}/${PREV_INDEX}`;
+    if (PREV_INDEX !== null) {
+        window.location.href = `/project/${PROJECT_ID}/editor/${USERNAME}/${PREV_INDEX}`;
+    }
 }
 
 function navigateToImage(imageIndex) {
-    if (imageIndex >= 1 && imageIndex <= TOTAL_IMAGES) {
-        window.location.href = `/editor/${USERNAME}/${imageIndex}`;
+    if (imageIndex >= 0 && imageIndex < TOTAL_IMAGES) {
+        window.location.href = `/project/${PROJECT_ID}/editor/${USERNAME}/${imageIndex}`;
     } else {
-        alert(`Please enter a number between 1 and ${TOTAL_IMAGES}`);
+        alert(`Please enter a number between 0 and ${TOTAL_IMAGES - 1}`);
         document.getElementById('jump-input').value = CURRENT_INDEX;
     }
 }
@@ -3030,8 +3097,15 @@ document.addEventListener('keydown', (e) => {
         saveAndNext();
     }
 
-    // Delete selected box: Delete or Backspace
-    if ((e.key === 'Delete' || e.key === 'Backspace') && selectedBoxId) {
+    // Delete current image: Shift+Delete (fast purging workflow)
+    if (e.key === 'Delete' && e.shiftKey) {
+        e.preventDefault();
+        deleteCurrentImage();
+        return; // Don't process as box deletion
+    }
+
+    // Delete selected box: Delete or Backspace (only if box is selected)
+    if ((e.key === 'Delete' || e.key === 'Backspace') && selectedBoxId && !e.shiftKey) {
         e.preventDefault();
         deleteBoxQuick(selectedBoxId);
     }
