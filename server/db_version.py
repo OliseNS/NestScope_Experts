@@ -115,9 +115,13 @@ class DatabaseVersionControl:
         Examples:
             "olisemeka.nmarkwe@selu.edu" → "Olisemeka Nmarkwe"
             "system" → "NestScope System"
+            "anonymous" → "Anonymous User"
         """
         if email == "system":
             return "NestScope System"
+
+        if email == "anonymous" or not email:
+            return "Anonymous User"
 
         # Get part before @
         local_part = email.split('@')[0]

@@ -129,6 +129,7 @@ class ExampleImagesResponse(BaseModel):
 
 class CustomSQLRequest(BaseModel):
     sql_query: str
+    expert_email: Optional[str] = None  # Email of user executing the query
 
 class CustomSQLResponse(BaseModel):
     success: bool
@@ -172,6 +173,7 @@ class RowUpdateRequest(BaseModel):
     table_name: str
     row_id: Dict[str, Any]  # Primary key column(s) and value(s)
     updates: Dict[str, Any]  # Columns to update
+    expert_email: Optional[str] = None  # Email of user making the change
 
 class RowUpdateResponse(BaseModel):
     success: bool
@@ -182,6 +184,7 @@ class RowUpdateResponse(BaseModel):
 class RowDeleteRequest(BaseModel):
     table_name: str
     row_id: Dict[str, Any]  # Primary key column(s) and value(s)
+    expert_email: Optional[str] = None  # Email of user making the change
 
 class RowDeleteResponse(BaseModel):
     success: bool
@@ -192,6 +195,7 @@ class RowDeleteResponse(BaseModel):
 class RowInsertRequest(BaseModel):
     table_name: str
     row_data: Dict[str, Any]  # Column names and values
+    expert_email: Optional[str] = None  # Email of user making the change
 
 class RowInsertResponse(BaseModel):
     success: bool
@@ -2835,20 +2839,23 @@ async def execute_query(request: CustomSQLRequest):
                 conn.commit()
                 rows_affected = cursor.rowcount
 
-                # Commit to version control
-                if db_version_control:
-                    try:
-                        commit_result = db_version_control.commit(
-                            message=f"Query executed via NestDB: {query[:100]}{'...' if len(query) > 100 else ''}",
-                            details={
-                                "operation": "SQL_QUERY",
-                                "query": query,
-                                "rows_affected": rows_affected,
-                                "interface": "NestDB"
-                            }
-                        )
-                        logger.info(f"Version control commit: {commit_result}")
-                    except Exception as vc_error:
+                # Commit to version control with user attribution
+                try:
+                    # Create user-specific version control instance
+                    user_email = request.expert_email or "anonymous"
+                    user_vc = DatabaseVersionControl(DB_PATH, expert_email=user_email)
+
+                    commit_result = user_vc.commit(
+                        message=f"Query executed via NestDB: {query[:100]}{'...' if len(query) > 100 else ''}",
+                        details={
+                            "operation": "SQL_QUERY",
+                            "query": query,
+                            "rows_affected": rows_affected,
+                            "interface": "NestDB"
+                        }
+                    )
+                    logger.info(f"Version control commit by {user_email}: {commit_result}")
+                except Exception as vc_error:
                         logger.warning(f"Version control commit failed: {vc_error}")
 
                 conn.close()
@@ -3077,23 +3084,26 @@ async def update_table_row(table_name: str, request: RowUpdateRequest):
                 error="No rows were updated. Row may not exist."
             )
 
-        # Auto-commit to version control
+        # Auto-commit to version control with user attribution
         commit_hash = None
-        if db_version_control is not None:
-            try:
-                commit_result = db_version_control.commit(
-                    message=f"Updated {rows_affected} row(s) in {table_name}",
-                    details={
-                        "operation": "UPDATE",
-                        "table": table_name,
-                        "rows_affected": rows_affected,
-                        "columns_updated": list(request.updates.keys())
-                    }
-                )
-                commit_hash = commit_result.get('commit_hash_short')
-                print(f"✓ Database change committed to version control: {commit_hash}")
-            except Exception as e:
-                print(f"⚠️  Warning: Version control commit failed: {e}")
+        try:
+            # Create user-specific version control instance
+            user_email = request.expert_email or "anonymous"
+            user_vc = DatabaseVersionControl(DB_PATH, expert_email=user_email)
+
+            commit_result = user_vc.commit(
+                message=f"Updated {rows_affected} row(s) in {table_name}",
+                details={
+                    "operation": "UPDATE",
+                    "table": table_name,
+                    "rows_affected": rows_affected,
+                    "columns_updated": list(request.updates.keys())
+                }
+            )
+            commit_hash = commit_result.get('commit_hash_short')
+            print(f"✓ Database change committed by {user_email}: {commit_hash}")
+        except Exception as e:
+            print(f"⚠️  Warning: Version control commit failed: {e}")
 
         return RowUpdateResponse(
             success=True,
@@ -3150,22 +3160,25 @@ async def delete_table_row(table_name: str, request: RowDeleteRequest):
                 error="No rows were deleted. Row may not exist."
             )
 
-        # Auto-commit to version control
+        # Auto-commit to version control with user attribution
         commit_hash = None
-        if db_version_control is not None:
-            try:
-                commit_result = db_version_control.commit(
-                    message=f"Deleted {rows_affected} row(s) from {table_name}",
-                    details={
-                        "operation": "DELETE",
-                        "table": table_name,
-                        "rows_affected": rows_affected
-                    }
-                )
-                commit_hash = commit_result.get('commit_hash_short')
-                print(f"✓ Database change committed to version control: {commit_hash}")
-            except Exception as e:
-                print(f"⚠️  Warning: Version control commit failed: {e}")
+        try:
+            # Create user-specific version control instance
+            user_email = request.expert_email or "anonymous"
+            user_vc = DatabaseVersionControl(DB_PATH, expert_email=user_email)
+
+            commit_result = user_vc.commit(
+                message=f"Deleted {rows_affected} row(s) from {table_name}",
+                details={
+                    "operation": "DELETE",
+                    "table": table_name,
+                    "rows_affected": rows_affected
+                }
+            )
+            commit_hash = commit_result.get('commit_hash_short')
+            print(f"✓ Database change committed by {user_email}: {commit_hash}")
+        except Exception as e:
+            print(f"⚠️  Warning: Version control commit failed: {e}")
 
         return RowDeleteResponse(
             success=True,
@@ -3218,23 +3231,26 @@ async def insert_table_row(table_name: str, request: RowInsertRequest):
                 error="No rows were inserted."
             )
 
-        # Auto-commit to version control
+        # Auto-commit to version control with user attribution
         commit_hash = None
-        if db_version_control is not None:
-            try:
-                commit_result = db_version_control.commit(
-                    message=f"Inserted {rows_affected} row(s) into {table_name}",
-                    details={
-                        "operation": "INSERT",
-                        "table": table_name,
-                        "rows_affected": rows_affected,
-                        "columns": list(request.row_data.keys())
-                    }
-                )
-                commit_hash = commit_result.get('commit_hash_short')
-                print(f"✓ Database change committed to version control: {commit_hash}")
-            except Exception as e:
-                print(f"⚠️  Warning: Version control commit failed: {e}")
+        try:
+            # Create user-specific version control instance
+            user_email = request.expert_email or "anonymous"
+            user_vc = DatabaseVersionControl(DB_PATH, expert_email=user_email)
+
+            commit_result = user_vc.commit(
+                message=f"Inserted {rows_affected} row(s) into {table_name}",
+                details={
+                    "operation": "INSERT",
+                    "table": table_name,
+                    "rows_affected": rows_affected,
+                    "columns": list(request.row_data.keys())
+                }
+            )
+            commit_hash = commit_result.get('commit_hash_short')
+            print(f"✓ Database change committed by {user_email}: {commit_hash}")
+        except Exception as e:
+            print(f"⚠️  Warning: Version control commit failed: {e}")
 
         return RowInsertResponse(
             success=True,
