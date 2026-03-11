@@ -543,6 +543,103 @@
                 height: 18px;
             }
         }
+
+        /* ============================================================================
+           LIGHT MODE OVERRIDES - Navbar and User Menu
+           ============================================================================ */
+        [data-theme="light"] .navbar {
+            background: #ffffff;
+            border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+        }
+
+        [data-theme="light"] .navbar-brand {
+            color: #1a1a1a;
+        }
+
+        [data-theme="light"] .navbar-brand:hover {
+            color: #7BABAE;
+        }
+
+        [data-theme="light"] .nav-link {
+            color: rgba(0, 0, 0, 0.7);
+        }
+
+        [data-theme="light"] .nav-link:hover {
+            color: #1a1a1a;
+            background: rgba(0, 0, 0, 0.06);
+        }
+
+        [data-theme="light"] .nav-link.active {
+            color: #7BABAE;
+            background: rgba(123, 171, 174, 0.1);
+        }
+
+        [data-theme="light"] .nav-divider {
+            background: rgba(0, 0, 0, 0.1);
+        }
+
+        [data-theme="light"] .user-menu-trigger {
+            background: rgba(0, 0, 0, 0.04);
+            border: 1px solid rgba(0, 0, 0, 0.08);
+        }
+
+        [data-theme="light"] .user-menu-trigger:hover {
+            background: rgba(0, 0, 0, 0.08);
+            border-color: rgba(0, 0, 0, 0.12);
+        }
+
+        [data-theme="light"] .user-name {
+            color: #1a1a1a;
+        }
+
+        [data-theme="light"] .user-role-badge {
+            color: rgba(123, 171, 174, 0.9);
+        }
+
+        [data-theme="light"] .dropdown-icon {
+            stroke: rgba(0, 0, 0, 0.5);
+        }
+
+        [data-theme="light"] .user-dropdown {
+            background: #ffffff;
+            border: 1px solid rgba(0, 0, 0, 0.1);
+            box-shadow: 0 12px 40px rgba(0, 0, 0, 0.15);
+        }
+
+        [data-theme="light"] .dropdown-header {
+            border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+            background: rgba(0, 0, 0, 0.02);
+        }
+
+        [data-theme="light"] .dropdown-user-name {
+            color: #1a1a1a;
+        }
+
+        [data-theme="light"] .dropdown-user-email {
+            color: rgba(0, 0, 0, 0.5);
+        }
+
+        [data-theme="light"] .dropdown-user-role {
+            color: #7BABAE;
+        }
+
+        [data-theme="light"] .dropdown-item {
+            color: rgba(0, 0, 0, 0.85);
+        }
+
+        [data-theme="light"] .dropdown-item:hover {
+            background: rgba(0, 0, 0, 0.08);
+            color: #1a1a1a;
+        }
+
+        [data-theme="light"] .dropdown-item.danger {
+            color: rgba(252, 129, 129, 0.85);
+        }
+
+        [data-theme="light"] .dropdown-item.danger:hover {
+            background: rgba(252, 129, 129, 0.12);
+            color: #fc8181;
+        }
     </style>
 
     {% block extra_css %}{% endblock %}

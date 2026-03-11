@@ -31,6 +31,51 @@
             --surface-light: #fdfbf7;
         }
 
+        /* Light theme overrides for canvas and overlays */
+        [data-theme="light"] .canvas-container {
+            background: #ffffff;
+        }
+
+        [data-theme="light"] .canvas-overlay {
+            background: rgba(255, 255, 255, 0.95);
+            border: 1px solid rgba(83, 124, 138, 0.3);
+            color: var(--text-primary);
+        }
+
+        [data-theme="light"] .zoom-btn {
+            background: rgba(255, 255, 255, 0.95);
+            border: 1px solid rgba(83, 124, 138, 0.3);
+        }
+
+        /* Rank badge styles */
+        .rank-badge {
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            font-size: 1.125rem;
+            flex-shrink: 0;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+        }
+
+        .rank-badge-1 {
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: white;
+        }
+
+        .rank-badge-other {
+            background: var(--surface);
+            color: var(--text-primary);
+        }
+
+        [data-theme="light"] .rank-badge-other {
+            background: #f0f0f0;
+            color: #1a1a1a;
+        }
+
         * {
             margin: 0;
             padding: 0;
@@ -666,86 +711,6 @@
             to { transform: rotate(360deg); }
         }
 
-        /* Theme Toggle Styles */
-        .theme-toggle {
-            position: relative;
-            width: 64px;
-            height: 32px;
-            cursor: pointer;
-            user-select: none;
-            flex-shrink: 0;
-            outline: none;
-        }
-
-        .theme-toggle-track {
-            position: absolute;
-            inset: 0;
-            border-radius: 16px;
-            background: #0f1419;
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-            overflow: hidden;
-        }
-
-        .theme-toggle-track.active {
-            background: #ffffff;
-            border-color: rgba(0, 0, 0, 0.1);
-        }
-
-        .theme-toggle-icons {
-            position: absolute;
-            inset: 0;
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            padding: 0 6px;
-            pointer-events: none;
-        }
-
-        .theme-icon {
-            width: 16px;
-            height: 16px;
-            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-            z-index: 1;
-        }
-
-        .theme-icon-sun {
-            stroke: rgba(255, 255, 255, 0.3);
-        }
-
-        .theme-icon-moon {
-            stroke: #ffffff;
-        }
-
-        .theme-toggle-track.active .theme-icon-sun {
-            stroke: rgba(0, 0, 0, 0.7);
-        }
-
-        .theme-toggle-track.active .theme-icon-moon {
-            stroke: rgba(0, 0, 0, 0.3);
-        }
-
-        .theme-toggle-thumb {
-            position: absolute;
-            top: 3px;
-            left: 3px;
-            width: 26px;
-            height: 26px;
-            background: #1a1f26;
-            border-radius: 50%;
-            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 14px;
-            z-index: 2;
-            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
-        }
-
-        .theme-toggle-track.active .theme-toggle-thumb {
-            transform: translateX(32px);
-            background: #fdfbf7;
-        }
     </style>
 </head>
 <body>
@@ -756,19 +721,6 @@
                 ←
             </button>
             <h1 class="image-title">{{ image_name }}</h1>
-            <div class="theme-toggle" role="button" tabindex="0" aria-label="Toggle theme" style="margin-left: auto; margin-right: 1rem;">
-                <div class="theme-toggle-track">
-                    <div class="theme-toggle-icons">
-                        <svg class="theme-icon theme-icon-sun" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.5">
-                            <path stroke-linecap="round" stroke-linejoin="round" d="M12 3v2.25m6.364.386l-1.591 1.591M21 12h-2.25m-.386 6.364l-1.591-1.591M12 18.75V21m-4.773-4.227l-1.591 1.591M5.25 12H3m4.227-4.773L5.636 5.636M15.75 12a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0z"/>
-                        </svg>
-                        <svg class="theme-icon theme-icon-moon" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.5">
-                            <path stroke-linecap="round" stroke-linejoin="round" d="M21.752 15.002A9.718 9.718 0 0118 15.75c-5.385 0-9.75-4.365-9.75-9.75 0-1.33.266-2.597.748-3.752A9.753 9.753 0 003 11.25C3 16.635 7.365 21 12.75 21a9.753 9.753 0 009.002-5.998z"/>
-                        </svg>
-                    </div>
-                    <div class="theme-toggle-thumb">🌙</div>
-                </div>
-            </div>
         </div>
         <div class="progress-indicator">
             <div class="nav-controls">
@@ -2429,23 +2381,19 @@ async function showAIPredictions(predictions, boxNumber) {
     for (let i = 0; i < predictions.length; i++) {
         const pred = predictions[i];
         const rank = i + 1;
-        const confidencePercent = (pred.confidence * 100).toFixed(1);
+        const rankClass = rank === 1 ? 'rank-badge-1' : 'rank-badge-other';
 
-        // Color based on confidence
-        let confidenceColor = '#7cb342'; // green
-        if (confidencePercent < 30) confidenceColor = 'var(--text-muted)';
-        else if (confidencePercent < 50) confidenceColor = 'var(--orange-primary)';
-
-        // Rank badge background
-        const rankBg = rank === 1 ? 'linear-gradient(135deg, #667eea, #764ba2)' : 'var(--surface)';
+        // Escape apostrophes for JavaScript strings
+        const escapedSpeciesName = pred.species_name.replace(/'/g, "\\'");
+        const escapedSpeciesCode = pred.species_code.replace(/'/g, "\\'");
 
         html += `
-            <div class="ai-species-card" onclick="selectSpeciesFromAI('${pred.species_code}', '${pred.species_name}')"
+            <div class="ai-species-card" onclick="selectSpeciesFromAI('${escapedSpeciesCode}', '${escapedSpeciesName}')"
                  style="background: var(--surface-light); border: 2px solid rgba(83, 124, 138, 0.2); border-radius: 12px; padding: 1rem; cursor: pointer; transition: all 0.3s;">
 
                 <div style="display: flex; gap: 1rem; align-items: center; margin-bottom: 1rem;">
                     <!-- Rank badge -->
-                    <div style="background: ${rankBg}; color: white; width: 36px; height: 36px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 1.125rem; flex-shrink: 0; box-shadow: 0 2px 8px rgba(0,0,0,0.2);">
+                    <div class="rank-badge ${rankClass}">
                         ${rank}
                     </div>
 
@@ -2458,16 +2406,6 @@ async function showAIPredictions(predictions, boxNumber) {
                             ${pred.species_code} • ${pred.group.replace(/_/g, ' ').toLowerCase()}
                         </div>
                     </div>
-
-                    <!-- Confidence -->
-                    <div style="text-align: right; flex-shrink: 0;">
-                        <div style="font-size: 1.75rem; font-weight: 700; color: ${confidenceColor};">
-                            ${confidencePercent}%
-                        </div>
-                        <div style="font-size: 0.75rem; color: var(--text-muted);">
-                            confidence
-                        </div>
-                    </div>
                 </div>
 
                 <!-- Bird image placeholder -->
@@ -2478,7 +2416,7 @@ async function showAIPredictions(predictions, boxNumber) {
                 <!-- More images button -->
                 <button class="btn-secondary"
                         style="width: 100%; margin-top: 0.75rem; padding: 0.5rem; font-size: 0.875rem;"
-                        onclick="event.stopPropagation(); showAISpeciesImages('${pred.species_name}', '${pred.species_code}', ${i})">
+                        onclick="event.stopPropagation(); showAISpeciesImages('${escapedSpeciesName}', '${escapedSpeciesCode}', ${i})">
                     📸 View More Images
                 </button>
 
@@ -2586,6 +2524,9 @@ async function showAISpeciesImages(speciesName, speciesCode, cardIdx) {
         // Handle both formats: plain URL strings or objects with url property
         const imageUrls = data.images.map(img => img.url || img);
 
+        // Escape apostrophes for JavaScript strings
+        const escapedSpeciesName = speciesName.replace(/'/g, "\\'");
+
         imagesDiv.innerHTML = `
             <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.5rem; margin-bottom: 0.75rem;">
                 ${imageUrls.map(url => `
@@ -2598,7 +2539,7 @@ async function showAISpeciesImages(speciesName, speciesCode, cardIdx) {
             ${data.has_more ? `
                 <button class="btn-secondary"
                         style="width: 100%; padding: 0.5rem; font-size: 0.875rem;"
-                        onclick="event.stopPropagation(); loadMoreAIImages('${speciesName}', ${cardIdx}, ${1 + imageUrls.length})">
+                        onclick="event.stopPropagation(); loadMoreAIImages('${escapedSpeciesName}', ${cardIdx}, ${1 + imageUrls.length})">
                     Load Even More Images
                 </button>
             ` : ''}
@@ -2739,8 +2680,13 @@ function showSpeciesList(containerId = 'classification-content') {
             this.style.borderColor = 'transparent';
             this.style.transform = 'translateX(0)';
         };
+
+        // Escape apostrophes for JavaScript strings
+        const escapedCommonName = species.common_name.replace(/'/g, "\\'");
+        const escapedCode = species.code.replace(/'/g, "\\'");
+
         speciesDiv.innerHTML = `
-            <div style="display: flex; gap: 1rem; align-items: center;" onclick="selectSpecies('${species.code}', '${species.common_name}')">
+            <div style="display: flex; gap: 1rem; align-items: center;" onclick="selectSpecies('${escapedCode}', '${escapedCommonName}')">
                 <div style="flex-shrink: 0;">
                     <div id="species-thumb-${idx}" style="width: 80px; height: 80px; background: var(--surface); border-radius: 8px; display: flex; align-items: center; justify-content: center; color: var(--text-muted);">
                         Loading...
@@ -2749,7 +2695,7 @@ function showSpeciesList(containerId = 'classification-content') {
                 <div style="flex: 1;">
                     <div style="font-weight: 600; font-size: 1.125rem; margin-bottom: 0.25rem;">${species.common_name}</div>
                     <div style="font-size: 0.875rem; color: var(--text-muted);">${species.code}</div>
-                    <button class="btn-secondary" style="margin-top: 0.5rem; padding: 0.5rem 1rem; font-size: 0.875rem;" onclick="event.stopPropagation(); showSpeciesImages('${species.common_name}', ${idx})">
+                    <button class="btn-secondary" style="margin-top: 0.5rem; padding: 0.5rem 1rem; font-size: 0.875rem;" onclick="event.stopPropagation(); showSpeciesImages('${escapedCommonName}', ${idx})">
                         View Reference Images
                     </button>
                 </div>
@@ -2837,6 +2783,9 @@ async function showSpeciesImages(speciesName, cardIdx) {
 
         const imageUrls = data.images.map(img => img.url || img);
 
+        // Escape apostrophes for JavaScript strings
+        const escapedSpeciesName = speciesName.replace(/'/g, "\\'");
+
         imagesDiv.innerHTML = `
             <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.5rem; margin-bottom: 1rem;">
                 ${imageUrls.map(url => `
@@ -2849,7 +2798,7 @@ async function showSpeciesImages(speciesName, cardIdx) {
             ${data.has_more ? `
                 <button class="btn-secondary"
                         style="width: 100%; padding: 0.75rem; font-size: 0.875rem;"
-                        onclick="event.stopPropagation(); loadMoreImages('${speciesName}', ${cardIdx}, ${1 + imageUrls.length})">
+                        onclick="event.stopPropagation(); loadMoreImages('${escapedSpeciesName}', ${cardIdx}, ${1 + imageUrls.length})">
                     Load More Images
                 </button>
             ` : ''}
