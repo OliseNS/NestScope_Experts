@@ -43,6 +43,7 @@ from labeller.auth import (
     api_db_editor_required,
     is_email_approved,
     is_admin,
+    is_base_admin,
     create_or_update_user,
     add_approved_email,
     remove_approved_email,
@@ -51,7 +52,8 @@ from labeller.auth import (
     get_current_user,
     add_admin,
     get_user_permissions,
-    delete_user
+    delete_user,
+    BASE_ADMIN_EMAIL
 )
 
 app = Flask(__name__)
@@ -195,31 +197,40 @@ def save_data_yaml(project_folder, data):
         yaml.dump(data, f, default_flow_style=False)
 
 def calculate_project_stats(project_folder):
-    """Calculate statistics for a project"""
+    """
+    Calculate statistics for a project based on USER WORK, not pre-imported labels.
+
+    This counts only images that users have marked as "completed" through the
+    annotation interface, not all label files (which may include pre-imported data).
+    """
     project_path = os.path.join(PROJECTS_DIR, project_folder)
     images_dir = os.path.join(project_path, 'images')
     labels_dir = os.path.join(project_path, 'labels')
 
-    # Count images
+    # Count total images
     total_images = 0
     if os.path.exists(images_dir):
         total_images = len([f for f in os.listdir(images_dir)
                            if f.lower().endswith(('.jpg', '.jpeg', '.png'))])
 
-    # Count completed images (have labels)
-    completed_images = 0
-    total_annotations = 0
-    if os.path.exists(labels_dir):
-        for label_file in os.listdir(labels_dir):
-            if label_file.endswith('.txt'):
-                completed_images += 1
-                # Count annotations in file
-                label_path = os.path.join(labels_dir, label_file)
-                with open(label_path, 'r') as f:
-                    lines = [line.strip() for line in f if line.strip()]
-                    total_annotations += len(lines)
+    # Get user-completed images from project_state.json
+    state = load_project_state(project_folder)
+    completed_by_users = set()
+    for user_data in state.get('users', {}).values():
+        completed_by_users.update(user_data.get('completed', []))
 
-    # Calculate progress (0% if no images or no completed work)
+    # Count only user-completed images and their annotations
+    completed_images = len(completed_by_users)
+    total_annotations = 0
+    for img_name in completed_by_users:
+        label_file = os.path.splitext(img_name)[0] + '.txt'
+        label_path = os.path.join(labels_dir, label_file)
+        if os.path.exists(label_path):
+            with open(label_path, 'r') as f:
+                lines = [line.strip() for line in f if line.strip()]
+                total_annotations += len(lines)
+
+    # Calculate progress based on user work
     if total_images == 0:
         progress = 0
     elif completed_images == 0:
@@ -436,11 +447,15 @@ def admin_update_role():
         flash('Cannot change your own role', 'error')
         return redirect(url_for('admin_panel'))
 
-    success = update_user_role(email, new_role)
-    if success:
-        flash(f'Updated {email} to {new_role}', 'success')
-    else:
-        flash(f'Failed to update role', 'error')
+    try:
+        success = update_user_role(email, new_role)
+        if success:
+            flash(f'Updated {email} to {new_role}', 'success')
+        else:
+            flash(f'Failed to update role', 'error')
+    except ValueError as e:
+        # Base admin protection triggered
+        flash(str(e), 'error')
 
     return redirect(url_for('admin_panel'))
 
@@ -459,11 +474,15 @@ def admin_delete_user():
         flash('Cannot delete your own account', 'error')
         return redirect(url_for('admin_panel'))
 
-    success = delete_user(email)
-    if success:
-        flash(f'Deleted user {email}', 'success')
-    else:
-        flash(f'Failed to delete user', 'error')
+    try:
+        success = delete_user(email)
+        if success:
+            flash(f'Deleted user {email}', 'success')
+        else:
+            flash(f'Failed to delete user', 'error')
+    except ValueError as e:
+        # Base admin protection triggered
+        flash(str(e), 'error')
 
     return redirect(url_for('admin_panel'))
 
@@ -577,12 +596,15 @@ def project_detail(project_folder):
     auth_users = {}
     try:
         all_auth_users = get_all_users_with_roles()
-        auth_users = {u['name']: u for u in all_auth_users}
+        # Index by both email and name for backwards compatibility
+        for u in all_auth_users:
+            auth_users[u['email']] = u
+            auth_users[u['name']] = u
     except Exception as e:
         print(f"Warning: Could not load auth users: {e}")
 
     users_detail = []
-    for username, user_data in state.get('users', {}).items():
+    for user_key, user_data in state.get('users', {}).items():
         assigned = user_data.get('assigned', [])
         completed = user_data.get('completed', [])
 
@@ -596,13 +618,15 @@ def project_detail(project_folder):
                     lines = [line.strip() for line in f if line.strip()]
                     user_annotations += len(lines)
 
-        # Get user picture from auth database
-        user_picture = None
-        if username in auth_users:
-            user_picture = auth_users[username].get('picture')
+        # Get user info from auth database (user_key might be email or name)
+        auth_user = auth_users.get(user_key, {})
+        display_name = user_data.get('name', auth_user.get('name', user_key))
+        user_picture = auth_user.get('picture')
+        user_email = user_key if '@' in user_key else auth_user.get('email', user_key)
 
         users_detail.append({
-            'username': username,
+            'username': display_name,
+            'email': user_email,
             'picture': user_picture,
             'assigned': len(assigned),
             'completed': len(completed),
@@ -630,8 +654,41 @@ def help_page():
 @app.route('/nestdb')
 @login_required
 def nestdb_page():
-    """NestDB - Supabase-inspired database management interface"""
-    return render_template('nestdb.html', active_page='nestdb')
+    """
+    NestDB - Supabase-inspired database management interface
+
+    SECURITY: Query execution requires admin or database editor permissions.
+    We check permissions here and pass them to the frontend for UI control.
+
+    Educational Note:
+    Two-layer security:
+    1. Flask checks if user CAN access NestDB interface
+    2. FastAPI backend validates each query execution
+    This prevents unauthorized database modifications.
+    """
+    # Get current user's permissions
+    user_email = session['user']['email']
+    permissions = get_user_permissions(user_email)
+
+    # Check if user has database editing permission
+    if not permissions.get('can_edit_db', False):
+        return '''
+        <html>
+        <head><title>Access Denied</title></head>
+        <body style="font-family: system-ui; padding: 2rem; max-width: 600px; margin: 0 auto;">
+            <h1>🔒 Access Denied</h1>
+            <p>You need <strong>database editor</strong> or <strong>admin</strong> permissions to access NestDB.</p>
+            <p><a href="/" style="color: #D97757;">← Back to Home</a></p>
+        </body>
+        </html>
+        ''', 403
+
+    return render_template(
+        'nestdb.html',
+        active_page='nestdb',
+        can_edit_db=True,
+        is_admin=is_admin(user_email)
+    )
 
 @app.route('/users')
 @login_required
@@ -655,15 +712,17 @@ def users_page():
             projects = get_all_projects()
             for proj in projects:
                 state = load_project_state(proj['folder'])
-                # Try to find user by name first, then by email
-                user_data = state.get('users', {}).get(user['name'])
+                # Look up user by EMAIL (unique identifier)
+                # Note: Old projects may use name as key, new projects use email
+                user_data = state.get('users', {}).get(user['email'])
                 if not user_data:
-                    user_data = state.get('users', {}).get(user['email'])
+                    # Fallback: try name (for backwards compatibility with old projects)
+                    user_data = state.get('users', {}).get(user['name'])
 
                 if not user_data:
-                    user_data = {}
+                    continue  # User not in this project
 
-                if user_data and (user_data.get('assigned') or user_data.get('completed')):  # User has actual assignments in this project
+                if user_data.get('assigned') or user_data.get('completed'):  # User has actual assignments in this project
                     assigned = user_data.get('assigned', [])
                     completed = user_data.get('completed', [])
 
@@ -722,7 +781,17 @@ def editor(project_folder, username, image_index=0):
     state = load_project_state(project_folder)
 
     # Get user's images (both assigned and completed)
+    # Try email first (new system), then name (legacy)
     user_data = state.get('users', {}).get(username, {})
+    if not user_data:
+        # Try to find by name if email not found (legacy support)
+        from labeller.auth import get_all_users_with_roles
+        auth_users = get_all_users_with_roles()
+        for user in auth_users:
+            if user['name'] == username and user['email'] in state.get('users', {}):
+                user_data = state['users'][user['email']]
+                break
+
     assigned_images = user_data.get('assigned', [])
     completed_images = user_data.get('completed', [])
 
@@ -730,7 +799,8 @@ def editor(project_folder, username, image_index=0):
     all_user_images = list(set(assigned_images + completed_images))
 
     if not all_user_images:
-        return f"No images for user '{username}'. Please assign images first.", 404
+        display_name = user_data.get('name', username)
+        return f"No images for user '{display_name}'. Please assign images first.", 404
 
     # Validate image index
     if image_index < 0 or image_index >= len(all_user_images):
@@ -1068,12 +1138,29 @@ def assign_task():
 
         data = request.json
         project_folder = data.get('project_id')
-        username = data.get('username')
+        # Support both email (new) and username (legacy) parameters
+        user_email = data.get('user_email') or data.get('username')
         num_images = data.get('num_images', 10)
         allow_reassign = data.get('allow_reassign', False)  # Allow taking assigned images
 
-        if not username:
-            return jsonify({'error': 'Username required'}), 400
+        if not user_email:
+            return jsonify({'error': 'User email required'}), 400
+
+        # Get user info from auth system
+        from labeller.auth import get_all_users_with_roles
+        auth_users = {u['email']: u for u in get_all_users_with_roles()}
+
+        # If username was provided instead of email, try to find the email
+        if '@' not in user_email:
+            # Legacy: username provided, find matching email
+            matching_users = [u for u in auth_users.values() if u['name'] == user_email]
+            if not matching_users:
+                return jsonify({'error': f'User not found: {user_email}'}), 404
+            if len(matching_users) > 1:
+                return jsonify({'error': f'Multiple users with name "{user_email}". Please use email instead.'}), 400
+            user_email = matching_users[0]['email']
+
+        user_name = auth_users.get(user_email, {}).get('name', user_email)
 
         metadata = get_project(project_folder)
         if not metadata:
@@ -1095,10 +1182,10 @@ def assign_task():
         for user_data in state.get('users', {}).values():
             assigned_images.update(user_data.get('assigned', []))
 
-        # Get user's current assignments
+        # Get user's current assignments (using EMAIL as key)
         user_current = set()
-        if username in state.get('users', {}):
-            user_current = set(state['users'][username].get('assigned', []))
+        if user_email in state.get('users', {}):
+            user_current = set(state['users'][user_email].get('assigned', []))
 
         # Determine selection pool
         if allow_reassign:
@@ -1113,7 +1200,7 @@ def assign_task():
 
         if not available:
             if allow_reassign:
-                return jsonify({'error': f'All images already assigned to {username}'}), 400
+                return jsonify({'error': f'All images already assigned to {user_name}'}), 400
             else:
                 return jsonify({'error': 'No unassigned images available. Enable "Allow Reassignment" to assign already-assigned images.'}), 400
 
@@ -1121,47 +1208,103 @@ def assign_task():
         num_to_assign = min(num_images, len(available))
         to_assign = random.sample(available, num_to_assign)
 
-        # Initialize user in project state if needed
+        # Initialize user in project state if needed (using EMAIL as key)
         if 'users' not in state:
             state['users'] = {}
-        if username not in state['users']:
-            state['users'][username] = {
+        if user_email not in state['users']:
+            state['users'][user_email] = {
+                'name': user_name,  # Store name for display purposes
                 'assigned': [],
                 'completed': []
             }
 
         # Add new assignments (avoid duplicates)
-        current_assigned = set(state['users'][username]['assigned'])
+        current_assigned = set(state['users'][user_email]['assigned'])
         new_assignments = [img for img in to_assign if img not in current_assigned]
-        state['users'][username]['assigned'].extend(new_assignments)
+        state['users'][user_email]['assigned'].extend(new_assignments)
 
         # Save project state
         save_project_state(project_folder, state)
 
-        # Update global user registry
+        # Update global user registry (still uses name for legacy reasons)
         user_service = get_user_service()
         if user_service:
             try:
                 # Create user if doesn't exist
-                if not user_service.get_user(username):
-                    user_service.create_user(username)
+                if not user_service.get_user(user_name):
+                    user_service.create_user(user_name)
 
                 # Add project to user's project list
-                user_service.add_user_to_project(username, project_folder)
+                user_service.add_user_to_project(user_name, project_folder)
             except Exception as e:
                 print(f"Warning: Could not update user service: {e}")
 
         return jsonify({
             'success': True,
             'assigned': len(new_assignments),
-            'total_assigned': len(state['users'][username]['assigned']),
+            'total_assigned': len(state['users'][user_email]['assigned']),
             'selection_type': selection_type,
-            'message': f'Assigned {len(new_assignments)} new image(s) to {username} ({selection_type})'
+            'message': f'Assigned {len(new_assignments)} new image(s) to {user_name} ({selection_type})'
         })
 
     except Exception as e:
         import traceback
         print(f"Error in assign_task: {traceback.format_exc()}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/projects/<project_folder>/remove-user', methods=['POST'])
+@login_required
+def remove_user_from_project(project_folder):
+    """
+    Remove a user from a project (unassign all their images).
+
+    This removes the user from project_state.json but KEEPS any label files
+    they created. Use this to fix bad assignments or remove inactive users.
+    """
+    try:
+        data = request.json
+        user_email = data.get('user_email')
+
+        if not user_email:
+            return jsonify({'error': 'User email required'}), 400
+
+        metadata = get_project(project_folder)
+        if not metadata:
+            return jsonify({'error': 'Project not found'}), 404
+
+        # Load project state
+        state = load_project_state(project_folder)
+
+        # Check if user exists in project
+        if user_email not in state.get('users', {}):
+            return jsonify({'error': f'User not found in project'}), 404
+
+        # Get user info for logging
+        user_data = state['users'][user_email]
+        user_name = user_data.get('name', user_email)
+        assigned_count = len(user_data.get('assigned', []))
+        completed_count = len(user_data.get('completed', []))
+
+        # Remove user from project
+        del state['users'][user_email]
+
+        # Save updated state
+        save_project_state(project_folder, state)
+
+        return jsonify({
+            'success': True,
+            'message': f'Removed {user_name} from project',
+            'removed': {
+                'name': user_name,
+                'email': user_email,
+                'assigned': assigned_count,
+                'completed': completed_count
+            }
+        })
+
+    except Exception as e:
+        import traceback
+        print(f"Error removing user from project: {traceback.format_exc()}")
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/projects/<project_folder>/delete', methods=['DELETE'])
@@ -1410,8 +1553,26 @@ def save_annotations():
 
         # Update user progress
         state = load_project_state(project_folder)
-        if username in state.get('users', {}):
-            user_data = state['users'][username]
+
+        # Find user by email (new) or username (legacy)
+        user_key = None
+        if '@' in username:
+            # Email provided
+            user_key = username if username in state.get('users', {}) else None
+        else:
+            # Username provided (legacy) - try to find email
+            user_key = username if username in state.get('users', {}) else None
+            if not user_key:
+                # Try to map username to email
+                from labeller.auth import get_all_users_with_roles
+                auth_users = get_all_users_with_roles()
+                for user in auth_users:
+                    if user['name'] == username and user['email'] in state.get('users', {}):
+                        user_key = user['email']
+                        break
+
+        if user_key:
+            user_data = state['users'][user_key]
             completed = user_data.get('completed', [])
             if image_name not in completed:
                 completed.append(image_name)
@@ -1434,17 +1595,30 @@ def get_all_users():
         auth_users = get_all_users_with_roles()
 
         # Filter to only include annotators and admins (can annotate)
-        users = [
-            {
+        # Count projects for each user
+        projects = get_all_projects()  # Function defined in this file
+
+        users = []
+        for u in auth_users:
+            if not u['can_annotate']:
+                continue
+
+            # Count how many projects this user is in
+            project_count = 0
+            for proj in projects:
+                state = load_project_state(proj['folder'])
+                # Check by email (new) or name (legacy)
+                if u['email'] in state.get('users', {}) or u['name'] in state.get('users', {}):
+                    project_count += 1
+
+            users.append({
                 'name': u['name'],
                 'email': u['email'],
                 'picture': u['picture'],
                 'role': u['role'],
-                'can_annotate': u['can_annotate']
-            }
-            for u in auth_users
-            if u['can_annotate']  # Only users who can annotate
-        ]
+                'can_annotate': u['can_annotate'],
+                'project_count': project_count
+            })
 
         return jsonify({'users': users})
 

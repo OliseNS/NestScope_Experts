@@ -14,6 +14,8 @@ from services import (
     update_table_row,
     delete_table_row,
     insert_table_row,
+    add_table_column,
+    delete_table_column,
     execute_custom_sql,
     get_version_history,
     get_version_stats,
@@ -33,7 +35,7 @@ init_page(page_title="NestDB - NestScope", page_icon="🗄️", layout="wide")
 # Render shared header
 render_header(page_name="NestDB")
 
-# Add custom CSS for proper scrolling in tabs
+# Add custom CSS for proper scrolling in tabs and clean version history
 st.markdown("""
 <style>
     /* Fix tab content scrolling */
@@ -73,6 +75,20 @@ st.markdown("""
     .stTabs [data-baseweb="tab-panel"]::-webkit-scrollbar-thumb:hover {
         background: #5A5A5A;
     }
+
+    /* Clean version history styling (Google Docs-like) */
+    .stContainer {
+        background: var(--claude-surface);
+        border-radius: 8px;
+        padding: 1rem;
+        margin-bottom: 0.5rem;
+        border-left: 3px solid var(--claude-border);
+        transition: border-color 0.2s;
+    }
+
+    .stContainer:hover {
+        border-left-color: var(--claude-orange);
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -98,15 +114,12 @@ if "db_edited_data" not in st.session_state:
 if "db_show_add_row" not in st.session_state:
     st.session_state.db_show_add_row = False
 
-# Version control session state
-if "vc_expert_email" not in st.session_state:
-    st.session_state.vc_expert_email = ""
+# User email session state (for version control attribution)
+if "user_email" not in st.session_state:
+    st.session_state.user_email = ""
 
 if "vc_search_query" not in st.session_state:
     st.session_state.vc_search_query = ""
-
-if "vc_quick_checkpoint" not in st.session_state:
-    st.session_state.vc_quick_checkpoint = False
 
 # ============================================================================
 # SIDEBAR
@@ -123,13 +136,27 @@ with st.sidebar:
 st.title("NestDB")
 st.caption("Database management interface - view, edit, and add data with full version control")
 
-# Version Control Status Banner
-version_stats = get_version_stats()
-if version_stats.get("success"):
-    total_commits = version_stats.get("total_commits", 0)
-    st.success(f"✅ Auto-versioning active ({total_commits:,} commits)")
-else:
-    st.warning("⚠️ Version control not active")
+# User Email Input (for attribution)
+col1, col2 = st.columns([3, 1])
+with col1:
+    user_email = st.text_input(
+        "Your email (for change attribution)",
+        value=st.session_state.user_email,
+        placeholder="your.email@example.com",
+        key="user_email_input",
+        help="All changes you make will be attributed to this email in version history"
+    )
+    if user_email != st.session_state.user_email:
+        st.session_state.user_email = user_email
+
+with col2:
+    # Version Control Status
+    version_stats = get_version_stats()
+    if version_stats.get("success"):
+        total_commits = version_stats.get("total_commits", 0)
+        st.metric("Total Commits", f"{total_commits:,}")
+    else:
+        st.warning("⚠️ Version control not active")
 
 # Create tabs for Table Browser, Schema Viewer, SQL Query Editor, and Version History
 tab1, tab2, tab3, tab4 = st.tabs(["📊 Table Browser", "📋 Schema Viewer", "⚙️ SQL Query Editor", "🕐 Version History"])
@@ -240,14 +267,83 @@ with tab1:
     </div>
     """, unsafe_allow_html=True)
 
-    # Add New Row section (only in edit mode)
+    # Insert menu (only in edit mode)
     if st.session_state.db_editing_mode and pk_columns:
         st.markdown("---")
-        col1, col2, col3 = st.columns([2, 1, 2])
-        with col2:
-            if st.button("➕ Add New Row", use_container_width=True, type="secondary"):
-                st.session_state.db_show_add_row = not st.session_state.db_show_add_row
 
+        # Insert dropdown menu
+        col1, col2, col3, col4 = st.columns([2, 1, 1, 2])
+        with col2:
+            if st.button("➕ Insert Row", use_container_width=True, type="secondary"):
+                st.session_state.db_show_add_row = not st.session_state.db_show_add_row
+                st.session_state.db_show_add_column = False  # Close column form if open
+
+        with col3:
+            if st.button("➕ Insert Column", use_container_width=True, type="secondary"):
+                st.session_state.db_show_add_column = not st.session_state.get("db_show_add_column", False)
+                st.session_state.db_show_add_row = False  # Close row form if open
+
+        # Add Column Form
+        if st.session_state.get("db_show_add_column", False):
+            with st.expander("➕ Add New Column", expanded=True):
+                st.markdown("Define the new column:")
+
+                with st.form(key=f"add_column_form_{selected_table}"):
+                    col_name_input = st.text_input(
+                        "Column Name",
+                        placeholder="e.g., new_column",
+                        help="Name of the new column (no spaces)"
+                    )
+
+                    col_type_input = st.selectbox(
+                        "Column Type",
+                        options=["TEXT", "INTEGER", "REAL", "BLOB"],
+                        help="Data type for the column"
+                    )
+
+                    col_default = st.text_input(
+                        "Default Value (optional)",
+                        placeholder="e.g., 'default' or 0",
+                        help="Default value for existing rows (use quotes for TEXT)"
+                    )
+
+                    col_not_null = st.checkbox(
+                        "NOT NULL",
+                        help="Require a value (default value must be provided)"
+                    )
+
+                    # Submit button
+                    col1, col2, col3 = st.columns([1, 1, 1])
+                    with col2:
+                        submit_col = st.form_submit_button("➕ Add Column", use_container_width=True, type="primary")
+
+                    if submit_col:
+                        if not col_name_input:
+                            st.error("Column name is required")
+                        elif col_not_null and not col_default:
+                            st.error("NOT NULL columns must have a default value")
+                        else:
+                            # Add the column
+                            response = add_table_column(
+                                selected_table,
+                                col_name_input,
+                                col_type_input,
+                                default_value=col_default if col_default else None,
+                                not_null=col_not_null,
+                                expert_email=st.session_state.user_email
+                            )
+
+                            if response.get("success"):
+                                success_msg = f"✅ {response.get('message', 'Column added successfully')}"
+                                if response.get("version_commit"):
+                                    success_msg += f" (commit `{response['version_commit'][:7]}`)"
+                                st.success(success_msg)
+                                st.session_state.db_show_add_column = False
+                                st.rerun()
+                            else:
+                                st.error(f"❌ Failed to add column: {response.get('error', 'Unknown error')}")
+
+        # Add Row Form
         if st.session_state.db_show_add_row:
             with st.expander("➕ Add New Row", expanded=True):
                 st.markdown("Fill in the values for the new row:")
@@ -321,12 +417,12 @@ with tab1:
 
                         # Insert the row
                         if new_row_data:
-                            response = insert_table_row(selected_table, new_row_data)
+                            response = insert_table_row(selected_table, new_row_data, expert_email=st.session_state.user_email)
 
                             if response.get("success"):
                                 success_msg = f"✅ {response.get('message', 'Row inserted successfully')}"
                                 if response.get("version_commit"):
-                                    success_msg += f" and automatically committed to version history (commit `{response['version_commit']}`)"
+                                    success_msg += f" (commit `{response['version_commit']}`)"
                                 st.success(success_msg)
                                 st.session_state.db_show_add_row = False
                                 st.rerun()
@@ -392,7 +488,7 @@ with tab1:
 
                                 if updates:
                                     # Send update to backend
-                                    response = update_table_row(selected_table, row_id, updates)
+                                    response = update_table_row(selected_table, row_id, updates, expert_email=st.session_state.user_email)
 
                                     if response.get("success"):
                                         changes_saved += 1
@@ -403,7 +499,7 @@ with tab1:
                         if changes_saved > 0:
                             # Check if the last response included version control info
                             if response.get("version_commit"):
-                                st.success(f"✅ Successfully saved {changes_saved} row(s) and automatically committed to version history (commit `{response['version_commit']}`)")
+                                st.success(f"✅ Successfully saved {changes_saved} row(s) (commit `{response['version_commit']}`)")
                             else:
                                 st.success(f"✅ Successfully saved {changes_saved} row(s)")
                             st.session_state.db_original_data = edited_df.copy()
@@ -525,7 +621,70 @@ with tab2:
         if pk_cols:
             st.info(f"Primary Key: {', '.join(pk_cols)}")
 
+        # Column Management Section (if edit mode is on)
+        if st.session_state.db_editing_mode:
+            st.markdown("---")
+            st.markdown("### 🔧 Column Management")
+            st.caption("Delete columns from the table (WARNING: This cannot be undone!)")
+
+            # Select column to delete
+            non_pk_cols = [col['name'] for col in columns if not col['pk']]
+
+            if not non_pk_cols:
+                st.info("No non-primary key columns available for deletion.")
+            else:
+                col1, col2 = st.columns([3, 1])
+                with col1:
+                    column_to_delete = st.selectbox(
+                        "Select column to delete",
+                        options=non_pk_cols,
+                        help="Primary key columns cannot be deleted"
+                    )
+
+                with col2:
+                    st.write("")  # Spacing
+                    st.write("")  # Spacing
+                    if st.button("🗑️ Delete Column", use_container_width=True, type="secondary"):
+                        st.session_state[f"confirm_delete_column_{column_to_delete}"] = True
+                        st.rerun()
+
+                # Confirmation dialog
+                if st.session_state.get(f"confirm_delete_column_{column_to_delete}", False):
+                    st.warning(f"""
+⚠️ **Delete column '{column_to_delete}'?**
+
+This will permanently remove this column and all its data from the table.
+This action cannot be undone! A version control backup will be created automatically.
+                    """)
+
+                    del_col1, del_col2 = st.columns([1, 1])
+
+                    with del_col1:
+                        if st.button("✅ Confirm Delete", key=f"confirm_del_yes_{column_to_delete}", type="primary", use_container_width=True):
+                            with st.spinner(f"Deleting column '{column_to_delete}'..."):
+                                del_response = delete_table_column(
+                                    schema_table,
+                                    column_to_delete,
+                                    expert_email=st.session_state.user_email
+                                )
+
+                                if del_response.get("success"):
+                                    success_msg = f"✅ {del_response.get('message', 'Column deleted successfully')}"
+                                    if del_response.get("version_commit"):
+                                        success_msg += f" (commit `{del_response['version_commit'][:7]}`)"
+                                    st.success(success_msg)
+                                    st.session_state[f"confirm_delete_column_{column_to_delete}"] = False
+                                    st.rerun()
+                                else:
+                                    st.error(f"❌ Failed to delete column: {del_response.get('error', 'Unknown error')}")
+
+                    with del_col2:
+                        if st.button("❌ Cancel", key=f"confirm_del_no_{column_to_delete}", use_container_width=True):
+                            st.session_state[f"confirm_delete_column_{column_to_delete}"] = False
+                            st.rerun()
+
         # Download schema button
+        st.markdown("---")
         schema_csv = schema_display.to_csv(index=False).encode('utf-8')
         st.download_button(
             label=f"📥 Download Schema for {schema_table}",
@@ -612,7 +771,7 @@ with tab3:
         execute_button = st.button("▶️ Execute Query", type="primary", use_container_width=True)
 
     # Safety warning
-    st.info("💡 **Tip:** This editor is read-only for safety. Only SELECT queries are recommended. Modifying queries (INSERT, UPDATE, DELETE) may work but use caution.")
+    st.info("💡 **Tip:** You can execute any SQL query here. Write operations (INSERT, UPDATE, DELETE) are automatically tracked in version history with your email.")
 
     # Execute query
     if execute_button:
@@ -629,7 +788,7 @@ with tab3:
                 st.session_state.sql_query_history = st.session_state.sql_query_history[:10]
 
             with st.spinner("Executing query..."):
-                response = execute_custom_sql(sql_query)
+                response = execute_custom_sql(sql_query, expert_email=st.session_state.user_email)
 
             # Display results
             if response.get("success"):
@@ -703,21 +862,11 @@ with tab3:
 with tab4:
     st.markdown("""
         <div class="title-card">
-            <h3>Database Version History</h3>
+            <h3>Version History</h3>
             <p>
-                All database changes are automatically tracked. Create checkpoints, view history, and rollback to any previous state.
+                Every change is automatically tracked. View the complete timeline, compare versions, and restore any previous state.
             </p>
         </div>
-    """, unsafe_allow_html=True)
-
-    # Powered by GitHub badge
-    st.markdown("""
-        <p style="font-size: 0.75rem; color: #888; margin-top: 0.5rem; margin-bottom: 1rem;">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="#888" xmlns="http://www.w3.org/2000/svg" style="vertical-align: middle; margin-right: 4px;">
-                <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/>
-            </svg>
-            Powered by <strong>Git</strong> version control
-        </p>
     """, unsafe_allow_html=True)
 
     # Fetch version control stats
@@ -727,104 +876,26 @@ with tab4:
         st.error(f"Version control unavailable: {stats.get('error', 'Unknown error')}")
         st.stop()
 
-    # ========================================================================
-    # QUICK CHECKPOINT SECTION (Prominently at Top)
-    # ========================================================================
-
-    st.markdown("### 💾 Quick Checkpoint")
-
-    # Two-column layout: Quick save on left, stats on right
-    col_left, col_right = st.columns([2, 1])
-
-    with col_left:
-        # Compact checkpoint creation
-        checkpoint_col1, checkpoint_col2 = st.columns([3, 1])
-
-        with checkpoint_col1:
-            checkpoint_message = st.text_input(
-                "Checkpoint description",
-                placeholder="e.g., Before bulk species update",
-                key="quick_checkpoint_message",
-                label_visibility="collapsed",
-                value="" if not st.session_state.vc_quick_checkpoint else st.session_state.get("last_checkpoint_msg", "")
-            )
-
-        with checkpoint_col2:
-            if st.button("💾 Save Checkpoint", type="primary", use_container_width=True, key="quick_checkpoint_btn"):
-                if not checkpoint_message:
-                    st.warning("Please enter a description")
-                else:
-                    # Use remembered email
-                    with st.spinner("Creating checkpoint..."):
-                        result = manual_version_commit(
-                            checkpoint_message,
-                            st.session_state.vc_expert_email or "system"
-                        )
-
-                        if result.get("success"):
-                            st.success(f"✅ Checkpoint `{result.get('commit_hash_short', 'N/A')}` created!")
-                            st.session_state.vc_quick_checkpoint = True
-                            st.session_state.last_checkpoint_msg = ""
-                            st.rerun()
-                        else:
-                            st.error(f"Failed: {result.get('error', 'Unknown error')}")
-
-        # Email input (remembered across checkpoints)
-        expert_email_input = st.text_input(
-            "Your email (saved for future checkpoints)",
-            placeholder="expert@email.com",
-            value=st.session_state.vc_expert_email,
-            key="expert_email_input_quick",
-            help="Your email is remembered so you don't have to type it every time"
-        )
-
-        # Update session state when email changes
-        if expert_email_input != st.session_state.vc_expert_email:
-            st.session_state.vc_expert_email = expert_email_input
-
-    with col_right:
-        # Mini stats display
-        st.metric(
-            "Total Commits",
-            f"{stats.get('total_commits', 0):,}",
-            help="All tracked changes"
-        )
-        st.metric(
-            "Database Size",
-            f"{stats.get('database_size_mb', 0):.1f} MB",
-            help="Current database size"
-        )
-
-    st.markdown("---")
-
-    # ========================================================================
-    # COMMIT HISTORY SECTION (Enhanced)
-    # ========================================================================
-
-    st.markdown("### 📜 Commit Timeline")
-
     # Controls: search and limit
-    col1, col2, col3 = st.columns([2, 1, 1])
+    col1, col2, col3 = st.columns([3, 1, 1])
 
     with col1:
         search_query = st.text_input(
-            "Search commits",
-            placeholder="Search by message, author, or hash...",
-            key="vc_search_input",
-            label_visibility="collapsed"
+            "🔍 Search history",
+            placeholder="Search by message, author, or commit hash...",
+            key="vc_search_input"
         )
 
     with col2:
         history_limit = st.selectbox(
-            "Show",
+            "Show commits",
             options=[10, 25, 50, 100],
             index=1,
-            key="history_limit",
-            label_visibility="collapsed"
+            key="history_limit"
         )
 
     with col3:
-        st.caption(f"📊 {stats.get('snapshot_count', 0)} snapshots")
+        st.metric("Commits", f"{stats.get('total_commits', 0)}", help="Total tracked changes")
 
     # Fetch commit history
     with st.spinner("Loading version history..."):
@@ -855,94 +926,94 @@ with tab4:
             filtered_commits = commits
 
         st.caption(f"Showing {len(filtered_commits)} of {len(commits)} commits")
+        st.markdown("---")
 
-        # Display commits with enhanced UI
+        # Display commits with Google Docs-style clean UI
         for idx, commit in enumerate(filtered_commits):
             # Determine if this is the current version
             is_current = (idx == 0 and not search_query)
 
-            # Color-code based on position
-            if is_current:
-                emoji = "🟢"
-                badge = "CURRENT"
-            elif idx < 5:
-                emoji = "🔵"
-                badge = ""
-            else:
-                emoji = "⚪"
-                badge = ""
+            # Create a clean card-like layout for each commit
+            with st.container():
+                # Header row with timestamp, author, and current badge
+                header_col1, header_col2, header_col3 = st.columns([2, 2, 1])
 
-            # Build expander title
-            title = f"{emoji} `{commit['hash_short']}` · {commit['date'][:16]} · {commit['message'][:60]}{'...' if len(commit['message']) > 60 else ''}"
-            if badge:
-                title = f"{badge} {title}"
+                with header_col1:
+                    # Relative time display (like Google Docs)
+                    st.markdown(f"**{commit['date']}**")
 
-            with st.expander(title, expanded=(idx == 0 and not search_query)):
-                # Commit metadata
-                meta_col1, meta_col2 = st.columns([2, 1])
+                with header_col2:
+                    # Author name
+                    st.markdown(f"*{commit['author']}*")
 
-                with meta_col1:
-                    st.markdown(f"""
-**Message:** {commit['message']}
-**Author:** {commit['author']}
-**Date:** {commit['date']}
-                    """)
-
-                with meta_col2:
-                    st.code(commit['hash_short'], language=None)
+                with header_col3:
                     if is_current:
-                        st.success("Current version")
+                        st.markdown("🟢 **Current**")
+                    else:
+                        st.markdown(f"`{commit['hash_short']}`")
 
-                st.markdown("---")
+                # Commit message (main content) - FULL, NO TRUNCATION
+                st.markdown(f"{commit['message']}")
 
-                # Action buttons (cleaner layout)
-                action_col1, action_col2, action_col3 = st.columns(3)
+                # Show detailed commit information if available
+                if commit.get('details'):
+                    with st.expander("📋 View details", expanded=False):
+                        details = commit.get('details', {})
+
+                        # Display each detail field
+                        for key, value in details.items():
+                            # Format the key nicely
+                            formatted_key = key.replace('_', ' ').title()
+
+                            # For long values (like SQL queries), show in code block
+                            if key == 'query' or len(str(value)) > 100:
+                                st.markdown(f"**{formatted_key}:**")
+                                st.code(value, language='sql' if key == 'query' else None)
+                            else:
+                                st.markdown(f"**{formatted_key}:** `{value}`")
+
+                # Action buttons in a subtle row
+                action_col1, action_col2, action_col3, action_col4 = st.columns([1, 1, 1, 3])
 
                 with action_col1:
-                    if st.button("🔍 View Changes", key=f"view_diff_{commit['hash_short']}", use_container_width=True):
+                    if st.button("View changes", key=f"view_diff_{commit['hash_short']}", use_container_width=True):
                         st.session_state[f"show_diff_{commit['hash_short']}"] = True
                         st.rerun()
 
                 with action_col2:
                     if not is_current:
-                        if st.button("↩️ Rollback Here", key=f"rollback_{commit['hash_short']}", use_container_width=True, type="secondary"):
+                        if st.button("Restore", key=f"rollback_{commit['hash_short']}", use_container_width=True):
                             st.session_state[f"confirm_rollback_{commit['hash_short']}"] = True
                             st.rerun()
-                    else:
-                        st.button("↩️ Rollback Here", key=f"rollback_{commit['hash_short']}_disabled", use_container_width=True, disabled=True, help="Already at this version")
 
                 with action_col3:
-                    # Copy hash to clipboard (using a workaround)
-                    if st.button("📋 Copy Hash", key=f"copy_{commit['hash_short']}", use_container_width=True):
+                    if st.button("Copy hash", key=f"copy_{commit['hash_short']}", use_container_width=True):
                         st.code(commit['hash'], language=None)
                         st.caption("Full hash displayed above ↑")
 
                 # Show diff if requested
                 if st.session_state.get(f"show_diff_{commit['hash_short']}", False):
-                    st.markdown("---")
-                    with st.spinner("Loading diff..."):
+                    with st.spinner("Loading changes..."):
                         diff_response = get_version_diff(commit_hash=commit['hash'])
 
                         if diff_response.get("success"):
                             diff_text = diff_response.get('diff', '')
 
                             if diff_text:
-                                st.markdown("**SQL Changes:**")
-
-                                # Show a preview of the diff (first 50 lines)
+                                # Show a preview of the diff (first 30 lines)
                                 diff_lines = diff_text.split('\n')
-                                if len(diff_lines) > 50:
-                                    st.code('\n'.join(diff_lines[:50]), language="diff")
-                                    st.caption(f"Showing first 50 lines of {len(diff_lines)} total")
+                                if len(diff_lines) > 30:
+                                    st.code('\n'.join(diff_lines[:30]), language="diff")
+                                    st.caption(f"Showing first 30 lines of {len(diff_lines)} total")
 
-                                    if st.button("Show Full Diff", key=f"show_full_diff_{commit['hash_short']}"):
+                                    if st.button("Show full diff", key=f"show_full_diff_{commit['hash_short']}"):
                                         st.code(diff_text, language="diff")
                                 else:
                                     st.code(diff_text, language="diff")
                             else:
                                 st.info("No changes to display")
 
-                            if st.button("Hide Changes", key=f"hide_diff_{commit['hash_short']}", type="secondary"):
+                            if st.button("Hide", key=f"hide_diff_{commit['hash_short']}"):
                                 st.session_state[f"show_diff_{commit['hash_short']}"] = False
                                 st.rerun()
                         else:
@@ -950,11 +1021,10 @@ with tab4:
 
                 # Rollback confirmation
                 if st.session_state.get(f"confirm_rollback_{commit['hash_short']}", False):
-                    st.markdown("---")
                     st.warning(f"""
-⚠️ **WARNING: This will undo all changes after commit `{commit['hash_short']}`**
+⚠️ **Restore this version?**
 
-A safety snapshot will be created automatically. The rollback will be recorded as a new commit.
+This will undo all changes made after this commit. A safety backup will be created automatically.
                     """)
 
                     # Count how many commits will be affected
@@ -965,27 +1035,30 @@ A safety snapshot will be created automatically. The rollback will be recorded a
                     rollback_col1, rollback_col2 = st.columns([1, 1])
 
                     with rollback_col1:
-                        if st.button("✅ Confirm Rollback", key=f"confirm_rollback_yes_{commit['hash_short']}", type="primary", use_container_width=True):
-                            with st.spinner("Rolling back database... This may take a minute."):
+                        if st.button("Confirm restore", key=f"confirm_rollback_yes_{commit['hash_short']}", type="primary", use_container_width=True):
+                            with st.spinner("Restoring version..."):
                                 rollback_result = rollback_database(
                                     commit_hash=commit['hash'],
-                                    expert_email=st.session_state.vc_expert_email or "system"
+                                    expert_email=st.session_state.user_email or "anonymous"
                                 )
 
                                 if rollback_result.get("success"):
-                                    st.success(f"✅ Rollback successful!")
-                                    st.caption(f"Snapshot saved: `{rollback_result.get('snapshot_path', 'N/A')}`")
+                                    st.success(f"✅ Version restored successfully!")
+                                    st.caption(f"Backup saved: `{rollback_result.get('snapshot_path', 'N/A')}`")
 
                                     # Clear confirmation state
                                     st.session_state[f"confirm_rollback_{commit['hash_short']}"] = False
 
                                     st.rerun()
                                 else:
-                                    st.error(f"❌ Rollback failed: {rollback_result.get('error', 'Unknown error')}")
+                                    st.error(f"❌ Restore failed: {rollback_result.get('error', 'Unknown error')}")
 
                     with rollback_col2:
-                        if st.button("❌ Cancel", key=f"confirm_rollback_no_{commit['hash_short']}", use_container_width=True):
+                        if st.button("Cancel", key=f"confirm_rollback_no_{commit['hash_short']}", use_container_width=True):
                             st.session_state[f"confirm_rollback_{commit['hash_short']}"] = False
                             st.rerun()
+
+                # Divider between commits
+                st.markdown("---")
 
 

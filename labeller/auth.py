@@ -18,6 +18,9 @@ from authlib.integrations.flask_client import OAuth
 # Store users.db in the data/ folder alongside bird_data_complete.db
 AUTH_DB = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'data', 'users.db')
 
+# Base admin that cannot be removed or demoted
+BASE_ADMIN_EMAIL = 'olisemekanmarkwe@gmail.com'
+
 def init_auth_db():
     """Initialize authentication database with users and approved emails"""
     conn = sqlite3.connect(AUTH_DB)
@@ -76,6 +79,24 @@ def init_auth_db():
             ('annotator', 1, 0, 0, 'Can annotate images'),
             ('viewer', 0, 0, 0, 'Read-only access')
         ])
+
+    # Ensure base admin is always in approved_emails
+    cursor.execute('SELECT email FROM approved_emails WHERE email = ?', (BASE_ADMIN_EMAIL,))
+    if not cursor.fetchone():
+        cursor.execute('''
+            INSERT INTO approved_emails (email, added_by, added_at, notes)
+            VALUES (?, ?, ?, ?)
+        ''', (BASE_ADMIN_EMAIL, 'SYSTEM', datetime.now().isoformat(), 'Protected base administrator'))
+        print(f"✓ Added base admin to approved emails: {BASE_ADMIN_EMAIL}")
+
+    # Ensure base admin is always in admin_users
+    cursor.execute('SELECT email FROM admin_users WHERE email = ?', (BASE_ADMIN_EMAIL,))
+    if not cursor.fetchone():
+        cursor.execute('''
+            INSERT INTO admin_users (email, added_at)
+            VALUES (?, ?)
+        ''', (BASE_ADMIN_EMAIL, datetime.now().isoformat()))
+        print(f"✓ Added base admin to admin users: {BASE_ADMIN_EMAIL}")
 
     conn.commit()
     conn.close()
@@ -149,7 +170,14 @@ def add_approved_email(email, added_by, notes=''):
         conn.close()
 
 def remove_approved_email(email):
-    """Remove email from approved list"""
+    """
+    Remove email from approved list
+
+    Protection: Cannot remove base admin from approved list
+    """
+    if is_base_admin(email):
+        raise ValueError(f"Cannot remove base admin from approved list: {email}")
+
     conn = sqlite3.connect(AUTH_DB)
     cursor = conn.cursor()
     cursor.execute('DELETE FROM approved_emails WHERE email = ?', (email,))
@@ -334,10 +362,18 @@ def get_user_permissions(email):
     }
 
 def update_user_role(email, new_role):
-    """Update a user's role"""
+    """
+    Update a user's role
+
+    Protection: The base admin cannot be demoted from admin role
+    """
     valid_roles = ['admin', 'annotator', 'viewer']
     if new_role not in valid_roles:
         return False
+
+    # Protect base admin from being demoted
+    if is_base_admin(email) and new_role != 'admin':
+        raise ValueError(f"Cannot change role of base admin: {email}")
 
     conn = sqlite3.connect(AUTH_DB)
     cursor = conn.cursor()
@@ -363,8 +399,20 @@ def update_user_role(email, new_role):
     conn.close()
     return True
 
+def is_base_admin(email):
+    """Check if email is the protected base admin"""
+    return email == BASE_ADMIN_EMAIL
+
 def delete_user(email):
-    """Delete a user completely from the system"""
+    """
+    Delete a user completely from the system
+
+    Protection: The base admin cannot be deleted
+    """
+    # Protect base admin from deletion
+    if is_base_admin(email):
+        raise ValueError(f"Cannot delete base admin: {email}")
+
     conn = sqlite3.connect(AUTH_DB)
     cursor = conn.cursor()
 
@@ -400,7 +448,8 @@ def get_all_users_with_roles():
             'first_login': row[3],
             'last_login': row[4],
             'login_count': row[5],
-            'role': row[6] or 'viewer'
+            'role': row[6] or 'viewer',
+            'is_base_admin': is_base_admin(row[0])
         }
         # Add permissions
         perms = get_user_permissions(user['email'])

@@ -675,7 +675,7 @@
                     class="jump-input"
                     min="1"
                     max="{{ total_images }}"
-                    value="{{ current_index }}"
+                    value="{{ current_index + 1 }}"
                     onkeypress="handleJumpKeyPress(event)"
                     title="Jump to image number"
                 />
@@ -683,7 +683,7 @@
             </div>
             <span>of {{ total_images }}</span>
             <div class="progress-bar">
-                <div class="progress-fill" style="width: {{ (current_index / total_images * 100) }}%"></div>
+                <div class="progress-fill" style="width: {{ ((current_index + 1) / total_images * 100) }}%"></div>
             </div>
         </div>
     </div>
@@ -815,7 +815,7 @@ console.log('Username:', USERNAME);
 console.log('Project ID:', PROJECT_ID);
 console.log('Image name:', IMAGE_NAME);
 console.log('Image URL:', IMAGE_URL);
-console.log('Current index:', CURRENT_INDEX, '/', TOTAL_IMAGES);
+console.log('Current image:', (CURRENT_INDEX + 1), 'of', TOTAL_IMAGES);
 console.log('Existing boxes:', EXISTING_BOXES.length);
 console.log('Species data:', SPECIES_DATA.length);
 console.log('==============================');
@@ -3038,15 +3038,17 @@ function navigateToImage(imageIndex) {
     if (imageIndex >= 0 && imageIndex < TOTAL_IMAGES) {
         window.location.href = `/project/${PROJECT_ID}/editor/${USERNAME}/${imageIndex}`;
     } else {
-        alert(`Please enter a number between 0 and ${TOTAL_IMAGES - 1}`);
-        document.getElementById('jump-input').value = CURRENT_INDEX;
+        alert(`Please enter a number between 1 and ${TOTAL_IMAGES}`);
+        document.getElementById('jump-input').value = CURRENT_INDEX + 1;
     }
 }
 
 function handleJumpKeyPress(event) {
     if (event.key === 'Enter') {
-        const imageIndex = parseInt(document.getElementById('jump-input').value);
-        navigateToImage(imageIndex);
+        // User enters 1-based number, convert to 0-based index for backend
+        const userInputNumber = parseInt(document.getElementById('jump-input').value);
+        const zeroBasedIndex = userInputNumber - 1;
+        navigateToImage(zeroBasedIndex);
     }
 }
 
