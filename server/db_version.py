@@ -164,7 +164,7 @@ class DatabaseVersionControl:
             print(f"Failed to export database: {e}")
             return False
 
-    def commit(self, message: str, details: Optional[Dict[str, Any]] = None, skip_timestamp: bool = False, expert_picture: Optional[str] = None) -> Dict[str, Any]:
+    def commit(self, message: str, details: Optional[Dict[str, Any]] = None, skip_timestamp: bool = False, expert_picture: Optional[str] = None, force: bool = False) -> Dict[str, Any]:
         """
         Commit current database state to Git with descriptive message.
 
@@ -175,6 +175,7 @@ class DatabaseVersionControl:
             message: Human-readable commit message (e.g., "Updated 5 Brown Pelican counts")
             details: Optional dict with additional context (table, rows_affected, operation, etc.)
             skip_timestamp: If True, don't prepend timestamp to message (for manual checkpoints)
+            force: If True, always create commit even if Git thinks nothing changed (fixes false negatives)
 
         Returns:
             Dictionary with success status, commit hash, and timestamp
@@ -206,20 +207,34 @@ class DatabaseVersionControl:
                 capture_output=True
             )
 
-            # Step 2.5: Check if there are any staged changes
-            diff_check = subprocess.run(
-                ["git", "diff", "--cached", "--quiet"],
-                cwd=self.db_dir,
-                capture_output=True
-            )
+            # Step 2.5: Check if there are any staged changes (unless force=True)
+            if not force:
+                diff_check = subprocess.run(
+                    ["git", "diff", "--cached", "--quiet"],
+                    cwd=self.db_dir,
+                    capture_output=True
+                )
 
-            # If diff_check returns 0, there are NO staged changes
-            if diff_check.returncode == 0:
-                return {
-                    "success": True,
-                    "message": "No changes to commit (database unchanged)",
-                    "no_changes": True
-                }
+                # If diff_check returns 0, there are NO staged changes
+                if diff_check.returncode == 0:
+                    # Sometimes Git doesn't detect changes due to row ordering in SQL dumps
+                    # If we have explicit change details, we know something changed
+                    if details and details.get('rows_affected', 0) > 0:
+                        print(f"⚠️  Git detected no changes but rows_affected={details['rows_affected']}. Forcing commit...")
+                        # Touch the SQL file to force a change
+                        self.sql_dump_path.touch()
+                        subprocess.run(
+                            ["git", "add", self.sql_dump_path.name],
+                            cwd=self.db_dir,
+                            check=True,
+                            capture_output=True
+                        )
+                    else:
+                        return {
+                            "success": True,
+                            "message": "No changes to commit (database unchanged)",
+                            "no_changes": True
+                        }
 
             # Step 3: Build commit message with metadata
             timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -252,9 +267,13 @@ class DatabaseVersionControl:
             env['GIT_COMMITTER_NAME'] = self.expert_name
             env['GIT_COMMITTER_EMAIL'] = self.expert_email
 
-            # Step 5: Commit to Git
+            # Step 5: Commit to Git (allow empty commits if force=True)
+            commit_args = ["git", "commit", "-m", commit_msg]
+            if force:
+                commit_args.append("--allow-empty")
+
             result = subprocess.run(
-                ["git", "commit", "-m", commit_msg],
+                commit_args,
                 cwd=self.db_dir,
                 env=env,
                 check=False,  # Don't raise exception immediately, we'll handle errors manually
@@ -278,7 +297,7 @@ class DatabaseVersionControl:
                         "error": f"Git commit failed: {result.stderr or result.stdout or 'Unknown error'}"
                     }
 
-            # Step 5: Get commit hash for tracking
+            # Step 6: Get commit hash for tracking
             commit_hash = subprocess.run(
                 ["git", "rev-parse", "HEAD"],
                 cwd=self.db_dir,

@@ -346,6 +346,27 @@
     outline: none;
 }
 
+.db-table td.saving {
+    background: rgba(62, 207, 142, 0.1);
+    outline: 1px solid var(--db-accent);
+    position: relative;
+}
+
+.db-table td.saving::after {
+    content: "💾";
+    position: absolute;
+    right: 8px;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 14px;
+    animation: pulse 1s ease-in-out infinite;
+}
+
+@keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+}
+
 .db-table tbody tr {
     transition: background var(--transition-fast);
 }
@@ -721,6 +742,13 @@
 
 {% block content %}
 <div class="db-layout">
+    <!-- Hidden inputs for current user (used by JavaScript) -->
+    {% if session.user %}
+        <input type="hidden" id="currentUserEmail" value="{{ session.user.email }}">
+        <input type="hidden" id="currentUserName" value="{{ session.user.name }}">
+        <input type="hidden" id="currentUserPicture" value="{{ session.user.picture }}">
+    {% endif %}
+
     <!-- LEFT SIDEBAR - Table List -->
     <aside class="db-sidebar">
         <div class="db-sidebar-header">
@@ -924,70 +952,6 @@
                     </div>
                 </div>
 
-                <!-- Create Checkpoint -->
-                <div style="background: var(--bg-tertiary); border: 1px solid var(--surface-border); border-radius: 12px; padding: 20px; margin-bottom: 20px;">
-                    <h3 style="margin: 0 0 12px 0; color: var(--text-primary); font-size: 16px;">💾 Create Manual Checkpoint</h3>
-                    <p style="margin: 0 0 16px 0; color: var(--text-tertiary); font-size: 14px;">Mark important moments for easier rollback later</p>
-
-                    {% if session.user %}
-                        <!-- Current User Display -->
-                        <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 16px; padding: 12px; background: var(--bg-secondary); border-radius: 8px; border: 1px solid var(--surface-border);">
-                            <div style="position: relative; width: 40px; height: 40px; flex-shrink: 0;">
-                                <img src="{{ session.user.picture }}"
-                                     alt="{{ session.user.name }}"
-                                     style="width: 40px; height: 40px; border-radius: 50%; border: 2px solid var(--db-accent); object-fit: cover; display: block;"
-                                     onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
-                                <div style="width: 40px; height: 40px; border-radius: 50%; border: 2px solid var(--db-accent); background: linear-gradient(135deg, var(--db-accent) 0%, #2DB77A 100%); display: none; align-items: center; justify-content: center; font-size: 16px; font-weight: 700; color: white; text-transform: uppercase; position: absolute; top: 0; left: 0;">
-                                    {{ session.user.name[0] if session.user.name else 'U' }}
-                                </div>
-                            </div>
-                            <div style="flex: 1; min-width: 0;">
-                                <div style="font-weight: 600; color: var(--text-primary); font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{{ session.user.name }}</div>
-                                <div style="font-size: 12px; color: var(--text-tertiary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{{ session.user.email }}</div>
-                            </div>
-                            {% if session.user.role %}
-                                <div style="padding: 4px 10px; background: rgba(62, 207, 142, 0.15); color: var(--db-accent); border-radius: 6px; font-size: 11px; font-weight: 700; text-transform: uppercase;">
-                                    {{ session.user.role }}
-                                </div>
-                            {% endif %}
-                        </div>
-
-                        {% if session.user.role == 'admin' or session.user.can_edit_db %}
-                            <!-- Checkpoint Form (for admins and users with DB edit permission) -->
-                            <div style="display: flex; gap: 12px;">
-                                <input
-                                    type="text"
-                                    id="checkpointMessage"
-                                    placeholder="e.g., Before bulk species update"
-                                    class="version-input"
-                                    style="flex: 1;"
-                                />
-                                <input type="hidden" id="currentUserEmail" value="{{ session.user.email }}">
-                                <input type="hidden" id="currentUserName" value="{{ session.user.name }}">
-                                <input type="hidden" id="currentUserPicture" value="{{ session.user.picture }}">
-                                <button class="db-btn db-btn-primary" onclick="createCheckpoint()">
-                                    Create Checkpoint
-                                </button>
-                            </div>
-                        {% else %}
-                            <!-- Permission Denied Message -->
-                            <div style="padding: 12px 16px; background: rgba(247, 144, 9, 0.15); border: 1px solid var(--db-warning); border-radius: 8px; color: var(--db-warning); font-size: 14px; display: flex; align-items: center; gap: 10px;">
-                                <span style="font-size: 20px;">🔒</span>
-                                <div>
-                                    <strong>No Access</strong><br>
-                                    <span style="font-size: 13px; opacity: 0.9;">Your role ({{ session.user.role }}) does not have permission to commit database changes. Contact an admin for access.</span>
-                                </div>
-                            </div>
-                        {% endif %}
-                    {% else %}
-                        <!-- Not logged in -->
-                        <div style="padding: 12px 16px; background: rgba(240, 68, 56, 0.15); border: 1px solid var(--db-danger); border-radius: 8px; color: var(--db-danger); font-size: 14px;">
-                            <strong>Not Authenticated</strong><br>
-                            Please log in to create checkpoints.
-                        </div>
-                    {% endif %}
-                </div>
-
                 <!-- Version History -->
                 <div style="background: var(--bg-tertiary); border: 1px solid var(--surface-border); border-radius: 12px; padding: 20px;">
                     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
@@ -1050,10 +1014,29 @@ let tableSchema = [];
 
 const API_BASE_URL = 'http://localhost:8000';
 
+// Get current user info from hidden inputs (set by Flask session)
+let expertEmail = null;
+let expertName = null;
+let expertPicture = null;
+
 // ============================================================================
 // INITIALIZATION
 // ============================================================================
 document.addEventListener('DOMContentLoaded', () => {
+    // Load user info from hidden inputs if logged in
+    const emailInput = document.getElementById('currentUserEmail');
+    const nameInput = document.getElementById('currentUserName');
+    const pictureInput = document.getElementById('currentUserPicture');
+
+    if (emailInput) {
+        expertEmail = emailInput.value;
+        expertName = nameInput ? nameInput.value : null;
+        expertPicture = pictureInput ? pictureInput.value : null;
+        console.log('User logged in:', expertEmail);
+    } else {
+        console.log('No user logged in, using anonymous');
+    }
+
     loadTables();
 
     // Close modal on background click
@@ -1259,7 +1242,7 @@ function editCell(cell) {
     });
 }
 
-function saveCell(cell, newValue) {
+async function saveCell(cell, newValue) {
     const oldValue = cell.dataset.value;
 
     if (newValue === oldValue) {
@@ -1273,22 +1256,81 @@ function saveCell(cell, newValue) {
     const rowIdx = parseInt(row.dataset.rowIdx);
     const column = cell.dataset.col;
 
-    // Update the data
-    tableData[rowIdx][column] = newValue;
-    cell.dataset.value = newValue;
+    // Show loading state
+    cell.classList.add('saving');
+    showToast('Saving changes...', 'info');
 
-    // Restore cell display
-    cell.classList.remove('editing');
+    try {
+        // Get the row data
+        const rowData = tableData[rowIdx];
 
-    if (!newValue) {
-        cell.innerHTML = '<span class="db-cell-null">NULL</span>';
-    } else if (!isNaN(newValue) && newValue.trim() !== '') {
-        cell.innerHTML = `<span class="db-cell-number">${parseFloat(newValue).toLocaleString()}</span>`;
-    } else {
-        cell.innerHTML = newValue;
+        // Build row_id from primary key columns
+        const rowId = {};
+        const pkColumns = tableSchema.filter(col => col.pk);
+
+        if (pkColumns.length === 0) {
+            // No primary key - can't update safely
+            cancelEdit(cell, oldValue);
+            showToast('Error: Table has no primary key. Cannot update.', 'error');
+            return;
+        }
+
+        pkColumns.forEach(col => {
+            rowId[col.name] = rowData[col.name];
+        });
+
+        // Call the backend API
+        const response = await fetch(`${API_BASE_URL}/db/table/${currentTable}/row`, {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                table_name: currentTable,
+                row_id: rowId,
+                updates: {
+                    [column]: newValue || null
+                },
+                expert_email: expertEmail || 'anonymous'
+            })
+        });
+
+        const result = await response.json();
+
+        if (result.success) {
+            // Update local data
+            tableData[rowIdx][column] = newValue;
+            cell.dataset.value = newValue;
+
+            // Restore cell display
+            cell.classList.remove('editing', 'saving');
+
+            if (!newValue) {
+                cell.innerHTML = '<span class="db-cell-null">NULL</span>';
+            } else if (!isNaN(newValue) && newValue.trim() !== '') {
+                cell.innerHTML = `<span class="db-cell-number">${parseFloat(newValue).toLocaleString()}</span>`;
+            } else {
+                cell.innerHTML = newValue;
+            }
+
+            // Show success message with commit hash
+            const commitMsg = result.version_commit
+                ? `✓ Changes saved and committed: ${result.version_commit}`
+                : '✓ Changes saved successfully';
+            showToast(commitMsg, 'success');
+        } else {
+            // Revert on error
+            cell.classList.remove('saving');
+            cancelEdit(cell, oldValue);
+            showToast(`Error: ${result.error}`, 'error');
+        }
+    } catch (error) {
+        // Revert on error
+        cell.classList.remove('saving');
+        cancelEdit(cell, oldValue);
+        showToast(`Failed to save: ${error.message}`, 'error');
+        console.error('Save error:', error);
     }
-
-    showToast('Cell updated (note: changes are local only)', 'info');
 }
 
 function cancelEdit(cell, oldValue) {
@@ -1415,7 +1457,10 @@ async function executeSQL() {
         const response = await fetch(`${API_BASE_URL}/db/query`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ sql_query: query })
+            body: JSON.stringify({
+                sql_query: query,
+                expert_email: expertEmail || 'anonymous'
+            })
         });
 
         const data = await response.json();
@@ -1512,8 +1557,14 @@ async function generateQuery() {
             if (data.is_write_operation) {
                 modalTitle.textContent = '⚠️ Write Operation Detected';
                 modalIcon.textContent = '🔴';
+
+                // Check if multi-statement query
+                const statementCount = data.sql_query.split(';').filter(s => s.trim()).length;
+                const isMultiStatement = statementCount > 1;
+
                 warningEl.innerHTML = `
                     <strong>⚠️ WARNING: This is a WRITE operation!</strong><br>
+                    ${isMultiStatement ? `<strong>Multi-statement query (${statementCount} statements)</strong> will be executed together.<br>` : ''}
                     This query will modify your database (INSERT, UPDATE, DELETE, DROP, CREATE, ALTER, etc.)<br>
                     <strong>Review carefully before executing.</strong>
                 `;
@@ -1694,8 +1745,131 @@ function showLoading() {
     viewport.innerHTML = '<div class="db-loading"><div class="db-spinner"></div></div>';
 }
 
-function showInsertRow() {
-    showToast('Insert row feature coming soon', 'info');
+async function showInsertRow() {
+    if (!currentTable || !tableSchema || tableSchema.length === 0) {
+        showToast('Please select a table first', 'warning');
+        return;
+    }
+
+    // Create modal HTML
+    const modalHtml = `
+        <div id="insertRowModal" style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.7); display: flex; align-items: center; justify-content: center; z-index: 10000;">
+            <div style="background: var(--bg-elevated); border-radius: 12px; max-width: 600px; width: 90%; max-height: 80vh; overflow: hidden; box-shadow: 0 10px 40px rgba(0,0,0,0.3);">
+                <div style="padding: 20px; border-bottom: 1px solid var(--surface-border); display: flex; justify-content: space-between; align-items: center;">
+                    <h3 style="margin: 0; color: var(--text-primary);">Add New Row to ${currentTable}</h3>
+                    <button onclick="closeInsertModal()" style="background: none; border: none; font-size: 24px; cursor: pointer; color: var(--text-secondary);">&times;</button>
+                </div>
+                <div style="padding: 20px; max-height: 60vh; overflow-y: auto;">
+                    <form id="insertRowForm">
+                        ${tableSchema.map(col => {
+                            const isRequired = col.notnull && !col.default_value && !col.pk;
+                            const isPk = col.pk;
+                            return `
+                                <div style="margin-bottom: 16px;">
+                                    <label style="display: block; margin-bottom: 6px; font-weight: 600; color: var(--text-primary);">
+                                        ${col.name}
+                                        ${isPk ? '<span style="color: var(--db-warning);">(Primary Key)</span>' : ''}
+                                        ${isRequired ? '<span style="color: red;">*</span>' : ''}
+                                    </label>
+                                    <input
+                                        type="text"
+                                        name="${col.name}"
+                                        placeholder="${col.type}${col.default_value ? ' (default: ' + col.default_value + ')' : ''}"
+                                        ${isRequired ? 'required' : ''}
+                                        style="width: 100%; padding: 10px; border: 1px solid var(--surface-border); border-radius: 6px; background: var(--surface-base); color: var(--text-primary); font-size: 14px;"
+                                    />
+                                    <small style="color: var(--text-secondary); font-size: 12px;">Type: ${col.type}</small>
+                                </div>
+                            `;
+                        }).join('')}
+                    </form>
+                </div>
+                <div style="padding: 20px; border-top: 1px solid var(--surface-border); display: flex; gap: 10px; justify-content: flex-end;">
+                    <button onclick="closeInsertModal()" style="padding: 10px 20px; background: var(--surface-border); border: none; border-radius: 6px; cursor: pointer; color: var(--text-primary);">
+                        Cancel
+                    </button>
+                    <button onclick="submitInsertRow()" style="padding: 10px 20px; background: var(--db-accent); border: none; border-radius: 6px; cursor: pointer; color: white; font-weight: 600;">
+                        Insert Row
+                    </button>
+                </div>
+            </div>
+        </div>
+    `;
+
+    // Add modal to page
+    const modalDiv = document.createElement('div');
+    modalDiv.innerHTML = modalHtml;
+    document.body.appendChild(modalDiv);
+}
+
+function closeInsertModal() {
+    const modal = document.getElementById('insertRowModal');
+    if (modal) {
+        modal.parentElement.remove();
+    }
+}
+
+async function submitInsertRow() {
+    const form = document.getElementById('insertRowForm');
+    const formData = new FormData(form);
+
+    // Build row data object
+    const rowData = {};
+    for (const [key, value] of formData.entries()) {
+        // Skip empty values for non-required fields
+        if (value.trim() === '') {
+            const col = tableSchema.find(c => c.name === key);
+            if (!col.notnull || col.default_value) {
+                continue; // Let database use default or NULL
+            }
+        }
+
+        // Try to parse numbers
+        const col = tableSchema.find(c => c.name === key);
+        if (col && (col.type.includes('INT') || col.type.includes('REAL') || col.type.includes('NUMERIC'))) {
+            const numValue = parseFloat(value);
+            rowData[key] = isNaN(numValue) ? value : numValue;
+        } else {
+            rowData[key] = value;
+        }
+    }
+
+    // Show loading
+    showToast('Inserting row...', 'info');
+
+    try {
+        const response = await fetch(`${API_BASE_URL}/db/table/${currentTable}/row`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                table_name: currentTable,
+                row_data: rowData,
+                expert_email: expertEmail || 'anonymous'
+            })
+        });
+
+        const result = await response.json();
+
+        if (result.success) {
+            closeInsertModal();
+
+            // Show success message with commit hash
+            const commitMsg = result.version_commit
+                ? `✓ Row inserted and committed: ${result.version_commit}`
+                : '✓ Row inserted successfully';
+            showToast(commitMsg, 'success');
+
+            // Refresh the table to show new row
+            await loadTableData();
+        } else {
+            showToast(`Error: ${result.error}`, 'error');
+        }
+    } catch (error) {
+        showToast(`Failed to insert: ${error.message}`, 'error');
+        console.error('Insert error:', error);
+    }
 }
 
 // ============================================================================
@@ -1722,7 +1896,8 @@ async function loadVersionHistory() {
     container.innerHTML = '<div style="text-align: center; padding: 40px; color: var(--text-tertiary);"><div class="db-loading"><div class="db-spinner"></div></div></div>';
 
     try {
-        const response = await fetch(`${API_BASE_URL}/db/version/history?limit=${limit}`);
+        // Use enhanced change history endpoint for detailed old->new value tracking
+        const response = await fetch(`${API_BASE_URL}/db/changes/history?limit=${limit}`);
         const data = await response.json();
 
         if (data.success && data.commits) {
@@ -1730,76 +1905,137 @@ async function loadVersionHistory() {
                 container.innerHTML = `
                     <div style="text-align: center; padding: 40px; color: var(--text-tertiary);">
                         <div style="font-size: 48px; margin-bottom: 16px; opacity: 0.3;">📭</div>
-                        <div>No commits found</div>
+                        <div>No changes found</div>
                     </div>
                 `;
                 return;
             }
 
             container.innerHTML = data.commits.map((commit, idx) => {
-                // Build detailed info section if details exist
-                let detailsHtml = '';
-                if (commit.details && Object.keys(commit.details).length > 0) {
-                    const detailItems = Object.entries(commit.details).map(([key, value]) => {
-                        // Format query with syntax highlighting
-                        if (key === 'query' && value) {
-                            const shortQuery = value.length > 100 ? value.substring(0, 100) + '...' : value;
-                            return `
-                                <div style="margin-bottom: 8px;">
-                                    <div style="font-weight: 600; color: var(--text-secondary); margin-bottom: 4px; font-size: 11px; text-transform: uppercase;">${key}:</div>
-                                    <code style="background: var(--bg-tertiary); padding: 8px; border-radius: 4px; font-size: 11px; display: block; color: var(--db-accent); word-break: break-all; white-space: pre-wrap;">${shortQuery}</code>
-                                </div>
-                            `;
-                        } else {
-                            return `
-                                <div style="margin-bottom: 4px;">
-                                    <span style="font-weight: 600; color: var(--text-secondary); font-size: 11px; text-transform: uppercase;">${key}:</span>
-                                    <span style="color: var(--text-primary); font-size: 12px; margin-left: 8px;">${value}</span>
-                                </div>
-                            `;
-                        }
+                // Format operation with color coding
+                const opColors = {
+                    'UPDATE': 'var(--db-info)',
+                    'INSERT': 'var(--db-accent)',
+                    'DELETE': 'var(--db-danger)',
+                    'SQL_QUERY': 'var(--db-warning)'
+                };
+                const opColor = opColors[commit.operation] || 'var(--text-tertiary)';
+
+                // Build changes diff table
+                let changesHtml = '';
+                if (commit.changes && commit.changes.length > 0) {
+                    const changesTable = commit.changes.map(change => {
+                        const oldVal = change.old_value || '<span style="color: var(--text-disabled); font-style: italic;">NULL</span>';
+                        const newVal = change.new_value || '<span style="color: var(--text-disabled); font-style: italic;">NULL</span>';
+
+                        return `
+                            <tr>
+                                <td style="padding: 8px 12px; border-bottom: 1px solid var(--surface-border); color: var(--text-secondary); font-weight: 600; font-family: 'Courier New', monospace; font-size: 12px;">${change.column_name}</td>
+                                <td style="padding: 8px 12px; border-bottom: 1px solid var(--surface-border); color: var(--db-danger); background: rgba(247, 68, 56, 0.08); font-family: 'Courier New', monospace; font-size: 12px; max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${change.old_value}">${oldVal}</td>
+                                <td style="padding: 8px 12px; border-bottom: 1px solid var(--surface-border); color: var(--text-tertiary); text-align: center; font-size: 14px;">→</td>
+                                <td style="padding: 8px 12px; border-bottom: 1px solid var(--surface-border); color: var(--db-accent); background: rgba(62, 207, 142, 0.08); font-family: 'Courier New', monospace; font-size: 12px; max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${change.new_value}">${newVal}</td>
+                            </tr>
+                        `;
                     }).join('');
 
-                    detailsHtml = `
-                        <div id="details-${idx}" style="display: none; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--surface-border);">
-                            ${detailItems}
+                    changesHtml = `
+                        <div id="changes-${idx}" style="display: none; margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--surface-border);">
+                            <div style="font-weight: 600; color: var(--text-primary); margin-bottom: 8px; font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em;">Column Changes (${commit.changes.length})</div>
+                            <div style="overflow-x: auto; border: 1px solid var(--surface-border); border-radius: 6px;">
+                                <table style="width: 100%; border-collapse: collapse; background: var(--bg-primary); font-size: 13px;">
+                                    <thead>
+                                        <tr style="background: var(--bg-tertiary);">
+                                            <th style="padding: 10px 12px; text-align: left; font-weight: 700; color: var(--text-primary); border-bottom: 2px solid var(--surface-border); font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em;">Column</th>
+                                            <th style="padding: 10px 12px; text-align: left; font-weight: 700; color: var(--text-primary); border-bottom: 2px solid var(--surface-border); font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em;">Before</th>
+                                            <th style="padding: 10px 12px; text-align: center; font-weight: 700; color: var(--text-primary); border-bottom: 2px solid var(--surface-border); width: 40px;"></th>
+                                            <th style="padding: 10px 12px; text-align: left; font-weight: 700; color: var(--text-primary); border-bottom: 2px solid var(--surface-border); font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em;">After</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        ${changesTable}
+                                    </tbody>
+                                </table>
+                            </div>
                         </div>
-                        <button onclick="toggleDetails(${idx})"
-                                style="margin-top: 8px; background: none; border: none; color: var(--db-accent); cursor: pointer; font-size: 12px; padding: 0; display: flex; align-items: center; gap: 4px;">
-                            <span id="toggle-icon-${idx}">▶</span> Show Details
+                        <button onclick="toggleChanges(${idx})"
+                                id="toggle-btn-${idx}"
+                                style="margin-top: 12px; background: var(--db-accent); border: none; color: white; cursor: pointer; font-size: 12px; padding: 8px 16px; border-radius: 6px; display: flex; align-items: center; gap: 6px; font-weight: 600;">
+                            <span id="toggle-icon-${idx}">▶</span> Show Changes (${commit.changes.length})
                         </button>
                     `;
                 }
 
+                // Build metadata section
+                let metadataHtml = '';
+                if (commit.query) {
+                    const shortQuery = commit.query.length > 150 ? commit.query.substring(0, 150) + '...' : commit.query;
+                    metadataHtml = `
+                        <div style="margin-top: 12px; padding: 10px 12px; background: var(--bg-tertiary); border-radius: 6px; border-left: 3px solid ${opColor};">
+                            <div style="font-weight: 600; color: var(--text-secondary); margin-bottom: 6px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em;">SQL Query:</div>
+                            <code style="font-size: 11px; color: var(--text-primary); word-break: break-all; white-space: pre-wrap; font-family: 'Courier New', monospace;">${shortQuery}</code>
+                        </div>
+                    `;
+                }
+
                 return `
-                    <div style="background: var(--bg-primary); border: 1px solid var(--surface-border); border-radius: 8px; padding: 16px; margin-bottom: 12px;">
+                    <div style="background: var(--bg-primary); border: 1px solid var(--surface-border); border-radius: 8px; padding: 18px; margin-bottom: 14px; transition: all 0.2s ease;">
                         <div style="display: flex; justify-content: space-between; align-items: start; gap: 16px;">
-                            ${commit.picture ? `
-                                <img src="${commit.picture}"
-                                     alt="${commit.author}"
-                                     style="width: 40px; height: 40px; border-radius: 50%; border: 2px solid var(--db-accent); object-fit: cover; flex-shrink: 0;"
-                                     onerror="this.style.display='none';">
+                            ${commit.user_picture ? `
+                                <img src="${commit.user_picture}"
+                                     alt="${commit.user_email}"
+                                     style="width: 48px; height: 48px; border-radius: 50%; border: 2px solid ${opColor}; object-fit: cover; flex-shrink: 0;"
+                                     onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+                                <div style="width: 48px; height: 48px; border-radius: 50%; border: 2px solid ${opColor}; background: var(--bg-tertiary); display: none; align-items: center; justify-content: center; font-size: 18px; font-weight: 700; color: var(--text-tertiary); text-transform: uppercase; flex-shrink: 0;">
+                                    ${commit.user_email[0] || 'S'}
+                                </div>
                             ` : `
-                                <div style="width: 40px; height: 40px; border-radius: 50%; border: 2px solid var(--surface-border); background: var(--bg-tertiary); display: flex; align-items: center; justify-content: center; font-size: 16px; font-weight: 700; color: var(--text-tertiary); text-transform: uppercase; flex-shrink: 0;">
-                                    ${commit.author[0] || 'S'}
+                                <div style="width: 48px; height: 48px; border-radius: 50%; border: 2px solid ${opColor}; background: var(--bg-tertiary); display: flex; align-items: center; justify-content: center; font-size: 18px; font-weight: 700; color: var(--text-tertiary); text-transform: uppercase; flex-shrink: 0;">
+                                    ${commit.user_email[0] || 'S'}
                                 </div>
                             `}
                             <div style="flex: 1; min-width: 0;">
-                                <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 8px; flex-wrap: wrap;">
-                                    <code style="background: var(--bg-tertiary); padding: 4px 8px; border-radius: 4px; font-size: 12px; color: var(--db-accent);">${commit.hash_short}</code>
-                                    <span style="color: var(--text-tertiary); font-size: 12px;">${commit.date}</span>
+                                <!-- Header -->
+                                <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 10px; flex-wrap: wrap;">
+                                    <span style="background: ${opColor}; color: white; padding: 4px 10px; border-radius: 4px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em;">${commit.operation}</span>
+                                    <code style="background: var(--bg-tertiary); padding: 4px 8px; border-radius: 4px; font-size: 11px; color: var(--db-accent); font-family: 'Courier New', monospace;">#${commit.commit_id}</code>
+                                    <span style="color: var(--text-tertiary); font-size: 12px;">${commit.timestamp}</span>
                                 </div>
-                                <div style="color: var(--text-primary); font-weight: 600; margin-bottom: 4px;">${commit.message}</div>
-                                <div style="color: var(--text-tertiary); font-size: 12px;">by ${commit.author}</div>
-                                ${detailsHtml}
+
+                                <!-- User Info - Email Primary -->
+                                <div style="margin-bottom: 8px;">
+                                    <div style="color: var(--text-primary); font-weight: 700; font-size: 14px; margin-bottom: 2px;">
+                                        ${commit.user_email}
+                                    </div>
+                                    ${commit.user_name ? `
+                                        <div style="color: var(--text-secondary); font-size: 12px;">${commit.user_name}</div>
+                                    ` : ''}
+                                </div>
+
+                                <!-- Message -->
+                                <div style="color: var(--text-primary); font-size: 14px; margin-bottom: 8px; line-height: 1.5;">
+                                    ${commit.message}
+                                </div>
+
+                                <!-- Table Info -->
+                                <div style="display: flex; align-items: center; gap: 12px; font-size: 12px; color: var(--text-tertiary);">
+                                    <span>📊 Table: <strong style="color: var(--text-primary);">${commit.table_name}</strong></span>
+                                    <span>• ${commit.rows_affected || 1} row(s) affected</span>
+                                </div>
+
+                                ${metadataHtml}
+                                ${changesHtml}
                             </div>
-                            <div style="display: flex; gap: 8px; flex-shrink: 0;">
-                                ${idx > 0 ? `
-                                    <button class="db-btn db-btn-secondary" style="padding: 6px 12px; height: 32px; font-size: 12px;" onclick="confirmRollback('${commit.hash}', '${commit.hash_short}')">
+
+                            <!-- Rollback button (only if Git commit hash exists) -->
+                            ${commit.commit_hash && idx > 0 ? `
+                                <div style="display: flex; gap: 8px; flex-shrink: 0; align-self: flex-start;">
+                                    <button class="db-btn db-btn-secondary"
+                                            style="padding: 8px 14px; height: 36px; font-size: 12px; white-space: nowrap;"
+                                            onclick="confirmRollback('${commit.commit_hash}', '${commit.commit_hash.substring(0, 8)}')">
                                         ↩️ Rollback
                                     </button>
-                                ` : ''}
-                            </div>
+                                </div>
+                            ` : ''}
                         </div>
                     </div>
                 `;
@@ -1807,7 +2043,7 @@ async function loadVersionHistory() {
         } else {
             container.innerHTML = `
                 <div style="text-align: center; padding: 40px; color: var(--db-danger);">
-                    Failed to load version history
+                    Failed to load change history
                 </div>
             `;
         }
@@ -1821,74 +2057,23 @@ async function loadVersionHistory() {
     }
 }
 
-async function createCheckpoint() {
-    const message = document.getElementById('checkpointMessage').value.trim();
-    const emailInput = document.getElementById('currentUserEmail');
-    const nameInput = document.getElementById('currentUserName');
-    const pictureInput = document.getElementById('currentUserPicture');
-
-    const email = emailInput ? emailInput.value : 'system';
-    const name = nameInput ? nameInput.value : '';
-    const picture = pictureInput ? pictureInput.value : '';
-
-    if (!message) {
-        showToast('Please enter a checkpoint description', 'error');
-        return;
-    }
-
-    if (!email || email === 'system') {
-        showToast('You must be logged in to create checkpoints', 'error');
-        return;
-    }
-
-    showToast('Creating checkpoint...', 'info');
-
-    try {
-        const response = await fetch(`${API_BASE_URL}/db/version/commit`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                message: message,
-                expert_email: email,
-                expert_name: name,
-                expert_picture: picture
-            })
-        });
-
-        const data = await response.json();
-
-        if (data.success) {
-            if (data.no_changes) {
-                showToast('⚠️ No changes to commit - database is unchanged', 'warning');
-            } else {
-                showToast(`✓ Checkpoint created: ${data.commit_hash_short}`, 'success');
-                document.getElementById('checkpointMessage').value = '';
-                await loadVersionHistory();
-                await loadVersionStats();
-            }
-        } else {
-            showToast('Failed to create checkpoint: ' + (data.error || 'Unknown error'), 'error');
-        }
-    } catch (error) {
-        showToast('Error creating checkpoint: ' + error.message, 'error');
-    }
-}
-
-function toggleDetails(idx) {
-    const detailsDiv = document.getElementById(`details-${idx}`);
+function toggleChanges(idx) {
+    const changesDiv = document.getElementById(`changes-${idx}`);
     const icon = document.getElementById(`toggle-icon-${idx}`);
-    const button = icon.parentElement;
+    const btn = document.getElementById(`toggle-btn-${idx}`);
 
-    if (detailsDiv.style.display === 'none') {
-        detailsDiv.style.display = 'block';
+    if (changesDiv.style.display === 'none') {
+        changesDiv.style.display = 'block';
         icon.textContent = '▼';
-        button.childNodes[1].textContent = ' Hide Details';
+        btn.innerHTML = `<span id="toggle-icon-${idx}">▼</span> Hide Changes`;
     } else {
-        detailsDiv.style.display = 'none';
+        changesDiv.style.display = 'none';
         icon.textContent = '▶';
-        button.childNodes[1].textContent = ' Show Details';
+        const changesCount = changesDiv.querySelectorAll('tbody tr').length;
+        btn.innerHTML = `<span id="toggle-icon-${idx}">▶</span> Show Changes (${changesCount})`;
     }
 }
+
 
 function confirmRollback(hash, hashShort) {
     if (confirm(`⚠️ WARNING: This will rollback the database to commit ${hashShort}.\n\nAll changes after this commit will be undone.\nA safety snapshot will be created.\n\nAre you sure?`)) {
