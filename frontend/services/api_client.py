@@ -257,12 +257,13 @@ def fetch_example_image(example_name: str) -> Optional[bytes]:
         return None
 
 
-def execute_custom_sql(sql_query: str) -> Dict[str, Any]:
+def execute_custom_sql(sql_query: str, expert_email: str = None) -> Dict[str, Any]:
     """
-    Execute a custom SQL query on the database.
+    Execute a custom SQL query on the database (with write access and version control).
 
     Args:
         sql_query: SQL query to execute
+        expert_email: Email of user executing the query (for version control attribution)
 
     Returns:
         Dictionary containing results and error (if any)
@@ -271,8 +272,8 @@ def execute_custom_sql(sql_query: str) -> Dict[str, Any]:
 
     try:
         response = requests.post(
-            f"{API_BASE_URL}/query/execute",
-            json={"sql_query": sql_query},
+            f"{API_BASE_URL}/db/query",
+            json={"sql_query": sql_query, "expert_email": expert_email},
             timeout=30
         )
         response.raise_for_status()
@@ -385,7 +386,7 @@ def get_table_schema(table_name: str) -> Dict[str, Any]:
         }
 
 
-def update_table_row(table_name: str, row_id: Dict[str, Any], updates: Dict[str, Any]) -> Dict[str, Any]:
+def update_table_row(table_name: str, row_id: Dict[str, Any], updates: Dict[str, Any], expert_email: str = None) -> Dict[str, Any]:
     """
     Update a row in a table.
 
@@ -393,6 +394,7 @@ def update_table_row(table_name: str, row_id: Dict[str, Any], updates: Dict[str,
         table_name: Name of the table
         row_id: Primary key column(s) and value(s)
         updates: Columns to update
+        expert_email: Email of user making the change (for version control attribution)
 
     Returns:
         Dictionary containing success status
@@ -402,7 +404,7 @@ def update_table_row(table_name: str, row_id: Dict[str, Any], updates: Dict[str,
     try:
         response = requests.put(
             f"{API_BASE_URL}/db/table/{table_name}/row",
-            json={"table_name": table_name, "row_id": row_id, "updates": updates},
+            json={"table_name": table_name, "row_id": row_id, "updates": updates, "expert_email": expert_email},
             timeout=30
         )
         response.raise_for_status()
@@ -411,13 +413,14 @@ def update_table_row(table_name: str, row_id: Dict[str, Any], updates: Dict[str,
         return {"success": False, "message": None, "error": str(e)}
 
 
-def delete_table_row(table_name: str, row_id: Dict[str, Any]) -> Dict[str, Any]:
+def delete_table_row(table_name: str, row_id: Dict[str, Any], expert_email: str = None) -> Dict[str, Any]:
     """
     Delete a row from a table.
 
     Args:
         table_name: Name of the table
         row_id: Primary key column(s) and value(s)
+        expert_email: Email of user making the change (for version control attribution)
 
     Returns:
         Dictionary containing success status
@@ -427,7 +430,7 @@ def delete_table_row(table_name: str, row_id: Dict[str, Any]) -> Dict[str, Any]:
     try:
         response = requests.delete(
             f"{API_BASE_URL}/db/table/{table_name}/row",
-            json={"table_name": table_name, "row_id": row_id},
+            json={"table_name": table_name, "row_id": row_id, "expert_email": expert_email},
             timeout=30
         )
         response.raise_for_status()
@@ -436,13 +439,14 @@ def delete_table_row(table_name: str, row_id: Dict[str, Any]) -> Dict[str, Any]:
         return {"success": False, "message": None, "error": str(e)}
 
 
-def insert_table_row(table_name: str, row_data: Dict[str, Any]) -> Dict[str, Any]:
+def insert_table_row(table_name: str, row_data: Dict[str, Any], expert_email: str = None) -> Dict[str, Any]:
     """
     Insert a new row into a table.
 
     Args:
         table_name: Name of the table
         row_data: Column names and values for the new row
+        expert_email: Email of user making the change (for version control attribution)
 
     Returns:
         Dictionary containing success status
@@ -452,7 +456,71 @@ def insert_table_row(table_name: str, row_data: Dict[str, Any]) -> Dict[str, Any
     try:
         response = requests.post(
             f"{API_BASE_URL}/db/table/{table_name}/row",
-            json={"table_name": table_name, "row_data": row_data},
+            json={"table_name": table_name, "row_data": row_data, "expert_email": expert_email},
+            timeout=30
+        )
+        response.raise_for_status()
+        return response.json()
+    except requests.exceptions.RequestException as e:
+        return {"success": False, "message": None, "error": str(e)}
+
+
+def add_table_column(table_name: str, column_name: str, column_type: str,
+                     default_value: str = None, not_null: bool = False,
+                     expert_email: str = None) -> Dict[str, Any]:
+    """
+    Add a new column to a table.
+
+    Args:
+        table_name: Name of the table
+        column_name: Name of the new column
+        column_type: SQL type (e.g., "TEXT", "INTEGER", "REAL")
+        default_value: Default value for existing rows
+        not_null: Whether the column should be NOT NULL
+        expert_email: Email of user making the change
+
+    Returns:
+        Dictionary containing success status
+    """
+    from .config import API_BASE_URL
+
+    try:
+        response = requests.post(
+            f"{API_BASE_URL}/db/table/{table_name}/column",
+            json={
+                "table_name": table_name,
+                "column_name": column_name,
+                "column_type": column_type,
+                "default_value": default_value,
+                "not_null": not_null,
+                "expert_email": expert_email
+            },
+            timeout=30
+        )
+        response.raise_for_status()
+        return response.json()
+    except requests.exceptions.RequestException as e:
+        return {"success": False, "message": None, "error": str(e)}
+
+
+def delete_table_column(table_name: str, column_name: str, expert_email: str = None) -> Dict[str, Any]:
+    """
+    Delete a column from a table.
+
+    Args:
+        table_name: Name of the table
+        column_name: Name of the column to delete
+        expert_email: Email of user making the change
+
+    Returns:
+        Dictionary containing success status
+    """
+    from .config import API_BASE_URL
+
+    try:
+        response = requests.delete(
+            f"{API_BASE_URL}/db/table/{table_name}/column/{column_name}",
+            params={"expert_email": expert_email},
             timeout=30
         )
         response.raise_for_status()

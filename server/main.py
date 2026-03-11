@@ -10,6 +10,7 @@ from pydantic import BaseModel
 from typing import Optional, List, Dict, Any
 import sqlite3
 import pandas as pd
+import time
 from openai import OpenAI
 import os
 from pathlib import Path
@@ -20,12 +21,18 @@ import cv2
 import base64
 import httpx
 import yaml
+import logging
 from server.cv_tools.inference import BirdDetector, get_example_images
 from server.db_version import DatabaseVersionControl
+from server.db_change_tracker import ChangeTracker
 from server.flood_tools.flood_database import FloodDatabase
 from server.flood_tools.noaa_client import NOAAClient
 from server.services.risk_intelligence import RiskIntelligenceService
 from server.services.db_explorer import DatabaseExplorer
+
+# Initialize logger
+logger = logging.getLogger(__name__)
+logging.basicConfig(level=logging.INFO)
 
 # Initialize risk intelligence service
 _risk_service = None
@@ -124,6 +131,7 @@ class ExampleImagesResponse(BaseModel):
 
 class CustomSQLRequest(BaseModel):
     sql_query: str
+    expert_email: Optional[str] = None  # Email of user executing the query
 
 class CustomSQLResponse(BaseModel):
     success: bool
@@ -167,6 +175,7 @@ class RowUpdateRequest(BaseModel):
     table_name: str
     row_id: Dict[str, Any]  # Primary key column(s) and value(s)
     updates: Dict[str, Any]  # Columns to update
+    expert_email: Optional[str] = None  # Email of user making the change
 
 class RowUpdateResponse(BaseModel):
     success: bool
@@ -177,6 +186,7 @@ class RowUpdateResponse(BaseModel):
 class RowDeleteRequest(BaseModel):
     table_name: str
     row_id: Dict[str, Any]  # Primary key column(s) and value(s)
+    expert_email: Optional[str] = None  # Email of user making the change
 
 class RowDeleteResponse(BaseModel):
     success: bool
@@ -187,6 +197,7 @@ class RowDeleteResponse(BaseModel):
 class RowInsertRequest(BaseModel):
     table_name: str
     row_data: Dict[str, Any]  # Column names and values
+    expert_email: Optional[str] = None  # Email of user making the change
 
 class RowInsertResponse(BaseModel):
     success: bool
@@ -194,7 +205,39 @@ class RowInsertResponse(BaseModel):
     error: Optional[str] = None
     version_commit: Optional[str] = None  # Git commit hash if versioning is active
 
-# Version Control Response Models
+class ColumnAddRequest(BaseModel):
+    table_name: str
+    column_name: str
+    column_type: str  # e.g., "TEXT", "INTEGER", "REAL"
+    default_value: Optional[str] = None
+    not_null: bool = False
+    expert_email: Optional[str] = None
+
+class ColumnAddResponse(BaseModel):
+    success: bool
+    message: Optional[str]
+    error: Optional[str] = None
+    version_commit: Optional[str] = None
+
+class ColumnDeleteRequest(BaseModel):
+    table_name: str
+    column_name: str
+    expert_email: Optional[str] = None
+
+class ColumnDeleteResponse(BaseModel):
+    success: bool
+    message: Optional[str]
+    error: Optional[str] = None
+    version_commit: Optional[str] = None
+
+# Version Control Request/Response Models
+class VersionCommitRequest(BaseModel):
+    """Request for manually creating a version control commit"""
+    message: str
+    expert_email: str = "system"
+    expert_name: Optional[str] = None
+    expert_picture: Optional[str] = None
+
 class VersionCommit(BaseModel):
     """Represents a single Git commit in version history"""
     hash: str
@@ -202,6 +245,9 @@ class VersionCommit(BaseModel):
     author: str
     date: str
     message: str
+    details: Optional[Dict[str, Any]] = {}
+    full_message: Optional[str] = ""
+    picture: Optional[str] = None
 
 class VersionHistoryResponse(BaseModel):
     """Response for /db/version/history endpoint"""
@@ -271,6 +317,67 @@ try:
 except Exception as e:
     print(f"⚠️  Warning: Database version control initialization failed: {e}")
     db_version_control = None
+
+# Initialize Enhanced Change Tracker
+# This tracks row-level changes for detailed audit trails
+try:
+    change_tracker = ChangeTracker(DB_PATH)
+    print(f"✓ Change tracker initialized (changelog at {change_tracker.changelog_db})")
+except Exception as e:
+    print(f"⚠️  Warning: Change tracker initialization failed: {e}")
+    change_tracker = None
+
+
+# ============================================================================
+# USER INFO HELPER (for version control attribution)
+# ============================================================================
+
+def get_user_info(email: str) -> Dict[str, str]:
+    """
+    Fetch user information from authentication database.
+
+    This retrieves the user's full name and profile picture from the
+    users.db authentication database, so we can attribute changes properly
+    in version control.
+
+    Args:
+        email: User's email address
+
+    Returns:
+        Dictionary with 'name' and 'picture' keys
+    """
+    # Path to authentication database
+    auth_db_path = Path(DB_PATH).parent / "users.db"
+
+    try:
+        if not auth_db_path.exists():
+            return {"name": email.split('@')[0].replace('.', ' ').title(), "picture": None}
+
+        conn = sqlite3.connect(str(auth_db_path))
+        cursor = conn.cursor()
+
+        cursor.execute('SELECT name, picture FROM users WHERE email = ?', (email,))
+        result = cursor.fetchone()
+        conn.close()
+
+        if result:
+            return {
+                "name": result[0] or email.split('@')[0].replace('.', ' ').title(),
+                "picture": result[1]
+            }
+        else:
+            # User not in auth DB yet - extract name from email
+            return {
+                "name": email.split('@')[0].replace('.', ' ').title(),
+                "picture": None
+            }
+
+    except Exception as e:
+        print(f"Warning: Failed to fetch user info for {email}: {e}")
+        return {
+            "name": email.split('@')[0].replace('.', ' ').title(),
+            "picture": None
+        }
 
 # Model configuration - SINGLE SOURCE OF TRUTH
 # Primary source: config.yaml (version controlled)
@@ -2171,13 +2278,22 @@ async def nestdb_generate_query(request: QuestionRequest):
             "content": f"""Question: {request.question}
 
 INSTRUCTIONS FOR NESTDB ADMIN INTERFACE:
-1. Return ONLY the SQL query - no explanations, no markdown, no comments
+1. Return ONLY the SQL query/queries - no explanations, no markdown, no comments
 2. You can generate ANY valid SQL operation: SELECT, INSERT, UPDATE, DELETE, CREATE, ALTER, DROP, etc.
 3. This is an admin interface, so write operations are allowed
 4. Use exact column names from the schema (case-sensitive)
 5. For SQLite, use proper syntax (e.g., AUTOINCREMENT, not AUTO_INCREMENT)
+6. **IMPORTANT**: You can generate MULTIPLE SQL statements separated by semicolons
+   - If the user asks to "create a table and insert data", generate BOTH statements:
+     CREATE TABLE ...; INSERT INTO ...;
+   - Always complete multi-step operations in a single response
+   - Each statement should end with a semicolon
+7. Be smart and helpful - understand the user's intent fully
+   - "Create a table and add data" = CREATE TABLE + INSERT statements
+   - "Set up a test table" = CREATE TABLE + INSERT sample data
+   - Think through what the user actually needs
 
-Generate the SQL query now:"""
+Generate the complete SQL query/queries now:"""
         })
 
         try:
@@ -2804,6 +2920,157 @@ async def get_tables():
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.post("/db/query", response_model=CustomSQLResponse)
+async def execute_query(request: CustomSQLRequest):
+    """
+    Execute a SQL query on the database (for NestDB admin interface).
+
+    This endpoint allows admins to execute any SQL query including write operations.
+    Write operations (INSERT, UPDATE, DELETE, etc.) are automatically committed to version control.
+
+    Args:
+        request: CustomSQLRequest with sql_query
+
+    Returns:
+        CustomSQLResponse with results or error
+
+    Educational Note:
+    Unlike /ask which is read-only for safety, this endpoint allows full database access
+    because it's protected by authentication in the Flask app (only logged-in admins can access NestDB).
+    """
+    try:
+        query = request.sql_query.strip()
+
+        if not query:
+            return CustomSQLResponse(
+                success=False,
+                results=None,
+                results_count=0,
+                error="Query cannot be empty"
+            )
+
+        # Detect if this is a write operation (check all statements)
+        query_upper = query.upper()
+        write_keywords = ['INSERT', 'UPDATE', 'DELETE', 'DROP', 'CREATE', 'ALTER', 'TRUNCATE', 'REPLACE']
+        is_write_operation = any(kw in query_upper for kw in write_keywords)
+
+        # Use read-write connection (not read-only like NestChat)
+        conn = sqlite3.connect(DB_PATH, check_same_thread=False)
+        cursor = conn.cursor()
+
+        try:
+            # Check if multiple statements (contains semicolons not at the end)
+            statements = [s.strip() for s in query.split(';') if s.strip()]
+            has_multiple_statements = len(statements) > 1
+
+            if has_multiple_statements:
+                # Use executescript for multiple statements
+                # This handles CREATE TABLE; INSERT INTO; etc. in one go
+                cursor.executescript(query)
+                rows_affected = cursor.rowcount if cursor.rowcount > 0 else len(statements)
+            else:
+                # Single statement - use regular execute
+                cursor.execute(query)
+                rows_affected = cursor.rowcount
+
+            # For write operations, commit and track in version control
+            if is_write_operation:
+                conn.commit()
+
+                # Get user info for attribution
+                user_email = request.expert_email or "anonymous"
+                user_info = get_user_info(user_email)
+
+                # Commit to Git version control FIRST (to get commit hash)
+                commit_hash = None
+                try:
+                    # Create user-specific version control instance
+                    user_vc = DatabaseVersionControl(
+                        DB_PATH,
+                        expert_email=user_email,
+                        expert_name=user_info.get("name")
+                    )
+
+                    commit_result = user_vc.commit(
+                        message=f"Query executed via NestDB: {query[:100]}{'...' if len(query) > 100 else ''}",
+                        details={
+                            "operation": "SQL_QUERY",
+                            "query": query,
+                            "rows_affected": rows_affected,
+                            "interface": "NestDB"
+                        },
+                        expert_picture=user_info.get("picture"),
+                        force=True  # Force commit even if Git thinks nothing changed
+                    )
+                    commit_hash = commit_result.get('commit_hash')  # Get full hash for tracker
+                    logger.info(f"Version control commit by {user_info.get('name')} ({user_email}): {commit_result}")
+                except Exception as vc_error:
+                        logger.warning(f"Version control commit failed: {vc_error}")
+
+                # Track query execution with detailed tracker (WITH commit hash)
+                if change_tracker:
+                    try:
+                        change_tracker.track_query(
+                            query=query,
+                            rows_affected=rows_affected,
+                            user_email=user_email,
+                            user_name=user_info.get("name"),
+                            user_picture=user_info.get("picture"),
+                            commit_hash=commit_hash  # Link Git commit to change tracker
+                        )
+                        print(f"✓ Query execution tracked for {user_email} (linked to Git commit {commit_result.get('commit_hash_short') if commit_hash else 'none'})")
+                    except Exception as e:
+                        print(f"⚠️  Warning: Change tracker failed: {e}")
+
+                conn.close()
+
+                return CustomSQLResponse(
+                    success=True,
+                    results=None,
+                    results_count=rows_affected,
+                    error=None
+                )
+
+            # For read operations (SELECT, etc.), return results
+            else:
+                columns = [description[0] for description in cursor.description] if cursor.description else []
+                rows = cursor.fetchall()
+
+                # Convert rows to list of dicts
+                results = []
+                for row in rows:
+                    row_dict = {}
+                    for i, col in enumerate(columns):
+                        row_dict[col] = row[i]
+                    results.append(row_dict)
+
+                conn.close()
+
+                return CustomSQLResponse(
+                    success=True,
+                    results=results,
+                    results_count=len(results),
+                    error=None
+                )
+
+        except Exception as e:
+            conn.rollback()
+            conn.close()
+            return CustomSQLResponse(
+                success=False,
+                results=None,
+                results_count=0,
+                error=f"Query execution failed: {str(e)}"
+            )
+
+    except Exception as e:
+        return CustomSQLResponse(
+            success=False,
+            results=None,
+            results_count=0,
+            error=f"Failed to process query: {str(e)}"
+        )
+
 @app.get("/db/table/{table_name}", response_model=TableDataResponse)
 async def get_table_data(table_name: str, page: int = 1, page_size: int = 50):
     """
@@ -2845,7 +3112,8 @@ async def get_table_data(table_name: str, page: int = 1, page_size: int = 50):
         offset = (page - 1) * page_size
 
         # Get paginated data
-        query = f'SELECT * FROM "{table_name}" LIMIT ? OFFSET ?'
+        # Include rowid for tables without explicit primary keys
+        query = f'SELECT rowid, * FROM "{table_name}" LIMIT ? OFFSET ?'
         df = pd.read_sql_query(query, conn, params=(page_size, offset))
 
         conn.close()
@@ -2957,6 +3225,16 @@ async def update_table_row(table_name: str, request: RowUpdateRequest):
             where_values.append(val)
         where_clause = " AND ".join(where_parts)
 
+        # STEP 1: Fetch old values BEFORE updating (for change tracking)
+        # Include rowid in case table has no explicit primary key
+        select_query = f'SELECT rowid, * FROM "{table_name}" WHERE {where_clause}'
+        cursor.execute(select_query, where_values)
+        old_row = cursor.fetchone()
+
+        # Get column names
+        column_names = [description[0] for description in cursor.description]
+        old_values = dict(zip(column_names, old_row)) if old_row else {}
+
         # Build UPDATE SET clause
         set_parts = []
         set_values = []
@@ -2965,7 +3243,7 @@ async def update_table_row(table_name: str, request: RowUpdateRequest):
             set_values.append(val)
         set_clause = ", ".join(set_parts)
 
-        # Execute update
+        # STEP 2: Execute update
         # Escape table name with double quotes to handle special characters
         query = f'UPDATE "{table_name}" SET {set_clause} WHERE {where_clause}'
         cursor.execute(query, set_values + where_values)
@@ -2981,23 +3259,55 @@ async def update_table_row(table_name: str, request: RowUpdateRequest):
                 error="No rows were updated. Row may not exist."
             )
 
-        # Auto-commit to version control
+        # STEP 3: Get user info for attribution
+        user_email = request.expert_email or "anonymous"
+        user_info = get_user_info(user_email)
+
+        # STEP 4: Auto-commit to Git version control FIRST (to get commit hash)
         commit_hash = None
-        if db_version_control is not None:
+        try:
+            # Create user-specific version control instance
+            user_vc = DatabaseVersionControl(
+                DB_PATH,
+                expert_email=user_email,
+                expert_name=user_info.get("name")
+            )
+
+            commit_result = user_vc.commit(
+                message=f"Updated {rows_affected} row(s) in {table_name}",
+                details={
+                    "operation": "UPDATE",
+                    "table": table_name,
+                    "rows_affected": rows_affected,
+                    "columns_updated": list(request.updates.keys())
+                },
+                expert_picture=user_info.get("picture"),
+                force=True  # Force commit even if Git thinks nothing changed
+            )
+            commit_hash = commit_result.get('commit_hash')  # Get full hash for tracker
+            print(f"✓ Database change committed by {user_info.get('name')} ({user_email}): {commit_result.get('commit_hash_short')}")
+        except Exception as e:
+            print(f"⚠️  Warning: Version control commit failed: {e}")
+
+        # STEP 5: Track change with detailed row-level tracker (WITH commit hash)
+        if change_tracker and old_values:
             try:
-                commit_result = db_version_control.commit(
-                    message=f"Updated {rows_affected} row(s) in {table_name}",
-                    details={
-                        "operation": "UPDATE",
-                        "table": table_name,
-                        "rows_affected": rows_affected,
-                        "columns_updated": list(request.updates.keys())
-                    }
+                # Build new values dict (merge old values with updates)
+                new_values = {**old_values, **request.updates}
+
+                change_tracker.track_update(
+                    table_name=table_name,
+                    row_id=request.row_id,
+                    old_values=old_values,
+                    new_values=new_values,
+                    user_email=user_email,
+                    user_name=user_info.get("name"),
+                    user_picture=user_info.get("picture"),
+                    commit_hash=commit_hash  # Link Git commit to change tracker
                 )
-                commit_hash = commit_result.get('commit_hash_short')
-                print(f"✓ Database change committed to version control: {commit_hash}")
+                print(f"✓ Row-level change tracked for {user_email} (linked to Git commit {commit_result.get('commit_hash_short') if commit_hash else 'none'})")
             except Exception as e:
-                print(f"⚠️  Warning: Version control commit failed: {e}")
+                print(f"⚠️  Warning: Change tracker failed: {e}")
 
         return RowUpdateResponse(
             success=True,
@@ -3038,7 +3348,16 @@ async def delete_table_row(table_name: str, request: RowDeleteRequest):
             where_values.append(val)
         where_clause = " AND ".join(where_parts)
 
-        # Execute delete
+        # STEP 1: Fetch row data BEFORE deleting (for change tracking)
+        select_query = f'SELECT * FROM "{table_name}" WHERE {where_clause}'
+        cursor.execute(select_query, where_values)
+        deleted_row = cursor.fetchone()
+
+        # Get column names
+        column_names = [description[0] for description in cursor.description]
+        deleted_values = dict(zip(column_names, deleted_row)) if deleted_row else {}
+
+        # STEP 2: Execute delete
         # Escape table name with double quotes to handle special characters
         query = f'DELETE FROM "{table_name}" WHERE {where_clause}'
         cursor.execute(query, where_values)
@@ -3054,22 +3373,49 @@ async def delete_table_row(table_name: str, request: RowDeleteRequest):
                 error="No rows were deleted. Row may not exist."
             )
 
-        # Auto-commit to version control
+        # STEP 3: Get user info for attribution
+        user_email = request.expert_email or "anonymous"
+        user_info = get_user_info(user_email)
+
+        # STEP 4: Track deletion with detailed row-level tracker
         commit_hash = None
-        if db_version_control is not None:
+        if change_tracker and deleted_values:
             try:
-                commit_result = db_version_control.commit(
-                    message=f"Deleted {rows_affected} row(s) from {table_name}",
-                    details={
-                        "operation": "DELETE",
-                        "table": table_name,
-                        "rows_affected": rows_affected
-                    }
+                change_tracker.track_delete(
+                    table_name=table_name,
+                    row_id=request.row_id,
+                    deleted_values=deleted_values,
+                    user_email=user_email,
+                    user_name=user_info.get("name"),
+                    user_picture=user_info.get("picture")
                 )
-                commit_hash = commit_result.get('commit_hash_short')
-                print(f"✓ Database change committed to version control: {commit_hash}")
+                print(f"✓ Row-level deletion tracked for {user_email}")
             except Exception as e:
-                print(f"⚠️  Warning: Version control commit failed: {e}")
+                print(f"⚠️  Warning: Change tracker failed: {e}")
+
+        # STEP 5: Auto-commit to version control with user attribution
+        try:
+            # Create user-specific version control instance
+            user_vc = DatabaseVersionControl(
+                DB_PATH,
+                expert_email=user_email,
+                expert_name=user_info.get("name")
+            )
+
+            commit_result = user_vc.commit(
+                message=f"Deleted {rows_affected} row(s) from {table_name}",
+                details={
+                    "operation": "DELETE",
+                    "table": table_name,
+                    "rows_affected": rows_affected
+                },
+                expert_picture=user_info.get("picture"),
+                force=True  # Force commit even if Git thinks nothing changed
+            )
+            commit_hash = commit_result.get('commit_hash_short')
+            print(f"✓ Database change committed by {user_info.get('name')} ({user_email}): {commit_hash}")
+        except Exception as e:
+            print(f"⚠️  Warning: Version control commit failed: {e}")
 
         return RowDeleteResponse(
             success=True,
@@ -3122,23 +3468,50 @@ async def insert_table_row(table_name: str, request: RowInsertRequest):
                 error="No rows were inserted."
             )
 
-        # Auto-commit to version control
+        # Get user info for attribution
+        user_email = request.expert_email or "anonymous"
+        user_info = get_user_info(user_email)
+
+        # Auto-commit to Git version control FIRST (to get commit hash)
         commit_hash = None
-        if db_version_control is not None:
+        try:
+            # Create user-specific version control instance
+            user_vc = DatabaseVersionControl(
+                DB_PATH,
+                expert_email=user_email,
+                expert_name=user_info.get("name")
+            )
+
+            commit_result = user_vc.commit(
+                message=f"Inserted {rows_affected} row(s) into {table_name}",
+                details={
+                    "operation": "INSERT",
+                    "table": table_name,
+                    "rows_affected": rows_affected,
+                    "columns": list(request.row_data.keys())
+                },
+                expert_picture=user_info.get("picture"),
+                force=True  # Force commit even if Git thinks nothing changed
+            )
+            commit_hash = commit_result.get('commit_hash')  # Get full hash for tracker
+            print(f"✓ Database change committed by {user_info.get('name')} ({user_email}): {commit_result.get('commit_hash_short')}")
+        except Exception as e:
+            print(f"⚠️  Warning: Version control commit failed: {e}")
+
+        # Track insert with detailed row-level tracker (WITH commit hash)
+        if change_tracker:
             try:
-                commit_result = db_version_control.commit(
-                    message=f"Inserted {rows_affected} row(s) into {table_name}",
-                    details={
-                        "operation": "INSERT",
-                        "table": table_name,
-                        "rows_affected": rows_affected,
-                        "columns": list(request.row_data.keys())
-                    }
+                change_tracker.track_insert(
+                    table_name=table_name,
+                    row_data=request.row_data,
+                    user_email=user_email,
+                    user_name=user_info.get("name"),
+                    user_picture=user_info.get("picture"),
+                    commit_hash=commit_hash  # Link Git commit to change tracker
                 )
-                commit_hash = commit_result.get('commit_hash_short')
-                print(f"✓ Database change committed to version control: {commit_hash}")
+                print(f"✓ Row-level insert tracked for {user_email} (linked to Git commit {commit_result.get('commit_hash_short') if commit_hash else 'none'})")
             except Exception as e:
-                print(f"⚠️  Warning: Version control commit failed: {e}")
+                print(f"⚠️  Warning: Change tracker failed: {e}")
 
         return RowInsertResponse(
             success=True,
@@ -3148,6 +3521,205 @@ async def insert_table_row(table_name: str, request: RowInsertRequest):
         )
     except Exception as e:
         return RowInsertResponse(
+            success=False,
+            message=None,
+            error=str(e)
+        )
+
+@app.post("/db/table/{table_name}/column", response_model=ColumnAddResponse)
+async def add_table_column(table_name: str, request: ColumnAddRequest):
+    """
+    Add a new column to an existing table.
+
+    Args:
+        table_name: Name of the table
+        request: ColumnAddRequest with column details
+
+    Returns:
+        ColumnAddResponse with success status
+    """
+    try:
+        # Use read_only=False for write operations
+        conn = chatbot.get_connection(read_only=False)
+        cursor = conn.cursor()
+
+        # Build ALTER TABLE query
+        column_def = f'"{request.column_name}" {request.column_type}'
+
+        if request.not_null:
+            if request.default_value is None:
+                return ColumnAddResponse(
+                    success=False,
+                    message=None,
+                    error="NOT NULL columns must have a default value"
+                )
+            column_def += f" NOT NULL DEFAULT {request.default_value}"
+        elif request.default_value is not None:
+            column_def += f" DEFAULT {request.default_value}"
+
+        query = f'ALTER TABLE "{table_name}" ADD COLUMN {column_def}'
+        cursor.execute(query)
+        conn.commit()
+        conn.close()
+
+        # Get user info for attribution
+        user_email = request.expert_email or "anonymous"
+        user_info = get_user_info(user_email)
+
+        # Auto-commit to Git version control
+        commit_hash = None
+        try:
+            user_vc = DatabaseVersionControl(
+                DB_PATH,
+                expert_email=user_email,
+                expert_name=user_info.get("name")
+            )
+
+            commit_result = user_vc.commit(
+                message=f"Added column '{request.column_name}' to {table_name}",
+                details={
+                    "operation": "ALTER_TABLE_ADD_COLUMN",
+                    "table": table_name,
+                    "column_name": request.column_name,
+                    "column_type": request.column_type
+                },
+                expert_picture=user_info.get("picture"),
+                force=True
+            )
+            commit_hash = commit_result.get('commit_hash')
+            print(f"✓ Column addition committed by {user_info.get('name')} ({user_email}): {commit_result.get('commit_hash_short')}")
+        except Exception as e:
+            print(f"⚠️  Warning: Version control commit failed: {e}")
+
+        return ColumnAddResponse(
+            success=True,
+            message=f"Successfully added column '{request.column_name}' to {table_name}",
+            error=None,
+            version_commit=commit_hash
+        )
+    except Exception as e:
+        return ColumnAddResponse(
+            success=False,
+            message=None,
+            error=str(e)
+        )
+
+@app.delete("/db/table/{table_name}/column/{column_name}", response_model=ColumnDeleteResponse)
+async def delete_table_column(table_name: str, column_name: str, expert_email: Optional[str] = None):
+    """
+    Delete a column from a table.
+
+    Note: SQLite doesn't support DROP COLUMN directly in older versions.
+    This recreates the table without the specified column.
+
+    Args:
+        table_name: Name of the table
+        column_name: Name of the column to delete
+        expert_email: Email of user making the change
+
+    Returns:
+        ColumnDeleteResponse with success status
+    """
+    try:
+        # Use read_only=False for write operations
+        conn = chatbot.get_connection(read_only=False)
+        cursor = conn.cursor()
+
+        # Get current table schema
+        cursor.execute(f'PRAGMA table_info("{table_name}")')
+        columns = cursor.fetchall()
+
+        # Check if column exists
+        column_exists = any(col[1] == column_name for col in columns)
+        if not column_exists:
+            conn.close()
+            return ColumnDeleteResponse(
+                success=False,
+                message=None,
+                error=f"Column '{column_name}' does not exist in table '{table_name}'"
+            )
+
+        # Get columns to keep (all except the one to delete)
+        columns_to_keep = [col for col in columns if col[1] != column_name]
+
+        if not columns_to_keep:
+            conn.close()
+            return ColumnDeleteResponse(
+                success=False,
+                message=None,
+                error="Cannot delete the last column in a table"
+            )
+
+        # Build new column definitions
+        new_columns_def = []
+        for col in columns_to_keep:
+            col_def = f'"{col[1]}" {col[2]}'
+            if col[3]:  # NOT NULL
+                col_def += " NOT NULL"
+            if col[4] is not None:  # DEFAULT value
+                col_def += f" DEFAULT {col[4]}"
+            if col[5]:  # PRIMARY KEY
+                col_def += " PRIMARY KEY"
+            new_columns_def.append(col_def)
+
+        columns_to_keep_names = [f'"{col[1]}"' for col in columns_to_keep]
+
+        # SQLite column deletion workflow (recreate table)
+        temp_table = f"{table_name}_temp_{int(time.time())}"
+
+        # Create temporary table with new schema
+        create_temp_query = f'CREATE TABLE "{temp_table}" ({", ".join(new_columns_def)})'
+        cursor.execute(create_temp_query)
+
+        # Copy data
+        copy_query = f'INSERT INTO "{temp_table}" SELECT {", ".join(columns_to_keep_names)} FROM "{table_name}"'
+        cursor.execute(copy_query)
+
+        # Drop old table
+        cursor.execute(f'DROP TABLE "{table_name}"')
+
+        # Rename temp table
+        cursor.execute(f'ALTER TABLE "{temp_table}" RENAME TO "{table_name}"')
+
+        conn.commit()
+        conn.close()
+
+        # Get user info for attribution
+        user_email = expert_email or "anonymous"
+        user_info = get_user_info(user_email)
+
+        # Auto-commit to Git version control
+        commit_hash = None
+        try:
+            user_vc = DatabaseVersionControl(
+                DB_PATH,
+                expert_email=user_email,
+                expert_name=user_info.get("name")
+            )
+
+            commit_result = user_vc.commit(
+                message=f"Deleted column '{column_name}' from {table_name}",
+                details={
+                    "operation": "ALTER_TABLE_DROP_COLUMN",
+                    "table": table_name,
+                    "column_name": column_name
+                },
+                expert_picture=user_info.get("picture"),
+                force=True
+            )
+            commit_hash = commit_result.get('commit_hash')
+            print(f"✓ Column deletion committed by {user_info.get('name')} ({user_email}): {commit_result.get('commit_hash_short')}")
+        except Exception as e:
+            print(f"⚠️  Warning: Version control commit failed: {e}")
+
+        return ColumnDeleteResponse(
+            success=True,
+            message=f"Successfully deleted column '{column_name}' from {table_name}",
+            error=None,
+            version_commit=commit_hash
+        )
+    except Exception as e:
+        return ColumnDeleteResponse(
             success=False,
             message=None,
             error=str(e)
@@ -3313,7 +3885,7 @@ async def rollback_database(request: VersionRollbackRequest):
         )
 
 @app.post("/db/version/commit")
-async def manual_commit(message: str, expert_email: str = "system"):
+async def manual_commit(request: VersionCommitRequest):
     """
     Manually create a version control commit.
 
@@ -3321,8 +3893,7 @@ async def manual_commit(message: str, expert_email: str = "system"):
     Normally commits happen automatically after database writes.
 
     Args:
-        message: Commit message
-        expert_email: Email/username of expert making the commit
+        request: Contains commit message and expert_email
 
     Returns:
         Commit hash and timestamp
@@ -3334,11 +3905,107 @@ async def manual_commit(message: str, expert_email: str = "system"):
         }
 
     try:
-        # Update expert email
-        db_version_control.expert_email = expert_email
+        # Update expert info for this commit
+        db_version_control.expert_email = request.expert_email
+        if request.expert_name:
+            db_version_control.expert_name = request.expert_name
 
-        result = db_version_control.commit(message)
+        # Pass skip_timestamp=True for manual checkpoints (timestamp is redundant with Git's own)
+        result = db_version_control.commit(
+            request.message,
+            skip_timestamp=True,
+            expert_picture=request.expert_picture
+        )
+
         return result
+    except Exception as e:
+        return {
+            "success": False,
+            "error": str(e)
+        }
+
+
+@app.get("/db/changes/history")
+async def get_enhanced_change_history(
+    limit: int = 50,
+    table_name: Optional[str] = None,
+    user_email: Optional[str] = None,
+    operation: Optional[str] = None
+):
+    """
+    Get enhanced row-level change history with detailed before/after values.
+
+    This provides much more detail than Git commits:
+    - Shows exact column values that changed (old → new)
+    - Filterable by table, user, or operation type
+    - Includes user profile pictures and names
+
+    Args:
+        limit: Maximum number of changes to return (default: 50)
+        table_name: Filter by table name (optional)
+        user_email: Filter by user email (optional)
+        operation: Filter by operation type: UPDATE, INSERT, DELETE (optional)
+
+    Returns:
+        List of commits with detailed change information
+
+    Educational Note:
+    This is the "detailed audit trail" that shows exactly what changed in each row.
+    Think of Git commits as "snapshots" and this as a "frame-by-frame replay".
+    """
+    if change_tracker is None:
+        return {
+            "success": False,
+            "error": "Change tracker is not initialized",
+            "commits": []
+        }
+
+    try:
+        history = change_tracker.get_history(
+            limit=limit,
+            table_name=table_name,
+            user_email=user_email,
+            operation=operation
+        )
+
+        return {
+            "success": True,
+            "commits": history,
+            "error": None
+        }
+    except Exception as e:
+        return {
+            "success": False,
+            "error": str(e),
+            "commits": []
+        }
+
+
+@app.get("/db/changes/stats")
+async def get_change_stats():
+    """
+    Get statistics about database changes.
+
+    Returns:
+        Statistics including:
+        - Total commits
+        - Total individual column changes
+        - Most active users
+        - Most modified tables
+        - Operation breakdown (INSERT/UPDATE/DELETE counts)
+    """
+    if change_tracker is None:
+        return {
+            "success": False,
+            "error": "Change tracker is not initialized"
+        }
+
+    try:
+        stats = change_tracker.get_stats()
+        return {
+            "success": True,
+            **stats
+        }
     except Exception as e:
         return {
             "success": False,
