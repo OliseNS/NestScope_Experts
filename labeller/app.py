@@ -778,6 +778,49 @@ def nestdb_page():
         is_admin=is_admin(user_email)
     )
 
+@app.route('/flood-intelligence')
+@login_required
+def flood_intelligence_page():
+    """
+    Flood Intelligence Center - Real-time coastal risk assessment
+
+    Expert tool for monitoring colony flood risk using multi-modal data fusion:
+    - NOAA water levels (real-time)
+    - FEMA flood zones
+    - USGS erosion rates
+    - HURDAT2 hurricane data
+    - TWI survey data
+
+    Uses persistent cache for instant loading with background updates.
+    """
+    # Get current user's permissions
+    user_email = session['user']['email']
+    permissions = get_user_permissions(user_email)
+
+    # Check if user has database editing permission (expert access)
+    if not permissions.get('can_edit_db', False):
+        return '''
+        <html>
+        <head><title>Access Denied</title></head>
+        <body style="font-family: system-ui; padding: 2rem; max-width: 600px; margin: 0 auto;">
+            <h1>🔒 Access Denied</h1>
+            <p>You need <strong>expert</strong> or <strong>admin</strong> permissions to access Flood Intelligence.</p>
+            <p>This tool is designed for experts conducting coastal risk assessments.</p>
+            <p><a href="/" style="color: #7BABAE;">← Back to Home</a></p>
+        </body>
+        </html>
+        ''', 403
+
+    # Get API base URL from environment
+    api_base_url = os.getenv("API_BASE_URL", "http://localhost:8000")
+
+    return render_template(
+        'flood_intelligence.html',
+        active_page='flood_intelligence',
+        api_base_url=api_base_url,
+        is_admin=is_admin(user_email)
+    )
+
 @app.route('/users')
 @login_required
 def users_page():
