@@ -10,6 +10,7 @@ from pydantic import BaseModel
 from typing import Optional, List, Dict, Any
 import sqlite3
 import pandas as pd
+import time
 from openai import OpenAI
 import os
 from pathlib import Path
@@ -203,6 +204,31 @@ class RowInsertResponse(BaseModel):
     message: Optional[str]
     error: Optional[str] = None
     version_commit: Optional[str] = None  # Git commit hash if versioning is active
+
+class ColumnAddRequest(BaseModel):
+    table_name: str
+    column_name: str
+    column_type: str  # e.g., "TEXT", "INTEGER", "REAL"
+    default_value: Optional[str] = None
+    not_null: bool = False
+    expert_email: Optional[str] = None
+
+class ColumnAddResponse(BaseModel):
+    success: bool
+    message: Optional[str]
+    error: Optional[str] = None
+    version_commit: Optional[str] = None
+
+class ColumnDeleteRequest(BaseModel):
+    table_name: str
+    column_name: str
+    expert_email: Optional[str] = None
+
+class ColumnDeleteResponse(BaseModel):
+    success: bool
+    message: Optional[str]
+    error: Optional[str] = None
+    version_commit: Optional[str] = None
 
 # Version Control Request/Response Models
 class VersionCommitRequest(BaseModel):
@@ -2924,21 +2950,8 @@ async def execute_query(request: CustomSQLRequest):
                 user_email = request.expert_email or "anonymous"
                 user_info = get_user_info(user_email)
 
-                # Track query execution with detailed tracker
-                if change_tracker:
-                    try:
-                        change_tracker.track_query(
-                            query=query,
-                            rows_affected=rows_affected,
-                            user_email=user_email,
-                            user_name=user_info.get("name"),
-                            user_picture=user_info.get("picture")
-                        )
-                        print(f"✓ Query execution tracked for {user_email}")
-                    except Exception as e:
-                        print(f"⚠️  Warning: Change tracker failed: {e}")
-
-                # Commit to version control with user attribution
+                # Commit to Git version control FIRST (to get commit hash)
+                commit_hash = None
                 try:
                     # Create user-specific version control instance
                     user_vc = DatabaseVersionControl(
@@ -2958,9 +2971,25 @@ async def execute_query(request: CustomSQLRequest):
                         expert_picture=user_info.get("picture"),
                         force=True  # Force commit even if Git thinks nothing changed
                     )
+                    commit_hash = commit_result.get('commit_hash')  # Get full hash for tracker
                     logger.info(f"Version control commit by {user_info.get('name')} ({user_email}): {commit_result}")
                 except Exception as vc_error:
                         logger.warning(f"Version control commit failed: {vc_error}")
+
+                # Track query execution with detailed tracker (WITH commit hash)
+                if change_tracker:
+                    try:
+                        change_tracker.track_query(
+                            query=query,
+                            rows_affected=rows_affected,
+                            user_email=user_email,
+                            user_name=user_info.get("name"),
+                            user_picture=user_info.get("picture"),
+                            commit_hash=commit_hash  # Link Git commit to change tracker
+                        )
+                        print(f"✓ Query execution tracked for {user_email} (linked to Git commit {commit_result.get('commit_hash_short') if commit_hash else 'none'})")
+                    except Exception as e:
+                        print(f"⚠️  Warning: Change tracker failed: {e}")
 
                 conn.close()
 
@@ -3052,7 +3081,8 @@ async def get_table_data(table_name: str, page: int = 1, page_size: int = 50):
         offset = (page - 1) * page_size
 
         # Get paginated data
-        query = f'SELECT * FROM "{table_name}" LIMIT ? OFFSET ?'
+        # Include rowid for tables without explicit primary keys
+        query = f'SELECT rowid, * FROM "{table_name}" LIMIT ? OFFSET ?'
         df = pd.read_sql_query(query, conn, params=(page_size, offset))
 
         conn.close()
@@ -3165,7 +3195,8 @@ async def update_table_row(table_name: str, request: RowUpdateRequest):
         where_clause = " AND ".join(where_parts)
 
         # STEP 1: Fetch old values BEFORE updating (for change tracking)
-        select_query = f'SELECT * FROM "{table_name}" WHERE {where_clause}'
+        # Include rowid in case table has no explicit primary key
+        select_query = f'SELECT rowid, * FROM "{table_name}" WHERE {where_clause}'
         cursor.execute(select_query, where_values)
         old_row = cursor.fetchone()
 
@@ -3201,27 +3232,8 @@ async def update_table_row(table_name: str, request: RowUpdateRequest):
         user_email = request.expert_email or "anonymous"
         user_info = get_user_info(user_email)
 
-        # STEP 4: Track change with detailed row-level tracker
+        # STEP 4: Auto-commit to Git version control FIRST (to get commit hash)
         commit_hash = None
-        if change_tracker and old_values:
-            try:
-                # Build new values dict (merge old values with updates)
-                new_values = {**old_values, **request.updates}
-
-                change_tracker.track_update(
-                    table_name=table_name,
-                    row_id=request.row_id,
-                    old_values=old_values,
-                    new_values=new_values,
-                    user_email=user_email,
-                    user_name=user_info.get("name"),
-                    user_picture=user_info.get("picture")
-                )
-                print(f"✓ Row-level change tracked for {user_email}")
-            except Exception as e:
-                print(f"⚠️  Warning: Change tracker failed: {e}")
-
-        # STEP 5: Auto-commit to Git version control with user attribution
         try:
             # Create user-specific version control instance
             user_vc = DatabaseVersionControl(
@@ -3241,10 +3253,30 @@ async def update_table_row(table_name: str, request: RowUpdateRequest):
                 expert_picture=user_info.get("picture"),
                 force=True  # Force commit even if Git thinks nothing changed
             )
-            commit_hash = commit_result.get('commit_hash_short')
-            print(f"✓ Database change committed by {user_info.get('name')} ({user_email}): {commit_hash}")
+            commit_hash = commit_result.get('commit_hash')  # Get full hash for tracker
+            print(f"✓ Database change committed by {user_info.get('name')} ({user_email}): {commit_result.get('commit_hash_short')}")
         except Exception as e:
             print(f"⚠️  Warning: Version control commit failed: {e}")
+
+        # STEP 5: Track change with detailed row-level tracker (WITH commit hash)
+        if change_tracker and old_values:
+            try:
+                # Build new values dict (merge old values with updates)
+                new_values = {**old_values, **request.updates}
+
+                change_tracker.track_update(
+                    table_name=table_name,
+                    row_id=request.row_id,
+                    old_values=old_values,
+                    new_values=new_values,
+                    user_email=user_email,
+                    user_name=user_info.get("name"),
+                    user_picture=user_info.get("picture"),
+                    commit_hash=commit_hash  # Link Git commit to change tracker
+                )
+                print(f"✓ Row-level change tracked for {user_email} (linked to Git commit {commit_result.get('commit_hash_short') if commit_hash else 'none'})")
+            except Exception as e:
+                print(f"⚠️  Warning: Change tracker failed: {e}")
 
         return RowUpdateResponse(
             success=True,
@@ -3409,22 +3441,8 @@ async def insert_table_row(table_name: str, request: RowInsertRequest):
         user_email = request.expert_email or "anonymous"
         user_info = get_user_info(user_email)
 
-        # Track insert with detailed row-level tracker
+        # Auto-commit to Git version control FIRST (to get commit hash)
         commit_hash = None
-        if change_tracker:
-            try:
-                change_tracker.track_insert(
-                    table_name=table_name,
-                    row_data=request.row_data,
-                    user_email=user_email,
-                    user_name=user_info.get("name"),
-                    user_picture=user_info.get("picture")
-                )
-                print(f"✓ Row-level insert tracked for {user_email}")
-            except Exception as e:
-                print(f"⚠️  Warning: Change tracker failed: {e}")
-
-        # Auto-commit to version control with user attribution
         try:
             # Create user-specific version control instance
             user_vc = DatabaseVersionControl(
@@ -3444,10 +3462,25 @@ async def insert_table_row(table_name: str, request: RowInsertRequest):
                 expert_picture=user_info.get("picture"),
                 force=True  # Force commit even if Git thinks nothing changed
             )
-            commit_hash = commit_result.get('commit_hash_short')
-            print(f"✓ Database change committed by {user_info.get('name')} ({user_email}): {commit_hash}")
+            commit_hash = commit_result.get('commit_hash')  # Get full hash for tracker
+            print(f"✓ Database change committed by {user_info.get('name')} ({user_email}): {commit_result.get('commit_hash_short')}")
         except Exception as e:
             print(f"⚠️  Warning: Version control commit failed: {e}")
+
+        # Track insert with detailed row-level tracker (WITH commit hash)
+        if change_tracker:
+            try:
+                change_tracker.track_insert(
+                    table_name=table_name,
+                    row_data=request.row_data,
+                    user_email=user_email,
+                    user_name=user_info.get("name"),
+                    user_picture=user_info.get("picture"),
+                    commit_hash=commit_hash  # Link Git commit to change tracker
+                )
+                print(f"✓ Row-level insert tracked for {user_email} (linked to Git commit {commit_result.get('commit_hash_short') if commit_hash else 'none'})")
+            except Exception as e:
+                print(f"⚠️  Warning: Change tracker failed: {e}")
 
         return RowInsertResponse(
             success=True,
@@ -3457,6 +3490,205 @@ async def insert_table_row(table_name: str, request: RowInsertRequest):
         )
     except Exception as e:
         return RowInsertResponse(
+            success=False,
+            message=None,
+            error=str(e)
+        )
+
+@app.post("/db/table/{table_name}/column", response_model=ColumnAddResponse)
+async def add_table_column(table_name: str, request: ColumnAddRequest):
+    """
+    Add a new column to an existing table.
+
+    Args:
+        table_name: Name of the table
+        request: ColumnAddRequest with column details
+
+    Returns:
+        ColumnAddResponse with success status
+    """
+    try:
+        # Use read_only=False for write operations
+        conn = chatbot.get_connection(read_only=False)
+        cursor = conn.cursor()
+
+        # Build ALTER TABLE query
+        column_def = f'"{request.column_name}" {request.column_type}'
+
+        if request.not_null:
+            if request.default_value is None:
+                return ColumnAddResponse(
+                    success=False,
+                    message=None,
+                    error="NOT NULL columns must have a default value"
+                )
+            column_def += f" NOT NULL DEFAULT {request.default_value}"
+        elif request.default_value is not None:
+            column_def += f" DEFAULT {request.default_value}"
+
+        query = f'ALTER TABLE "{table_name}" ADD COLUMN {column_def}'
+        cursor.execute(query)
+        conn.commit()
+        conn.close()
+
+        # Get user info for attribution
+        user_email = request.expert_email or "anonymous"
+        user_info = get_user_info(user_email)
+
+        # Auto-commit to Git version control
+        commit_hash = None
+        try:
+            user_vc = DatabaseVersionControl(
+                DB_PATH,
+                expert_email=user_email,
+                expert_name=user_info.get("name")
+            )
+
+            commit_result = user_vc.commit(
+                message=f"Added column '{request.column_name}' to {table_name}",
+                details={
+                    "operation": "ALTER_TABLE_ADD_COLUMN",
+                    "table": table_name,
+                    "column_name": request.column_name,
+                    "column_type": request.column_type
+                },
+                expert_picture=user_info.get("picture"),
+                force=True
+            )
+            commit_hash = commit_result.get('commit_hash')
+            print(f"✓ Column addition committed by {user_info.get('name')} ({user_email}): {commit_result.get('commit_hash_short')}")
+        except Exception as e:
+            print(f"⚠️  Warning: Version control commit failed: {e}")
+
+        return ColumnAddResponse(
+            success=True,
+            message=f"Successfully added column '{request.column_name}' to {table_name}",
+            error=None,
+            version_commit=commit_hash
+        )
+    except Exception as e:
+        return ColumnAddResponse(
+            success=False,
+            message=None,
+            error=str(e)
+        )
+
+@app.delete("/db/table/{table_name}/column/{column_name}", response_model=ColumnDeleteResponse)
+async def delete_table_column(table_name: str, column_name: str, expert_email: Optional[str] = None):
+    """
+    Delete a column from a table.
+
+    Note: SQLite doesn't support DROP COLUMN directly in older versions.
+    This recreates the table without the specified column.
+
+    Args:
+        table_name: Name of the table
+        column_name: Name of the column to delete
+        expert_email: Email of user making the change
+
+    Returns:
+        ColumnDeleteResponse with success status
+    """
+    try:
+        # Use read_only=False for write operations
+        conn = chatbot.get_connection(read_only=False)
+        cursor = conn.cursor()
+
+        # Get current table schema
+        cursor.execute(f'PRAGMA table_info("{table_name}")')
+        columns = cursor.fetchall()
+
+        # Check if column exists
+        column_exists = any(col[1] == column_name for col in columns)
+        if not column_exists:
+            conn.close()
+            return ColumnDeleteResponse(
+                success=False,
+                message=None,
+                error=f"Column '{column_name}' does not exist in table '{table_name}'"
+            )
+
+        # Get columns to keep (all except the one to delete)
+        columns_to_keep = [col for col in columns if col[1] != column_name]
+
+        if not columns_to_keep:
+            conn.close()
+            return ColumnDeleteResponse(
+                success=False,
+                message=None,
+                error="Cannot delete the last column in a table"
+            )
+
+        # Build new column definitions
+        new_columns_def = []
+        for col in columns_to_keep:
+            col_def = f'"{col[1]}" {col[2]}'
+            if col[3]:  # NOT NULL
+                col_def += " NOT NULL"
+            if col[4] is not None:  # DEFAULT value
+                col_def += f" DEFAULT {col[4]}"
+            if col[5]:  # PRIMARY KEY
+                col_def += " PRIMARY KEY"
+            new_columns_def.append(col_def)
+
+        columns_to_keep_names = [f'"{col[1]}"' for col in columns_to_keep]
+
+        # SQLite column deletion workflow (recreate table)
+        temp_table = f"{table_name}_temp_{int(time.time())}"
+
+        # Create temporary table with new schema
+        create_temp_query = f'CREATE TABLE "{temp_table}" ({", ".join(new_columns_def)})'
+        cursor.execute(create_temp_query)
+
+        # Copy data
+        copy_query = f'INSERT INTO "{temp_table}" SELECT {", ".join(columns_to_keep_names)} FROM "{table_name}"'
+        cursor.execute(copy_query)
+
+        # Drop old table
+        cursor.execute(f'DROP TABLE "{table_name}"')
+
+        # Rename temp table
+        cursor.execute(f'ALTER TABLE "{temp_table}" RENAME TO "{table_name}"')
+
+        conn.commit()
+        conn.close()
+
+        # Get user info for attribution
+        user_email = expert_email or "anonymous"
+        user_info = get_user_info(user_email)
+
+        # Auto-commit to Git version control
+        commit_hash = None
+        try:
+            user_vc = DatabaseVersionControl(
+                DB_PATH,
+                expert_email=user_email,
+                expert_name=user_info.get("name")
+            )
+
+            commit_result = user_vc.commit(
+                message=f"Deleted column '{column_name}' from {table_name}",
+                details={
+                    "operation": "ALTER_TABLE_DROP_COLUMN",
+                    "table": table_name,
+                    "column_name": column_name
+                },
+                expert_picture=user_info.get("picture"),
+                force=True
+            )
+            commit_hash = commit_result.get('commit_hash')
+            print(f"✓ Column deletion committed by {user_info.get('name')} ({user_email}): {commit_result.get('commit_hash_short')}")
+        except Exception as e:
+            print(f"⚠️  Warning: Version control commit failed: {e}")
+
+        return ColumnDeleteResponse(
+            success=True,
+            message=f"Successfully deleted column '{column_name}' from {table_name}",
+            error=None,
+            version_commit=commit_hash
+        )
+    except Exception as e:
+        return ColumnDeleteResponse(
             success=False,
             message=None,
             error=str(e)

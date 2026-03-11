@@ -14,6 +14,8 @@ from services import (
     update_table_row,
     delete_table_row,
     insert_table_row,
+    add_table_column,
+    delete_table_column,
     execute_custom_sql,
     get_version_history,
     get_version_stats,
@@ -265,14 +267,83 @@ with tab1:
     </div>
     """, unsafe_allow_html=True)
 
-    # Add New Row section (only in edit mode)
+    # Insert menu (only in edit mode)
     if st.session_state.db_editing_mode and pk_columns:
         st.markdown("---")
-        col1, col2, col3 = st.columns([2, 1, 2])
-        with col2:
-            if st.button("➕ Add New Row", use_container_width=True, type="secondary"):
-                st.session_state.db_show_add_row = not st.session_state.db_show_add_row
 
+        # Insert dropdown menu
+        col1, col2, col3, col4 = st.columns([2, 1, 1, 2])
+        with col2:
+            if st.button("➕ Insert Row", use_container_width=True, type="secondary"):
+                st.session_state.db_show_add_row = not st.session_state.db_show_add_row
+                st.session_state.db_show_add_column = False  # Close column form if open
+
+        with col3:
+            if st.button("➕ Insert Column", use_container_width=True, type="secondary"):
+                st.session_state.db_show_add_column = not st.session_state.get("db_show_add_column", False)
+                st.session_state.db_show_add_row = False  # Close row form if open
+
+        # Add Column Form
+        if st.session_state.get("db_show_add_column", False):
+            with st.expander("➕ Add New Column", expanded=True):
+                st.markdown("Define the new column:")
+
+                with st.form(key=f"add_column_form_{selected_table}"):
+                    col_name_input = st.text_input(
+                        "Column Name",
+                        placeholder="e.g., new_column",
+                        help="Name of the new column (no spaces)"
+                    )
+
+                    col_type_input = st.selectbox(
+                        "Column Type",
+                        options=["TEXT", "INTEGER", "REAL", "BLOB"],
+                        help="Data type for the column"
+                    )
+
+                    col_default = st.text_input(
+                        "Default Value (optional)",
+                        placeholder="e.g., 'default' or 0",
+                        help="Default value for existing rows (use quotes for TEXT)"
+                    )
+
+                    col_not_null = st.checkbox(
+                        "NOT NULL",
+                        help="Require a value (default value must be provided)"
+                    )
+
+                    # Submit button
+                    col1, col2, col3 = st.columns([1, 1, 1])
+                    with col2:
+                        submit_col = st.form_submit_button("➕ Add Column", use_container_width=True, type="primary")
+
+                    if submit_col:
+                        if not col_name_input:
+                            st.error("Column name is required")
+                        elif col_not_null and not col_default:
+                            st.error("NOT NULL columns must have a default value")
+                        else:
+                            # Add the column
+                            response = add_table_column(
+                                selected_table,
+                                col_name_input,
+                                col_type_input,
+                                default_value=col_default if col_default else None,
+                                not_null=col_not_null,
+                                expert_email=st.session_state.user_email
+                            )
+
+                            if response.get("success"):
+                                success_msg = f"✅ {response.get('message', 'Column added successfully')}"
+                                if response.get("version_commit"):
+                                    success_msg += f" (commit `{response['version_commit'][:7]}`)"
+                                st.success(success_msg)
+                                st.session_state.db_show_add_column = False
+                                st.rerun()
+                            else:
+                                st.error(f"❌ Failed to add column: {response.get('error', 'Unknown error')}")
+
+        # Add Row Form
         if st.session_state.db_show_add_row:
             with st.expander("➕ Add New Row", expanded=True):
                 st.markdown("Fill in the values for the new row:")
@@ -550,7 +621,70 @@ with tab2:
         if pk_cols:
             st.info(f"Primary Key: {', '.join(pk_cols)}")
 
+        # Column Management Section (if edit mode is on)
+        if st.session_state.db_editing_mode:
+            st.markdown("---")
+            st.markdown("### 🔧 Column Management")
+            st.caption("Delete columns from the table (WARNING: This cannot be undone!)")
+
+            # Select column to delete
+            non_pk_cols = [col['name'] for col in columns if not col['pk']]
+
+            if not non_pk_cols:
+                st.info("No non-primary key columns available for deletion.")
+            else:
+                col1, col2 = st.columns([3, 1])
+                with col1:
+                    column_to_delete = st.selectbox(
+                        "Select column to delete",
+                        options=non_pk_cols,
+                        help="Primary key columns cannot be deleted"
+                    )
+
+                with col2:
+                    st.write("")  # Spacing
+                    st.write("")  # Spacing
+                    if st.button("🗑️ Delete Column", use_container_width=True, type="secondary"):
+                        st.session_state[f"confirm_delete_column_{column_to_delete}"] = True
+                        st.rerun()
+
+                # Confirmation dialog
+                if st.session_state.get(f"confirm_delete_column_{column_to_delete}", False):
+                    st.warning(f"""
+⚠️ **Delete column '{column_to_delete}'?**
+
+This will permanently remove this column and all its data from the table.
+This action cannot be undone! A version control backup will be created automatically.
+                    """)
+
+                    del_col1, del_col2 = st.columns([1, 1])
+
+                    with del_col1:
+                        if st.button("✅ Confirm Delete", key=f"confirm_del_yes_{column_to_delete}", type="primary", use_container_width=True):
+                            with st.spinner(f"Deleting column '{column_to_delete}'..."):
+                                del_response = delete_table_column(
+                                    schema_table,
+                                    column_to_delete,
+                                    expert_email=st.session_state.user_email
+                                )
+
+                                if del_response.get("success"):
+                                    success_msg = f"✅ {del_response.get('message', 'Column deleted successfully')}"
+                                    if del_response.get("version_commit"):
+                                        success_msg += f" (commit `{del_response['version_commit'][:7]}`)"
+                                    st.success(success_msg)
+                                    st.session_state[f"confirm_delete_column_{column_to_delete}"] = False
+                                    st.rerun()
+                                else:
+                                    st.error(f"❌ Failed to delete column: {del_response.get('error', 'Unknown error')}")
+
+                    with del_col2:
+                        if st.button("❌ Cancel", key=f"confirm_del_no_{column_to_delete}", use_container_width=True):
+                            st.session_state[f"confirm_delete_column_{column_to_delete}"] = False
+                            st.rerun()
+
         # Download schema button
+        st.markdown("---")
         schema_csv = schema_display.to_csv(index=False).encode('utf-8')
         st.download_button(
             label=f"📥 Download Schema for {schema_table}",

@@ -465,6 +465,70 @@ def insert_table_row(table_name: str, row_data: Dict[str, Any], expert_email: st
         return {"success": False, "message": None, "error": str(e)}
 
 
+def add_table_column(table_name: str, column_name: str, column_type: str,
+                     default_value: str = None, not_null: bool = False,
+                     expert_email: str = None) -> Dict[str, Any]:
+    """
+    Add a new column to a table.
+
+    Args:
+        table_name: Name of the table
+        column_name: Name of the new column
+        column_type: SQL type (e.g., "TEXT", "INTEGER", "REAL")
+        default_value: Default value for existing rows
+        not_null: Whether the column should be NOT NULL
+        expert_email: Email of user making the change
+
+    Returns:
+        Dictionary containing success status
+    """
+    from .config import API_BASE_URL
+
+    try:
+        response = requests.post(
+            f"{API_BASE_URL}/db/table/{table_name}/column",
+            json={
+                "table_name": table_name,
+                "column_name": column_name,
+                "column_type": column_type,
+                "default_value": default_value,
+                "not_null": not_null,
+                "expert_email": expert_email
+            },
+            timeout=30
+        )
+        response.raise_for_status()
+        return response.json()
+    except requests.exceptions.RequestException as e:
+        return {"success": False, "message": None, "error": str(e)}
+
+
+def delete_table_column(table_name: str, column_name: str, expert_email: str = None) -> Dict[str, Any]:
+    """
+    Delete a column from a table.
+
+    Args:
+        table_name: Name of the table
+        column_name: Name of the column to delete
+        expert_email: Email of user making the change
+
+    Returns:
+        Dictionary containing success status
+    """
+    from .config import API_BASE_URL
+
+    try:
+        response = requests.delete(
+            f"{API_BASE_URL}/db/table/{table_name}/column/{column_name}",
+            params={"expert_email": expert_email},
+            timeout=30
+        )
+        response.raise_for_status()
+        return response.json()
+    except requests.exceptions.RequestException as e:
+        return {"success": False, "message": None, "error": str(e)}
+
+
 # ============================================================================
 # STAC DATA API — Water Institute avian monitoring catalog
 # ============================================================================
