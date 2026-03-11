@@ -7,18 +7,28 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Crimson+Pro:wght@400;600;700&family=DM+Sans:wght@400;500;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/theme.css') }}">
     <style>
+        /* Editor-specific overrides that work with theme system */
         :root {
             --orange-primary: #537C8A;
             --orange-light: #CEE9F4;
             --orange-dark: #456773;
+            --success: #7cb342;
+        }
+
+        /* Dark theme colors for editor */
+        [data-theme="dark"] {
             --bg-dark: #1a1614;
             --surface: #2a2421;
             --surface-light: #3a3431;
-            --text-primary: #f5f1ed;
-            --text-secondary: #c4b5a8;
-            --text-muted: #8a7e74;
-            --success: #7cb342;
+        }
+
+        /* Light theme colors for editor */
+        [data-theme="light"] {
+            --bg-dark: #f5f0e8;
+            --surface: #ffffff;
+            --surface-light: #fdfbf7;
         }
 
         * {
@@ -655,6 +665,87 @@
         @keyframes spin {
             to { transform: rotate(360deg); }
         }
+
+        /* Theme Toggle Styles */
+        .theme-toggle {
+            position: relative;
+            width: 64px;
+            height: 32px;
+            cursor: pointer;
+            user-select: none;
+            flex-shrink: 0;
+            outline: none;
+        }
+
+        .theme-toggle-track {
+            position: absolute;
+            inset: 0;
+            border-radius: 16px;
+            background: #0f1419;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            overflow: hidden;
+        }
+
+        .theme-toggle-track.active {
+            background: #ffffff;
+            border-color: rgba(0, 0, 0, 0.1);
+        }
+
+        .theme-toggle-icons {
+            position: absolute;
+            inset: 0;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 6px;
+            pointer-events: none;
+        }
+
+        .theme-icon {
+            width: 16px;
+            height: 16px;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            z-index: 1;
+        }
+
+        .theme-icon-sun {
+            stroke: rgba(255, 255, 255, 0.3);
+        }
+
+        .theme-icon-moon {
+            stroke: #ffffff;
+        }
+
+        .theme-toggle-track.active .theme-icon-sun {
+            stroke: rgba(0, 0, 0, 0.7);
+        }
+
+        .theme-toggle-track.active .theme-icon-moon {
+            stroke: rgba(0, 0, 0, 0.3);
+        }
+
+        .theme-toggle-thumb {
+            position: absolute;
+            top: 3px;
+            left: 3px;
+            width: 26px;
+            height: 26px;
+            background: #1a1f26;
+            border-radius: 50%;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 14px;
+            z-index: 2;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+        }
+
+        .theme-toggle-track.active .theme-toggle-thumb {
+            transform: translateX(32px);
+            background: #fdfbf7;
+        }
     </style>
 </head>
 <body>
@@ -665,6 +756,19 @@
                 ←
             </button>
             <h1 class="image-title">{{ image_name }}</h1>
+            <div class="theme-toggle" role="button" tabindex="0" aria-label="Toggle theme" style="margin-left: auto; margin-right: 1rem;">
+                <div class="theme-toggle-track">
+                    <div class="theme-toggle-icons">
+                        <svg class="theme-icon theme-icon-sun" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.5">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M12 3v2.25m6.364.386l-1.591 1.591M21 12h-2.25m-.386 6.364l-1.591-1.591M12 18.75V21m-4.773-4.227l-1.591 1.591M5.25 12H3m4.227-4.773L5.636 5.636M15.75 12a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0z"/>
+                        </svg>
+                        <svg class="theme-icon theme-icon-moon" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.5">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M21.752 15.002A9.718 9.718 0 0118 15.75c-5.385 0-9.75-4.365-9.75-9.75 0-1.33.266-2.597.748-3.752A9.753 9.753 0 003 11.25C3 16.635 7.365 21 12.75 21a9.753 9.753 0 009.002-5.998z"/>
+                        </svg>
+                    </div>
+                    <div class="theme-toggle-thumb">🌙</div>
+                </div>
+            </div>
         </div>
         <div class="progress-indicator">
             <div class="nav-controls">
@@ -3177,5 +3281,8 @@ document.addEventListener('DOMContentLoaded', () => {
     updateBoxCount();
 });
     </script>
+
+    <!-- Theme Management -->
+    <script src="{{ url_for('static', filename='js/theme.js') }}"></script>
 </body>
 </html>
