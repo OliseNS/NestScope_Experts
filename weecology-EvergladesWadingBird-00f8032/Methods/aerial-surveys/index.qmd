@@ -1,6 +1,0 @@
----
-title: "Aerial Surveys"
-format: html
----
-
-stuff

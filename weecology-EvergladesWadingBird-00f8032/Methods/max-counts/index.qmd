@@ -1,6 +1,0 @@
----
-title: "Max Counts"
-format: html
----
-
-stuff
