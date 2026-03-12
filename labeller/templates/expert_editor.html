@@ -7,18 +7,73 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Crimson+Pro:wght@400;600;700&family=DM+Sans:wght@400;500;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/theme.css') }}">
     <style>
+        /* Editor-specific overrides that work with theme system */
         :root {
             --orange-primary: #537C8A;
             --orange-light: #CEE9F4;
             --orange-dark: #456773;
+            --success: #7cb342;
+        }
+
+        /* Dark theme colors for editor */
+        [data-theme="dark"] {
             --bg-dark: #1a1614;
             --surface: #2a2421;
             --surface-light: #3a3431;
-            --text-primary: #f5f1ed;
-            --text-secondary: #c4b5a8;
-            --text-muted: #8a7e74;
-            --success: #7cb342;
+        }
+
+        /* Light theme colors for editor */
+        [data-theme="light"] {
+            --bg-dark: #f5f0e8;
+            --surface: #ffffff;
+            --surface-light: #fdfbf7;
+        }
+
+        /* Light theme overrides for canvas and overlays */
+        [data-theme="light"] .canvas-container {
+            background: #ffffff;
+        }
+
+        [data-theme="light"] .canvas-overlay {
+            background: rgba(255, 255, 255, 0.95);
+            border: 1px solid rgba(83, 124, 138, 0.3);
+            color: var(--text-primary);
+        }
+
+        [data-theme="light"] .zoom-btn {
+            background: rgba(255, 255, 255, 0.95);
+            border: 1px solid rgba(83, 124, 138, 0.3);
+        }
+
+        /* Rank badge styles */
+        .rank-badge {
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            font-size: 1.125rem;
+            flex-shrink: 0;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+        }
+
+        .rank-badge-1 {
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: white;
+        }
+
+        .rank-badge-other {
+            background: var(--surface);
+            color: var(--text-primary);
+        }
+
+        [data-theme="light"] .rank-badge-other {
+            background: #f0f0f0;
+            color: #1a1a1a;
         }
 
         * {
@@ -655,6 +710,7 @@
         @keyframes spin {
             to { transform: rotate(360deg); }
         }
+
     </style>
 </head>
 <body>
@@ -2325,23 +2381,19 @@ async function showAIPredictions(predictions, boxNumber) {
     for (let i = 0; i < predictions.length; i++) {
         const pred = predictions[i];
         const rank = i + 1;
-        const confidencePercent = (pred.confidence * 100).toFixed(1);
+        const rankClass = rank === 1 ? 'rank-badge-1' : 'rank-badge-other';
 
-        // Color based on confidence
-        let confidenceColor = '#7cb342'; // green
-        if (confidencePercent < 30) confidenceColor = 'var(--text-muted)';
-        else if (confidencePercent < 50) confidenceColor = 'var(--orange-primary)';
-
-        // Rank badge background
-        const rankBg = rank === 1 ? 'linear-gradient(135deg, #667eea, #764ba2)' : 'var(--surface)';
+        // Escape apostrophes for JavaScript strings
+        const escapedSpeciesName = pred.species_name.replace(/'/g, "\\'");
+        const escapedSpeciesCode = pred.species_code.replace(/'/g, "\\'");
 
         html += `
-            <div class="ai-species-card" onclick="selectSpeciesFromAI('${pred.species_code}', '${pred.species_name}')"
+            <div class="ai-species-card" onclick="selectSpeciesFromAI('${escapedSpeciesCode}', '${escapedSpeciesName}')"
                  style="background: var(--surface-light); border: 2px solid rgba(83, 124, 138, 0.2); border-radius: 12px; padding: 1rem; cursor: pointer; transition: all 0.3s;">
 
                 <div style="display: flex; gap: 1rem; align-items: center; margin-bottom: 1rem;">
                     <!-- Rank badge -->
-                    <div style="background: ${rankBg}; color: white; width: 36px; height: 36px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 1.125rem; flex-shrink: 0; box-shadow: 0 2px 8px rgba(0,0,0,0.2);">
+                    <div class="rank-badge ${rankClass}">
                         ${rank}
                     </div>
 
@@ -2354,16 +2406,6 @@ async function showAIPredictions(predictions, boxNumber) {
                             ${pred.species_code} • ${pred.group.replace(/_/g, ' ').toLowerCase()}
                         </div>
                     </div>
-
-                    <!-- Confidence -->
-                    <div style="text-align: right; flex-shrink: 0;">
-                        <div style="font-size: 1.75rem; font-weight: 700; color: ${confidenceColor};">
-                            ${confidencePercent}%
-                        </div>
-                        <div style="font-size: 0.75rem; color: var(--text-muted);">
-                            confidence
-                        </div>
-                    </div>
                 </div>
 
                 <!-- Bird image placeholder -->
@@ -2374,7 +2416,7 @@ async function showAIPredictions(predictions, boxNumber) {
                 <!-- More images button -->
                 <button class="btn-secondary"
                         style="width: 100%; margin-top: 0.75rem; padding: 0.5rem; font-size: 0.875rem;"
-                        onclick="event.stopPropagation(); showAISpeciesImages('${pred.species_name}', '${pred.species_code}', ${i})">
+                        onclick="event.stopPropagation(); showAISpeciesImages('${escapedSpeciesName}', '${escapedSpeciesCode}', ${i})">
                     📸 View More Images
                 </button>
 
@@ -2482,6 +2524,9 @@ async function showAISpeciesImages(speciesName, speciesCode, cardIdx) {
         // Handle both formats: plain URL strings or objects with url property
         const imageUrls = data.images.map(img => img.url || img);
 
+        // Escape apostrophes for JavaScript strings
+        const escapedSpeciesName = speciesName.replace(/'/g, "\\'");
+
         imagesDiv.innerHTML = `
             <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.5rem; margin-bottom: 0.75rem;">
                 ${imageUrls.map(url => `
@@ -2494,7 +2539,7 @@ async function showAISpeciesImages(speciesName, speciesCode, cardIdx) {
             ${data.has_more ? `
                 <button class="btn-secondary"
                         style="width: 100%; padding: 0.5rem; font-size: 0.875rem;"
-                        onclick="event.stopPropagation(); loadMoreAIImages('${speciesName}', ${cardIdx}, ${1 + imageUrls.length})">
+                        onclick="event.stopPropagation(); loadMoreAIImages('${escapedSpeciesName}', ${cardIdx}, ${1 + imageUrls.length})">
                     Load Even More Images
                 </button>
             ` : ''}
@@ -2635,8 +2680,13 @@ function showSpeciesList(containerId = 'classification-content') {
             this.style.borderColor = 'transparent';
             this.style.transform = 'translateX(0)';
         };
+
+        // Escape apostrophes for JavaScript strings
+        const escapedCommonName = species.common_name.replace(/'/g, "\\'");
+        const escapedCode = species.code.replace(/'/g, "\\'");
+
         speciesDiv.innerHTML = `
-            <div style="display: flex; gap: 1rem; align-items: center;" onclick="selectSpecies('${species.code}', '${species.common_name}')">
+            <div style="display: flex; gap: 1rem; align-items: center;" onclick="selectSpecies('${escapedCode}', '${escapedCommonName}')">
                 <div style="flex-shrink: 0;">
                     <div id="species-thumb-${idx}" style="width: 80px; height: 80px; background: var(--surface); border-radius: 8px; display: flex; align-items: center; justify-content: center; color: var(--text-muted);">
                         Loading...
@@ -2645,7 +2695,7 @@ function showSpeciesList(containerId = 'classification-content') {
                 <div style="flex: 1;">
                     <div style="font-weight: 600; font-size: 1.125rem; margin-bottom: 0.25rem;">${species.common_name}</div>
                     <div style="font-size: 0.875rem; color: var(--text-muted);">${species.code}</div>
-                    <button class="btn-secondary" style="margin-top: 0.5rem; padding: 0.5rem 1rem; font-size: 0.875rem;" onclick="event.stopPropagation(); showSpeciesImages('${species.common_name}', ${idx})">
+                    <button class="btn-secondary" style="margin-top: 0.5rem; padding: 0.5rem 1rem; font-size: 0.875rem;" onclick="event.stopPropagation(); showSpeciesImages('${escapedCommonName}', ${idx})">
                         View Reference Images
                     </button>
                 </div>
@@ -2733,6 +2783,9 @@ async function showSpeciesImages(speciesName, cardIdx) {
 
         const imageUrls = data.images.map(img => img.url || img);
 
+        // Escape apostrophes for JavaScript strings
+        const escapedSpeciesName = speciesName.replace(/'/g, "\\'");
+
         imagesDiv.innerHTML = `
             <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.5rem; margin-bottom: 1rem;">
                 ${imageUrls.map(url => `
@@ -2745,7 +2798,7 @@ async function showSpeciesImages(speciesName, cardIdx) {
             ${data.has_more ? `
                 <button class="btn-secondary"
                         style="width: 100%; padding: 0.75rem; font-size: 0.875rem;"
-                        onclick="event.stopPropagation(); loadMoreImages('${speciesName}', ${cardIdx}, ${1 + imageUrls.length})">
+                        onclick="event.stopPropagation(); loadMoreImages('${escapedSpeciesName}', ${cardIdx}, ${1 + imageUrls.length})">
                     Load More Images
                 </button>
             ` : ''}
@@ -3177,5 +3230,8 @@ document.addEventListener('DOMContentLoaded', () => {
     updateBoxCount();
 });
     </script>
+
+    <!-- Theme Management -->
+    <script src="{{ url_for('static', filename='js/theme.js') }}"></script>
 </body>
 </html>

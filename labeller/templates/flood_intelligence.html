@@ -1,0 +1,1908 @@
+{% extends "base.html" %}
+
+{% block title %}Flood Intelligence - Nestperts{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+      integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+      crossorigin="" />
+<style>
+    @import url('https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Inter:wght@300;400;500;600;700&display=swap');
+
+    /* Main Container */
+    .flood-container {
+        max-width: 1800px;
+        margin: 0 auto;
+        padding: 2rem;
+    }
+
+    /* Header */
+    .flood-header {
+        font-family: 'Space Mono', monospace;
+        font-size: 2.5rem;
+        font-weight: 700;
+        color: #00D9FF;
+        letter-spacing: -0.02em;
+        margin-bottom: 0.5rem;
+        text-shadow: 0 0 20px rgba(0, 217, 255, 0.3);
+        text-align: center;
+    }
+
+    .flood-subtitle {
+        font-family: 'Inter', sans-serif;
+        font-size: 1rem;
+        color: #94A3B8;
+        font-weight: 300;
+        margin-bottom: 2rem;
+        text-align: center;
+    }
+
+    /* Search Bar */
+    .search-container {
+        max-width: 600px;
+        margin: 0 auto 2rem auto;
+        position: relative;
+    }
+
+    .search-input {
+        width: 100%;
+        padding: 1rem 1rem 1rem 3rem;
+        background: linear-gradient(135deg, #1E293B 0%, #0F172A 100%);
+        border: 1px solid rgba(0, 217, 255, 0.3);
+        border-radius: 12px;
+        color: #E2E8F0;
+        font-size: 1rem;
+        font-family: 'Inter', sans-serif;
+        transition: all 0.2s ease;
+    }
+
+    .search-input:focus {
+        outline: none;
+        border-color: #00D9FF;
+        box-shadow: 0 0 20px rgba(0, 217, 255, 0.3);
+    }
+
+    .search-icon {
+        position: absolute;
+        left: 1rem;
+        top: 50%;
+        transform: translateY(-50%);
+        color: #64748B;
+        pointer-events: none;
+    }
+
+    .search-results {
+        position: absolute;
+        top: calc(100% + 0.5rem);
+        left: 0;
+        right: 0;
+        background: #1E293B;
+        border: 1px solid rgba(0, 217, 255, 0.3);
+        border-radius: 8px;
+        max-height: 300px;
+        overflow-y: auto;
+        z-index: 1000;
+        display: none;
+    }
+
+    .search-results.active {
+        display: block;
+    }
+
+    .search-result-item {
+        padding: 0.75rem 1rem;
+        color: #E2E8F0;
+        cursor: pointer;
+        transition: background 0.15s ease;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    }
+
+    .search-result-item:last-child {
+        border-bottom: none;
+    }
+
+    .search-result-item:hover {
+        background: rgba(0, 217, 255, 0.1);
+    }
+
+    .search-result-item .colony-name {
+        font-weight: 600;
+        color: #00D9FF;
+    }
+
+    .search-result-item .colony-info {
+        font-size: 0.875rem;
+        color: #94A3B8;
+        margin-top: 0.25rem;
+    }
+
+    /* Two Column Layout */
+    .flood-grid {
+        display: grid;
+        grid-template-columns: 1fr 400px;
+        gap: 1.5rem;
+        margin-bottom: 2rem;
+        min-height: 600px;
+    }
+
+    @media (max-width: 1200px) {
+        .flood-grid {
+            grid-template-columns: 1fr;
+        }
+
+        .detail-panel {
+            position: relative !important;
+            top: 0 !important;
+        }
+    }
+
+    /* Map Container */
+    .map-section {
+        display: flex;
+        flex-direction: column;
+        gap: 1rem;
+    }
+
+    .map-container {
+        height: 600px;
+        width: 100%;
+        border-radius: 12px;
+        border: 1px solid rgba(0, 217, 255, 0.2);
+        background: #1E293B;
+        position: relative;
+    }
+
+    #map {
+        height: 100%;
+        width: 100%;
+        border-radius: 12px;
+    }
+
+    /* Ensure Leaflet container is properly sized */
+    .leaflet-container {
+        height: 100%;
+        width: 100%;
+        border-radius: 12px;
+    }
+
+    .leaflet-tile-container {
+        pointer-events: auto;
+    }
+
+    /* Colony Detail Panel */
+    .detail-panel {
+        background: linear-gradient(135deg, #1E293B 0%, #0F172A 100%);
+        border: 1px solid rgba(0, 217, 255, 0.2);
+        border-radius: 12px;
+        padding: 1.5rem;
+        height: fit-content;
+        position: sticky;
+        top: 80px;
+        max-height: calc(100vh - 100px);
+        overflow-y: auto;
+    }
+
+    .detail-header {
+        font-family: 'Space Mono', monospace;
+        font-size: 1.25rem;
+        font-weight: 700;
+        color: #00D9FF;
+        margin-bottom: 1rem;
+        padding-bottom: 1rem;
+        border-bottom: 1px solid rgba(0, 217, 255, 0.2);
+    }
+
+    /* Nowcast Card */
+    .nowcast-card {
+        background: rgba(0, 217, 255, 0.05);
+        border: 1px solid rgba(0, 217, 255, 0.3);
+        border-radius: 8px;
+        padding: 1rem;
+        margin-bottom: 1rem;
+        position: relative;
+    }
+
+    .nowcast-label {
+        font-size: 0.75rem;
+        color: #94A3B8;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        margin-bottom: 0.5rem;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .info-icon {
+        cursor: pointer;
+        color: #7BABAE;
+        transition: all 0.2s ease;
+        display: inline-flex;
+        align-items: center;
+    }
+
+    .info-icon:hover {
+        color: #00D9FF;
+        transform: scale(1.1);
+    }
+
+    .info-icon svg {
+        width: 14px;
+        height: 14px;
+    }
+
+    /* Info Modal */
+    .info-modal {
+        display: none;
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0, 0, 0, 0.85);
+        z-index: 9999;
+        align-items: center;
+        justify-content: center;
+        padding: 2rem;
+        backdrop-filter: blur(4px);
+    }
+
+    .info-modal.active {
+        display: flex;
+    }
+
+    .info-modal-content {
+        background: linear-gradient(135deg, #0A0F1C 0%, #1E293B 100%);
+        border: 2px solid #00D9FF;
+        border-radius: 16px;
+        max-width: 600px;
+        width: 100%;
+        max-height: 80vh;
+        overflow-y: auto;
+        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.9);
+        animation: slideIn 0.3s ease;
+    }
+
+    @keyframes slideIn {
+        from {
+            opacity: 0;
+            transform: translateY(-20px);
+        }
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+
+    .info-modal-header {
+        padding: 1.5rem 2rem;
+        border-bottom: 2px solid rgba(0, 217, 255, 0.3);
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        background: rgba(0, 217, 255, 0.05);
+    }
+
+    .info-modal-title {
+        font-family: 'Space Mono', monospace;
+        font-size: 1.25rem;
+        font-weight: 700;
+        color: #00D9FF;
+    }
+
+    .info-modal-close {
+        background: transparent;
+        border: none;
+        color: #7BABAE;
+        cursor: pointer;
+        padding: 0.5rem;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: all 0.2s ease;
+    }
+
+    .info-modal-close:hover {
+        color: #FF4B4B;
+        transform: scale(1.1);
+    }
+
+    .info-modal-close svg {
+        width: 24px;
+        height: 24px;
+    }
+
+    .info-modal-body {
+        padding: 2rem;
+    }
+
+    .info-section {
+        margin-bottom: 1.5rem;
+    }
+
+    .info-section:last-child {
+        margin-bottom: 0;
+    }
+
+    .info-section-title {
+        font-weight: 700;
+        color: #00D9FF;
+        margin-bottom: 0.75rem;
+        font-size: 1rem;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .info-section-text {
+        font-size: 0.95rem;
+        color: #E2E8F0;
+        line-height: 1.8;
+        margin-bottom: 0.75rem;
+    }
+
+    .info-section-text strong {
+        color: #FFFFFF;
+        font-weight: 600;
+    }
+
+    .info-formula {
+        background: rgba(0, 217, 255, 0.1);
+        border-left: 3px solid #00D9FF;
+        padding: 1rem;
+        border-radius: 6px;
+        font-family: 'Space Mono', monospace;
+        color: #00D9FF;
+        margin: 1rem 0;
+    }
+
+    .info-source {
+        background: rgba(123, 171, 174, 0.1);
+        border-radius: 8px;
+        padding: 1rem;
+        margin-top: 1.5rem;
+        border: 1px solid rgba(123, 171, 174, 0.3);
+    }
+
+    .info-source-label {
+        font-weight: 700;
+        color: #7BABAE;
+        margin-bottom: 0.5rem;
+        font-size: 0.875rem;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+    }
+
+    .info-source-text {
+        color: #E2E8F0;
+        font-size: 0.9rem;
+        line-height: 1.6;
+    }
+
+    .info-list {
+        list-style: none;
+        padding: 0;
+        margin: 1rem 0;
+    }
+
+    .info-list li {
+        padding: 0.5rem 0;
+        padding-left: 1.5rem;
+        position: relative;
+        color: #E2E8F0;
+        line-height: 1.6;
+    }
+
+    .info-list li::before {
+        content: '•';
+        position: absolute;
+        left: 0;
+        color: #00D9FF;
+        font-weight: bold;
+        font-size: 1.2rem;
+    }
+
+    .nowcast-value {
+        font-family: 'Space Mono', monospace;
+        font-size: 2rem;
+        font-weight: 700;
+        color: #00D9FF;
+        line-height: 1;
+    }
+
+    .nowcast-unit {
+        font-size: 1rem;
+        color: #64748B;
+        margin-left: 0.25rem;
+    }
+
+    .nowcast-status {
+        font-size: 0.875rem;
+        margin-top: 0.5rem;
+        padding: 0.375rem 0.75rem;
+        border-radius: 4px;
+        font-weight: 600;
+        text-align: center;
+    }
+
+    .status-normal { background: rgba(0, 255, 0, 0.1); color: #00FF00; }
+    .status-elevated { background: rgba(255, 165, 0, 0.1); color: #FFA500; }
+    .status-critical { background: rgba(255, 75, 75, 0.1); color: #FF4B4B; }
+
+    /* Chart Placeholder */
+    .chart-placeholder {
+        background: linear-gradient(135deg, #0A0F1C 0%, #1E293B 100%);
+        border: 2px dashed rgba(0, 217, 255, 0.4);
+        border-radius: 12px;
+        padding: 3rem 2rem;
+        margin-bottom: 1.5rem;
+        text-align: center;
+        position: relative;
+        transition: all 0.3s ease;
+    }
+
+    .chart-placeholder:hover {
+        border-color: rgba(0, 217, 255, 0.7);
+        background: linear-gradient(135deg, #0A0F1C 0%, #2D3748 100%);
+        transform: translateY(-2px);
+        box-shadow: 0 8px 32px rgba(0, 217, 255, 0.2);
+    }
+
+    .chart-placeholder-icon {
+        font-size: 4rem;
+        margin-bottom: 1rem;
+        opacity: 0.8;
+    }
+
+    .chart-placeholder-title {
+        font-size: 1.25rem;
+        color: #00D9FF;
+        font-weight: 700;
+        margin-bottom: 0.75rem;
+        font-family: 'Space Mono', monospace;
+    }
+
+    .chart-placeholder-subtitle {
+        font-size: 0.9rem;
+        color: #7BABAE;
+        margin-bottom: 1.5rem;
+        line-height: 1.6;
+    }
+
+    .chart-open-btn {
+        background: linear-gradient(135deg, #00D9FF 0%, #7BABAE 100%);
+        color: #0F172A;
+        padding: 1rem 2rem;
+        border-radius: 8px;
+        border: none;
+        cursor: pointer;
+        font-weight: 700;
+        font-size: 1rem;
+        transition: all 0.3s ease;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.75rem;
+        box-shadow: 0 4px 16px rgba(0, 217, 255, 0.3);
+    }
+
+    .chart-open-btn:hover {
+        transform: scale(1.05);
+        box-shadow: 0 8px 24px rgba(0, 217, 255, 0.5);
+    }
+
+    .chart-open-btn svg {
+        width: 20px;
+        height: 20px;
+    }
+
+    /* Fullscreen Modal */
+    .fullscreen-modal {
+        display: none;
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0, 0, 0, 0.95);
+        z-index: 10000;
+        padding: 2rem;
+    }
+
+    .fullscreen-modal.active {
+        display: flex;
+        flex-direction: column;
+    }
+
+    .fullscreen-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 1rem;
+        padding-bottom: 1rem;
+        border-bottom: 2px solid rgba(0, 217, 255, 0.3);
+    }
+
+    .fullscreen-title {
+        font-size: 1.5rem;
+        color: #00D9FF;
+        font-weight: 700;
+        font-family: 'Space Mono', monospace;
+    }
+
+    .close-fullscreen {
+        background: rgba(255, 75, 75, 0.2);
+        border: 1px solid rgba(255, 75, 75, 0.5);
+        color: #FF4B4B;
+        padding: 0.75rem 1.5rem;
+        border-radius: 8px;
+        cursor: pointer;
+        font-weight: 600;
+        font-size: 1rem;
+        transition: all 0.2s ease;
+    }
+
+    .close-fullscreen:hover {
+        background: rgba(255, 75, 75, 0.3);
+        transform: scale(1.05);
+    }
+
+    .fullscreen-chart-wrapper {
+        flex: 1;
+        background: linear-gradient(180deg, rgba(0, 217, 255, 0.05) 0%, rgba(0, 0, 0, 0.5) 100%);
+        border-radius: 12px;
+        padding: 2rem;
+        border: 2px solid rgba(0, 217, 255, 0.3);
+        position: relative;
+    }
+
+    .fullscreen-footer {
+        margin-top: 1rem;
+        text-align: center;
+        font-size: 1rem;
+        color: #7BABAE;
+        font-weight: 600;
+        letter-spacing: 0.05em;
+        text-transform: uppercase;
+    }
+
+    /* Station Info */
+    .station-info {
+        background: rgba(0, 217, 255, 0.05);
+        border: 1px solid rgba(0, 217, 255, 0.2);
+        border-radius: 8px;
+        padding: 1.25rem;
+        margin-bottom: 1rem;
+    }
+
+    .station-header {
+        font-size: 0.875rem;
+        color: #00D9FF;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        margin-bottom: 1rem;
+        padding-bottom: 0.75rem;
+        border-bottom: 1px solid rgba(0, 217, 255, 0.2);
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .station-grid {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 1rem;
+    }
+
+    .station-item {
+        display: flex;
+        flex-direction: column;
+        gap: 0.25rem;
+    }
+
+    .station-item-label {
+        color: #64748B;
+        font-size: 0.7rem;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        font-weight: 500;
+    }
+
+    .station-item-value {
+        color: #E2E8F0;
+        font-weight: 600;
+        font-size: 0.95rem;
+    }
+
+    .risk-badge {
+        display: inline-block;
+        padding: 0.25rem 0.75rem;
+        border-radius: 4px;
+        font-size: 0.8rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+    }
+
+    .risk-critical { background: rgba(255, 75, 75, 0.2); color: #FF4B4B; }
+    .risk-high { background: rgba(255, 165, 0, 0.2); color: #FFA500; }
+    .risk-moderate { background: rgba(255, 255, 0, 0.2); color: #FFFF00; }
+    .risk-low { background: rgba(0, 255, 0, 0.2); color: #00FF00; }
+
+    .fema-badge {
+        display: inline-block;
+        padding: 0.25rem 0.75rem;
+        border-radius: 4px;
+        font-size: 0.8rem;
+        font-weight: 700;
+        background: rgba(123, 171, 174, 0.2);
+        color: #7BABAE;
+    }
+
+    /* Loading State */
+    .loading-state {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        padding: 4rem 2rem;
+        min-height: 400px;
+    }
+
+    .loading-spinner {
+        width: 60px;
+        height: 60px;
+        border: 4px solid rgba(0, 217, 255, 0.1);
+        border-top-color: #00D9FF;
+        border-radius: 50%;
+        animation: spin 1s linear infinite;
+    }
+
+    @keyframes spin {
+        to { transform: rotate(360deg); }
+    }
+
+    .loading-text {
+        margin-top: 1.5rem;
+        font-family: 'Space Mono', monospace;
+        color: #00D9FF;
+        font-size: 1.125rem;
+    }
+
+
+    /* Light Mode */
+    [data-theme="light"] .flood-header {
+        color: #0891B2;
+        text-shadow: none;
+    }
+
+    [data-theme="light"] .detail-panel,
+    [data-theme="light"] .search-input,
+    [data-theme="light"] .search-results {
+        background: linear-gradient(135deg, #F8FAFC 0%, #F1F5F9 100%);
+        border-color: rgba(8, 145, 178, 0.2);
+    }
+
+    [data-theme="light"] .nowcast-value {
+        color: #0891B2;
+    }
+
+    [data-theme="light"] .map-container {
+        background: #F1F5F9;
+        border-color: rgba(8, 145, 178, 0.2);
+    }
+
+    [data-theme="light"] .station-info,
+    [data-theme="light"] .chart-container,
+    [data-theme="light"] .nowcast-card {
+        background: rgba(8, 145, 178, 0.05);
+    }
+
+    [data-theme="light"] .priority-info h4,
+    [data-theme="light"] .search-input {
+        color: #1E293B;
+    }
+
+    [data-theme="light"] .search-result-item {
+        color: #1E293B;
+    }
+
+    [data-theme="light"] .chart-title {
+        color: #1E293B;
+    }
+
+    [data-theme="light"] .chart-subtitle {
+        color: #64748B;
+    }
+
+    [data-theme="light"] .chart-footer {
+        border-top-color: rgba(0, 0, 0, 0.1);
+        color: #475569;
+    }
+
+    [data-theme="light"] .station-info {
+        background: rgba(8, 145, 178, 0.08);
+        border-color: rgba(8, 145, 178, 0.3);
+    }
+
+    [data-theme="light"] .station-header {
+        color: #0891B2;
+        border-bottom-color: rgba(8, 145, 178, 0.3);
+    }
+
+    [data-theme="light"] .station-item-label {
+        color: #64748B;
+    }
+
+    [data-theme="light"] .station-item-value {
+        color: #1E293B;
+    }
+
+    [data-theme="light"] .risk-badge,
+    [data-theme="light"] .fema-badge {
+        opacity: 0.9;
+    }
+
+    [data-theme="light"] .chart-placeholder {
+        background: linear-gradient(135deg, #F8FAFC 0%, #EFF6FF 100%);
+        border-color: rgba(8, 145, 178, 0.4);
+    }
+
+    [data-theme="light"] .chart-placeholder:hover {
+        background: linear-gradient(135deg, #EFF6FF 0%, #DBEAFE 100%);
+        border-color: rgba(8, 145, 178, 0.7);
+    }
+
+    [data-theme="light"] .chart-placeholder-title {
+        color: #0891B2;
+    }
+
+    [data-theme="light"] .chart-placeholder-subtitle {
+        color: #475569;
+    }
+
+    [data-theme="light"] .chart-open-btn {
+        background: linear-gradient(135deg, #0891B2 0%, #0E7490 100%);
+        color: #FFFFFF;
+    }
+
+    [data-theme="light"] .fullscreen-modal {
+        background: rgba(255, 255, 255, 0.98);
+    }
+
+    [data-theme="light"] .fullscreen-title {
+        color: #0891B2;
+    }
+
+    [data-theme="light"] .info-icon {
+        color: #0891B2;
+    }
+
+    [data-theme="light"] .info-icon:hover {
+        color: #0E7490;
+    }
+
+    [data-theme="light"] .info-tooltip {
+        background: #FFFFFF;
+        border-color: #0891B2;
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+    }
+
+    [data-theme="light"] .info-tooltip-title {
+        color: #0891B2;
+    }
+
+    [data-theme="light"] .info-tooltip-text {
+        color: #1E293B;
+    }
+
+    [data-theme="light"] .info-tooltip-source {
+        color: #475569;
+        border-top-color: rgba(8, 145, 178, 0.2);
+    }
+
+    [data-theme="light"] .info-tooltip-source strong {
+        color: #0891B2;
+    }
+
+    [data-theme="light"] .info-tooltip::after {
+        border-top-color: #0891B2;
+    }
+
+    /* Mobile: Make tooltips work on touch */
+    @media (max-width: 768px) {
+        .info-tooltip {
+            width: 280px;
+        }
+
+        .info-icon {
+            cursor: pointer;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="flood-container">
+    <!-- Header -->
+    <div class="flood-header">FLOOD INTELLIGENCE CENTER</div>
+    <div class="flood-subtitle">
+        Physics-Based Nowcasting • Multi-Modal Data Fusion • Extreme Value Analysis
+    </div>
+
+    <!-- Search Bar -->
+    <div class="search-container">
+        <svg class="search-icon" width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+        </svg>
+        <input type="text" id="search-input" class="search-input" placeholder="Search for a colony or island..." autocomplete="off">
+        <div id="search-results" class="search-results"></div>
+    </div>
+
+    <!-- Loading State -->
+    <div id="loading-state" class="loading-state">
+        <div class="loading-spinner"></div>
+        <div class="loading-text">Loading Flood Intelligence Data</div>
+    </div>
+
+    <!-- Main Content (hidden initially) -->
+    <div id="main-content" style="display: none;">
+        <!-- Two Column Layout -->
+        <div class="flood-grid">
+            <!-- Left: Map -->
+            <div class="map-section">
+                <div class="map-container" id="map"></div>
+            </div>
+
+            <!-- Right: Selected Colony Detail -->
+            <div class="detail-panel">
+                <div class="detail-header" id="selected-colony-name">Select a Colony</div>
+
+                <!-- Nowcast Cards -->
+                <div id="nowcast-section">
+                    <div class="nowcast-card">
+                        <div class="nowcast-label">
+                            Current Water Level
+                            <span class="info-icon" onclick="openInfoModal('water-level')">
+                                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                                </svg>
+                            </span>
+                        </div>
+                        <div class="nowcast-value">
+                            <span id="current-level">--</span>
+                            <span class="nowcast-unit">m MHHW</span>
+                        </div>
+                        <div class="nowcast-status status-normal" id="level-status">Waiting...</div>
+                    </div>
+
+                    <div class="nowcast-card">
+                        <div class="nowcast-label">
+                            Meteorological Surge
+                            <span class="info-icon" onclick="openInfoModal('surge')">
+                                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                                </svg>
+                            </span>
+                        </div>
+                        <div class="nowcast-value">
+                            <span id="surge-value">--</span>
+                            <span class="nowcast-unit">m</span>
+                        </div>
+                        <div class="nowcast-status status-normal" id="surge-status">Waiting...</div>
+                    </div>
+
+                    <div class="nowcast-card">
+                        <div class="nowcast-label">
+                            72h Forecast Peak
+                            <span class="info-icon" onclick="openInfoModal('forecast')">
+                                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                                </svg>
+                            </span>
+                        </div>
+                        <div class="nowcast-value">
+                            <span id="forecast-peak">--</span>
+                            <span class="nowcast-unit">m MHHW</span>
+                        </div>
+                        <div class="nowcast-status status-normal" id="forecast-status">Waiting...</div>
+                    </div>
+                </div>
+
+                <!-- Water Level Chart Placeholder -->
+                <div class="chart-placeholder">
+                    <div class="chart-placeholder-icon">📊</div>
+                    <div class="chart-placeholder-title">
+                        WATER LEVEL NOWCAST & FORECAST
+                        <span class="info-icon" style="margin-left: 0.5rem;" onclick="event.stopPropagation(); openInfoModal('chart');">
+                            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" style="width: 20px; height: 20px;">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                            </svg>
+                        </span>
+                    </div>
+                    <div class="chart-placeholder-subtitle">
+                        View real-time water levels, tide predictions, and meteorological surge analysis<br>
+                        <strong>24h observations</strong> + <strong>72h forecast</strong> from nearest NOAA station
+                    </div>
+                    <button class="chart-open-btn" onclick="toggleFullscreen()">
+                        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"/>
+                        </svg>
+                        Open Fullscreen Graph
+                    </button>
+                </div>
+
+                <!-- Station Info -->
+                <div class="station-info" id="station-info">
+                    <div class="station-header">
+                        📡 Data Sources & Risk Assessment
+                        <span class="info-icon" onclick="openInfoModal('risk')">
+                            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                            </svg>
+                        </span>
+                    </div>
+                    <div class="station-grid">
+                        <div class="station-item">
+                            <span class="station-item-label">NOAA Station</span>
+                            <span class="station-item-value" id="station-name">--</span>
+                        </div>
+                        <div class="station-item">
+                            <span class="station-item-label">Distance</span>
+                            <span class="station-item-value" id="station-distance">--</span>
+                        </div>
+                        <div class="station-item">
+                            <span class="station-item-label">Risk Level</span>
+                            <span class="station-item-value" id="risk-level-badge">--</span>
+                        </div>
+                        <div class="station-item">
+                            <span class="station-item-label">FEMA Zone</span>
+                            <span class="station-item-value" id="fema-zone-badge">--</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- Info Modal -->
+    <div class="info-modal" id="info-modal" onclick="closeInfoModal()">
+        <div class="info-modal-content" onclick="event.stopPropagation()">
+            <div class="info-modal-header">
+                <div class="info-modal-title" id="info-modal-title">Information</div>
+                <button class="info-modal-close" onclick="closeInfoModal()">
+                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                    </svg>
+                </button>
+            </div>
+            <div class="info-modal-body" id="info-modal-body">
+                <!-- Content populated by JavaScript -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Fullscreen Modal -->
+    <div class="fullscreen-modal" id="fullscreen-modal">
+        <div class="fullscreen-header">
+            <div style="display: flex; align-items: center; gap: 1rem;">
+                <div>
+                    <div class="fullscreen-title" style="display: flex; align-items: center; gap: 0.75rem;">
+                        WATER LEVEL NOWCAST & FORECAST
+                        <span class="info-icon" style="cursor: pointer;" onclick="event.stopPropagation(); alert('METHODOLOGY\n\n• Blue Line: NOAA real-time observations (past 24h)\n• Orange Line: Harmonic tide predictions (next 72h) + current surge\n• Flood Lines: NOAA impact categories\n• NOW Line: Current time marker\n\nSources: NOAA CO-OPS | Method: Physics-based residual analysis');">
+                            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" style="width: 24px; height: 24px;">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                            </svg>
+                        </span>
+                    </div>
+                    <div style="color: #7BABAE; font-size: 0.9rem; margin-top: 0.5rem;">
+                        <span id="fullscreen-colony-name">--</span> • <span id="fullscreen-station-name">--</span>
+                    </div>
+                </div>
+            </div>
+            <button class="close-fullscreen" onclick="toggleFullscreen()">
+                <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24" style="display: inline-block; vertical-align: middle; margin-right: 0.5rem;">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                </svg>
+                Close
+            </button>
+        </div>
+        <div class="fullscreen-chart-wrapper">
+            <canvas id="fullscreen-chart"></canvas>
+        </div>
+        <div class="fullscreen-footer">
+            Physics-Based Nowcasting • Multi-Modal Data Fusion • Extreme Value Analysis
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+        integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+        crossorigin=""></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3.0.1/dist/chartjs-plugin-annotation.min.js"></script>
+<script>
+    let map;
+    let markers = [];
+    let fullscreenChart;
+    let selectedColony = null;
+    let colonyData = {};
+    let allColonies = [];
+    let currentObserved = [];
+    let currentPredicted = [];
+    let currentSurge = 0;
+    let currentStation = null;
+    const API_BASE = "{{ api_base_url }}";
+
+    const GULF_STATIONS = [
+        {name: "Grand Isle, LA", id: "8761724", lat: 29.2633, lon: -89.9567},
+        {name: "Shell Beach, LA", id: "8761305", lat: 29.8683, lon: -89.6733},
+        {name: "Pascagoula, MS", id: "8741533", lat: 30.345, lon: -88.5633},
+        {name: "Waveland, MS", id: "8747766", lat: 30.2783, lon: -89.3667},
+        {name: "New Canal, LA", id: "8761927", lat: 30.0267, lon: -90.1133},
+        {name: "Port Fourchon, LA", id: "8762075", lat: 29.1150, lon: -90.1983}
+    ];
+
+    // Initialize page
+    async function initPage() {
+        await loadCachedData();
+        setupSearch();
+        setInterval(checkForUpdates, 60000); // Check every minute
+    }
+
+    // Load cached colony data
+    async function loadCachedData() {
+        try {
+            const response = await fetch(`${API_BASE}/api/flood/cached`);
+            const result = await response.json();
+
+            colonyData = {};
+            allColonies = result.data.zones || [];
+
+            result.data.zones.forEach(zone => {
+                colonyData[zone.colony_name] = zone;
+            });
+
+            // Show content first, then init map
+            document.getElementById('loading-state').style.display = 'none';
+            document.getElementById('main-content').style.display = 'block';
+
+            // Initialize map after container is visible
+            setTimeout(() => {
+                initMap(result.data.zones);
+
+                // Select first colony
+                if (result.data.zones.length > 0) {
+                    selectColony(result.data.zones[0]);
+                }
+            }, 100);
+
+        } catch (error) {
+            console.error('Error loading data:', error);
+        }
+    }
+
+    // Setup search functionality
+    function setupSearch() {
+        const input = document.getElementById('search-input');
+        const results = document.getElementById('search-results');
+
+        input.addEventListener('input', (e) => {
+            const query = e.target.value.toLowerCase().trim();
+
+            if (query.length < 2) {
+                results.classList.remove('active');
+                return;
+            }
+
+            const filtered = allColonies.filter(colony =>
+                colony.colony_name.toLowerCase().includes(query)
+            ).slice(0, 10);
+
+            if (filtered.length === 0) {
+                results.innerHTML = '<div class="search-result-item" style="color: #64748B;">No colonies found</div>';
+                results.classList.add('active');
+                return;
+            }
+
+            results.innerHTML = filtered.map(colony => `
+                <div class="search-result-item" onclick="selectColonyByName('${colony.colony_name}')">
+                    <div class="colony-name">${colony.colony_name}</div>
+                    <div class="colony-info">Risk: ${colony.risk_score} | FEMA: ${colony.fema_zone}</div>
+                </div>
+            `).join('');
+
+            results.classList.add('active');
+        });
+
+        // Close results when clicking outside
+        document.addEventListener('click', (e) => {
+            if (!e.target.closest('.search-container')) {
+                results.classList.remove('active');
+            }
+        });
+    }
+
+    // Initialize map
+    function initMap(zones) {
+        if (!map) {
+            console.log('Initializing map...');
+            const mapContainer = document.getElementById('map');
+            console.log('Map container dimensions:', mapContainer.offsetWidth, 'x', mapContainer.offsetHeight);
+
+            // Start with default view (will be adjusted to fit bounds)
+            map = L.map('map').setView([29.5, -90.0], 7);
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '© OpenStreetMap',
+                maxZoom: 19
+            }).addTo(map);
+
+            // Fix map size after initialization
+            setTimeout(() => {
+                console.log('Calling invalidateSize...');
+                map.invalidateSize();
+            }, 200);
+
+            console.log('Map initialized successfully');
+        } else {
+            markers.forEach(m => map.removeLayer(m));
+            markers = [];
+        }
+
+        // Add markers and collect bounds
+        const bounds = [];
+        zones.forEach(zone => {
+            const color = zone.risk_level === 'CRITICAL' ? '#FF4B4B' :
+                         zone.risk_level === 'HIGH' ? '#FFA500' :
+                         zone.risk_level === 'MODERATE' ? '#FFFF00' : '#00FF00';
+
+            const marker = L.circleMarker([zone.latitude, zone.longitude], {
+                radius: 8,
+                fillColor: color,
+                color: '#fff',
+                weight: 2,
+                opacity: 1,
+                fillOpacity: 0.8
+            }).addTo(map);
+
+            marker.on('click', () => selectColony(zone));
+            marker.bindPopup(`<strong>${zone.colony_name}</strong><br>Risk: ${zone.risk_score}`);
+            markers.push(marker);
+            bounds.push([zone.latitude, zone.longitude]);
+        });
+
+        // Fit map to show all markers with padding
+        if (bounds.length > 0) {
+            setTimeout(() => {
+                map.fitBounds(bounds, { padding: [50, 50] });
+            }, 300);
+        }
+    }
+
+    // Select colony and load NOAA data
+    async function selectColony(colony) {
+        selectedColony = colony;
+        document.getElementById('selected-colony-name').textContent = colony.colony_name;
+
+        // Clear search
+        document.getElementById('search-input').value = '';
+        document.getElementById('search-results').classList.remove('active');
+
+        // Find nearest station
+        const station = findNearestStation(colony.latitude, colony.longitude);
+        currentStation = station;
+
+        // Update static info
+        document.getElementById('station-name').textContent = station.name;
+        document.getElementById('station-distance').textContent =
+            `${haversine(colony.latitude, colony.longitude, station.lat, station.lon).toFixed(1)} km`;
+
+        // Update risk level badge
+        const riskLevel = colony.risk_level;
+        const riskClass = riskLevel === 'CRITICAL' ? 'risk-critical' :
+                         riskLevel === 'HIGH' ? 'risk-high' :
+                         riskLevel === 'MODERATE' ? 'risk-moderate' : 'risk-low';
+        document.getElementById('risk-level-badge').innerHTML =
+            `<span class="risk-badge ${riskClass}">${riskLevel}</span>`;
+
+        // Update FEMA zone badge
+        document.getElementById('fema-zone-badge').innerHTML =
+            `<span class="fema-badge">${colony.fema_zone}</span>`;
+
+        // Show loading state
+        document.getElementById('current-level').textContent = '--';
+        document.getElementById('surge-value').textContent = '--';
+        document.getElementById('forecast-peak').textContent = '--';
+        document.getElementById('level-status').textContent = 'Loading...';
+        document.getElementById('surge-status').textContent = 'Loading...';
+        document.getElementById('forecast-status').textContent = 'Loading...';
+
+        // Load real-time NOAA data
+        await loadNOAAData(station);
+
+        // Focus map
+        map.setView([colony.latitude, colony.longitude], 10);
+    }
+
+    // Utilities
+    function selectColonyByName(name) {
+        if (colonyData[name]) {
+            selectColony(colonyData[name]);
+        }
+    }
+
+    // Load NOAA water level data
+    async function loadNOAAData(station) {
+        try {
+            console.log('Loading NOAA data for station:', station.id);
+
+            // Fetch observed and predicted data
+            const [observed, predicted] = await Promise.all([
+                fetchNOAA(station.id, 'water_level', 24, false),
+                fetchNOAA(station.id, 'predictions', 72, true)
+            ]);
+
+            console.log('Observed data points:', observed ? observed.data.length : 0);
+            console.log('Predicted data points:', predicted ? predicted.data.length : 0);
+
+            if (!observed || observed.data.length === 0) {
+                throw new Error('No observed water level data available');
+            }
+
+            if (!predicted || predicted.data.length === 0) {
+                throw new Error('No prediction data available');
+            }
+
+            // Calculate nowcast
+            const currentLevel = observed.data[observed.data.length - 1].v;
+            const currentTime = new Date(observed.data[observed.data.length - 1].t);
+
+            // Find predicted value closest to current time
+            let predictedAtCurrent = null;
+            let minTimeDiff = Infinity;
+
+            predicted.data.forEach(p => {
+                const pTime = new Date(p.t);
+                const diff = Math.abs(pTime - currentTime);
+                if (diff < minTimeDiff) {
+                    minTimeDiff = diff;
+                    predictedAtCurrent = p;
+                }
+            });
+
+            const surge = predictedAtCurrent ? (currentLevel - predictedAtCurrent.v) : 0;
+            const forecastPeak = Math.max(...predicted.data.map(p => p.v)) + surge;
+
+            console.log('Current level:', currentLevel, 'Surge:', surge, 'Forecast peak:', forecastPeak);
+
+            // Update nowcast cards
+            document.getElementById('current-level').textContent = currentLevel.toFixed(2);
+            document.getElementById('surge-value').textContent = surge >= 0 ? `+${surge.toFixed(2)}` : surge.toFixed(2);
+            document.getElementById('forecast-peak').textContent = forecastPeak.toFixed(2);
+
+            // Update status indicators
+            updateStatus('level-status', currentLevel, [0.6, 1.0]);
+            updateStatus('surge-status', Math.abs(surge), [0.1, 0.3]);
+            updateStatus('forecast-status', forecastPeak, [0.6, 1.0]);
+
+            // Store data for fullscreen
+            currentObserved = observed.data;
+            currentPredicted = predicted.data;
+            currentSurge = surge;
+
+            // Chart is only shown in fullscreen - data is ready
+
+        } catch (error) {
+            console.error('Error loading NOAA data:', error);
+            document.getElementById('current-level').textContent = 'N/A';
+            document.getElementById('surge-value').textContent = 'N/A';
+            document.getElementById('forecast-peak').textContent = 'N/A';
+            document.getElementById('level-status').textContent = 'Error';
+            document.getElementById('surge-status').textContent = 'Error';
+            document.getElementById('forecast-status').textContent = 'Error';
+
+            // Clear stored data
+            currentObserved = [];
+            currentPredicted = [];
+            currentSurge = 0;
+        }
+    }
+
+    // Fetch NOAA API
+    async function fetchNOAA(stationId, product, hours, isFuture) {
+        const now = new Date();
+        let begin, end;
+
+        if (isFuture) {
+            // For predictions, start now and go forward
+            begin = now;
+            end = new Date(now.getTime() + hours * 3600000);
+        } else {
+            // For observations, start in past and end now
+            begin = new Date(now.getTime() - hours * 3600000);
+            end = now;
+        }
+
+        const formatDate = (date) => {
+            const y = date.getFullYear();
+            const m = String(date.getMonth() + 1).padStart(2, '0');
+            const d = String(date.getDate()).padStart(2, '0');
+            const h = String(date.getHours()).padStart(2, '0');
+            const min = String(date.getMinutes()).padStart(2, '0');
+            return `${y}${m}${d} ${h}:${min}`;
+        };
+
+        const url = `https://api.tidesandcurrents.noaa.gov/api/prod/datagetter?` +
+            `product=${product}&` +
+            `application=NestScope&` +
+            `begin_date=${formatDate(begin)}&` +
+            `end_date=${formatDate(end)}&` +
+            `datum=MHHW&` +
+            `station=${stationId}&` +
+            `time_zone=lst_ldt&` +
+            `units=metric&` +
+            `format=json`;
+
+        console.log('Fetching NOAA:', url);
+
+        try {
+            const response = await fetch(url);
+            if (!response.ok) {
+                throw new Error(`NOAA API returned ${response.status}`);
+            }
+
+            const data = await response.json();
+
+            if (data.error) {
+                throw new Error(data.error.message || 'NOAA API error');
+            }
+
+            const dataArray = data.predictions || data.data || [];
+
+            if (dataArray.length === 0) {
+                throw new Error('No data returned from NOAA API');
+            }
+
+            return {
+                data: dataArray.map(d => ({
+                    t: d.t,
+                    v: parseFloat(d.v)
+                }))
+            };
+        } catch (error) {
+            console.error('NOAA API error:', error);
+            return null;
+        }
+    }
+
+    // Draw water level chart (fullscreen only)
+    function drawWaterLevelChart(observed, predicted, surge) {
+        const canvas = document.getElementById('fullscreen-chart');
+
+        if (fullscreenChart) {
+            fullscreenChart.destroy();
+        }
+
+        // Convert to Date objects for time axis
+        const observedData = observed.map(d => ({ x: new Date(d.t), y: d.v }));
+        const predictedData = predicted.map(d => ({ x: new Date(d.t), y: d.v + surge }));
+
+        // Create gradient for observed data
+        const ctx = canvas.getContext('2d');
+        const height = 800;
+        const gradientObserved = ctx.createLinearGradient(0, 0, 0, height);
+        gradientObserved.addColorStop(0, 'rgba(0, 217, 255, 0.6)');
+        gradientObserved.addColorStop(1, 'rgba(0, 217, 255, 0.05)');
+
+        // Create gradient for forecast
+        const gradientForecast = ctx.createLinearGradient(0, 0, 0, height);
+        gradientForecast.addColorStop(0, 'rgba(255, 165, 0, 0.5)');
+        gradientForecast.addColorStop(1, 'rgba(255, 165, 0, 0.05)');
+
+        // Find min/max for annotation lines
+        const allValues = [...observedData, ...predictedData].map(d => d.y);
+        const minY = Math.min(...allValues);
+        const maxY = Math.max(...allValues);
+
+        const fontSize = 16;
+        const lineWidth = 5;
+        const annotationWidth = 3;
+
+        const newChart = new Chart(canvas, {
+            type: 'line',
+            data: {
+                datasets: [
+                    {
+                        label: 'Observed',
+                        data: observedData,
+                        borderColor: '#00D9FF',
+                        backgroundColor: gradientObserved,
+                        borderWidth: lineWidth,
+                        pointRadius: 0,
+                        tension: 0.4,
+                        fill: true,
+                        order: 1
+                    },
+                    {
+                        label: 'Forecast (w/ surge)',
+                        data: predictedData,
+                        borderColor: '#FFA500',
+                        backgroundColor: gradientForecast,
+                        borderWidth: lineWidth,
+                        borderDash: [10, 5],
+                        pointRadius: 0,
+                        tension: 0.4,
+                        fill: true,
+                        order: 2
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                interaction: {
+                    intersect: false,
+                    mode: 'index'
+                },
+                plugins: {
+                    legend: {
+                        display: true,
+                        position: 'top',
+                        align: 'end',
+                        labels: {
+                            color: '#FFFFFF',
+                            font: { size: fontSize + 2, family: 'Inter', weight: '700' },
+                            padding: 20,
+                            usePointStyle: true,
+                            pointStyle: 'line',
+                            boxWidth: 40,
+                            boxHeight: 4
+                        }
+                    },
+                    tooltip: {
+                        backgroundColor: 'rgba(10, 15, 28, 0.98)',
+                        titleColor: '#00D9FF',
+                        bodyColor: '#FFFFFF',
+                        borderColor: 'rgba(0, 217, 255, 0.5)',
+                        borderWidth: 2,
+                        padding: 16,
+                        displayColors: true,
+                        titleFont: { size: fontSize + 1, weight: 'bold' },
+                        bodyFont: { size: fontSize, weight: '600' },
+                        callbacks: {
+                            title: (items) => {
+                                const date = new Date(items[0].parsed.x);
+                                return date.toLocaleString('en-US', {
+                                    month: 'short',
+                                    day: 'numeric',
+                                    hour: '2-digit',
+                                    minute: '2-digit'
+                                });
+                            },
+                            label: (item) => {
+                                return `${item.dataset.label}: ${item.parsed.y.toFixed(2)} m MHHW`;
+                            }
+                        }
+                    },
+                    annotation: {
+                        annotations: {
+                            normalLine: {
+                                type: 'line',
+                                yMin: 0,
+                                yMax: 0,
+                                borderColor: 'rgba(0, 255, 0, 0.7)',
+                                borderWidth: annotationWidth,
+                                borderDash: [5, 5],
+                                label: {
+                                    display: true,
+                                    content: 'NORMAL',
+                                    position: 'start',
+                                    backgroundColor: 'rgba(0, 255, 0, 0.2)',
+                                    color: '#00FF00',
+                                    font: { size: fontSize, family: 'Space Mono', weight: 'bold' },
+                                    padding: 6
+                                }
+                            },
+                            minorFloodLine: {
+                                type: 'line',
+                                yMin: 0.6,
+                                yMax: 0.6,
+                                borderColor: 'rgba(255, 255, 0, 0.7)',
+                                borderWidth: annotationWidth,
+                                borderDash: [5, 5],
+                                label: {
+                                    display: true,
+                                    content: 'MINOR FLOODING',
+                                    position: 'start',
+                                    backgroundColor: 'rgba(255, 255, 0, 0.2)',
+                                    color: '#FFFF00',
+                                    font: { size: fontSize, family: 'Space Mono', weight: 'bold' },
+                                    padding: 6
+                                }
+                            },
+                            moderateFloodLine: {
+                                type: 'line',
+                                yMin: 1.0,
+                                yMax: 1.0,
+                                borderColor: 'rgba(255, 165, 0, 0.7)',
+                                borderWidth: annotationWidth,
+                                borderDash: [5, 5],
+                                label: {
+                                    display: true,
+                                    content: 'MODERATE FLOODING',
+                                    position: 'start',
+                                    backgroundColor: 'rgba(255, 165, 0, 0.2)',
+                                    color: '#FFA500',
+                                    font: { size: fontSize, family: 'Space Mono', weight: 'bold' },
+                                    padding: 6
+                                }
+                            },
+                            majorFloodLine: {
+                                type: 'line',
+                                yMin: 1.5,
+                                yMax: 1.5,
+                                borderColor: 'rgba(255, 75, 75, 0.7)',
+                                borderWidth: annotationWidth,
+                                borderDash: [5, 5],
+                                label: {
+                                    display: true,
+                                    content: 'MAJOR FLOODING',
+                                    position: 'start',
+                                    backgroundColor: 'rgba(255, 75, 75, 0.2)',
+                                    color: '#FF4B4B',
+                                    font: { size: fontSize, family: 'Space Mono', weight: 'bold' },
+                                    padding: 6
+                                }
+                            },
+                            nowLine: {
+                                type: 'line',
+                                xMin: new Date(),
+                                xMax: new Date(),
+                                borderColor: 'rgba(0, 217, 255, 0.9)',
+                                borderWidth: annotationWidth + 1,
+                                label: {
+                                    display: true,
+                                    content: 'NOW',
+                                    position: 'start',
+                                    backgroundColor: 'rgba(0, 217, 255, 0.3)',
+                                    color: '#00D9FF',
+                                    font: { size: fontSize + 2, family: 'Space Mono', weight: 'bold' },
+                                    padding: 8
+                                }
+                            }
+                        }
+                    }
+                },
+                scales: {
+                    x: {
+                        type: 'time',
+                        time: {
+                            unit: 'hour',
+                            stepSize: 6,
+                            displayFormats: {
+                                hour: 'MMM d, ha'
+                            }
+                        },
+                        ticks: {
+                            color: '#FFFFFF',
+                            font: { size: fontSize, family: 'Inter', weight: '600' },
+                            maxRotation: 0,
+                            padding: 10
+                        },
+                        grid: {
+                            color: 'rgba(255, 255, 255, 0.12)',
+                            drawBorder: false,
+                            lineWidth: 1
+                        }
+                    },
+                    y: {
+                        title: {
+                            display: true,
+                            text: 'Water Level (meters above MHHW)',
+                            color: '#FFFFFF',
+                            font: { size: fontSize + 2, family: 'Inter', weight: '700' },
+                            padding: { top: 0, bottom: 10 }
+                        },
+                        ticks: {
+                            color: '#FFFFFF',
+                            font: { size: fontSize, family: 'Space Mono', weight: '600' },
+                            callback: (value) => value.toFixed(1) + ' m',
+                            padding: 10
+                        },
+                        grid: {
+                            color: 'rgba(255, 255, 255, 0.12)',
+                            drawBorder: false,
+                            lineWidth: 1
+                        }
+                    }
+                }
+            }
+        });
+
+        // Store the chart reference
+        fullscreenChart = newChart;
+    }
+
+    // Utilities
+    function findNearestStation(lat, lon) {
+        return GULF_STATIONS.reduce((nearest, station) => {
+            const dist = haversine(lat, lon, station.lat, station.lon);
+            return dist < haversine(lat, lon, nearest.lat, nearest.lon) ? station : nearest;
+        });
+    }
+
+    function haversine(lat1, lon1, lat2, lon2) {
+        const R = 6371;
+        const dLat = (lat2 - lat1) * Math.PI / 180;
+        const dLon = (lon2 - lon1) * Math.PI / 180;
+        const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+                  Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+                  Math.sin(dLon/2) * Math.sin(dLon/2);
+        return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+    }
+
+    function updateStatus(elementId, value, thresholds) {
+        const el = document.getElementById(elementId);
+        if (value > thresholds[1]) {
+            el.className = 'nowcast-status status-critical';
+            el.textContent = 'CRITICAL';
+        } else if (value > thresholds[0]) {
+            el.className = 'nowcast-status status-elevated';
+            el.textContent = 'ELEVATED';
+        } else {
+            el.className = 'nowcast-status status-normal';
+            el.textContent = 'NORMAL';
+        }
+    }
+
+    async function checkForUpdates() {
+        // Reload NOAA data for selected colony
+        if (selectedColony) {
+            const station = findNearestStation(selectedColony.latitude, selectedColony.longitude);
+            await loadNOAAData(station);
+        }
+    }
+
+
+    // Fullscreen toggle
+    function toggleFullscreen() {
+        const modal = document.getElementById('fullscreen-modal');
+        const isActive = modal.classList.contains('active');
+
+        if (isActive) {
+            // Close fullscreen
+            modal.classList.remove('active');
+            if (fullscreenChart) {
+                fullscreenChart.destroy();
+                fullscreenChart = null;
+            }
+        } else {
+            // Check if we have data
+            if (!selectedColony) {
+                alert('Please select a colony first');
+                return;
+            }
+
+            if (currentObserved.length === 0 || currentPredicted.length === 0) {
+                alert('No NOAA data available for this location. The station may be offline or out of range.');
+                return;
+            }
+
+            // Open fullscreen
+            modal.classList.add('active');
+
+            // Update header info
+            document.getElementById('fullscreen-colony-name').textContent = selectedColony.colony_name;
+            document.getElementById('fullscreen-station-name').textContent = currentStation ? currentStation.name : '--';
+
+            // Draw fullscreen chart
+            setTimeout(() => {
+                drawWaterLevelChart(currentObserved, currentPredicted, currentSurge);
+            }, 100);
+        }
+    }
+
+    // Close fullscreen on Escape key
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+            const modal = document.getElementById('fullscreen-modal');
+            if (modal.classList.contains('active')) {
+                toggleFullscreen();
+            }
+        }
+    });
+
+    // Handle window resize
+    window.addEventListener('resize', () => {
+        if (map) {
+            setTimeout(() => map.invalidateSize(), 100);
+        }
+    });
+
+    // Info Modal Functions
+    function openInfoModal(type) {
+        const modal = document.getElementById('info-modal');
+        const title = document.getElementById('info-modal-title');
+        const body = document.getElementById('info-modal-body');
+
+        const content = {
+            'water-level': {
+                title: 'Real-Time Water Level',
+                html: `
+                    <div class="info-section">
+                        <div class="info-section-title">📡 What is this?</div>
+                        <div class="info-section-text">
+                            Live measurements from NOAA CO-OPS (Center for Operational Oceanographic Products and Services) tide gauges,
+                            updated every <strong>6 minutes</strong>. These are real-time observations of water height at the nearest monitoring station.
+                        </div>
+                    </div>
+                    <div class="info-section">
+                        <div class="info-section-title">📏 What does MHHW mean?</div>
+                        <div class="info-section-text">
+                            <strong>Mean Higher High Water (MHHW)</strong> is the average of the higher high water heights from each tidal day over a 19-year period.
+                            It's used as a standard reference point for measuring coastal flooding.<br><br>
+                            Values above 0.0m indicate water is higher than normal high tide.
+                        </div>
+                    </div>
+                    <div class="info-source">
+                        <div class="info-source-label">Data Source</div>
+                        <div class="info-source-text">
+                            <strong>NOAA Center for Operational Oceanographic Products and Services</strong><br>
+                            Real-time verified water level data from permanent tide gauges
+                        </div>
+                    </div>
+                `
+            },
+            'surge': {
+                title: 'Meteorological Surge',
+                html: `
+                    <div class="info-section">
+                        <div class="info-section-title">🌊 What is Storm Surge?</div>
+                        <div class="info-section-text">
+                            Meteorological surge is the difference between <strong>observed</strong> water levels and <strong>predicted</strong> astronomical tides.
+                            This isolates the weather-driven component (wind, pressure) from normal tides.
+                        </div>
+                    </div>
+                    <div class="info-section">
+                        <div class="info-section-title">🧮 Calculation Method</div>
+                        <div class="info-formula">
+                            Observed Water Level - Predicted Tide = Meteorological Surge
+                        </div>
+                        <div class="info-section-text">
+                            <strong>Positive values:</strong> Storm surge (water pushed toward shore by wind/low pressure)<br>
+                            <strong>Negative values:</strong> Setup or offshore winds (water pushed away from shore)
+                        </div>
+                    </div>
+                    <div class="info-source">
+                        <div class="info-source-label">Methodology</div>
+                        <div class="info-source-text">
+                            <strong>Physics-Based Residual Analysis</strong><br>
+                            Nowcasting technique used by NOAA, TWI, and coastal researchers worldwide
+                        </div>
+                    </div>
+                `
+            },
+            'forecast': {
+                title: '72-Hour Forecast Peak',
+                html: `
+                    <div class="info-section">
+                        <div class="info-section-title">🔮 What is this forecast?</div>
+                        <div class="info-section-text">
+                            The maximum predicted water level over the next <strong>72 hours (3 days)</strong>, adjusted for current meteorological conditions.
+                            This combines astronomical tide predictions with the current surge residual.
+                        </div>
+                    </div>
+                    <div class="info-section">
+                        <div class="info-section-title">🧮 Compound Prediction</div>
+                        <div class="info-formula">
+                            Harmonic Tide Forecast + Current Surge = Total Forecast
+                        </div>
+                        <div class="info-section-text">
+                            <strong>Harmonic Prediction:</strong> Based on astronomical cycles (moon, sun positions)<br>
+                            <strong>Surge Adjustment:</strong> Adds current weather-driven surge to account for ongoing conditions
+                        </div>
+                    </div>
+                    <div class="info-source">
+                        <div class="info-source-label">Data Sources</div>
+                        <div class="info-source-text">
+                            <strong>NOAA Harmonic Tide Predictions</strong> + <strong>Real-Time Meteorological Adjustment</strong><br>
+                            Method: Compound nowcasting with residual persistence
+                        </div>
+                    </div>
+                `
+            },
+            'chart': {
+                title: 'Nowcast & Forecast Methodology',
+                html: `
+                    <div class="info-section">
+                        <div class="info-section-title">📊 Chart Components</div>
+                        <div class="info-section-text">
+                            <strong style="color: #00D9FF;">Blue Line (Observed):</strong> Real-time NOAA tide gauge data from the <strong>past 24 hours</strong><br><br>
+                            <strong style="color: #FFA500;">Orange Dashed Line (Forecast):</strong> Harmonic tide predictions for <strong>next 72 hours</strong>, adjusted for current meteorological conditions<br><br>
+                            <strong style="color: #00D9FF;">NOW Line:</strong> Current time marker<br><br>
+                            <strong>Colored Threshold Lines:</strong> NOAA flood impact categories
+                        </div>
+                    </div>
+                    <div class="info-section">
+                        <div class="info-section-title">🌊 Flood Thresholds</div>
+                        <ul class="info-list">
+                            <li><strong style="color: #00FF00;">NORMAL (0.0m):</strong> No flooding expected</li>
+                            <li><strong style="color: #FFFF00;">MINOR FLOODING (0.6m):</strong> Nuisance flooding, road closures</li>
+                            <li><strong style="color: #FFA500;">MODERATE FLOODING (1.0m):</strong> Property damage, evacuations</li>
+                            <li><strong style="color: #FF4B4B;">MAJOR FLOODING (1.5m+):</strong> Severe damage, life-threatening</li>
+                        </ul>
+                    </div>
+                    <div class="info-source">
+                        <div class="info-source-label">Methodology</div>
+                        <div class="info-source-text">
+                            <strong>Data:</strong> NOAA CO-OPS real-time observations<br>
+                            <strong>Method:</strong> Residual analysis + harmonic tide prediction<br>
+                            <strong>Update Frequency:</strong> Every 6 minutes
+                        </div>
+                    </div>
+                `
+            },
+            'risk': {
+                title: 'Multi-Modal Risk Fusion',
+                html: `
+                    <div class="info-section">
+                        <div class="info-section-title">⚠️ Compound Risk Score</div>
+                        <div class="info-section-text">
+                            The risk level (0-100) combines <strong>six independent data sources</strong> using a weighted fusion algorithm
+                            developed for coastal hazard assessment.
+                        </div>
+                    </div>
+                    <div class="info-section">
+                        <div class="info-section-title">📊 Risk Factors & Weights</div>
+                        <ul class="info-list">
+                            <li><strong>FEMA Flood Zones (30%):</strong> Official 100-year floodplain designation</li>
+                            <li><strong>Coastal Erosion (25%):</strong> USGS shoreline change rates (m/year)</li>
+                            <li><strong>Sea Level Rise (20%):</strong> NOAA 2050 projections (intermediate scenario)</li>
+                            <li><strong>Storm Surge History (10%):</strong> Historical NOAA water level extremes</li>
+                            <li><strong>Hurricane Exposure (10%):</strong> HURDAT2 major storm frequency (2005-present)</li>
+                            <li><strong>Population Vulnerability (5%):</strong> Bird colony size and species diversity</li>
+                        </ul>
+                    </div>
+                    <div class="info-section">
+                        <div class="info-section-title">🎯 NOAA Station</div>
+                        <div class="info-section-text">
+                            The nearest NOAA tide gauge station to this colony, used for real-time water level monitoring.
+                            Distance is calculated using haversine formula (great-circle distance).
+                        </div>
+                    </div>
+                    <div class="info-source">
+                        <div class="info-source-label">Data Sources</div>
+                        <div class="info-source-text">
+                            <strong>FEMA NFHL</strong> (flood zones) • <strong>USGS</strong> (erosion) • <strong>NOAA</strong> (SLR, water levels) •
+                            <strong>HURDAT2</strong> (hurricanes) • <strong>TWI Survey Data</strong> (populations)
+                        </div>
+                    </div>
+                `
+            }
+        };
+
+        const info = content[type] || content['water-level'];
+        title.textContent = info.title;
+        body.innerHTML = info.html;
+        modal.classList.add('active');
+    }
+
+    function closeInfoModal() {
+        const modal = document.getElementById('info-modal');
+        modal.classList.remove('active');
+    }
+
+    // Close modal on Escape key
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+            closeInfoModal();
+        }
+    });
+
+    document.addEventListener('DOMContentLoaded', initPage);
+</script>
+{% endblock %}

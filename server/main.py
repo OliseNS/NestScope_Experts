@@ -3,7 +3,7 @@ FastAPI Server for Text-to-SQL Bird Colony Chatbot
 Provides REST API endpoints for querying bird colony data
 """
 
-from fastapi import FastAPI, HTTPException, UploadFile, File
+from fastapi import FastAPI, HTTPException, UploadFile, File, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse, Response
 from pydantic import BaseModel
@@ -11,6 +11,7 @@ from typing import Optional, List, Dict, Any
 import sqlite3
 import pandas as pd
 import time
+from datetime import datetime
 from openai import OpenAI
 import os
 from pathlib import Path
@@ -29,6 +30,7 @@ from server.flood_tools.flood_database import FloodDatabase
 from server.flood_tools.noaa_client import NOAAClient
 from server.services.risk_intelligence import RiskIntelligenceService
 from server.services.db_explorer import DatabaseExplorer
+from server.services.flood_cache import get_flood_cache
 
 # Initialize logger
 logger = logging.getLogger(__name__)
@@ -4264,6 +4266,220 @@ async def get_risk_summary():
         logger.error(f"Error in get_risk_summary: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+
+# ============================================================================
+# FLOOD INTELLIGENCE CACHE ENDPOINTS - Fast Loading with Background Updates
+# ============================================================================
+
+@app.get("/api/flood/cached")
+async def get_cached_flood_data():
+    """
+    Get flood intelligence data from cache (instant response).
+    Returns cached data if available, otherwise triggers fresh calculation.
+    """
+    try:
+        cache = get_flood_cache()
+        cached = cache.get_cached_data()
+
+        if cached and not cached['is_stale']:
+            # Return cached data with metadata
+            return {
+                "status": "cached",
+                "cached_at": cached['timestamp'],
+                "age_minutes": round(cached['age_minutes'], 1),
+                "is_fresh": cached['is_fresh'],
+                "data": cached['data']
+            }
+
+        # Cache is stale or missing - generate fresh data
+        logger.info("Cache stale/missing, generating fresh flood data")
+        service = get_risk_service()
+        colonies = service.get_colonies_with_stats()
+        results = service.calculate_dynamic_risk(colonies)
+
+        # Format data
+        priorities_raw = [r for r in results if r['risk_level'] in ('CRITICAL', 'HIGH')]
+        priorities_raw = sorted(priorities_raw, key=lambda x: (x['years_until_critical'], -x['risk_score']))[:500]
+
+        priorities = []
+        for idx, row in enumerate(priorities_raw, 1):
+            erosion = row['erosion_rate']
+            birds = row['bird_count']
+            complexity = 1.5 if birds > 10000 else 1.2 if birds > 5000 else 1.0
+            years_critical = row['years_until_critical']
+            urgency = 1.8 if years_critical < 5 else 1.4 if years_critical < 10 else 1.0
+            estimated_area_m2 = max(10000, min(200000, erosion * 1000 + birds * 2))
+            estimated_cost = estimated_area_m2 * (75 * complexity * urgency) * 1.2
+
+            priorities.append({
+                "rank": idx,
+                "colony_name": row['colony_name'],
+                "risk_score": row['risk_score'],
+                "years_until_critical": row['years_until_critical'],
+                "estimated_cost": int(estimated_cost),
+                "risk_level": row['risk_level']
+            })
+
+        zones = []
+        for row in results:
+            fema_zone = row.get('fema_flood_zone', 'UNKNOWN')
+            if fema_zone in ['A', 'AE', 'V', 'VE']:
+                fema_category = 'HIGH'
+            elif fema_zone in ['AO', 'AH', 'A99']:
+                fema_category = 'MODERATE'
+            elif fema_zone == 'X500':
+                fema_category = 'LOW'
+            else:
+                fema_category = 'MINIMAL'
+
+            zones.append({
+                "colony_name": row['colony_name'],
+                "latitude": row['latitude'],
+                "longitude": row['longitude'],
+                "risk_score": row['risk_score'],
+                "risk_level": row['risk_level'],
+                "color": row['risk_color'],
+                "fema_zone": fema_zone,
+                "fema_category": fema_category,
+                "years_until_critical": row['years_until_critical']
+            })
+
+        data = {
+            "priorities": priorities,
+            "zones": zones,
+            "summary": service.get_summary_stats(results)
+        }
+
+        # Save to cache
+        cache.save_cache(data)
+
+        return {
+            "status": "fresh",
+            "cached_at": datetime.now().isoformat(),
+            "age_minutes": 0,
+            "is_fresh": True,
+            "data": data
+        }
+
+    except Exception as e:
+        logger.error(f"Error in get_cached_flood_data: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/flood/refresh")
+async def refresh_flood_cache(background_tasks: BackgroundTasks):
+    """
+    Trigger background refresh of flood intelligence cache.
+    Returns immediately, cache updates in background.
+    """
+    try:
+        def refresh_cache():
+            """Background task to refresh cache"""
+            try:
+                logger.info("Starting background flood cache refresh")
+                service = get_risk_service()
+                colonies = service.get_colonies_with_stats()
+                results = service.calculate_dynamic_risk(colonies)
+
+                # Format data (same as above)
+                priorities_raw = [r for r in results if r['risk_level'] in ('CRITICAL', 'HIGH')]
+                priorities_raw = sorted(priorities_raw, key=lambda x: (x['years_until_critical'], -x['risk_score']))[:500]
+
+                priorities = []
+                for idx, row in enumerate(priorities_raw, 1):
+                    erosion = row['erosion_rate']
+                    birds = row['bird_count']
+                    complexity = 1.5 if birds > 10000 else 1.2 if birds > 5000 else 1.0
+                    years_critical = row['years_until_critical']
+                    urgency = 1.8 if years_critical < 5 else 1.4 if years_critical < 10 else 1.0
+                    estimated_area_m2 = max(10000, min(200000, erosion * 1000 + birds * 2))
+                    estimated_cost = estimated_area_m2 * (75 * complexity * urgency) * 1.2
+
+                    priorities.append({
+                        "rank": idx,
+                        "colony_name": row['colony_name'],
+                        "risk_score": row['risk_score'],
+                        "years_until_critical": row['years_until_critical'],
+                        "estimated_cost": int(estimated_cost),
+                        "risk_level": row['risk_level']
+                    })
+
+                zones = []
+                for row in results:
+                    fema_zone = row.get('fema_flood_zone', 'UNKNOWN')
+                    if fema_zone in ['A', 'AE', 'V', 'VE']:
+                        fema_category = 'HIGH'
+                    elif fema_zone in ['AO', 'AH', 'A99']:
+                        fema_category = 'MODERATE'
+                    elif fema_zone == 'X500':
+                        fema_category = 'LOW'
+                    else:
+                        fema_category = 'MINIMAL'
+
+                    zones.append({
+                        "colony_name": row['colony_name'],
+                        "latitude": row['latitude'],
+                        "longitude": row['longitude'],
+                        "risk_score": row['risk_score'],
+                        "risk_level": row['risk_level'],
+                        "color": row['risk_color'],
+                        "fema_zone": fema_zone,
+                        "fema_category": fema_category,
+                        "years_until_critical": row['years_until_critical']
+                    })
+
+                data = {
+                    "priorities": priorities,
+                    "zones": zones,
+                    "summary": service.get_summary_stats(results)
+                }
+
+                cache = get_flood_cache()
+                cache.save_cache(data)
+                logger.info("Background flood cache refresh completed")
+
+            except Exception as e:
+                logger.error(f"Error in background cache refresh: {e}")
+
+        # Add to background tasks
+        background_tasks.add_task(refresh_cache)
+
+        return {
+            "status": "refresh_queued",
+            "message": "Cache refresh started in background"
+        }
+
+    except Exception as e:
+        logger.error(f"Error queuing flood cache refresh: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/flood/cache-status")
+async def get_flood_cache_status():
+    """Get flood intelligence cache metadata (age, freshness)"""
+    try:
+        cache = get_flood_cache()
+        cached = cache.get_cached_data()
+
+        if not cached:
+            return {
+                "exists": False,
+                "message": "No cache found"
+            }
+
+        return {
+            "exists": True,
+            "cached_at": cached['timestamp'],
+            "age_seconds": cached['age_seconds'],
+            "age_minutes": round(cached['age_minutes'], 1),
+            "is_fresh": cached['is_fresh'],
+            "is_stale": cached['is_stale'],
+            "colony_count": len(cached['data'].get('zones', []))
+        }
+
+    except Exception as e:
+        logger.error(f"Error getting cache status: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 # ============================================================================

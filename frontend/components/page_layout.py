@@ -145,16 +145,6 @@ def render_sidebar(active_page: str = "home"):
     ):
         st.switch_page("pages/02_nest_vision.py")
 
-    # Flood Intelligence button
-    if st.button(
-        "🌊 Flood Intelligence",
-        use_container_width=True,
-        help="Automated multi-modal flood hazard monitoring",
-        type="primary" if active_page == "coastal_risk" else "secondary",
-        key="sb_nav_flood"
-    ):
-        st.switch_page("pages/06_coastal_risk.py")
-
     # Expert tools section
     render_sidebar_section("Expert tools")
 
@@ -170,6 +160,13 @@ def render_sidebar(active_page: str = "home"):
         "http://localhost:5000/nestdb",
         use_container_width=True,
         help="Database management interface"
+    )
+
+    st.link_button(
+        "🌊 Flood Intelligence",
+        "http://localhost:5000/flood-intelligence",
+        use_container_width=True,
+        help="Real-time coastal flood risk monitoring (Expert tool)"
     )
 
     # System Status section

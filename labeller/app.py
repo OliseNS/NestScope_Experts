@@ -207,17 +207,22 @@ def calculate_project_stats(project_folder):
     images_dir = os.path.join(project_path, 'images')
     labels_dir = os.path.join(project_path, 'labels')
 
-    # Count total images
-    total_images = 0
+    # Get list of actual images that exist
+    existing_images = set()
     if os.path.exists(images_dir):
-        total_images = len([f for f in os.listdir(images_dir)
-                           if f.lower().endswith(('.jpg', '.jpeg', '.png'))])
+        existing_images = set([f for f in os.listdir(images_dir)
+                              if f.lower().endswith(('.jpg', '.jpeg', '.png'))])
+
+    total_images = len(existing_images)
 
     # Get user-completed images from project_state.json
     state = load_project_state(project_folder)
     completed_by_users = set()
     for user_data in state.get('users', {}).values():
         completed_by_users.update(user_data.get('completed', []))
+
+    # Filter out "ghost completions" - images marked complete but no longer exist
+    completed_by_users = completed_by_users & existing_images
 
     # Count only user-completed images and their annotations
     completed_images = len(completed_by_users)
@@ -236,7 +241,7 @@ def calculate_project_stats(project_folder):
     elif completed_images == 0:
         progress = 0
     else:
-        progress = (completed_images / total_images * 100)
+        progress = min((completed_images / total_images * 100), 100.0)  # Cap at 100%
 
     return {
         'total_images': total_images,
@@ -267,6 +272,89 @@ def get_all_project_stats():
         'total_images': total_images,
         'total_annotations': total_annotations,
         'active_users': len(active_users)
+    }
+
+def sync_project_labels_images(project_folder):
+    """
+    Synchronize labels and images in a project.
+
+    Rules:
+    1. If a label exists without a matching image → DELETE the label
+    2. If an image exists without a matching label → CREATE an empty label
+
+    This ensures every image has exactly one label file, and no orphaned labels exist.
+
+    Returns:
+        dict with 'deleted_labels', 'created_labels', and 'errors'
+    """
+    project_path = os.path.join(PROJECTS_DIR, project_folder)
+    images_dir = os.path.join(project_path, 'images')
+    labels_dir = os.path.join(project_path, 'labels')
+
+    # Ensure directories exist
+    os.makedirs(images_dir, exist_ok=True)
+    os.makedirs(labels_dir, exist_ok=True)
+
+    deleted_labels = []
+    created_labels = []
+    errors = []
+
+    # Step 1: Find and delete orphaned labels (labels without images)
+    try:
+        label_files = [f for f in os.listdir(labels_dir) if f.endswith('.txt')]
+        for label_file in label_files:
+            # Get base name (without .txt extension)
+            base_name = os.path.splitext(label_file)[0]
+            # Check if matching image exists (.jpg, .jpeg, or .png)
+            matching_images = [
+                f for f in os.listdir(images_dir)
+                if os.path.splitext(f)[0] == base_name and f.lower().endswith(('.jpg', '.jpeg', '.png'))
+            ]
+
+            if not matching_images:
+                # No matching image - delete the label
+                label_path = os.path.join(labels_dir, label_file)
+                try:
+                    os.remove(label_path)
+                    deleted_labels.append(label_file)
+                    print(f"Deleted orphaned label: {label_file}")
+                except Exception as e:
+                    errors.append(f"Failed to delete {label_file}: {str(e)}")
+
+    except Exception as e:
+        errors.append(f"Error scanning labels: {str(e)}")
+
+    # Step 2: Find images without labels and create empty labels
+    try:
+        image_files = [f for f in os.listdir(images_dir)
+                      if f.lower().endswith(('.jpg', '.jpeg', '.png'))]
+
+        for image_file in image_files:
+            # Get base name (without extension)
+            base_name = os.path.splitext(image_file)[0]
+            label_file = base_name + '.txt'
+            label_path = os.path.join(labels_dir, label_file)
+
+            if not os.path.exists(label_path):
+                # Create empty label file
+                try:
+                    with open(label_path, 'w') as f:
+                        pass  # Create empty file
+                    created_labels.append(label_file)
+                    print(f"Created empty label: {label_file}")
+                except Exception as e:
+                    errors.append(f"Failed to create {label_file}: {str(e)}")
+
+    except Exception as e:
+        errors.append(f"Error scanning images: {str(e)}")
+
+    return {
+        'deleted_labels': deleted_labels,
+        'created_labels': created_labels,
+        'errors': errors,
+        'deleted_count': len(deleted_labels),
+        'created_count': len(created_labels),
+        'error_count': len(errors)
     }
 
 # ============================================================================
@@ -687,6 +775,49 @@ def nestdb_page():
         'nestdb.html',
         active_page='nestdb',
         can_edit_db=True,
+        is_admin=is_admin(user_email)
+    )
+
+@app.route('/flood-intelligence')
+@login_required
+def flood_intelligence_page():
+    """
+    Flood Intelligence Center - Real-time coastal risk assessment
+
+    Expert tool for monitoring colony flood risk using multi-modal data fusion:
+    - NOAA water levels (real-time)
+    - FEMA flood zones
+    - USGS erosion rates
+    - HURDAT2 hurricane data
+    - TWI survey data
+
+    Uses persistent cache for instant loading with background updates.
+    """
+    # Get current user's permissions
+    user_email = session['user']['email']
+    permissions = get_user_permissions(user_email)
+
+    # Check if user has database editing permission (expert access)
+    if not permissions.get('can_edit_db', False):
+        return '''
+        <html>
+        <head><title>Access Denied</title></head>
+        <body style="font-family: system-ui; padding: 2rem; max-width: 600px; margin: 0 auto;">
+            <h1>🔒 Access Denied</h1>
+            <p>You need <strong>expert</strong> or <strong>admin</strong> permissions to access Flood Intelligence.</p>
+            <p>This tool is designed for experts conducting coastal risk assessments.</p>
+            <p><a href="/" style="color: #7BABAE;">← Back to Home</a></p>
+        </body>
+        </html>
+        ''', 403
+
+    # Get API base URL from environment
+    api_base_url = os.getenv("API_BASE_URL", "http://localhost:8000")
+
+    return render_template(
+        'flood_intelligence.html',
+        active_page='flood_intelligence',
+        api_base_url=api_base_url,
         is_admin=is_admin(user_email)
     )
 
@@ -1307,6 +1438,43 @@ def remove_user_from_project(project_folder):
         print(f"Error removing user from project: {traceback.format_exc()}")
         return jsonify({'error': str(e)}), 500
 
+@app.route('/api/projects/<project_folder>/sync', methods=['POST'])
+@admin_required  # Only admins can sync project data
+def api_sync_project_data(project_folder):
+    """
+    Synchronize images and labels for a project.
+
+    Ensures data hygiene by:
+    1. Deleting labels without matching images (orphaned labels)
+    2. Creating empty labels for images without labels
+
+    This endpoint is admin-only to prevent accidental data loss.
+    """
+    try:
+        # Verify project exists
+        metadata = get_project(project_folder)
+        if not metadata:
+            return jsonify({'error': 'Project not found'}), 404
+
+        # Run sync
+        result = sync_project_labels_images(project_folder)
+
+        return jsonify({
+            'success': True,
+            'project': project_folder,
+            'deleted_labels': result['deleted_labels'],
+            'created_labels': result['created_labels'],
+            'errors': result['errors'],
+            'summary': {
+                'deleted_count': result['deleted_count'],
+                'created_count': result['created_count'],
+                'error_count': result['error_count']
+            }
+        }), 200
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
 @app.route('/api/projects/<project_folder>/delete', methods=['DELETE'])
 @admin_required  # CRITICAL: Only admins can delete projects!
 def delete_project(project_folder):
@@ -1668,6 +1836,105 @@ def get_unassigned_images(project_folder):
         })
 
     except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/correction/upload', methods=['POST'])
+def upload_correction():
+    """
+    Upload an image with initial detections for expert correction.
+    All corrections are saved to the 'corrections' project.
+
+    This endpoint is called by NestVision's "Train with Experts" button.
+    """
+    import base64
+    import time
+
+    try:
+        data = request.get_json()
+
+        if not data or 'image_base64' not in data:
+            return jsonify({'error': 'No image data provided'}), 400
+
+        # Decode image
+        image_data = base64.b64decode(data['image_base64'])
+        detections = data.get('detections', [])
+
+        # Ensure 'corrections' project exists
+        corrections_folder = 'corrections'
+        corrections_path = os.path.join(PROJECTS_DIR, corrections_folder)
+
+        if not os.path.exists(corrections_path):
+            # Create corrections project
+            os.makedirs(corrections_path, exist_ok=True)
+            os.makedirs(os.path.join(corrections_path, 'images'), exist_ok=True)
+            os.makedirs(os.path.join(corrections_path, 'labels'), exist_ok=True)
+
+            # Create metadata
+            metadata = {
+                'name': 'Corrections',
+                'description': 'Expert corrections and refinements from NestVision',
+                'created_at': datetime.now().isoformat()
+            }
+            save_project_metadata(corrections_folder, metadata)
+
+            # Create data.yaml with default bird class
+            import yaml
+            data_yaml = {
+                'path': corrections_path,
+                'train': 'images',
+                'val': 'images',
+                'names': {0: 'bird'}
+            }
+            with open(os.path.join(corrections_path, 'data.yaml'), 'w') as f:
+                yaml.dump(data_yaml, f, default_flow_style=False)
+
+            # Initialize project state
+            save_project_state(corrections_folder, {'users': {}})
+
+        # Generate unique filename with timestamp
+        timestamp = int(time.time() * 1000)  # milliseconds
+        image_filename = f"correction_{timestamp}.jpg"
+
+        # Save image
+        image_path = os.path.join(corrections_path, 'images', image_filename)
+        with open(image_path, 'wb') as f:
+            f.write(image_data)
+
+        # Save detections as YOLO labels
+        label_filename = f"correction_{timestamp}.txt"
+        label_path = os.path.join(corrections_path, 'labels', label_filename)
+
+        with open(label_path, 'w') as f:
+            for det in detections:
+                # Convert detections to YOLO format: class x_center y_center width height
+                # Assuming detections come in format with bbox [x1, y1, x2, y2]
+                bbox = det.get('bbox', [])
+                if len(bbox) == 4:
+                    x1, y1, x2, y2 = bbox
+                    x_center = (x1 + x2) / 2
+                    y_center = (y1 + y2) / 2
+                    width = x2 - x1
+                    height = y2 - y1
+
+                    # Class 0 for bird (default)
+                    class_id = det.get('class_id', 0)
+                    f.write(f"{class_id} {x_center:.6f} {y_center:.6f} {width:.6f} {height:.6f}\n")
+
+        # Return URL to edit this image in Nestperts
+        correction_url = f"/project/{corrections_folder}/editor/unassigned"
+
+        return jsonify({
+            'success': True,
+            'message': 'Correction uploaded successfully',
+            'image_filename': image_filename,
+            'correction_url': correction_url,
+            'project': 'corrections'
+        })
+
+    except Exception as e:
+        import traceback
+        print(f"Error uploading correction: {e}")
+        print(traceback.format_exc())
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/delete_image', methods=['POST'])

@@ -15,6 +15,70 @@
         min-height: 100vh;
     }
 
+    /* Light mode text and element overrides */
+    [data-theme="light"] .stat-label {
+        color: rgba(0, 0, 0, 0.6);
+    }
+
+    [data-theme="light"] .section-header {
+        border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+    }
+
+    [data-theme="light"] .form-input::placeholder {
+        color: rgba(0, 0, 0, 0.4);
+    }
+
+    [data-theme="light"] .form-input:focus {
+        background: rgba(0, 0, 0, 0.03);
+    }
+
+    [data-theme="light"] .role-badge.viewer {
+        background: rgba(0, 0, 0, 0.08);
+        color: rgba(0, 0, 0, 0.7);
+        border: 1px solid rgba(0, 0, 0, 0.2);
+    }
+
+    [data-theme="light"] .permission-dot.inactive {
+        background: rgba(0, 0, 0, 0.2);
+    }
+
+    [data-theme="light"] .permission-label {
+        color: rgba(0, 0, 0, 0.6);
+    }
+
+    [data-theme="light"] .role-select:hover {
+        background: rgba(0, 0, 0, 0.05);
+    }
+
+    [data-theme="light"] .empty-state {
+        color: rgba(0, 0, 0, 0.5);
+    }
+
+    [data-theme="light"] .stat-card:hover {
+        box-shadow: 0 12px 40px rgba(0, 0, 0, 0.1);
+    }
+
+    /* Table muted text (for "You" and "—" in admin table) */
+    .table-muted-text {
+        color: rgba(255, 255, 255, 0.5);
+        font-size: 0.875rem;
+    }
+
+    [data-theme="light"] .table-muted-text {
+        color: rgba(0, 0, 0, 0.5);
+    }
+
+    /* Mobile responsive overrides for light mode */
+    @media (max-width: 768px) {
+        [data-theme="light"] .data-table tr {
+            background: rgba(0, 0, 0, 0.03);
+        }
+
+        [data-theme="light"] .data-table td::before {
+            color: rgba(0, 0, 0, 0.6);
+        }
+    }
+
     .admin-container {
         max-width: 1600px;
         margin: 0 auto;
@@ -772,7 +836,7 @@
                             </select>
                         </form>
                         {% else %}
-                        <span style="color: rgba(255,255,255,0.5); font-size: 0.875rem;">You</span>
+                        <span class="table-muted-text">You</span>
                         {% endif %}
                     </td>
                     <td data-label="Actions">
@@ -784,7 +848,7 @@
                             </button>
                         </form>
                         {% else %}
-                        <span style="color: rgba(255,255,255,0.5); font-size: 0.875rem;">—</span>
+                        <span class="table-muted-text">—</span>
                         {% endif %}
                     </td>
                 </tr>
