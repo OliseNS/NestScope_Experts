@@ -163,3 +163,4 @@ rasterio
 # - Recommended Python version: 3.10 or 3.11
 # - Use `uv pip compile requirements.txt` to generate a locked requirements file
 # - Use `uv pip sync requirements.txt` to install exact versions from lock file
+libsql-client

@@ -429,40 +429,112 @@
             return;
         }
 
+        const file = selectedFiles[0];
+        const fileSize = file.size;
+        const fileSizeMB = (fileSize / (1024 * 1024)).toFixed(2);
+
+        console.log('Starting chunked upload...');
+        console.log(`File: ${file.name}`);
+        console.log(`Size: ${fileSizeMB} MB (${fileSize} bytes)`);
+
         btn.disabled = true;
-        btn.textContent = 'Uploading & extracting...';
+
+        // Detect Firefox for special handling
+        const isFirefox = navigator.userAgent.toLowerCase().indexOf('firefox') > -1;
+
+        // Chunked upload configuration
+        // Firefox needs smaller chunks to avoid memory issues
+        const CHUNK_SIZE = isFirefox ? 50 * 1024 * 1024 : 100 * 1024 * 1024; // 50MB for Firefox, 100MB for others
+        const totalChunks = Math.ceil(fileSize / CHUNK_SIZE);
+        const uploadId = `upload_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+
+        console.log(`Browser: ${isFirefox ? 'Firefox' : 'Chromium-based'}`);
+        console.log(`Splitting into ${totalChunks} chunks of ${CHUNK_SIZE / (1024 * 1024)}MB each`);
 
         try {
-            // Create FormData with project info and zip file
-            const formData = new FormData();
-            formData.append('name', name);
-            formData.append('description', description);
-            formData.append('zip_file', selectedFiles[0]);
+            // Upload each chunk
+            for (let chunkIndex = 0; chunkIndex < totalChunks; chunkIndex++) {
+                const start = chunkIndex * CHUNK_SIZE;
+                const end = Math.min(start + CHUNK_SIZE, fileSize);
+                const chunk = file.slice(start, end);
 
-            const response = await fetch('/api/projects/create', {
+                const chunkProgress = ((chunkIndex / totalChunks) * 100).toFixed(1);
+                btn.textContent = `Uploading chunk ${chunkIndex + 1}/${totalChunks} (${chunkProgress}%)`;
+                console.log(`Uploading chunk ${chunkIndex + 1}/${totalChunks} (${chunk.size} bytes)`);
+
+                // Upload this chunk
+                const formData = new FormData();
+                formData.append('upload_id', uploadId);
+                formData.append('chunk_index', chunkIndex);
+                formData.append('total_chunks', totalChunks);
+                formData.append('chunk', chunk, `chunk_${chunkIndex}`);
+
+                const response = await fetch('/api/projects/upload_chunk', {
+                    method: 'POST',
+                    body: formData,
+                    // Firefox needs explicit signal that we accept large responses
+                    signal: AbortSignal.timeout(300000) // 5 minute timeout per chunk
+                }).catch(err => {
+                    console.error(`Chunk ${chunkIndex} network error:`, err);
+                    throw new Error(`Network error on chunk ${chunkIndex}: ${err.message}`);
+                });
+
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    console.error(`Chunk ${chunkIndex} HTTP error:`, response.status, errorText);
+                    throw new Error(`Chunk ${chunkIndex} failed: ${response.status} ${errorText}`);
+                }
+
+                const result = await response.json();
+                if (!result.success) {
+                    throw new Error(`Chunk ${chunkIndex} upload failed`);
+                }
+
+                // Firefox: Add small delay between chunks to prevent memory buildup
+                if (isFirefox && chunkIndex < totalChunks - 1) {
+                    await new Promise(resolve => setTimeout(resolve, 100));
+                }
+            }
+
+            console.log('All chunks uploaded successfully!');
+            btn.textContent = 'Assembling & extracting...';
+
+            // Assemble chunks and create project
+            const assembleFormData = new FormData();
+            assembleFormData.append('upload_id', uploadId);
+            assembleFormData.append('total_chunks', totalChunks);
+            assembleFormData.append('filename', file.name);
+            assembleFormData.append('name', name);
+            assembleFormData.append('description', description);
+
+            const assembleResponse = await fetch('/api/projects/assemble_and_create', {
                 method: 'POST',
-                body: formData
+                body: assembleFormData
             });
 
-            const result = await response.json();
+            if (!assembleResponse.ok) {
+                const error = await assembleResponse.json();
+                throw new Error(error.error || 'Failed to assemble and create project');
+            }
 
-            if (result.success) {
-                let message = `Project created! Extracted ${result.images_uploaded} images`;
-                if (result.labels_uploaded > 0) {
-                    message += ` and ${result.labels_uploaded} labels`;
-                }
-                if (result.users_imported > 0) {
-                    message += `. Imported ${result.users_imported} user(s) with assignments`;
+            const assembleResult = await assembleResponse.json();
+
+            if (assembleResult.success) {
+                let message = `Project created! Extracted ${assembleResult.images_uploaded} images`;
+                if (assembleResult.labels_uploaded > 0) {
+                    message += ` and ${assembleResult.labels_uploaded} labels`;
                 }
                 showToast(message, 'success');
                 setTimeout(() => {
                     window.location.reload();
                 }, 1500);
             } else {
-                throw new Error(result.error || 'Failed to create project');
+                throw new Error(assembleResult.error || 'Failed to create project');
             }
+
         } catch (error) {
-            showToast(error.message, 'error');
+            console.error('Upload error:', error);
+            showToast(`Upload failed: ${error.message}`, 'error');
             btn.disabled = false;
             btn.textContent = 'Create Project';
         }

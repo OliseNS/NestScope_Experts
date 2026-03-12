@@ -5,101 +5,109 @@ Handles Google OAuth, user management, and access control
 
 import os
 import json
-import sqlite3
+import libsql_client
 from datetime import datetime
 from functools import wraps
 from flask import session, redirect, url_for, request, jsonify
 from authlib.integrations.flask_client import OAuth
+import logging
+
+# Initialize logger
+logger = logging.getLogger(__name__)
 
 # ============================================================================
 # DATABASE SETUP
 # ============================================================================
 
-# Store users.db in the data/ folder alongside bird_data_complete.db
-AUTH_DB = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'data', 'users.db')
+# Turso Cloud Configuration (CLOUD-ONLY MODE)
+TURSO_URL = os.getenv("TURSO_DATABASE_URL")
+TURSO_TOKEN = os.getenv("TURSO_AUTH_TOKEN")
+
+def get_cloud_client():
+    """Get a connection to the Turso cloud database."""
+    if not TURSO_URL or not TURSO_TOKEN:
+        raise ValueError("❌ TURSO_DATABASE_URL and TURSO_AUTH_TOKEN must be set in .env")
+    try:
+        client = libsql_client.create_client_sync(url=TURSO_URL, auth_token=TURSO_TOKEN)
+        logger.info("✅ Successfully connected to Turso cloud database")
+        return client
+    except Exception as e:
+        logger.error(f"❌ Failed to connect to Turso: {e}")
+        raise ConnectionError(f"Cannot connect to Turso database: {e}")
 
 # Base admin that cannot be removed or demoted
 BASE_ADMIN_EMAIL = 'olisemekanmarkwe@gmail.com'
 
 def init_auth_db():
-    """Initialize authentication database with users and approved emails"""
-    conn = sqlite3.connect(AUTH_DB)
-    cursor = conn.cursor()
+    """Initialize authentication database with users and approved emails (Turso Cloud ONLY)"""
+    client = get_cloud_client()
 
-    # Table: approved_emails (admin-managed whitelist)
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS approved_emails (
-            email TEXT PRIMARY KEY,
-            added_by TEXT,
-            added_at TEXT,
-            notes TEXT
-        )
-    ''')
+    if client:  # Will always be True now (or raises exception)
+        try:
+            # Initialize all tables in Turso
+            client.execute('''
+                CREATE TABLE IF NOT EXISTS approved_emails (
+                    email TEXT PRIMARY KEY,
+                    added_by TEXT,
+                    added_at TEXT,
+                    notes TEXT
+                )
+            ''')
 
-    # Table: users (people who've signed in)
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS users (
-            email TEXT PRIMARY KEY,
-            name TEXT,
-            picture TEXT,
-            first_login TEXT,
-            last_login TEXT,
-            login_count INTEGER DEFAULT 1,
-            role TEXT DEFAULT 'viewer'
-        )
-    ''')
+            client.execute('''
+                CREATE TABLE IF NOT EXISTS users (
+                    email TEXT PRIMARY KEY,
+                    name TEXT,
+                    picture TEXT,
+                    first_login TEXT,
+                    last_login TEXT,
+                    login_count INTEGER DEFAULT 1,
+                    role TEXT DEFAULT 'viewer'
+                )
+            ''')
 
-    # Table: admin_users (superusers who can manage approved emails)
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS admin_users (
-            email TEXT PRIMARY KEY,
-            added_at TEXT
-        )
-    ''')
+            client.execute('''
+                CREATE TABLE IF NOT EXISTS admin_users (
+                    email TEXT PRIMARY KEY,
+                    added_at TEXT
+                )
+            ''')
 
-    # Table: permissions (defines what each role can do)
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS permissions (
-            role TEXT PRIMARY KEY,
-            can_annotate INTEGER DEFAULT 0,
-            can_edit_db INTEGER DEFAULT 0,
-            can_manage_users INTEGER DEFAULT 0,
-            description TEXT
-        )
-    ''')
+            client.execute('''
+                CREATE TABLE IF NOT EXISTS permissions (
+                    role TEXT PRIMARY KEY,
+                    can_annotate INTEGER DEFAULT 0,
+                    can_edit_db INTEGER DEFAULT 0,
+                    can_manage_users INTEGER DEFAULT 0,
+                    description TEXT
+                )
+            ''')
 
-    # Insert default permissions if table is empty
-    cursor.execute('SELECT COUNT(*) FROM permissions')
-    if cursor.fetchone()[0] == 0:
-        cursor.executemany('''
-            INSERT INTO permissions (role, can_annotate, can_edit_db, can_manage_users, description)
-            VALUES (?, ?, ?, ?, ?)
-        ''', [
-            ('admin', 1, 1, 1, 'Full access to all features'),
-            ('annotator', 1, 0, 0, 'Can annotate images'),
-            ('viewer', 0, 0, 0, 'Read-only access')
-        ])
+            # Insert default permissions if table is empty
+            perms_count = client.execute('SELECT COUNT(*) FROM permissions')
+            if perms_count.rows[0][0] == 0:
+                client.batch([
+                    ("INSERT INTO permissions (role, can_annotate, can_edit_db, can_manage_users, description) VALUES (?, ?, ?, ?, ?)", 
+                     ['admin', 1, 1, 1, 'Full access to all features']),
+                    ("INSERT INTO permissions (role, can_annotate, can_edit_db, can_manage_users, description) VALUES (?, ?, ?, ?, ?)", 
+                     ['annotator', 1, 0, 0, 'Can annotate images']),
+                    ("INSERT INTO permissions (role, can_annotate, can_edit_db, can_manage_users, description) VALUES (?, ?, ?, ?, ?)", 
+                     ['viewer', 0, 0, 0, 'Read-only access'])
+                ])
 
-    # Ensure base admin is always in approved_emails
-    cursor.execute('SELECT email FROM approved_emails WHERE email = ?', (BASE_ADMIN_EMAIL,))
-    if not cursor.fetchone():
-        cursor.execute('''
-            INSERT INTO approved_emails (email, added_by, added_at, notes)
-            VALUES (?, ?, ?, ?)
-        ''', (BASE_ADMIN_EMAIL, 'SYSTEM', datetime.now().isoformat(), 'Protected base administrator'))
-        print(f"✓ Added base admin to approved emails: {BASE_ADMIN_EMAIL}")
-
-    # Ensure base admin is always in admin_users
-    cursor.execute('SELECT email FROM admin_users WHERE email = ?', (BASE_ADMIN_EMAIL,))
-    if not cursor.fetchone():
-        cursor.execute('''
-            INSERT INTO admin_users (email, added_at)
-            VALUES (?, ?)
-        ''', (BASE_ADMIN_EMAIL, datetime.now().isoformat()))
-        print(f"✓ Added base admin to admin users: {BASE_ADMIN_EMAIL}")
-
-    conn.commit()
-    conn.close()
+            # Ensure base admin is approved and set as admin
+            client.execute('INSERT OR IGNORE INTO approved_emails (email, added_by, added_at, notes) VALUES (?, ?, ?, ?)', 
+                          [BASE_ADMIN_EMAIL, 'SYSTEM', datetime.now().isoformat(), 'Protected base administrator'])
+            client.execute('INSERT OR IGNORE INTO admin_users (email, added_at) VALUES (?, ?)', 
+                          [BASE_ADMIN_EMAIL, datetime.now().isoformat()])
+            
+            logger.info("✅ Cloud authentication database initialized (Turso)")
+            client.close()
+            return
+        except Exception as e:
+            logger.error(f"❌ Failed to initialize Turso database: {e}")
+            if client: client.close()
+            raise  # Fail loudly instead of falling back
 
 # ============================================================================
 # OAUTH CONFIGURATION
@@ -136,125 +144,139 @@ def setup_oauth(app):
 # ============================================================================
 
 def is_email_approved(email):
-    """Check if email is in the approved list"""
-    conn = sqlite3.connect(AUTH_DB)
-    cursor = conn.cursor()
-    cursor.execute('SELECT email FROM approved_emails WHERE email = ?', (email,))
-    result = cursor.fetchone()
-    conn.close()
-    return result is not None
+    """Check if email is in the approved list (Turso Cloud ONLY)"""
+    client = get_cloud_client()
+    try:
+        result = client.execute('SELECT email FROM approved_emails WHERE email = ?', [email])
+        client.close()
+        return len(result.rows) > 0
+    except Exception as e:
+        if client: client.close()
+        logger.error(f"❌ Failed to check approved email: {e}")
+        raise
 
 def is_admin(email):
-    """Check if user is an admin"""
-    conn = sqlite3.connect(AUTH_DB)
-    cursor = conn.cursor()
-    cursor.execute('SELECT email FROM admin_users WHERE email = ?', (email,))
-    result = cursor.fetchone()
-    conn.close()
-    return result is not None
+    """Check if user is an admin (Turso Cloud ONLY)"""
+    client = get_cloud_client()
+    try:
+        result = client.execute('SELECT email FROM admin_users WHERE email = ?', [email])
+        client.close()
+        return len(result.rows) > 0
+    except Exception as e:
+        if client: client.close()
+        logger.error(f"❌ Failed to check admin status: {e}")
+        raise
 
 def add_approved_email(email, added_by, notes=''):
-    """Add email to approved list"""
-    conn = sqlite3.connect(AUTH_DB)
-    cursor = conn.cursor()
+    """Add email to approved list (Turso Cloud ONLY)"""
+    client = get_cloud_client()
     try:
-        cursor.execute('''
+        client.execute('''
             INSERT INTO approved_emails (email, added_by, added_at, notes)
             VALUES (?, ?, ?, ?)
-        ''', (email, added_by, datetime.now().isoformat(), notes))
-        conn.commit()
+        ''', [email, added_by, datetime.now().isoformat(), notes])
+        client.close()
+        logger.info(f"✅ Email {email} added to approved list")
         return True
-    except sqlite3.IntegrityError:
-        return False  # Email already exists
-    finally:
-        conn.close()
+    except Exception as e:
+        if client: client.close()
+        logger.error(f"❌ Failed to add approved email: {e}")
+        return False
 
 def remove_approved_email(email):
-    """
-    Remove email from approved list
-
-    Protection: Cannot remove base admin from approved list
-    """
+    """Remove email from approved list (Turso Cloud ONLY)"""
     if is_base_admin(email):
         raise ValueError(f"Cannot remove base admin from approved list: {email}")
 
-    conn = sqlite3.connect(AUTH_DB)
-    cursor = conn.cursor()
-    cursor.execute('DELETE FROM approved_emails WHERE email = ?', (email,))
-    conn.commit()
-    conn.close()
+    client = get_cloud_client()
+    try:
+        client.execute('DELETE FROM approved_emails WHERE email = ?', [email])
+        client.close()
+        logger.info(f"✅ Email {email} removed from approved list")
+    except Exception as e:
+        if client: client.close()
+        logger.error(f"❌ Failed to remove approved email: {e}")
+        raise
 
 def get_approved_emails():
-    """Get all approved emails"""
-    conn = sqlite3.connect(AUTH_DB)
-    cursor = conn.cursor()
-    cursor.execute('SELECT email, added_by, added_at, notes FROM approved_emails ORDER BY added_at DESC')
-    emails = [{'email': row[0], 'added_by': row[1], 'added_at': row[2], 'notes': row[3]}
-              for row in cursor.fetchall()]
-    conn.close()
-    return emails
+    """Get all approved emails (Turso Cloud ONLY)"""
+    client = get_cloud_client()
+    try:
+        result = client.execute('SELECT email, added_by, added_at, notes FROM approved_emails ORDER BY added_at DESC')
+        emails = [{'email': row[0], 'added_by': row[1], 'added_at': row[2], 'notes': row[3]}
+                  for row in result.rows]
+        client.close()
+        return emails
+    except Exception as e:
+        if client: client.close()
+        logger.error(f"❌ Failed to get approved emails: {e}")
+        raise
 
 def create_or_update_user(email, name, picture):
-    """Create new user or update existing user's login info"""
-    conn = sqlite3.connect(AUTH_DB)
-    cursor = conn.cursor()
+    """Create new user or update existing user's login info (Turso Cloud ONLY)"""
+    client = get_cloud_client()
+    try:
+        # Check if user exists
+        result = client.execute('SELECT email, login_count, role FROM users WHERE email = ?', [email])
 
-    # Check if user exists
-    cursor.execute('SELECT email, login_count, role FROM users WHERE email = ?', (email,))
-    existing = cursor.fetchone()
+        if result.rows:
+            # Update existing user
+            client.execute('''
+                UPDATE users
+                SET name = ?, picture = ?, last_login = ?, login_count = login_count + 1
+                WHERE email = ?
+            ''', [name, picture, datetime.now().isoformat(), email])
+        else:
+            # Create new user
+            is_admin_res = client.execute('SELECT email FROM admin_users WHERE email = ?', [email])
+            default_role = 'admin' if len(is_admin_res.rows) > 0 else 'viewer'
 
-    if existing:
-        # Update existing user
-        cursor.execute('''
-            UPDATE users
-            SET name = ?, picture = ?, last_login = ?, login_count = login_count + 1
-            WHERE email = ?
-        ''', (name, picture, datetime.now().isoformat(), email))
-    else:
-        # Create new user with default role
-        # Check if they're in admin_users table (from setup script)
-        cursor.execute('SELECT email FROM admin_users WHERE email = ?', (email,))
-        is_admin_user = cursor.fetchone() is not None
-        default_role = 'admin' if is_admin_user else 'viewer'
+            client.execute('''
+                INSERT INTO users (email, name, picture, first_login, last_login, login_count, role)
+                VALUES (?, ?, ?, ?, ?, 1, ?)
+            ''', [email, name, picture, datetime.now().isoformat(), datetime.now().isoformat(), default_role])
 
-        cursor.execute('''
-            INSERT INTO users (email, name, picture, first_login, last_login, login_count, role)
-            VALUES (?, ?, ?, ?, ?, 1, ?)
-        ''', (email, name, picture, datetime.now().isoformat(), datetime.now().isoformat(), default_role))
-
-    conn.commit()
-    conn.close()
+        client.close()
+        logger.info(f"✅ User {email} created/updated in Turso")
+    except Exception as e:
+        logger.error(f"❌ Cloud user update failed: {e}")
+        if client: client.close()
+        raise
 
 def get_all_users():
-    """Get all registered users"""
-    conn = sqlite3.connect(AUTH_DB)
-    cursor = conn.cursor()
-    cursor.execute('''
-        SELECT email, name, picture, first_login, last_login, login_count
-        FROM users
-        ORDER BY last_login DESC
-    ''')
-    users = [{'email': row[0], 'name': row[1], 'picture': row[2],
-              'first_login': row[3], 'last_login': row[4], 'login_count': row[5]}
-             for row in cursor.fetchall()]
-    conn.close()
-    return users
+    """Get all registered users (Turso Cloud ONLY)"""
+    client = get_cloud_client()
+    try:
+        result = client.execute('''
+            SELECT email, name, picture, first_login, last_login, login_count
+            FROM users
+            ORDER BY last_login DESC
+        ''')
+        users = [{'email': row[0], 'name': row[1], 'picture': row[2],
+                  'first_login': row[3], 'last_login': row[4], 'login_count': row[5]}
+                 for row in result.rows]
+        client.close()
+        return users
+    except Exception as e:
+        if client: client.close()
+        logger.error(f"❌ Failed to get users: {e}")
+        raise
 
 def add_admin(email):
-    """Add user to admin list"""
-    conn = sqlite3.connect(AUTH_DB)
-    cursor = conn.cursor()
+    """Add user to admin list (Turso Cloud ONLY)"""
+    client = get_cloud_client()
     try:
-        cursor.execute('''
+        client.execute('''
             INSERT INTO admin_users (email, added_at)
             VALUES (?, ?)
-        ''', (email, datetime.now().isoformat()))
-        conn.commit()
+        ''', [email, datetime.now().isoformat()])
+        client.close()
+        logger.info(f"✅ User {email} added as admin")
         return True
-    except sqlite3.IntegrityError:
+    except Exception as e:
+        if client: client.close()
+        logger.error(f"❌ Failed to add admin: {e}")
         return False
-    finally:
-        conn.close()
 
 # ============================================================================
 # DECORATORS (Route Protection)
@@ -326,138 +348,137 @@ def api_login_required(f):
 # ============================================================================
 
 def get_user_role(email):
-    """Get user's role from database"""
-    conn = sqlite3.connect(AUTH_DB)
-    cursor = conn.cursor()
-    cursor.execute('SELECT role FROM users WHERE email = ?', (email,))
-    result = cursor.fetchone()
-    conn.close()
-    return result[0] if result else 'viewer'
+    """Get user's role from database (Turso Cloud ONLY)"""
+    client = get_cloud_client()
+    try:
+        result = client.execute('SELECT role FROM users WHERE email = ?', [email])
+        client.close()
+        return result.rows[0][0] if result.rows else 'viewer'
+    except Exception as e:
+        if client: client.close()
+        logger.error(f"❌ Failed to get user role: {e}")
+        return 'viewer'  # Safe default
 
 def get_user_permissions(email):
-    """Get user's permissions based on their role"""
+    """Get user's permissions based on their role (Turso Cloud ONLY)"""
     role = get_user_role(email)
-    conn = sqlite3.connect(AUTH_DB)
-    cursor = conn.cursor()
-    cursor.execute('''
-        SELECT can_annotate, can_edit_db, can_manage_users
-        FROM permissions
-        WHERE role = ?
-    ''', (role,))
-    result = cursor.fetchone()
-    conn.close()
-
-    if result:
+    client = get_cloud_client()
+    try:
+        result = client.execute('''
+            SELECT can_annotate, can_edit_db, can_manage_users
+            FROM permissions
+            WHERE role = ?
+        ''', [role])
+        client.close()
+        if result.rows:
+            return {
+                'role': role,
+                'can_annotate': bool(result.rows[0][0]),
+                'can_edit_db': bool(result.rows[0][1]),
+                'can_manage_users': bool(result.rows[0][2])
+            }
+        # Safe default if role not found
         return {
-            'role': role,
-            'can_annotate': bool(result[0]),
-            'can_edit_db': bool(result[1]),
-            'can_manage_users': bool(result[2])
+            'role': 'viewer',
+            'can_annotate': False,
+            'can_edit_db': False,
+            'can_manage_users': False
         }
-    return {
-        'role': 'viewer',
-        'can_annotate': False,
-        'can_edit_db': False,
-        'can_manage_users': False
-    }
-
-def update_user_role(email, new_role):
-    """
-    Update a user's role
-
-    Protection: The base admin cannot be demoted from admin role
-    """
-    valid_roles = ['admin', 'annotator', 'viewer']
-    if new_role not in valid_roles:
-        return False
-
-    # Protect base admin from being demoted
-    if is_base_admin(email) and new_role != 'admin':
-        raise ValueError(f"Cannot change role of base admin: {email}")
-
-    conn = sqlite3.connect(AUTH_DB)
-    cursor = conn.cursor()
-
-    # Update users table
-    cursor.execute('UPDATE users SET role = ? WHERE email = ?', (new_role, email))
-
-    # Update admin_users table accordingly
-    if new_role == 'admin':
-        # Add to admin_users if not already there
-        try:
-            cursor.execute('''
-                INSERT INTO admin_users (email, added_at)
-                VALUES (?, ?)
-            ''', (email, datetime.now().isoformat()))
-        except sqlite3.IntegrityError:
-            pass  # Already an admin
-    else:
-        # Remove from admin_users if they're not admin anymore
-        cursor.execute('DELETE FROM admin_users WHERE email = ?', (email,))
-
-    conn.commit()
-    conn.close()
-    return True
+    except Exception as e:
+        if client: client.close()
+        logger.error(f"❌ Failed to get user permissions: {e}")
+        # Safe default on error
+        return {
+            'role': 'viewer',
+            'can_annotate': False,
+            'can_edit_db': False,
+            'can_manage_users': False
+        }
 
 def is_base_admin(email):
     """Check if email is the protected base admin"""
     return email == BASE_ADMIN_EMAIL
 
-def delete_user(email):
-    """
-    Delete a user completely from the system
+def update_user_role(email, new_role):
+    """Update a user's role (Turso Cloud ONLY)"""
+    valid_roles = ['admin', 'annotator', 'viewer']
+    if new_role not in valid_roles:
+        return False
 
-    Protection: The base admin cannot be deleted
-    """
-    # Protect base admin from deletion
+    if is_base_admin(email) and new_role != 'admin':
+        raise ValueError(f"Cannot change role of base admin: {email}")
+
+    client = get_cloud_client()
+    try:
+        # Update users table
+        client.execute('UPDATE users SET role = ? WHERE email = ?', [new_role, email])
+
+        # Update admin_users table accordingly
+        if new_role == 'admin':
+            client.execute('INSERT OR IGNORE INTO admin_users (email, added_at) VALUES (?, ?)',
+                          [email, datetime.now().isoformat()])
+        else:
+            client.execute('DELETE FROM admin_users WHERE email = ?', [email])
+
+        client.close()
+        logger.info(f"✅ User {email} role updated to {new_role}")
+        return True
+    except Exception as e:
+        if client: client.close()
+        logger.error(f"❌ Failed to update user role: {e}")
+        return False
+
+def delete_user(email):
+    """Delete a user completely from the system (Turso Cloud ONLY)"""
     if is_base_admin(email):
         raise ValueError(f"Cannot delete base admin: {email}")
 
-    conn = sqlite3.connect(AUTH_DB)
-    cursor = conn.cursor()
-
-    # Delete from users table
-    cursor.execute('DELETE FROM users WHERE email = ?', (email,))
-
-    # Delete from admin_users table if exists
-    cursor.execute('DELETE FROM admin_users WHERE email = ?', (email,))
-
-    # Optionally remove from approved_emails (so they can't log back in)
-    cursor.execute('DELETE FROM approved_emails WHERE email = ?', (email,))
-
-    conn.commit()
-    conn.close()
-    return True
+    client = get_cloud_client()
+    try:
+        client.batch([
+            ('DELETE FROM users WHERE email = ?', [email]),
+            ('DELETE FROM admin_users WHERE email = ?', [email]),
+            ('DELETE FROM approved_emails WHERE email = ?', [email])
+        ])
+        client.close()
+        logger.info(f"✅ User {email} deleted")
+        return True
+    except Exception as e:
+        if client: client.close()
+        logger.error(f"❌ Failed to delete user: {e}")
+        return False
 
 def get_all_users_with_roles():
-    """Get all registered users with their roles and permissions"""
-    conn = sqlite3.connect(AUTH_DB)
-    cursor = conn.cursor()
-    cursor.execute('''
-        SELECT u.email, u.name, u.picture, u.first_login, u.last_login,
-               u.login_count, u.role
-        FROM users u
-        ORDER BY u.last_login DESC
-    ''')
-    users = []
-    for row in cursor.fetchall():
-        user = {
-            'email': row[0],
-            'name': row[1],
-            'picture': row[2],
-            'first_login': row[3],
-            'last_login': row[4],
-            'login_count': row[5],
-            'role': row[6] or 'viewer',
-            'is_base_admin': is_base_admin(row[0])
-        }
-        # Add permissions
-        perms = get_user_permissions(user['email'])
-        user.update(perms)
-        users.append(user)
-
-    conn.close()
-    return users
+    """Get all registered users with their roles and permissions (Turso Cloud ONLY)"""
+    client = get_cloud_client()
+    try:
+        result = client.execute('''
+            SELECT u.email, u.name, u.picture, u.first_login, u.last_login,
+                   u.login_count, u.role
+            FROM users u
+            ORDER BY u.last_login DESC
+        ''')
+        users = []
+        for row in result.rows:
+            user = {
+                'email': row[0],
+                'name': row[1],
+                'picture': row[2],
+                'first_login': row[3],
+                'last_login': row[4],
+                'login_count': row[5],
+                'role': row[6] or 'viewer',
+                'is_base_admin': is_base_admin(row[0])
+            }
+            perms = get_user_permissions(user['email'])
+            user.update(perms)
+            users.append(user)
+        client.close()
+        return users
+    except Exception as e:
+        if client: client.close()
+        logger.error(f"❌ Failed to get users with roles: {e}")
+        raise
 
 # ============================================================================
 # PERMISSION DECORATORS

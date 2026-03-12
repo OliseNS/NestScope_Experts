@@ -673,6 +673,106 @@
             line-height: 1.6;
         }
 
+        /* Class Legend Panel */
+        .class-legend {
+            background: var(--surface-light);
+            border-radius: 8px;
+            padding: 0.75rem;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+
+        .legend-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 0.75rem;
+        }
+
+        .legend-title {
+            font-size: 0.875rem;
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+
+        .add-class-btn {
+            background: var(--orange-primary);
+            color: white;
+            border: none;
+            padding: 0.375rem 0.75rem;
+            border-radius: 6px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 0.25rem;
+        }
+
+        .add-class-btn:hover {
+            background: var(--orange-dark);
+            transform: scale(1.05);
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.5rem;
+            border-radius: 6px;
+            margin-bottom: 0.375rem;
+            cursor: pointer;
+            transition: all 0.2s;
+            background: var(--surface);
+            border: 2px solid transparent;
+        }
+
+        .legend-item:hover {
+            background: rgba(83, 124, 138, 0.1);
+            border-color: var(--orange-primary);
+        }
+
+        .legend-item.active {
+            background: rgba(83, 124, 138, 0.2);
+            border-color: var(--orange-primary);
+        }
+
+        .legend-color {
+            width: 16px;
+            height: 16px;
+            border-radius: 3px;
+            flex-shrink: 0;
+            border: 2px solid rgba(255, 255, 255, 0.3);
+        }
+
+        .legend-label {
+            flex: 1;
+            font-size: 0.8125rem;
+            font-weight: 500;
+            color: var(--text-primary);
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .legend-count {
+            background: rgba(83, 124, 138, 0.2);
+            color: var(--text-primary);
+            padding: 0.125rem 0.5rem;
+            border-radius: 10px;
+            font-size: 0.75rem;
+            font-weight: 700;
+            flex-shrink: 0;
+        }
+
+        .legend-empty {
+            text-align: center;
+            padding: 1.5rem 1rem;
+            color: var(--text-muted);
+            font-size: 0.8125rem;
+        }
+
         /* Success Animation */
         @keyframes checkmark {
             0% { transform: scale(0) rotate(-45deg); }
@@ -772,6 +872,24 @@
                         <div class="tool-label">Hand</div>
                         <div class="tool-shortcut">H</div>
                     </button>
+                </div>
+            </div>
+
+            <!-- Class Legend Section -->
+            <div class="sidebar-section">
+                <h3 class="section-title">📊 Classes in Image</h3>
+                <div class="class-legend" id="class-legend">
+                    <div class="legend-header">
+                        <span class="legend-title">Species</span>
+                        <button class="add-class-btn" onclick="showAddClassDialog()" title="Add new species">
+                            <span>+</span>
+                            <span>Add</span>
+                        </button>
+                    </div>
+                    <div class="legend-empty" id="legend-empty">
+                        No labeled birds yet.<br>Draw boxes and assign species.
+                    </div>
+                    <div id="legend-items"></div>
                 </div>
             </div>
 
@@ -1563,36 +1681,53 @@ function redrawCanvas() {
         const w = box.width * canvas.width;
         const h = box.height * canvas.height;
 
-        // Draw box (highlight only in edit mode)
+        // Draw box (use species-specific colors from legend)
         // Scale line width inversely with zoom so it stays visible
         const baseLineWidth = isSelected || isHovered ? 4 : 3;
         const scaledLineWidth = baseLineWidth / zoomLevel;
+
+        // Get species color (or default if unidentified)
+        const speciesForColor = box.species || 'Unidentified';
+        const speciesColor = getSpeciesColor(speciesForColor);
+
+        // Check if this box matches the legend filter
+        const isFiltered = selectedLegendSpecies && (speciesForColor !== selectedLegendSpecies);
 
         ctx.setLineDash([]);
         if (isSelected) {
             ctx.strokeStyle = '#7cb342';  // Green for selected (edit mode only)
             ctx.lineWidth = scaledLineWidth;
+            ctx.globalAlpha = 1.0;
         } else if (isHovered) {
             ctx.strokeStyle = '#FFA500';  // Orange for hovered (edit mode only)
             ctx.lineWidth = scaledLineWidth;
+            ctx.globalAlpha = 1.0;
         } else {
-            ctx.strokeStyle = '#537C8A';  // Default orange
+            ctx.strokeStyle = speciesColor;  // Use species color
             ctx.lineWidth = scaledLineWidth;
+            ctx.globalAlpha = isFiltered ? 0.2 : 1.0;  // Dim if filtered out
         }
         ctx.strokeRect(x, y, w, h);
+        ctx.globalAlpha = 1.0;  // Reset alpha
 
-        // Draw label if species identified
+        // Draw label if species identified (CONSTANT SIZE - always readable)
         if (box.species) {
-            ctx.fillStyle = 'rgba(83, 124, 138, 0.9)';
-            const text = box.species;
-            const fontSize = 14 / zoomLevel;
-            ctx.font = `${fontSize}px DM Sans, sans-serif`;
-            const textWidth = ctx.measureText(text).width;
-            const labelHeight = 24 / zoomLevel;
-            ctx.fillRect(x, y - labelHeight, textWidth + 12 / zoomLevel, labelHeight);
+            // Use constant sizes that don't change with zoom
+            const fontSize = 14;  // Fixed at 14px
+            const padding = 8;    // Fixed padding
+            const labelHeight = 24;  // Fixed height
 
-            ctx.fillStyle = '#fff';
-            ctx.fillText(text, x + 6 / zoomLevel, y - 6 / zoomLevel);
+            ctx.font = `${fontSize}px DM Sans, sans-serif`;
+            const text = box.species;
+            const textWidth = ctx.measureText(text).width;
+
+            // Semi-transparent dark background for better contrast
+            ctx.fillStyle = 'rgba(42, 36, 33, 0.85)';
+            ctx.fillRect(x, y - labelHeight, textWidth + padding * 2, labelHeight);
+
+            // White text on dark background
+            ctx.fillStyle = '#ffffff';
+            ctx.fillText(text, x + padding, y - 7);
         }
 
         // Draw resize handles for selected box in edit mode
@@ -1710,9 +1845,91 @@ function updateBoxCount() {
         }
 
         console.log(`Box count updated: ${boxes.length} birds`);
+
+        // Also update class legend
+        updateClassLegend();
     } catch (e) {
         console.error('Update box count error:', e);
     }
+}
+
+// Generate consistent color for each species
+const speciesColorCache = {};
+function getSpeciesColor(speciesCode) {
+    if (!speciesCode) return '#7cb342'; // Default green for unidentified
+
+    if (!speciesColorCache[speciesCode]) {
+        // Generate deterministic color from species code
+        let hash = 0;
+        for (let i = 0; i < speciesCode.length; i++) {
+            hash = speciesCode.charCodeAt(i) + ((hash << 5) - hash);
+        }
+
+        // Generate vibrant colors (high saturation)
+        const hue = Math.abs(hash % 360);
+        const saturation = 65 + (Math.abs(hash >> 8) % 20); // 65-85%
+        const lightness = 50 + (Math.abs(hash >> 16) % 15);  // 50-65%
+
+        speciesColorCache[speciesCode] = `hsl(${hue}, ${saturation}%, ${lightness}%)`;
+    }
+
+    return speciesColorCache[speciesCode];
+}
+
+// Update class legend panel
+let selectedLegendSpecies = null;  // Track which species is selected in legend
+
+function updateClassLegend() {
+    const legendItems = document.getElementById('legend-items');
+    const legendEmpty = document.getElementById('legend-empty');
+
+    if (!legendItems || !legendEmpty) return;
+
+    // Count species
+    const speciesCount = {};
+    boxes.forEach(box => {
+        const species = box.species || 'Unidentified';
+        speciesCount[species] = (speciesCount[species] || 0) + 1;
+    });
+
+    const speciesList = Object.entries(speciesCount).sort((a, b) => b[1] - a[1]); // Sort by count
+
+    if (speciesList.length === 0) {
+        legendEmpty.style.display = 'block';
+        legendItems.innerHTML = '';
+        return;
+    }
+
+    legendEmpty.style.display = 'none';
+
+    // Build legend HTML
+    legendItems.innerHTML = speciesList.map(([species, count]) => {
+        const color = getSpeciesColor(species);
+        const isActive = selectedLegendSpecies === species;
+        const activeClass = isActive ? 'active' : '';
+
+        return `
+            <div class="legend-item ${activeClass}" onclick="toggleLegendFilter('${species}')" title="Click to filter">
+                <div class="legend-color" style="background: ${color};"></div>
+                <div class="legend-label">${species}</div>
+                <div class="legend-count">${count}</div>
+            </div>
+        `;
+    }).join('');
+}
+
+// Toggle filter for legend item
+function toggleLegendFilter(species) {
+    if (selectedLegendSpecies === species) {
+        // Deselect
+        selectedLegendSpecies = null;
+    } else {
+        // Select this species
+        selectedLegendSpecies = species;
+    }
+
+    updateClassLegend();
+    redrawCanvas(); // Redraw to highlight filtered boxes
 }
 
 // Update live preview with current work area
@@ -3074,6 +3291,66 @@ async function deleteCurrentImage() {
     }
 }
 
+// Add New Species Dialog Functions
+function showAddClassDialog() {
+    const modal = document.getElementById('add-class-modal');
+    const input = document.getElementById('new-species-input');
+
+    if (modal && input) {
+        modal.style.display = 'flex';
+        input.value = '';
+        input.focus();
+    }
+}
+
+function hideAddClassDialog() {
+    const modal = document.getElementById('add-class-modal');
+    if (modal) {
+        modal.style.display = 'none';
+    }
+}
+
+async function addNewClass() {
+    const input = document.getElementById('new-species-input');
+    const speciesName = input.value.trim();
+
+    if (!speciesName) {
+        showToast('⚠️ Please enter a species name', 'warning');
+        return;
+    }
+
+    try {
+        // For now, just add to the local species candidates list
+        // In a real system, this would POST to the backend to add to database
+        const newSpecies = {
+            code: speciesName.toUpperCase().replace(/\s+/g, '_'),
+            name: speciesName,
+            common_name: speciesName
+        };
+
+        // Add to candidates if not already present
+        if (!speciesCandidates.find(s => s.code === newSpecies.code)) {
+            speciesCandidates.push(newSpecies);
+            showToast(`✓ Added "${speciesName}" to available species`, 'success');
+        } else {
+            showToast(`⚠️ "${speciesName}" already exists`, 'warning');
+        }
+
+        hideAddClassDialog();
+
+        // TODO: Optionally POST to backend to persist
+        // await fetch('/api/species/add', {
+        //     method: 'POST',
+        //     headers: { 'Content-Type': 'application/json' },
+        //     body: JSON.stringify({ species: newSpecies })
+        // });
+
+    } catch (error) {
+        console.error('Add species error:', error);
+        showToast('❌ Failed to add species', 'error');
+    }
+}
+
 // Navigation
 function navigateToNext() {
     if (NEXT_INDEX !== null) {
@@ -3230,6 +3507,48 @@ document.addEventListener('DOMContentLoaded', () => {
     updateBoxCount();
 });
     </script>
+
+    <!-- Add New Species Dialog -->
+    <div id="add-class-modal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.7); z-index: 10000; display: flex; align-items: center; justify-content: center;" onclick="if(event.target === this) hideAddClassDialog()">
+        <div style="background: var(--surface); border-radius: 12px; padding: 2rem; max-width: 500px; width: 90%; box-shadow: 0 20px 60px rgba(0,0,0,0.5);">
+            <h3 style="font-family: 'Crimson Pro', serif; font-size: 1.5rem; margin-bottom: 1rem; color: var(--text-primary);">
+                ➕ Add New Species
+            </h3>
+            <p style="color: var(--text-muted); font-size: 0.875rem; margin-bottom: 1.5rem;">
+                Enter the species code (e.g., BRPE, GREG) or common name. This will be available for all annotations in this project.
+            </p>
+
+            <div style="margin-bottom: 1rem;">
+                <label style="display: block; font-size: 0.875rem; font-weight: 600; margin-bottom: 0.5rem; color: var(--text-primary);">
+                    Species Code or Name
+                </label>
+                <input
+                    type="text"
+                    id="new-species-input"
+                    placeholder="e.g., BRPE or Brown Pelican"
+                    style="width: 100%; padding: 0.75rem; border: 2px solid rgba(83, 124, 138, 0.3); border-radius: 8px; background: var(--surface-light); color: var(--text-primary); font-size: 1rem; font-family: 'DM Sans', sans-serif;"
+                    onkeypress="if(event.key === 'Enter') addNewClass()"
+                />
+            </div>
+
+            <div style="display: flex; gap: 0.75rem; justify-content: flex-end; margin-top: 1.5rem;">
+                <button
+                    class="btn-secondary"
+                    onclick="hideAddClassDialog()"
+                    style="padding: 0.75rem 1.5rem;"
+                >
+                    Cancel
+                </button>
+                <button
+                    class="btn-primary"
+                    onclick="addNewClass()"
+                    style="padding: 0.75rem 1.5rem;"
+                >
+                    Add Species
+                </button>
+            </div>
+        </div>
+    </div>
 
     <!-- Theme Management -->
     <script src="{{ url_for('static', filename='js/theme.js') }}"></script>
