@@ -364,19 +364,18 @@ def sync_project_labels_images(project_folder):
 @app.route('/health')
 def health():
     """Health check endpoint for monitoring (no auth required)"""
-    from labeller.auth import AUTH_DB
-    import sqlite3
+    from labeller.auth import get_cloud_client
 
     try:
-        # Check database connection
-        conn = sqlite3.connect(AUTH_DB)
-        cursor = conn.cursor()
-        cursor.execute('SELECT COUNT(*) FROM users')
-        user_count = cursor.fetchone()[0]
-        conn.close()
+        # Check Turso database connection
+        client = get_cloud_client()
+        result = client.execute('SELECT COUNT(*) FROM users')
+        user_count = result.rows[0][0]
+        client.close()
 
         return jsonify({
             'status': 'healthy',
+            'database': 'turso_cloud',
             'service': 'nestperts',
             'port': 5000,
             'users': user_count,
@@ -1015,6 +1014,228 @@ def editor(project_folder, username, image_index=0):
 # API - PROJECT MANAGEMENT
 # ============================================================================
 
+@app.route('/api/projects/upload_chunk', methods=['POST'])
+@api_annotator_required
+def upload_chunk():
+    """Receive and store a single chunk of a large file upload"""
+    try:
+        upload_id = request.form.get('upload_id')
+        chunk_index = int(request.form.get('chunk_index'))
+        total_chunks = int(request.form.get('total_chunks'))
+        chunk_file = request.files.get('chunk')
+
+        if not all([upload_id, chunk_file]) or chunk_index is None or total_chunks is None:
+            return jsonify({'error': 'Missing required fields'}), 400
+
+        # Create temp directory for this upload
+        temp_upload_dir = os.path.join(PROJECTS_DIR, '.uploads', upload_id)
+        os.makedirs(temp_upload_dir, exist_ok=True)
+
+        # Save chunk
+        chunk_path = os.path.join(temp_upload_dir, f'chunk_{chunk_index:06d}')
+        chunk_file.save(chunk_path)
+
+        return jsonify({
+            'success': True,
+            'chunk_index': chunk_index,
+            'total_chunks': total_chunks
+        })
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/projects/assemble_and_create', methods=['POST'])
+@api_annotator_required
+def assemble_and_create():
+    """Assemble uploaded chunks and create project"""
+    import traceback
+    import logging
+    import yaml
+
+    logging.basicConfig(level=logging.DEBUG)
+    logger = logging.getLogger(__name__)
+
+    try:
+        upload_id = request.form.get('upload_id')
+        total_chunks = int(request.form.get('total_chunks'))
+        original_filename = request.form.get('filename')
+        name = request.form.get('name')
+        description = request.form.get('description', '')
+
+        logger.info("=" * 60)
+        logger.info("ASSEMBLING CHUNKED UPLOAD")
+        logger.info("=" * 60)
+        logger.info(f"Upload ID: {upload_id}")
+        logger.info(f"Total chunks: {total_chunks}")
+        logger.info(f"Original file: {original_filename}")
+        logger.info(f"Project name: {name}")
+
+        if not all([upload_id, total_chunks, original_filename, name]):
+            return jsonify({'error': 'Missing required fields'}), 400
+
+        # Assemble chunks
+        temp_upload_dir = os.path.join(PROJECTS_DIR, '.uploads', upload_id)
+        if not os.path.exists(temp_upload_dir):
+            return jsonify({'error': 'Upload not found'}), 404
+
+        # Create temporary assembled file
+        assembled_path = os.path.join(temp_upload_dir, original_filename)
+        logger.info(f"Assembling {total_chunks} chunks into {assembled_path}")
+
+        with open(assembled_path, 'wb') as outfile:
+            for i in range(total_chunks):
+                chunk_path = os.path.join(temp_upload_dir, f'chunk_{i:06d}')
+                if not os.path.exists(chunk_path):
+                    return jsonify({'error': f'Missing chunk {i}'}), 400
+
+                with open(chunk_path, 'rb') as infile:
+                    outfile.write(infile.read())
+
+                # Delete chunk after adding to assembled file
+                os.remove(chunk_path)
+
+                if (i + 1) % 10 == 0:
+                    logger.info(f"  Assembled {i + 1}/{total_chunks} chunks...")
+
+        logger.info(f"✓ All chunks assembled into {assembled_path}")
+
+        # Now process the assembled file (reuse existing logic)
+        project_folder = sanitize_folder_name(name)
+        project_path = os.path.join(PROJECTS_DIR, project_folder)
+
+        # Check if project already exists
+        if os.path.exists(project_path):
+            counter = 1
+            while os.path.exists(f"{project_path}_{counter}"):
+                counter += 1
+            project_folder = f"{project_folder}_{counter}"
+            project_path = os.path.join(PROJECTS_DIR, project_folder)
+
+        # Create project directories
+        os.makedirs(project_path, exist_ok=True)
+        images_dir = os.path.join(project_path, 'images')
+        labels_dir = os.path.join(project_path, 'labels')
+        os.makedirs(images_dir, exist_ok=True)
+        os.makedirs(labels_dir, exist_ok=True)
+        logger.info("✓ Project directories created")
+
+        # Move assembled file to project directory
+        temp_zip_path = os.path.join(project_path, 'temp.zip')
+        shutil.move(assembled_path, temp_zip_path)
+        logger.info("✓ Moved assembled file to project directory")
+
+        # Extract and process (reuse existing extraction logic)
+        has_data_yaml = False
+        has_project_state = False
+        data_yaml_content = None
+        project_state_content = None
+        image_count = 0
+        label_count = 0
+
+        import time
+        with zipfile.ZipFile(temp_zip_path, 'r') as zip_ref:
+            logger.info(f"✓ Opened zip, contains {len(zip_ref.namelist())} files")
+
+            # Analyze structure
+            for file_info in zip_ref.namelist():
+                if file_info.lower().endswith('.yaml') or file_info.lower().endswith('.yml'):
+                    if not has_data_yaml:
+                        has_data_yaml = True
+                        data_yaml_content = zip_ref.read(file_info).decode('utf-8')
+                        logger.info(f"✓ Found {os.path.basename(file_info)}")
+                elif file_info.endswith('project_state.json'):
+                    has_project_state = True
+                    project_state_content = zip_ref.read(file_info).decode('utf-8')
+                    logger.info("✓ Found project_state.json")
+
+            import_type = 'full' if (has_data_yaml and has_project_state) else ('yolo' if has_data_yaml else ('partial' if has_project_state else 'new'))
+            logger.info(f"📦 Import type: {import_type}")
+
+            # Extract files
+            logger.info("📤 Extracting files...")
+            for file_info in zip_ref.namelist():
+                if file_info.endswith('/') or '/.' in file_info or file_info.startswith('.'):
+                    continue
+
+                filename = os.path.basename(file_info)
+                if not filename:
+                    continue
+
+                if filename.lower().endswith(('.jpg', '.jpeg', '.png')):
+                    zip_ref.extract(file_info, project_path)
+                    extracted_path = os.path.join(project_path, file_info)
+                    dest_path = os.path.join(images_dir, filename)
+                    shutil.move(extracted_path, dest_path)
+                    image_count += 1
+                    if image_count % 100 == 0:
+                        logger.info(f"  Extracted {image_count} images...")
+
+                elif filename.endswith('.txt') and 'classes.txt' not in filename:
+                    zip_ref.extract(file_info, project_path)
+                    extracted_path = os.path.join(project_path, file_info)
+                    dest_path = os.path.join(labels_dir, filename)
+                    shutil.move(extracted_path, dest_path)
+                    label_count += 1
+
+                elif (filename.lower().endswith('.yaml') or filename.lower().endswith('.yml')) and has_data_yaml:
+                    with open(os.path.join(project_path, 'data.yaml'), 'w') as f:
+                        f.write(data_yaml_content)
+
+                elif filename == 'project_state.json' and has_project_state:
+                    with open(os.path.join(project_path, 'project_state.json'), 'w') as f:
+                        f.write(project_state_content)
+
+                elif filename == 'classes.txt':
+                    zip_ref.extract(file_info, project_path)
+                    extracted_path = os.path.join(project_path, file_info)
+                    shutil.move(extracted_path, os.path.join(project_path, 'classes.txt'))
+
+            logger.info(f"✓ Extracted {image_count} images, {label_count} labels")
+
+            # Cleanup
+            os.remove(temp_zip_path)
+            for item in os.listdir(project_path):
+                item_path = os.path.join(project_path, item)
+                if os.path.isdir(item_path) and item not in ['images', 'labels']:
+                    shutil.rmtree(item_path)
+
+        # Create missing files
+        if not has_data_yaml:
+            data_yaml = {'path': '.', 'train': 'images', 'val': 'images', 'test': 'images', 'names': {0: 'Bird'}}
+            save_data_yaml(project_folder, data_yaml)
+
+        if not has_project_state:
+            save_project_state(project_folder, {'users': {}})
+
+        metadata = {
+            'name': name,
+            'description': description,
+            'created_at': datetime.now().isoformat(),
+            'import_type': import_type
+        }
+        save_project_metadata(project_folder, metadata)
+
+        # Clean up upload directory
+        shutil.rmtree(temp_upload_dir, ignore_errors=True)
+
+        logger.info("✓ Project created successfully")
+        logger.info("=" * 60)
+
+        return jsonify({
+            'success': True,
+            'project_folder': project_folder,
+            'images_uploaded': image_count,
+            'labels_uploaded': label_count,
+            'users_imported': 0
+        })
+
+    except Exception as e:
+        logger.error(f"Error: {e}")
+        logger.error(traceback.format_exc())
+        return jsonify({'error': str(e)}), 500
+
+
 @app.route('/api/projects/create', methods=['POST'])
 @api_annotator_required  # Only annotators and admins can create projects
 def create_project():
@@ -1032,6 +1253,12 @@ def create_project():
         logger.info("PROJECT CREATION STARTED")
         logger.info("=" * 60)
 
+        # Get content length to show upload size
+        content_length = request.content_length
+        if content_length:
+            size_mb = content_length / (1024 * 1024)
+            logger.info(f"📦 Upload size: {size_mb:.2f} MB ({content_length:,} bytes)")
+
         name = request.form.get('name')
         description = request.form.get('description', '')
 
@@ -1043,6 +1270,7 @@ def create_project():
             return jsonify({'error': 'Project name required'}), 400
 
         # Check for zip file
+        logger.info("Receiving zip file from request...")
         zip_file = request.files.get('zip_file')
         if not zip_file:
             logger.error("No zip file provided")
@@ -1080,8 +1308,19 @@ def create_project():
 
         # Save and analyze zip
         temp_zip_path = os.path.join(project_path, 'temp.zip')
+        logger.info(f"💾 Saving zip file to disk (this may take a while for large files)...")
+
+        # Save with progress logging
+        import time
+        start_time = time.time()
         zip_file.save(temp_zip_path)
+        elapsed = time.time() - start_time
+
+        # Get actual file size
+        zip_size = os.path.getsize(temp_zip_path)
+        zip_size_mb = zip_size / (1024 * 1024)
         logger.info(f"✓ Saved zip to: {temp_zip_path}")
+        logger.info(f"✓ Zip file size: {zip_size_mb:.2f} MB, took {elapsed:.2f}s to save")
 
         # Analyze zip structure
         has_data_yaml = False
@@ -1124,6 +1363,9 @@ def create_project():
                     logger.info("📦 Import type: NEW (fresh dataset)")
 
                 # Second pass: extract files
+                logger.info(f"📦 Starting extraction of {len(zip_ref.namelist())} files...")
+                extraction_start = time.time()
+
                 for file_info in zip_ref.namelist():
                     # Skip directories and hidden files
                     if file_info.endswith('/') or '/.' in file_info or file_info.startswith('.'):
@@ -1140,7 +1382,7 @@ def create_project():
                         dest_path = os.path.join(images_dir, filename)
                         shutil.move(extracted_path, dest_path)
                         image_count += 1
-                        if image_count % 10 == 0:
+                        if image_count % 100 == 0:
                             logger.info(f"  Extracted {image_count} images...")
 
                     # Extract labels
@@ -1150,6 +1392,8 @@ def create_project():
                         dest_path = os.path.join(labels_dir, filename)
                         shutil.move(extracted_path, dest_path)
                         label_count += 1
+                        if label_count % 100 == 0 and label_count > 0:
+                            logger.info(f"  Extracted {label_count} labels...")
 
                     # Extract YAML file (rename to data.yaml for consistency)
                     elif (filename.lower().endswith('.yaml') or filename.lower().endswith('.yml')) and has_data_yaml:
@@ -1173,9 +1417,11 @@ def create_project():
                         shutil.move(extracted_path, dest_path)
                         logger.info("✓ Preserved classes.txt")
 
-                logger.info(f"✓ Extracted {image_count} images, {label_count} labels from zip")
+                extraction_elapsed = time.time() - extraction_start
+                logger.info(f"✓ Extracted {image_count} images, {label_count} labels from zip in {extraction_elapsed:.2f}s")
 
                 # Clean up temp files
+                logger.info("🧹 Cleaning up temporary files...")
                 os.remove(temp_zip_path)
                 # Remove any extracted directories
                 for item in os.listdir(project_path):

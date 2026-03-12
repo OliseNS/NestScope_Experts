@@ -31,5 +31,16 @@ from app import app
 # Ensure unlimited uploads
 app.config['MAX_CONTENT_LENGTH'] = None
 
-serve(app, host='0.0.0.0', port=5000, threads=4, channel_timeout=3600)
+# Configure waitress for large uploads
+# Note: max_request_body_size in bytes (100GB = 100*1024*1024*1024)
+serve(
+    app,
+    host='0.0.0.0',
+    port=5000,
+    threads=4,
+    channel_timeout=7200,
+    recv_bytes=1048576,  # 1MB receive buffer
+    send_bytes=1048576,  # 1MB send buffer
+    max_request_body_size=107374182400  # 100GB limit (effectively unlimited)
+)
 "

@@ -257,6 +257,8 @@ data/*.sql
 *.npz
 *.fits  # Astronomy
 *.root  # ROOT (particle physics)
+annotated_dataset/*.json
+
 
 # Geospatial data (can be large)
 *.shp
@@ -341,6 +343,29 @@ dataset_visualizations/
 # All images and labels directories (global catch-all)
 **/images/
 **/labels/
+**/crops/
 **/dataset_vis/
 **/dataset_visualizations/
-data/users.db
+
+# Dataset directories (any name pattern)
+*_dataset/
+*_dataset_*/
+annotated_dataset/
+bird_classification_dataset/
+bird_detection_dataset/
+training_dataset/
+test_dataset/
+validation_dataset/
+val_dataset/
+
+# YOLO dataset configuration files (in dataset directories only)
+*_dataset/*.yaml
+*_dataset/data.yaml
+*_dataset/dataset.yaml
+**/train.cache
+**/val.cache
+**/test.cache
+
+# Export scripts output
+labeller/export_crops.py
+labeller/nestvision/export/

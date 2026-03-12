@@ -9,6 +9,7 @@ from fastapi.responses import StreamingResponse, Response
 from pydantic import BaseModel
 from typing import Optional, List, Dict, Any
 import sqlite3
+import libsql_client
 import pandas as pd
 import time
 from datetime import datetime
@@ -35,6 +36,47 @@ from server.services.flood_cache import get_flood_cache
 # Initialize logger
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
+
+# Load environment variables (for secrets like API keys)
+load_dotenv()
+
+# Initialize Turso Cloud Database (for user information and persistence)
+TURSO_URL = os.getenv("TURSO_DATABASE_URL")
+TURSO_TOKEN = os.getenv("TURSO_AUTH_TOKEN")
+
+def get_cloud_db():
+    """Get a connection to the Turso cloud database."""
+    if not TURSO_URL or not TURSO_TOKEN:
+        logger.warning("⚠️  Turso configuration missing. Cloud persistence disabled.")
+        return None
+    try:
+        return libsql_client.create_client_sync(url=TURSO_URL, auth_token=TURSO_TOKEN)
+    except Exception as e:
+        logger.error(f"❌ Failed to connect to Turso: {e}")
+        return None
+
+async def init_cloud_db():
+    """Initialize the cloud database schema if needed."""
+    client = get_cloud_db()
+    if not client:
+        return
+
+    try:
+        # Create users table if it doesn't exist
+        client.execute("""
+            CREATE TABLE IF NOT EXISTS users (
+                email TEXT PRIMARY KEY,
+                name TEXT,
+                picture TEXT,
+                role TEXT DEFAULT 'expert',
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        logger.info("✓ Cloud database initialized (Turso)")
+    except Exception as e:
+        logger.error(f"❌ Failed to initialize cloud database: {e}")
+    finally:
+        client.close()
 
 # Initialize risk intelligence service
 _risk_service = None
@@ -83,6 +125,11 @@ app = FastAPI(
     description="REST API for querying bird colony observation data using natural language",
     version="1.0.0"
 )
+
+@app.on_event("startup")
+async def startup_event():
+    """Initialize database and services on startup."""
+    await init_cloud_db()
 
 # Add CORS middleware
 app.add_middleware(
@@ -336,11 +383,13 @@ except Exception as e:
 
 def get_user_info(email: str) -> Dict[str, str]:
     """
-    Fetch user information from authentication database.
+    Fetch user information from Turso cloud database with local fallback.
 
     This retrieves the user's full name and profile picture from the
-    users.db authentication database, so we can attribute changes properly
-    in version control.
+    cloud database, ensuring team members can collaborate and see
+    attribution across different environments.
+
+    If a user doesn't exist, it auto-registers them in the cloud.
 
     Args:
         email: User's email address
@@ -348,38 +397,45 @@ def get_user_info(email: str) -> Dict[str, str]:
     Returns:
         Dictionary with 'name' and 'picture' keys
     """
-    # Path to authentication database
-    auth_db_path = Path(DB_PATH).parent / "users.db"
+    # Default name from email
+    default_name = email.split('@')[0].replace('.', ' ').title()
+
+    client = get_cloud_db()
+    if not client:
+        # Fallback to local logic if Turso isn't configured
+        return {"name": default_name, "picture": None}
 
     try:
-        if not auth_db_path.exists():
-            return {"name": email.split('@')[0].replace('.', ' ').title(), "picture": None}
+        # Try to find user in cloud database
+        result = client.execute("SELECT name, picture FROM users WHERE email = ?", [email])
+        rows = result.rows
 
-        conn = sqlite3.connect(str(auth_db_path))
-        cursor = conn.cursor()
-
-        cursor.execute('SELECT name, picture FROM users WHERE email = ?', (email,))
-        result = cursor.fetchone()
-        conn.close()
-
-        if result:
+        if rows:
             return {
-                "name": result[0] or email.split('@')[0].replace('.', ' ').title(),
-                "picture": result[1]
+                "name": rows[0][0] or default_name,
+                "picture": rows[0][1]
             }
         else:
-            # User not in auth DB yet - extract name from email
+            # AUTO-REGISTER: User not in cloud yet, add them for future persistence
+            try:
+                client.execute(
+                    "INSERT INTO users (email, name) VALUES (?, ?)",
+                    [email, default_name]
+                )
+                logger.info(f"✓ Registered new user in cloud: {email}")
+            except Exception as reg_err:
+                logger.warning(f"Failed to auto-register {email}: {reg_err}")
+
             return {
-                "name": email.split('@')[0].replace('.', ' ').title(),
+                "name": default_name,
                 "picture": None
             }
 
     except Exception as e:
-        print(f"Warning: Failed to fetch user info for {email}: {e}")
-        return {
-            "name": email.split('@')[0].replace('.', ' ').title(),
-            "picture": None
-        }
+        logger.warning(f"Failed to fetch cloud user info for {email}: {e}")
+        return {"name": default_name, "picture": None}
+    finally:
+        client.close()
 
 # Model configuration - SINGLE SOURCE OF TRUTH
 # Primary source: config.yaml (version controlled)
