@@ -56,6 +56,41 @@ Label bird images for training data:
 - **Species**: 20+ coastal waterbird species
 - **Observations**: 100,000+ data points from colony surveys
 
+### 🛰️ Edge Detection - Jetson Nano Deployment
+Deploy bird detection to the field with NVIDIA Jetson Nano:
+- **On-board AI inference**: YOLO runs locally on Jetson GPU — no cloud, no internet
+- **Continuous aerial survey mode**: Camera captures every N seconds, simulating helicopter flyover
+- **Real-time transmission**: Detection results sent to NestScope server over local network
+- **Offline buffering**: Results saved locally when server is unreachable, auto-synced when reconnected
+- **Natural language querying**: Ask NestChat "How many birds in the last scan?" and get live field data
+
+**How it works:**
+1. Jetson Nano captures image (camera or file)
+2. YOLO model detects birds on-device (GPU accelerated)
+3. Results (count, bounding boxes) sent via HTTP to laptop server
+4. Server saves to `edge_scans` table in SQLite
+5. NestChat can immediately query: "What did the Jetson detect?"
+
+**The deployment story:**
+> In production, the Jetson Nano is mounted on a helicopter. As it flies over bird colonies,
+> the Jetson automatically captures aerial images and runs NestVision on-board. Results are
+> transmitted in real-time back to NestScope where scientists query the data instantly through NestChat.
+
+**Usage on Jetson:**
+```bash
+# Single image detection
+python3 jetson_detect.py --image bird_photo.jpg
+
+# Continuous aerial survey mode (captures every 5 seconds)
+python3 jetson_detect.py --camera-loop
+
+# Custom interval
+python3 jetson_detect.py --camera-loop --interval 3
+
+# Send buffered offline results
+python3 jetson_detect.py --flush
+```
+
 ## Quick Start
 
 ### Prerequisites
@@ -211,6 +246,7 @@ nexus/
 ├── CSV_Files/                   # 📁 Source data (imported to database)
 │
 ├── scripts/                     # 🛠️ Utility scripts
+│   ├── jetson_detect.py        # 🛰️ Jetson Nano edge detection script
 │   ├── data_management/        # Database import/export
 │   ├── analysis/               # Data analysis tools
 │   └── deployment/             # Deployment helpers
@@ -241,6 +277,7 @@ nexus/
 | **models/** | Pre-trained AI models | No README (binary files) |
 | **data/** | SQLite database | Query via NestChat or `/docs` endpoint |
 | **scripts/** | One-off utilities | Check individual script docstrings |
+| **scripts/jetson_detect.py** | Edge detection for Jetson Nano | Run with `--help` for options |
 | **docs/** | Extra documentation | Browse for guides and examples |
 
 ## How It All Works Together
@@ -293,6 +330,34 @@ nexus/
 │  • Training data preparation                                │
 │  • Model training (YOLO)                                    │
 │  • Export to ONNX                                           │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### Edge Detection Data Flow
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│              JETSON NANO (Edge Device)                       │
+│                                                             │
+│  Camera ──→ YOLO Model ──→ Bird Detections                 │
+│              (swift.pt)     (count + bboxes)                │
+│                                                             │
+│  If server reachable:     If server unreachable:            │
+│    POST /edge/scan ──→      Save to offline_buffer.json     │
+│                              (auto-sync later)              │
+└──────────────────┬──────────────────────────────────────────┘
+                   │ HTTP POST (JSON)
+                   │ WiFi / Local Network
+                   ▼
+┌─────────────────────────────────────────────────────────────┐
+│                    BACKEND (FastAPI)                         │
+│                                                             │
+│  /edge/scan endpoint ──→ SQLite (edge_scans table)         │
+│                                                             │
+│  NestChat: "How many birds in the last scan?"              │
+│     └──→ SELECT bird_count FROM edge_scans                 │
+│           ORDER BY id DESC LIMIT 1                          │
+│     └──→ "The last scan detected 47 birds..."              │
 └─────────────────────────────────────────────────────────────┘
 ```
 

@@ -284,6 +284,25 @@ class VersionRollbackResponse(BaseModel):
     new_commit: Optional[str] = None
     error: Optional[str] = None
 
+# Edge Detection Models (Jetson Nano integration)
+class EdgeScanRequest(BaseModel):
+    """Incoming scan results from edge devices like Jetson Nano"""
+    device_name: str
+    image_name: str
+    bird_count: int
+    detections: List[Dict[str, Any]]
+    inference_time: float
+    image_width: int
+    image_height: int
+    timestamp: str
+    confidence_threshold: float = 0.25
+
+class EdgeScanResponse(BaseModel):
+    success: bool
+    scan_id: Optional[int] = None
+    message: Optional[str] = None
+    error: Optional[str] = None
+
 # Database configuration
 # .env override takes priority, otherwise use config.yaml default
 DB_PATH = os.getenv("DB_PATH", config['database']['default_path'])
@@ -482,6 +501,10 @@ def validate_and_enhance_sql_for_mapping(sql_query: str) -> tuple[str, bool, str
     import re
 
     sql_upper = sql_query.upper()
+
+    # edge_scans is a standalone table — skip all colony validation
+    if 'EDGE_SCANS' in sql_upper:
+        return sql_query, False, "Edge scans query - no coordinate enhancement needed"
 
     # Detect if this is a colony-related query
     colony_indicators = [
@@ -1576,6 +1599,7 @@ NOT generic placeholders like "Parsing the question" but ACTUAL reasoning.
 5. **Species Groups**: Join `tblColonyTotals...` with `tblSpeciesCodes` on `SpeciesCode`.
 6. **Temporal Trends**: Always include `Year` in SELECT and GROUP BY.
 7. **Mapping Requirements**: ALWAYS include `Latitude` and `Longitude` for any colony-based query.
+8. **Edge Device Scans**: Use `edge_scans` table for ANY question about scans, Jetson, edge devices, drones, helicopters, real-time detections, or "last scan". This is a SEPARATE table from colony data — do NOT use tblColonyTotals for edge queries.
 
 ## GOLD-STANDARD FEW-SHOT EXAMPLES
 
@@ -1701,7 +1725,14 @@ Now analyze the user's actual question with this same level of detail."""}
             {"role": "system", "content": """You are a Principal Data Engineer and Ecologist.
 Validate the SQL query against high-level scientific and structural principles.
 
-🚨 STRUCTURAL INTEGRITY CHECKLIST:
+⚡ EDGE DEVICE QUERIES (ALWAYS VALID):
+If the SQL queries the `edge_scans` table, it is ALWAYS VALID.
+edge_scans stores real-time bird detections from Jetson Nano / edge devices.
+It uses plain column names (no double quotes needed), has NO Latitude/Longitude,
+and does NOT use tblColonyTotals. Do NOT apply colony data rules to edge_scans.
+Mark these as is_valid=true immediately.
+
+🚨 STRUCTURAL INTEGRITY CHECKLIST (for colony data queries ONLY):
 1. Table Selection: Does it use tblColonyTotals for bird counts (not tblSpeciesData)?
 2. Aggregation: Does it use SUM(Birds/Nests) for counts (not COUNT(*))?
 3. Spatial Data: If querying locations, are Latitude/Longitude included?
@@ -4421,6 +4452,125 @@ async def get_flood_database_stats():
         stats = flood_db.get_database_stats()
 
         return stats
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ============================================================================
+# EDGE DEVICE INTEGRATION (Jetson Nano)
+# ============================================================================
+# This section handles results from edge devices running bird detection locally.
+# The Jetson Nano runs jetson_detect.py, which sends results here via HTTP.
+# Results are stored in the edge_scans table so NestChat can query them.
+
+def _init_edge_scans_table():
+    """Create the edge_scans table if it doesn't exist.
+    
+    This table stores bird detection results from edge devices (e.g. Jetson Nano).
+    NestChat can then answer questions like 'How many birds in the last scan?'
+    """
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        conn.execute('''
+            CREATE TABLE IF NOT EXISTS edge_scans (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                device_name TEXT NOT NULL,
+                image_name TEXT NOT NULL,
+                bird_count INTEGER NOT NULL,
+                inference_time REAL,
+                image_width INTEGER,
+                image_height INTEGER,
+                confidence_threshold REAL,
+                detections_json TEXT,
+                scanned_at TEXT NOT NULL,
+                received_at TEXT NOT NULL DEFAULT (datetime('now'))
+            )
+        ''')
+        conn.commit()
+        conn.close()
+        print("\u2713 Edge scans table ready")
+    except Exception as e:
+        print(f"\u26a0\ufe0f  Warning: Could not initialize edge_scans table: {e}")
+
+# Initialize the table on server startup
+_init_edge_scans_table()
+
+
+@app.post("/edge/scan", response_model=EdgeScanResponse)
+async def receive_edge_scan(scan: EdgeScanRequest):
+    """
+    Receive bird detection results from an edge device (e.g. Jetson Nano).
+
+    The Jetson runs detection locally, then sends the results here.
+    We store them in the database so NestChat can query:
+    - "How many birds were detected in the last scan?"
+    - "Show me all edge scans from today"
+    - "What device detected the most birds?"
+
+    Args:
+        scan: Detection results from edge device
+
+    Returns:
+        EdgeScanResponse with scan_id on success
+    """
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        cursor = conn.cursor()
+        cursor.execute('''
+            INSERT INTO edge_scans
+                (device_name, image_name, bird_count, inference_time,
+                 image_width, image_height, confidence_threshold,
+                 detections_json, scanned_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ''', (
+            scan.device_name,
+            scan.image_name,
+            scan.bird_count,
+            scan.inference_time,
+            scan.image_width,
+            scan.image_height,
+            scan.confidence_threshold,
+            json.dumps(scan.detections),
+            scan.timestamp
+        ))
+        conn.commit()
+        scan_id = cursor.lastrowid
+        conn.close()
+
+        print(f"[Edge] Scan #{scan_id} from {scan.device_name}: "
+              f"{scan.bird_count} birds in {scan.image_name}")
+
+        return EdgeScanResponse(
+            success=True,
+            scan_id=scan_id,
+            message=f"Scan saved: {scan.bird_count} birds detected by {scan.device_name}"
+        )
+
+    except Exception as e:
+        return EdgeScanResponse(
+            success=False,
+            error=str(e)
+        )
+
+
+@app.get("/edge/scans")
+async def list_edge_scans(limit: int = 20):
+    """
+    List recent edge device scans.
+    Useful for checking if the Jetson is sending data correctly.
+    """
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        cursor.execute(
+            'SELECT id, device_name, image_name, bird_count, inference_time, '
+            'scanned_at, received_at FROM edge_scans ORDER BY id DESC LIMIT ?',
+            (min(limit, 100),)
+        )
+        rows = [dict(row) for row in cursor.fetchall()]
+        conn.close()
+        return {"scans": rows, "count": len(rows)}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
