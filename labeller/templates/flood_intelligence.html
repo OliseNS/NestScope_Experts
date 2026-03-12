@@ -639,69 +639,6 @@
         color: #7BABAE;
     }
 
-    /* Priority List */
-    .priority-section {
-        margin-top: 2rem;
-    }
-
-    .priority-header {
-        font-family: 'Space Mono', monospace;
-        font-size: 1.5rem;
-        font-weight: 700;
-        color: #00D9FF;
-        margin-bottom: 1.5rem;
-    }
-
-    .priority-item {
-        background: linear-gradient(135deg, #1E293B 0%, #0F172A 100%);
-        border: 1px solid rgba(0, 217, 255, 0.2);
-        border-radius: 8px;
-        padding: 1rem;
-        margin-bottom: 1rem;
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        transition: all 0.2s ease;
-        cursor: pointer;
-    }
-
-    .priority-item:hover {
-        background: rgba(0, 217, 255, 0.05);
-        border-color: rgba(0, 217, 255, 0.4);
-        transform: translateX(4px);
-    }
-
-    .priority-info h4 {
-        font-size: 1rem;
-        font-weight: 600;
-        color: #E2E8F0;
-        margin-bottom: 0.25rem;
-    }
-
-    .priority-info p {
-        font-size: 0.875rem;
-        color: #94A3B8;
-        margin: 0;
-    }
-
-    .priority-score {
-        text-align: center;
-    }
-
-    .score-value {
-        font-family: 'Space Mono', monospace;
-        font-size: 1.75rem;
-        font-weight: 700;
-        color: #00D9FF;
-        display: block;
-    }
-
-    .score-label {
-        font-size: 0.75rem;
-        color: #64748B;
-        text-transform: uppercase;
-    }
-
     /* Loading State */
     .loading-state {
         display: flex;
@@ -732,39 +669,6 @@
         font-size: 1.125rem;
     }
 
-    /* Refresh Button */
-    .refresh-btn {
-        position: fixed;
-        bottom: 80px;
-        right: 2rem;
-        background: linear-gradient(135deg, #00D9FF 0%, #7BABAE 100%);
-        color: #0F172A;
-        border: none;
-        border-radius: 50%;
-        width: 60px;
-        height: 60px;
-        cursor: pointer;
-        box-shadow: 0 8px 24px rgba(0, 217, 255, 0.4);
-        transition: all 0.3s ease;
-        z-index: 100;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-    }
-
-    .refresh-btn:hover {
-        transform: scale(1.1) rotate(180deg);
-        box-shadow: 0 12px 32px rgba(0, 217, 255, 0.6);
-    }
-
-    .refresh-btn.spinning {
-        animation: spin 2s linear infinite;
-    }
-
-    .refresh-btn svg {
-        width: 24px;
-        height: 24px;
-    }
 
     /* Light Mode */
     [data-theme="light"] .flood-header {
@@ -773,16 +677,13 @@
     }
 
     [data-theme="light"] .detail-panel,
-    [data-theme="light"] .priority-item,
     [data-theme="light"] .search-input,
     [data-theme="light"] .search-results {
         background: linear-gradient(135deg, #F8FAFC 0%, #F1F5F9 100%);
         border-color: rgba(8, 145, 178, 0.2);
     }
 
-    [data-theme="light"] .nowcast-value,
-    [data-theme="light"] .priority-header,
-    [data-theme="light"] .score-value {
+    [data-theme="light"] .nowcast-value {
         color: #0891B2;
     }
 
@@ -1063,19 +964,7 @@
             </div>
         </div>
 
-        <!-- Priority List -->
-        <div class="priority-section">
-            <div class="priority-header">HIGH-PRIORITY RESTORATION SITES</div>
-            <div id="priority-list"></div>
-        </div>
     </div>
-
-    <!-- Refresh Button -->
-    <button class="refresh-btn" id="refresh-btn" title="Refresh data" onclick="refreshData()">
-        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
-        </svg>
-    </button>
 
     <!-- Info Modal -->
     <div class="info-modal" id="info-modal" onclick="closeInfoModal()">
@@ -1165,6 +1054,38 @@
         setInterval(checkForUpdates, 60000); // Check every minute
     }
 
+    // Load cached colony data
+    async function loadCachedData() {
+        try {
+            const response = await fetch(`${API_BASE}/api/flood/cached`);
+            const result = await response.json();
+
+            colonyData = {};
+            allColonies = result.data.zones || [];
+
+            result.data.zones.forEach(zone => {
+                colonyData[zone.colony_name] = zone;
+            });
+
+            // Show content first, then init map
+            document.getElementById('loading-state').style.display = 'none';
+            document.getElementById('main-content').style.display = 'block';
+
+            // Initialize map after container is visible
+            setTimeout(() => {
+                initMap(result.data.zones);
+
+                // Select first colony
+                if (result.data.zones.length > 0) {
+                    selectColony(result.data.zones[0]);
+                }
+            }, 100);
+
+        } catch (error) {
+            console.error('Error loading data:', error);
+        }
+    }
+
     // Setup search functionality
     function setupSearch() {
         const input = document.getElementById('search-input');
@@ -1204,39 +1125,6 @@
                 results.classList.remove('active');
             }
         });
-    }
-
-    // Load cached colony data
-    async function loadCachedData() {
-        try {
-            const response = await fetch(`${API_BASE}/api/flood/cached`);
-            const result = await response.json();
-
-            colonyData = {};
-            allColonies = result.data.zones || [];
-
-            result.data.zones.forEach(zone => {
-                colonyData[zone.colony_name] = zone;
-            });
-
-            // Show content first, then init map
-            document.getElementById('loading-state').style.display = 'none';
-            document.getElementById('main-content').style.display = 'block';
-
-            // Initialize map after container is visible
-            setTimeout(() => {
-                initMap(result.data.zones);
-                displayPriorityList(result.data.priorities);
-
-                // Select first colony
-                if (result.data.zones.length > 0) {
-                    selectColony(result.data.zones[0]);
-                }
-            }, 100);
-
-        } catch (error) {
-            console.error('Error loading data:', error);
-        }
     }
 
     // Initialize map
@@ -1338,6 +1226,13 @@
 
         // Focus map
         map.setView([colony.latitude, colony.longitude], 10);
+    }
+
+    // Utilities
+    function selectColonyByName(name) {
+        if (colonyData[name]) {
+            selectColony(colonyData[name]);
+        }
     }
 
     // Load NOAA water level data
@@ -1732,30 +1627,7 @@
         fullscreenChart = newChart;
     }
 
-    // Display priority list
-    function displayPriorityList(priorities) {
-        const html = priorities.slice(0, 10).map(p => `
-            <div class="priority-item" onclick="selectColonyByName('${p.colony_name}')">
-                <div class="priority-info">
-                    <h4>${p.colony_name}</h4>
-                    <p>${p.years_until_critical} years until critical • $${(p.estimated_cost / 1000000).toFixed(1)}M</p>
-                </div>
-                <div class="priority-score">
-                    <span class="score-value">${p.risk_score}</span>
-                    <span class="score-label">Risk</span>
-                </div>
-            </div>
-        `).join('');
-        document.getElementById('priority-list').innerHTML = html;
-    }
-
     // Utilities
-    function selectColonyByName(name) {
-        if (colonyData[name]) {
-            selectColony(colonyData[name]);
-        }
-    }
-
     function findNearestStation(lat, lon) {
         return GULF_STATIONS.reduce((nearest, station) => {
             const dist = haversine(lat, lon, station.lat, station.lon);
@@ -1795,15 +1667,6 @@
         }
     }
 
-    async function refreshData() {
-        const btn = document.getElementById('refresh-btn');
-        btn.classList.add('spinning');
-        await fetch(`${API_BASE}/api/flood/refresh`, { method: 'POST' });
-        setTimeout(async () => {
-            await loadCachedData();
-            btn.classList.remove('spinning');
-        }, 2000);
-    }
 
     // Fullscreen toggle
     function toggleFullscreen() {
