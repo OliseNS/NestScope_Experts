@@ -1149,8 +1149,19 @@
     // Load cached colony data
     async function loadCachedData() {
         try {
+            console.log('Fetching from:', `${API_BASE}/api/flood/cached`);
             const response = await fetch(`${API_BASE}/api/flood/cached`);
+
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+
             const result = await response.json();
+            console.log('Received result:', result);
+
+            if (!result.data || !result.data.zones) {
+                throw new Error('Invalid data structure: missing zones');
+            }
 
             colonyData = {};
             allColonies = result.data.zones || [];
@@ -1158,6 +1169,8 @@
             result.data.zones.forEach(zone => {
                 colonyData[zone.colony_name] = zone;
             });
+
+            console.log(`Loaded ${result.data.zones.length} zones`);
 
             // Show content first, then init map
             document.getElementById('loading-state').style.display = 'none';
@@ -1175,6 +1188,18 @@
 
         } catch (error) {
             console.error('Error loading data:', error);
+            document.getElementById('loading-state').style.display = 'none';
+            document.getElementById('main-content').innerHTML = `
+                <div style="padding: 2rem; text-align: center; color: #FF4B4B;">
+                    <h3>Failed to Load Data</h3>
+                    <p>${error.message}</p>
+                    <p style="font-size: 0.9rem; color: #94A3B8;">Check console for details</p>
+                    <button onclick="location.reload()" style="margin-top: 1rem; padding: 0.5rem 1rem; background: #00D9FF; border: none; border-radius: 6px; color: #0F172A; cursor: pointer;">
+                        Retry
+                    </button>
+                </div>
+            `;
+            document.getElementById('main-content').style.display = 'block';
         }
     }
 
