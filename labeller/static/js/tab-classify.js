@@ -268,8 +268,9 @@ function createBBoxListItem(label, index) {
         font-size: 1.2rem;
         flex-shrink: 0;
     `;
-    statusIndicator.textContent = label.species ? '✅' : '⚠️';
+    statusIndicator.textContent = label.species ? '✓' : '!';
     statusIndicator.title = label.species ? 'Species assigned' : 'No species assigned';
+    statusIndicator.style.color = label.species ? 'var(--success)' : 'var(--warning)';
 
     speciesContainer.appendChild(speciesSelect);
     speciesContainer.appendChild(statusIndicator);
@@ -452,7 +453,7 @@ async function applySpeciesToAll(speciesCode) {
 
     // Show feedback
     const speciesName = appState.speciesList.find(s => s.code === speciesCode)?.name || speciesCode;
-    console.log(`✅ Applied ${speciesCode} (${speciesName}) to all ${appState.labels.length} boxes`);
+    console.log(`Applied ${speciesCode} (${speciesName}) to all ${appState.labels.length} boxes`);
 
     // Show toast notification
     showToast(`Applied ${speciesCode} to ${appState.labels.length} boxes`, 'success');
@@ -490,15 +491,15 @@ async function autoSaveLabels() {
         const data = await res.json();
 
         if (data.status === 'success') {
-            console.log('💾 Auto-saved species assignments');
+            console.log('Auto-saved species assignments');
             showSavingIndicator(false, true); // Show checkmark briefly
         } else {
-            console.error('❌ Auto-save failed:', data);
+            console.error('Auto-save failed:', data);
             showSavingIndicator(false);
             showToast('Failed to save species assignments', 'error');
         }
     } catch (e) {
-        console.error('❌ Auto-save error:', e);
+        console.error('Auto-save error:', e);
         showSavingIndicator(false);
         showToast('Error saving species assignments', 'error');
     }

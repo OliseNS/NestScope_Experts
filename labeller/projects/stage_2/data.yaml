@@ -1,0 +1,10 @@
+# SAHI Bird Detection Dataset
+# Generated from bird_detection_dataset
+# Tile size: 1024x1024, Overlap: 20%
+
+path: /home/olisemeka.dev/Projects/nexus/bird_detection_dataset_sahi
+train: images
+val: images
+
+nc: 1
+names: ['bird']

@@ -107,6 +107,10 @@ def load_projects():
         return projects
 
     for folder_name in os.listdir(PROJECTS_DIR):
+        # Skip hidden directories (starting with .)
+        if folder_name.startswith('.'):
+            continue
+
         project_path = os.path.join(PROJECTS_DIR, folder_name)
         if not os.path.isdir(project_path):
             continue
@@ -946,6 +950,45 @@ def editor(project_folder, username, image_index=0):
     if not os.path.exists(image_path):
         return f"Image not found: {image_name}", 404
 
+    # Load classes from project's data.yaml first
+    data_yaml_path = os.path.join(project_path, 'data.yaml')
+    class_list = []
+    class_names = {}  # Map class_id to class_name
+
+    if os.path.exists(data_yaml_path):
+        import yaml
+        with open(data_yaml_path, 'r') as f:
+            yaml_data = yaml.safe_load(f)
+            names = yaml_data.get('names', {})
+
+            # Handle both dict and list formats
+            if isinstance(names, dict):
+                # Dict format: {0: 'bird', 1: 'car'}
+                class_names = names
+                for class_id, class_name in names.items():
+                    class_list.append({
+                        'code': class_name,
+                        'name': class_name
+                    })
+            elif isinstance(names, list):
+                # List format: ['bird', 'car']
+                class_names = {i: name for i, name in enumerate(names)}
+                for i, class_name in enumerate(names):
+                    class_list.append({
+                        'code': class_name,
+                        'name': class_name
+                    })
+            else:
+                # Unexpected format, fallback to empty
+                class_names = {}
+    else:
+        # Fallback to species_list.json if data.yaml doesn't exist
+        species_file = os.path.join(APP_DIR, 'data', 'species_list.json')
+        if os.path.exists(species_file):
+            with open(species_file, 'r') as f:
+                data = json.load(f)
+                class_list = data.get('real_species', [])
+
     # Load existing labels (if any)
     label_file = os.path.splitext(image_name)[0] + '.txt'
     label_path = os.path.join(labels_dir, label_file)
@@ -956,29 +999,24 @@ def editor(project_folder, username, image_index=0):
             for line in f:
                 parts = line.strip().split()
                 if len(parts) >= 5:
+                    class_id = int(parts[0])
+                    # Use class name from data.yaml instead of species code from column 6
+                    class_name = class_names.get(class_id, None)
                     boxes.append({
-                        'class_id': int(parts[0]),
+                        'class_id': class_id,
                         'x_center': float(parts[1]),
                         'y_center': float(parts[2]),
                         'width': float(parts[3]),
                         'height': float(parts[4]),
-                        'species': parts[5] if len(parts) > 5 else 'UNWA'
+                        'species': class_name  # Use class name from data.yaml
                     })
-
-    # Load species list
-    species_file = os.path.join(APP_DIR, 'data', 'species_list.json')
-    species_list = []
-    if os.path.exists(species_file):
-        with open(species_file, 'r') as f:
-            data = json.load(f)
-            species_list = data.get('real_species', [])
 
     # Simple questions structure (can be expanded later)
     questions = [
         {
             "id": 0,
-            "text": "Select the bird species",
-            "type": "species_select"
+            "text": "Select the class",
+            "type": "class_select"
         }
     ]
 
@@ -995,6 +1033,7 @@ def editor(project_folder, username, image_index=0):
     logging.info(f"Editor loading: {username} - {image_name}")
     logging.info(f"Image URL: {image_url}")
     logging.info(f"Total images: {len(all_user_images)}")
+    logging.info(f"Loaded {len(class_list)} classes from data.yaml")
 
     return render_template('expert_editor.html',
                          username=username,
@@ -1006,7 +1045,7 @@ def editor(project_folder, username, image_index=0):
                          prev_index=prev_index,
                          next_index=next_index,
                          boxes=boxes,
-                         species_list=species_list,
+                         species_list=class_list,  # Keep as species_list for template compatibility
                          questions=questions,
                          back_url=f'/project/{project_folder}')
 
@@ -1098,7 +1137,7 @@ def assemble_and_create():
                 if (i + 1) % 10 == 0:
                     logger.info(f"  Assembled {i + 1}/{total_chunks} chunks...")
 
-        logger.info(f"✓ All chunks assembled into {assembled_path}")
+        logger.info(f"All chunks assembled into {assembled_path}")
 
         # Now process the assembled file (reuse existing logic)
         project_folder = sanitize_folder_name(name)
@@ -1118,12 +1157,12 @@ def assemble_and_create():
         labels_dir = os.path.join(project_path, 'labels')
         os.makedirs(images_dir, exist_ok=True)
         os.makedirs(labels_dir, exist_ok=True)
-        logger.info("✓ Project directories created")
+        logger.info("Project directories created")
 
         # Move assembled file to project directory
         temp_zip_path = os.path.join(project_path, 'temp.zip')
         shutil.move(assembled_path, temp_zip_path)
-        logger.info("✓ Moved assembled file to project directory")
+        logger.info("Moved assembled file to project directory")
 
         # Extract and process (reuse existing extraction logic)
         has_data_yaml = False
@@ -1135,7 +1174,7 @@ def assemble_and_create():
 
         import time
         with zipfile.ZipFile(temp_zip_path, 'r') as zip_ref:
-            logger.info(f"✓ Opened zip, contains {len(zip_ref.namelist())} files")
+            logger.info(f"Opened zip, contains {len(zip_ref.namelist())} files")
 
             # Analyze structure
             for file_info in zip_ref.namelist():
@@ -1143,11 +1182,11 @@ def assemble_and_create():
                     if not has_data_yaml:
                         has_data_yaml = True
                         data_yaml_content = zip_ref.read(file_info).decode('utf-8')
-                        logger.info(f"✓ Found {os.path.basename(file_info)}")
+                        logger.info(f"Found {os.path.basename(file_info)}")
                 elif file_info.endswith('project_state.json'):
                     has_project_state = True
                     project_state_content = zip_ref.read(file_info).decode('utf-8')
-                    logger.info("✓ Found project_state.json")
+                    logger.info("Found project_state.json")
 
             import_type = 'full' if (has_data_yaml and has_project_state) else ('yolo' if has_data_yaml else ('partial' if has_project_state else 'new'))
             logger.info(f"📦 Import type: {import_type}")
@@ -1191,7 +1230,7 @@ def assemble_and_create():
                     extracted_path = os.path.join(project_path, file_info)
                     shutil.move(extracted_path, os.path.join(project_path, 'classes.txt'))
 
-            logger.info(f"✓ Extracted {image_count} images, {label_count} labels")
+            logger.info(f"Extracted {image_count} images, {label_count} labels")
 
             # Cleanup
             os.remove(temp_zip_path)
@@ -1219,7 +1258,7 @@ def assemble_and_create():
         # Clean up upload directory
         shutil.rmtree(temp_upload_dir, ignore_errors=True)
 
-        logger.info("✓ Project created successfully")
+        logger.info("Project created successfully")
         logger.info("=" * 60)
 
         return jsonify({
@@ -1280,7 +1319,7 @@ def create_project():
             logger.error(f"Invalid file type: {zip_file.filename}")
             return jsonify({'error': 'Only .zip files are accepted'}), 400
 
-        logger.info(f"✓ Received zip file: {zip_file.filename}")
+        logger.info(f"Received zip file: {zip_file.filename}")
 
         # Generate project folder name
         project_folder = sanitize_folder_name(name)
@@ -1304,11 +1343,11 @@ def create_project():
         labels_dir = os.path.join(project_path, 'labels')
         os.makedirs(images_dir, exist_ok=True)
         os.makedirs(labels_dir, exist_ok=True)
-        logger.info("✓ Directories created")
+        logger.info("Directories created")
 
         # Save and analyze zip
         temp_zip_path = os.path.join(project_path, 'temp.zip')
-        logger.info(f"💾 Saving zip file to disk (this may take a while for large files)...")
+        logger.info(f"Saving zip file to disk (this may take a while for large files)...")
 
         # Save with progress logging
         import time
@@ -1319,8 +1358,8 @@ def create_project():
         # Get actual file size
         zip_size = os.path.getsize(temp_zip_path)
         zip_size_mb = zip_size / (1024 * 1024)
-        logger.info(f"✓ Saved zip to: {temp_zip_path}")
-        logger.info(f"✓ Zip file size: {zip_size_mb:.2f} MB, took {elapsed:.2f}s to save")
+        logger.info(f"Saved zip to: {temp_zip_path}")
+        logger.info(f"Zip file size: {zip_size_mb:.2f} MB, took {elapsed:.2f}s to save")
 
         # Analyze zip structure
         has_data_yaml = False
@@ -1332,7 +1371,7 @@ def create_project():
 
         try:
             with zipfile.ZipFile(temp_zip_path, 'r') as zip_ref:
-                logger.info(f"✓ Opened zip, contains {len(zip_ref.namelist())} files")
+                logger.info(f"Opened zip, contains {len(zip_ref.namelist())} files")
 
                 # First pass: detect structure
                 for file_info in zip_ref.namelist():
@@ -1342,11 +1381,11 @@ def create_project():
                             has_data_yaml = True
                             data_yaml_content = zip_ref.read(file_info).decode('utf-8')
                             yaml_filename = os.path.basename(file_info)
-                            logger.info(f"✓ Found {yaml_filename} - this is a YOLO dataset import")
+                            logger.info(f"Found {yaml_filename} - this is a YOLO dataset import")
                     elif file_info.endswith('project_state.json') or file_info == 'project_state.json':
                         has_project_state = True
                         project_state_content = zip_ref.read(file_info).decode('utf-8')
-                        logger.info("✓ Found project_state.json - importing user assignments")
+                        logger.info("Found project_state.json - importing user assignments")
 
                 # Determine import type
                 if has_data_yaml and has_project_state:
@@ -1400,14 +1439,14 @@ def create_project():
                         dest_path = os.path.join(project_path, 'data.yaml')
                         with open(dest_path, 'w') as f:
                             f.write(data_yaml_content)
-                        logger.info(f"✓ Preserved {filename} as data.yaml")
+                        logger.info(f"Preserved {filename} as data.yaml")
 
                     # Extract project_state.json
                     elif filename == 'project_state.json' and has_project_state:
                         dest_path = os.path.join(project_path, 'project_state.json')
                         with open(dest_path, 'w') as f:
                             f.write(project_state_content)
-                        logger.info("✓ Preserved project_state.json")
+                        logger.info("Preserved project_state.json")
 
                     # Extract classes.txt if present
                     elif filename == 'classes.txt':
@@ -1415,10 +1454,10 @@ def create_project():
                         zip_ref.extract(file_info, project_path)
                         extracted_path = os.path.join(project_path, file_info)
                         shutil.move(extracted_path, dest_path)
-                        logger.info("✓ Preserved classes.txt")
+                        logger.info("Preserved classes.txt")
 
                 extraction_elapsed = time.time() - extraction_start
-                logger.info(f"✓ Extracted {image_count} images, {label_count} labels from zip in {extraction_elapsed:.2f}s")
+                logger.info(f"Extracted {image_count} images, {label_count} labels from zip in {extraction_elapsed:.2f}s")
 
                 # Clean up temp files
                 logger.info("🧹 Cleaning up temporary files...")
@@ -1430,7 +1469,7 @@ def create_project():
                         shutil.rmtree(item_path)
 
         except Exception as zip_error:
-            logger.error(f"❌ Error processing zip: {zip_error}")
+            logger.error(f"Error processing zip: {zip_error}")
             logger.error(traceback.format_exc())
             raise
 
@@ -1445,14 +1484,14 @@ def create_project():
                 'names': {0: 'Bird'}
             }
             save_data_yaml(project_folder, data_yaml)
-            logger.info("✓ Created data.yaml with default class (Bird)")
+            logger.info("Created data.yaml with default class (Bird)")
 
         # Create or preserve project_state.json
         if not has_project_state:
             logger.info("Creating empty project_state.json...")
             project_state = {'users': {}}
             save_project_state(project_folder, project_state)
-            logger.info("✓ Created empty project_state.json")
+            logger.info("Created empty project_state.json")
 
         # Create metadata.json
         logger.info("Creating metadata.json...")
@@ -1463,7 +1502,7 @@ def create_project():
             'import_type': import_type
         }
         save_project_metadata(project_folder, metadata)
-        logger.info("✓ Created metadata.json")
+        logger.info("Created metadata.json")
 
         # Count imported users
         users_imported = 0
@@ -1781,7 +1820,7 @@ def delete_project(project_folder):
         # Delete the entire project directory
         if os.path.exists(project_path):
             shutil.rmtree(project_path)
-            logger.info(f"✓ Deleted project directory: {project_path}")
+            logger.info(f"Deleted project directory: {project_path}")
         else:
             logger.warning(f"Project directory not found: {project_path}")
 
@@ -1915,7 +1954,7 @@ def serve_project_image(project_folder, filename):
     logging.info(f"[IMAGE REQUEST] Exists: {os.path.exists(full_path)}")
 
     if os.path.exists(full_path):
-        logging.info(f"[IMAGE REQUEST] ✓ Serving {filename}")
+        logging.info(f"[IMAGE REQUEST] Serving {filename}")
         return send_from_directory(images_dir, filename)
 
     logging.error(f"[IMAGE REQUEST] ✗ Not found: {full_path}")
@@ -1954,15 +1993,21 @@ def save_annotations():
 
         with open(label_path, 'w') as f:
             for box in boxes:
-                # YOLO format: class_id x_center y_center width height species
-                class_id = box.get('class_id', 0)
+                # YOLO format: class_id x_center y_center width height [species]
+                # Ensure class_id is always 0 (not None)
+                class_id = box.get('class_id') or 0
                 x_center = box.get('x_center', box.get('x', 0))
                 y_center = box.get('y_center', box.get('y', 0))
                 width = box.get('width', 0)
                 height = box.get('height', 0)
-                species = box.get('species', 'UNWA')
+                species = box.get('species')
 
-                line = f"{class_id} {x_center} {y_center} {width} {height} {species}"
+                # Only include species if it's actually set (not None/empty)
+                if species:
+                    line = f"{class_id} {x_center} {y_center} {width} {height} {species}"
+                else:
+                    # No species assigned - just save bbox coordinates
+                    line = f"{class_id} {x_center} {y_center} {width} {height}"
                 f.write(line + '\n')
 
         # Update user progress
@@ -2215,12 +2260,12 @@ def delete_image():
 
         # Delete image file
         os.remove(image_path)
-        print(f"✓ Deleted image: {image_name}")
+        print(f"Deleted image: {image_name}")
 
         # Delete label file if exists
         if os.path.exists(label_path):
             os.remove(label_path)
-            print(f"✓ Deleted label: {label_file}")
+            print(f"Deleted label: {label_file}")
 
         # Update user's task list (remove from both assigned and completed)
         state = load_project_state(project_folder)
@@ -2269,9 +2314,9 @@ def get_bird_detector():
             sys.path.insert(0, PROJECT_ROOT)
             from server.cv_tools.inference import BirdDetector
             _bird_detector = BirdDetector()
-            print("✓ BirdDetector with classifier loaded")
+            print("BirdDetector with classifier loaded")
         except Exception as e:
-            print(f"⚠️  Could not load BirdDetector: {e}")
+            print(f" Could not load BirdDetector: {e}")
     return _bird_detector
 
 def get_species_service():
@@ -2281,9 +2326,9 @@ def get_species_service():
         try:
             from labeller.services.species_service import get_species_service as _get_svc
             _species_service = _get_svc()
-            print("✓ SpeciesService loaded")
+            print("SpeciesService loaded")
         except Exception as e:
-            print(f"⚠️  Could not load SpeciesService: {e}")
+            print(f" Could not load SpeciesService: {e}")
     return _species_service
 
 def get_user_service():
@@ -2293,9 +2338,9 @@ def get_user_service():
         try:
             from labeller.services.user_service import get_user_service as _get_svc
             _user_service = _get_svc(PROJECTS_DIR)
-            print("✓ UserService loaded")
+            print("UserService loaded")
         except Exception as e:
-            print(f"⚠️  Could not load UserService: {e}")
+            print(f" Could not load UserService: {e}")
     return _user_service
 
 def get_wikipedia_images_func(species_name, max_images=5, offset=0):
@@ -2304,7 +2349,7 @@ def get_wikipedia_images_func(species_name, max_images=5, offset=0):
         from labeller.services.wikipedia_images_v2 import get_wikipedia_images
         return get_wikipedia_images(species_name, max_images=max_images, offset=offset)
     except Exception as e:
-        print(f"⚠️  Could not load Wikipedia images: {e}")
+        print(f" Could not load Wikipedia images: {e}")
         return []
 
 @app.route('/api/sam_segment', methods=['POST'])
