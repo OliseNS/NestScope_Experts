@@ -1338,7 +1338,15 @@
                         <i data-lucide="tag" style="width: 16px; height: 16px;"></i>
                         <span>Class Assignment</span>
                     </div>
-                    <button class="panel-close" onclick="closeClassification()"><i data-lucide="x"></i></button>
+                    <div style="display: flex; gap: 0.5rem; align-items: center;">
+                        <button id="identify-all-btn" class="btn-primary" onclick="identifyAllBirds()"
+                                style="padding: 0.5rem 1rem; font-size: 0.875rem; background: var(--success); border: none; border-radius: 6px; cursor: pointer; display: flex; align-items: center; gap: 0.5rem; font-weight: 600;"
+                                title="Automatically identify all birds in this image">
+                            <i data-lucide="zap" style="width: 14px; height: 14px;"></i>
+                            <span>Identify All</span>
+                        </button>
+                        <button class="panel-close" onclick="closeClassification()"><i data-lucide="x"></i></button>
+                    </div>
                 </div>
                 <div class="panel-content">
                     <div id="classification-content">
@@ -2831,8 +2839,7 @@ async function runAIClassification() {
                     y_center: selectedBox.y_center,
                     width: selectedBox.width,
                     height: selectedBox.height
-                },
-                fast_mode: true
+                }
             })
         });
 
@@ -2845,6 +2852,87 @@ async function runAIClassification() {
     } catch (error) {
         console.error('Classification error:', error);
         content.innerHTML = `<div style="text-align: center; color: #ef4444; font-size: 0.75rem; padding: 10px;">Classification error: ${error.message}</div>`;
+    }
+}
+
+// Batch classify all birds in the image
+async function identifyAllBirds() {
+    if (boxes.length === 0) {
+        alert('No birds to classify! Draw bounding boxes first.');
+        return;
+    }
+
+    // Show loading state
+    const btn = document.getElementById('identify-all-btn');
+    const originalHTML = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<div style="width: 14px; height: 14px; border: 2px solid rgba(255,255,255,0.3); border-top-color: white; border-radius: 50%; animation: spin 0.8s linear infinite;"></div><span>Classifying...</span>';
+
+    try {
+        const response = await fetch('/api/classify_all_birds', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                project_id: PROJECT_ID,
+                image_name: IMAGE_NAME,
+                boxes: boxes.map(b => ({
+                    x_center: b.x_center,
+                    y_center: b.y_center,
+                    width: b.width,
+                    height: b.height,
+                    class_id: b.class_id || 0
+                }))
+            })
+        });
+
+        const result = await response.json();
+        if (result.error) throw new Error(result.error);
+
+        // Update all boxes with classifications
+        const classifiedBoxes = result.boxes;
+        let successCount = 0;
+
+        classifiedBoxes.forEach((classifiedBox, index) => {
+            if (boxes[index] && classifiedBox.species !== 'UNKNOWN') {
+                boxes[index].species = classifiedBox.species;
+                successCount++;
+            }
+        });
+
+        // Save all changes
+        await saveLabels();
+
+        // Redraw canvas
+        redrawCanvas();
+
+        // Show success message
+        const content = document.getElementById('classification-content');
+        content.innerHTML = `
+            <div style="text-align: center; padding: 3rem 2rem;">
+                <div style="font-size: 4rem; margin-bottom: 1rem;">✓</div>
+                <h3 style="color: var(--success); margin-bottom: 0.5rem; font-size: 1.5rem;">All Birds Classified!</h3>
+                <p style="color: var(--text-secondary); margin-top: 0.5rem;">
+                    Successfully identified ${successCount} of ${boxes.length} birds.
+                </p>
+                <button class="btn-primary" style="margin-top: 1rem; padding: 0.75rem 1.5rem;" onclick="closeClassification()">
+                    Done
+                </button>
+            </div>
+        `;
+
+        // Reset button
+        btn.disabled = false;
+        btn.innerHTML = originalHTML;
+        if (typeof lucide !== 'undefined') lucide.createIcons();
+
+    } catch (error) {
+        console.error('Batch classification error:', error);
+        alert(`Classification failed: ${error.message}`);
+
+        // Reset button
+        btn.disabled = false;
+        btn.innerHTML = originalHTML;
+        if (typeof lucide !== 'undefined') lucide.createIcons();
     }
 }
 
@@ -2909,8 +2997,36 @@ async function showAIPredictions(predictions, boxNumber) {
                 </div>
             </div>
 
+            <!-- Search Bar -->
+            <div style="padding: 1.5rem; padding-bottom: 1rem; background: var(--surface-light); border-bottom: 1px solid rgba(83, 124, 138, 0.2);">
+                <div style="margin-bottom: 0.5rem;">
+                    <label style="display: block; font-size: 0.875rem; color: var(--text-secondary); margin-bottom: 0.5rem; font-weight: 600;">
+                        Search All Species
+                    </label>
+                    <div style="position: relative;">
+                        <input type="text"
+                               id="ai-species-search"
+                               placeholder="Type species name or code..."
+                               oninput="handleAISearch(this.value)"
+                               style="width: 100%; padding: 0.75rem 1rem 0.75rem 2.5rem; background: var(--bg-dark); border: 2px solid rgba(83, 124, 138, 0.3); border-radius: 8px; color: var(--text-primary); font-size: 0.875rem; transition: all 0.3s;"
+                               onfocus="this.style.borderColor='var(--orange-primary)'"
+                               onblur="this.style.borderColor='rgba(83, 124, 138, 0.3)'" />
+                        <svg style="position: absolute; left: 0.75rem; top: 50%; transform: translateY(-50%); width: 1rem; height: 1rem; color: var(--text-muted);" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <circle cx="11" cy="11" r="8"></circle>
+                            <path d="m21 21-4.35-4.35"></path>
+                        </svg>
+                    </div>
+                </div>
+                <p style="color: var(--text-muted); font-size: 0.75rem; text-align: center;">
+                    Can't find your species below? Use search to find any bird.
+                </p>
+            </div>
+
+            <!-- Search Results Container (hidden by default) -->
+            <div id="ai-search-results" style="display: none; padding: 1.5rem; background: var(--bg-dark); border-bottom: 1px solid rgba(83, 124, 138, 0.2);"></div>
+
             <!-- Predictions -->
-            <div style="padding: 1.5rem;">
+            <div id="ai-predictions-section" style="padding: 1.5rem;">
                 <div style="text-align: center; margin-bottom: 1rem;">
                     <p style="color: var(--text-secondary); font-size: 0.875rem;">
                         Top 5 predictions • Click to select
@@ -3006,6 +3122,16 @@ async function showAIPredictions(predictions, boxNumber) {
     predictions.forEach(pred => {
         loadAISpeciesImages(pred.species_name, `ai-bird-img-${pred.species_code}`);
     });
+
+    // Clear search input and ensure predictions are visible
+    const searchInput = document.getElementById('ai-species-search');
+    if (searchInput) {
+        searchInput.value = '';
+    }
+    const searchResultsDiv = document.getElementById('ai-search-results');
+    const predictionsSection = document.getElementById('ai-predictions-section');
+    if (searchResultsDiv) searchResultsDiv.style.display = 'none';
+    if (predictionsSection) predictionsSection.style.display = 'block';
 }
 
 async function loadAISpeciesImages(speciesName, containerId) {
@@ -3134,6 +3260,141 @@ async function loadMoreAIImages(speciesName, cardIdx, currentOffset) {
     } catch (error) {
         console.error('Error loading more images:', error);
     }
+}
+
+// Show identification choice (manual selection)
+function showIdentificationChoice() {
+    const content = document.getElementById('classification-content');
+
+    if (!selectedBoxId) {
+        content.innerHTML = '<div style="text-align: center; padding: 2rem; color: var(--text-muted);">No bird selected</div>';
+        return;
+    }
+
+    const selectedBox = boxes.find(b => b.id === selectedBoxId);
+    const boxNumber = selectedBox ? boxes.indexOf(selectedBox) + 1 : '?';
+
+    content.innerHTML = `
+        <div style="padding: 1.5rem;">
+            <div style="text-align: center; margin-bottom: 1.5rem;">
+                <h3 style="color: var(--text-primary); font-size: 1.125rem; margin-bottom: 0.5rem;">Select Species Manually</h3>
+                <p style="color: var(--text-secondary); font-size: 0.875rem;">Bird #${boxNumber}</p>
+            </div>
+
+            <div style="margin-bottom: 1rem;">
+                <input type="text"
+                       id="manual-search"
+                       placeholder="Search for species..."
+                       oninput="filterManualSpecies(this.value)"
+                       style="width: 100%; padding: 0.75rem; background: var(--bg-dark); border: 2px solid rgba(83, 124, 138, 0.3); border-radius: 8px; color: var(--text-primary); font-size: 0.875rem;"
+                       autofocus />
+            </div>
+
+            <div id="manual-species-list" style="max-height: 50vh; overflow-y: auto;">
+                ${SPECIES_DATA.map(s => {
+                    const escapedCode = s.code.replace(/'/g, "\\'");
+                    const escapedName = s.name.replace(/'/g, "\\'");
+                    return `
+                        <div class="manual-species-item" data-code="${s.code}" data-name="${s.name}"
+                             onclick="selectSpeciesFromAI('${escapedCode}', '${escapedName}')"
+                             style="padding: 0.75rem 1rem; margin-bottom: 0.5rem; background: var(--surface-light); border: 2px solid rgba(83, 124, 138, 0.2); border-radius: 8px; cursor: pointer; transition: all 0.2s;">
+                            <div style="font-weight: 700; color: var(--text-primary);">${s.code}</div>
+                            <div style="font-size: 0.75rem; color: var(--text-secondary);">${s.name}</div>
+                        </div>
+                    `;
+                }).join('')}
+            </div>
+
+            <button class="btn-secondary" style="margin-top: 1rem; width: 100%;" onclick="runAIClassification()">
+                ✨ Use AI Instead
+            </button>
+        </div>
+    `;
+}
+
+// Filter manual species list
+function filterManualSpecies(query) {
+    const items = document.querySelectorAll('.manual-species-item');
+    const lowerQuery = query.toLowerCase();
+
+    items.forEach(item => {
+        const code = item.getAttribute('data-code').toLowerCase();
+        const name = item.getAttribute('data-name').toLowerCase();
+
+        if (code.includes(lowerQuery) || name.includes(lowerQuery)) {
+            item.style.display = 'block';
+        } else {
+            item.style.display = 'none';
+        }
+    });
+}
+
+// Handle search in AI predictions panel
+function handleAISearch(query) {
+    const searchResultsDiv = document.getElementById('ai-search-results');
+    const predictionsSection = document.getElementById('ai-predictions-section');
+
+    if (!query || query.trim().length === 0) {
+        // No search query - hide search results and show predictions
+        searchResultsDiv.style.display = 'none';
+        predictionsSection.style.display = 'block';
+        return;
+    }
+
+    // Search through all species
+    const results = SPECIES_DATA.filter(s =>
+        s.code.toLowerCase().includes(query.toLowerCase()) ||
+        s.name.toLowerCase().includes(query.toLowerCase())
+    ).slice(0, 10);
+
+    // Hide predictions, show search results
+    predictionsSection.style.display = 'none';
+    searchResultsDiv.style.display = 'block';
+
+    if (results.length === 0) {
+        searchResultsDiv.innerHTML = `
+            <div style="text-align: center; padding: 2rem; color: var(--text-muted);">
+                <svg style="width: 3rem; height: 3rem; margin: 0 auto 1rem; opacity: 0.5;" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <circle cx="11" cy="11" r="8"></circle>
+                    <path d="m21 21-4.35-4.35"></path>
+                </svg>
+                <div style="font-size: 0.875rem;">No species found for "${query}"</div>
+            </div>
+        `;
+        return;
+    }
+
+    // Display search results
+    searchResultsDiv.innerHTML = `
+        <div style="margin-bottom: 1rem;">
+            <div style="font-size: 0.75rem; color: var(--orange-primary); font-weight: 700; text-transform: uppercase;">
+                Search Results (${results.length})
+            </div>
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 0.75rem; max-height: 60vh; overflow-y: auto;">
+            ${results.map(s => {
+                const escapedName = s.name.replace(/'/g, "\\'");
+                const escapedCode = s.code.replace(/'/g, "\\'");
+                return `
+                    <div class="ai-species-card" onclick="selectSpeciesFromAI('${escapedCode}', '${escapedName}')"
+                         style="padding: 1rem; border-radius: 8px; cursor: pointer; background: var(--surface-light); border: 2px solid rgba(83, 124, 138, 0.2); transition: all 0.3s;">
+                        <div style="display: flex; align-items: center; gap: 1rem;">
+                            <div style="flex-shrink: 0; width: 3rem; height: 3rem; background: var(--bg-dark); border-radius: 6px; display: flex; align-items: center; justify-content: center; font-weight: 700; color: var(--orange-primary); font-size: 0.75rem;">
+                                ${s.code.substring(0, 2)}
+                            </div>
+                            <div style="flex-grow: 1;">
+                                <div style="font-weight: 700; color: var(--text-primary); font-size: 0.95rem; margin-bottom: 0.25rem;">${s.code}</div>
+                                <div style="font-size: 0.75rem; color: var(--text-secondary);">${s.name}</div>
+                            </div>
+                            <svg style="width: 1.25rem; height: 1.25rem; color: var(--text-muted);" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
+                            </svg>
+                        </div>
+                    </div>
+                `;
+            }).join('')}
+        </div>
+    `;
 }
 
 function selectSpeciesFromAI(speciesCode, speciesName) {

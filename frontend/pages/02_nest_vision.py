@@ -40,8 +40,6 @@ if "cv_last_processed_image" not in st.session_state:
     st.session_state.cv_last_processed_image = None
 if "cv_conf_threshold" not in st.session_state:
     st.session_state.cv_conf_threshold = 0.25
-if "cv_fast_mode" not in st.session_state:
-    st.session_state.cv_fast_mode = True
 
 # ============================================================================
 # SIDEBAR
@@ -141,42 +139,27 @@ else:
 with st.expander("⚙️ Advanced Settings", expanded=False):
     st.markdown("### Detection Configuration")
 
-    col1, col2 = st.columns(2)
-
-    with col1:
-        st.markdown("**Detection Confidence**")
-        conf_threshold = st.slider(
-            "Minimum confidence threshold",
-            min_value=0.1,
-            max_value=0.9,
-            value=st.session_state.cv_conf_threshold,
-            step=0.05,
-            help="Lower values detect more birds but may include false positives",
-            key="conf_slider"
-        )
-        st.session_state.cv_conf_threshold = conf_threshold
-
-    with col2:
-        st.markdown("**Processing Mode**")
-        fast_mode = st.radio(
-            "Select detection model",
-            options=[True, False],
-            format_func=lambda x: "🚀 Swift (Fast)" if x else "🎯 Apex (Accurate)",
-            index=0 if st.session_state.cv_fast_mode else 1,
-            help="Swift: 3x faster, great for quick previews\nApex: Maximum accuracy for final analysis",
-            key="mode_radio"
-        )
-        st.session_state.cv_fast_mode = fast_mode
+    st.markdown("**Detection Confidence**")
+    conf_threshold = st.slider(
+        "Minimum confidence threshold",
+        min_value=0.1,
+        max_value=0.9,
+        value=st.session_state.cv_conf_threshold,
+        step=0.05,
+        help="Lower values detect more birds but may include false positives",
+        key="conf_slider"
+    )
+    st.session_state.cv_conf_threshold = conf_threshold
 
     st.markdown("---")
     st.markdown("""
     **About the Models:**
-    - **Detection**: YOLO26 trained on Gulf Coast avian data
-    - **Classification**: 25 species - shows best prediction (confidence may be low)
+    - **Detection**: Swift YOLO26 trained on Gulf Coast avian data
+    - **Classification**: Swift classifier for 7 species groups
     - **SAHI Processing**: Automatically slices large images for better accuracy
     - **Confidence Thresholds**:
         - Detection: Adjustable (default 25%)
-        - Classification: Shows best guess regardless of confidence
+        - Classification: Shows best guess for species group
     """)
 
 # ============================================================================
@@ -217,11 +200,10 @@ if image_to_process:
             image_file = BytesIO(image_to_process)
             image_file.name = image_name
 
-            # Run inference with current settings
+            # Run inference with current settings (Swift mode)
             result = run_cv_inference(
                 image_file,
-                st.session_state.cv_conf_threshold,
-                st.session_state.cv_fast_mode
+                st.session_state.cv_conf_threshold
             )
 
             # Store result in session state
@@ -301,15 +283,12 @@ if image_to_process:
 
         st.markdown("### 📊 Summary")
 
-        metric_cols = st.columns(4)
+        metric_cols = st.columns(3)
         with metric_cols[0]:
             st.metric("🐦 Total Birds", bird_count)
         with metric_cols[1]:
             st.metric("🎯 Confidence", f"{st.session_state.cv_conf_threshold:.0%}")
         with metric_cols[2]:
-            mode_name = "Swift" if st.session_state.cv_fast_mode else "Apex"
-            st.metric("⚡ Mode", mode_name)
-        with metric_cols[3]:
             st.metric("⏱️ Time", f"{inference_time:.2f}s")
 
         # Show message
@@ -462,23 +441,21 @@ if image_to_process:
 
         with st.expander("ℹ️ About NestVision", expanded=False):
             st.markdown("""
-            ### Detection Models
-            - **🚀 Swift**: Fast inference (~3x faster) - perfect for quick previews
-            - **🎯 Apex**: Maximum accuracy - ideal for detecting small/distant birds
+            ### Detection Model
+            - **Swift YOLO26**: Fast, accurate bird detection trained on Gulf Coast avian data
+            - Optimized for speed and precision
+            - Input resolution: 1024×1024 pixels
 
             ### Species Classification
-            - **25 Gulf Coast waterbird species** automatically identified
-            - **7 color-coded groups**: Pelican, Tern, Gull, Shorebird, Cormorant, Heron, Wader
-            - **Best prediction shown**: Even with low confidence, shows the model's top guess
-            - **Classification confidence**: May be low (5-15%) - this is the model's uncertainty
-            - Use **Nestperts** to verify and correct species identifications
+            - **7 color-coded species groups**: Pelican, Tern, Gull, Shorebird, Cormorant, Heron, Wader
+            - **Best prediction shown**: Model's top guess for each bird
+            - Use **Nestperts** to verify and refine species identifications
             - Species shown as **4-letter codes** (e.g., BRPE = Brown Pelican)
 
             ### Understanding Confidence
             - **Detection confidence (70-80%)**: How sure the model is there's a bird
-            - **Classification confidence (5-15%)**: Which of 25 species is most likely
-            - Low classification confidence is normal for a 25-class problem
-            - Random guessing = 4%, so 10% is better than random
+            - **Classification confidence**: Which species group is most likely
+            - Higher confidence = more certain identification
 
             ### SAHI Processing
             - Automatically slices large images into overlapping tiles
@@ -486,8 +463,8 @@ if image_to_process:
             - Intelligent merging removes duplicate detections
 
             ### Technical Details
-            - **Detection Model**: YOLO26 (1024×1024 input)
-            - **Classification Model**: ResNet-based (224×224 input)
+            - **Detection Model**: Swift YOLO26 (1024×1024 input)
+            - **Classification Model**: Swift ResNet-based (224×224 input)
             - **NMS Threshold**: 50% IoU
             - **Training Data**: Gulf Coast avian monitoring 2010-2021
             """)
