@@ -70,6 +70,9 @@ models/*
 .ipynb_checkpoints/
 *.ipynb
 
+# Eval run results (per-run artifacts; keep only .gitkeep)
+server/evals/results/*.json
+
 # Logs and temporary files
 *.log
 logs/
