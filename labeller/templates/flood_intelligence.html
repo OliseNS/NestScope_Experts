@@ -17,24 +17,37 @@
     }
 
     /* Header */
+    @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=Crimson+Pro:wght@400;600;700&display=swap');
+
+    /* Mission Command Header */
+    @keyframes scan-line {
+        0% { transform: translateX(-100%); }
+        100% { transform: translateX(100%); }
+    }
+
+    @keyframes pulse-live {
+        0%, 100% { opacity: 1; transform: scale(1); }
+        50% { opacity: 0.6; transform: scale(0.95); }
+    }
+
     .flood-header {
-        font-family: 'Space Mono', monospace;
-        font-size: 2.5rem;
-        font-weight: 700;
-        color: #00D9FF;
-        letter-spacing: -0.02em;
+        font-family: 'IBM Plex Mono', monospace;
+        font-size: 2rem;
+        font-weight: 600;
+        color: #00aaff;
+        letter-spacing: 0.02em;
         margin-bottom: 0.5rem;
-        text-shadow: 0 0 20px rgba(0, 217, 255, 0.3);
         text-align: center;
     }
 
     .flood-subtitle {
-        font-family: 'Inter', sans-serif;
-        font-size: 1rem;
-        color: #94A3B8;
-        font-weight: 300;
+        font-family: 'IBM Plex Mono', monospace;
+        font-size: 0.85rem;
+        color: #8899bb;
+        font-weight: 400;
         margin-bottom: 2rem;
         text-align: center;
+        letter-spacing: 0.05em;
     }
 
     /* Search Bar */
@@ -190,6 +203,59 @@
         margin-bottom: 1rem;
         padding-bottom: 1rem;
         border-bottom: 1px solid rgba(0, 217, 255, 0.2);
+    }
+
+    /* Map Legend */
+    .map-legend {
+        background: rgba(30, 41, 59, 0.95);
+        border: 1px solid rgba(136, 153, 187, 0.2);
+        border-radius: 8px;
+        padding: 1rem;
+        margin-bottom: 1rem;
+    }
+
+    .map-legend-title {
+        font-family: 'IBM Plex Mono', monospace;
+        font-size: 0.75rem;
+        font-weight: 600;
+        color: #e5e5e5;
+        margin-bottom: 0.75rem;
+        letter-spacing: 0.05em;
+    }
+
+    .legend-items {
+        display: flex;
+        gap: 1.5rem;
+        flex-wrap: wrap;
+    }
+
+    .legend-item {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        font-family: 'IBM Plex Mono', monospace;
+        font-size: 0.7rem;
+        color: #94A3B8;
+    }
+
+    .legend-dot {
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+        border: 2px solid #fff;
+    }
+
+    /* Section Headers */
+    .section-header {
+        font-family: 'IBM Plex Mono', monospace;
+        font-size: 0.7rem;
+        font-weight: 600;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+        margin: 1.5rem 0 1rem 0;
+        padding-bottom: 0.5rem;
+        border-bottom: 1px solid rgba(136, 153, 187, 0.2);
+        color: #8899bb;
     }
 
     /* Nowcast Card */
@@ -825,9 +891,9 @@
 {% block content %}
 <div class="flood-container">
     <!-- Header -->
-    <div class="flood-header">FLOOD INTELLIGENCE CENTER</div>
+    <div class="flood-header">Coastal Flood Intelligence</div>
     <div class="flood-subtitle">
-        Physics-Based Nowcasting • Multi-Modal Data Fusion • Extreme Value Analysis
+        Real-time water level monitoring and risk assessment
     </div>
 
     <!-- Search Bar -->
@@ -851,12 +917,36 @@
         <div class="flood-grid">
             <!-- Left: Map -->
             <div class="map-section">
+                <div class="map-legend">
+                    <div class="map-legend-title">Long-term Flood Risk (click marker for current conditions)</div>
+                    <div class="legend-items">
+                        <div class="legend-item">
+                            <span class="legend-dot" style="background: #00FF00;"></span>
+                            <span>Low</span>
+                        </div>
+                        <div class="legend-item">
+                            <span class="legend-dot" style="background: #FFFF00;"></span>
+                            <span>Moderate</span>
+                        </div>
+                        <div class="legend-item">
+                            <span class="legend-dot" style="background: #FFA500;"></span>
+                            <span>High</span>
+                        </div>
+                        <div class="legend-item">
+                            <span class="legend-dot" style="background: #FF4B4B;"></span>
+                            <span>Critical</span>
+                        </div>
+                    </div>
+                </div>
                 <div class="map-container" id="map"></div>
             </div>
 
             <!-- Right: Selected Colony Detail -->
             <div class="detail-panel">
                 <div class="detail-header" id="selected-colony-name">Select a Colony</div>
+
+                <!-- Real-Time Monitoring -->
+                <div class="section-header">Current Conditions</div>
 
                 <!-- Nowcast Cards -->
                 <div id="nowcast-section">
@@ -911,7 +1001,6 @@
 
                 <!-- Water Level Chart Placeholder -->
                 <div class="chart-placeholder">
-                    <div class="chart-placeholder-icon">📊</div>
                     <div class="chart-placeholder-title">
                         WATER LEVEL NOWCAST & FORECAST
                         <span class="info-icon" style="margin-left: 0.5rem;" onclick="event.stopPropagation(); openInfoModal('chart');">
@@ -932,10 +1021,13 @@
                     </button>
                 </div>
 
+                <!-- Risk Assessment -->
+                <div class="section-header">Risk Assessment</div>
+
                 <!-- Station Info -->
                 <div class="station-info" id="station-info">
                     <div class="station-header">
-                        📡 Data Sources & Risk Assessment
+                        Data Sources
                         <span class="info-icon" onclick="openInfoModal('risk')">
                             <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
@@ -952,11 +1044,11 @@
                             <span class="station-item-value" id="station-distance">--</span>
                         </div>
                         <div class="station-item">
-                            <span class="station-item-label">Risk Level</span>
+                            <span class="station-item-label">Long-term Risk</span>
                             <span class="station-item-value" id="risk-level-badge">--</span>
                         </div>
                         <div class="station-item">
-                            <span class="station-item-label">FEMA Zone</span>
+                            <span class="station-item-label">FEMA Flood Zone</span>
                             <span class="station-item-value" id="fema-zone-badge">--</span>
                         </div>
                     </div>
@@ -1156,6 +1248,7 @@
         // Add markers and collect bounds
         const bounds = [];
         zones.forEach(zone => {
+            // Color by long-term risk level
             const color = zone.risk_level === 'CRITICAL' ? '#FF4B4B' :
                          zone.risk_level === 'HIGH' ? '#FFA500' :
                          zone.risk_level === 'MODERATE' ? '#FFFF00' : '#00FF00';
@@ -1170,7 +1263,7 @@
             }).addTo(map);
 
             marker.on('click', () => selectColony(zone));
-            marker.bindPopup(`<strong>${zone.colony_name}</strong><br>Risk: ${zone.risk_score}`);
+            marker.bindPopup(`<strong>${zone.colony_name}</strong><br>Long-term Risk: ${zone.risk_level}<br>Click for current conditions`);
             markers.push(marker);
             bounds.push([zone.latitude, zone.longitude]);
         });
@@ -1734,7 +1827,7 @@
                 title: 'Real-Time Water Level',
                 html: `
                     <div class="info-section">
-                        <div class="info-section-title">📡 What is this?</div>
+                        <div class="info-section-title"> What is this?</div>
                         <div class="info-section-text">
                             Live measurements from NOAA CO-OPS (Center for Operational Oceanographic Products and Services) tide gauges,
                             updated every <strong>6 minutes</strong>. These are real-time observations of water height at the nearest monitoring station.
@@ -1761,7 +1854,7 @@
                 title: 'Meteorological Surge',
                 html: `
                     <div class="info-section">
-                        <div class="info-section-title">🌊 What is Storm Surge?</div>
+                        <div class="info-section-title"> What is Storm Surge?</div>
                         <div class="info-section-text">
                             Meteorological surge is the difference between <strong>observed</strong> water levels and <strong>predicted</strong> astronomical tides.
                             This isolates the weather-driven component (wind, pressure) from normal tides.
@@ -1819,7 +1912,7 @@
                 title: 'Nowcast & Forecast Methodology',
                 html: `
                     <div class="info-section">
-                        <div class="info-section-title">📊 Chart Components</div>
+                        <div class="info-section-title"> Chart Components</div>
                         <div class="info-section-text">
                             <strong style="color: #00D9FF;">Blue Line (Observed):</strong> Real-time NOAA tide gauge data from the <strong>past 24 hours</strong><br><br>
                             <strong style="color: #FFA500;">Orange Dashed Line (Forecast):</strong> Harmonic tide predictions for <strong>next 72 hours</strong>, adjusted for current meteorological conditions<br><br>
@@ -1828,7 +1921,7 @@
                         </div>
                     </div>
                     <div class="info-section">
-                        <div class="info-section-title">🌊 Flood Thresholds</div>
+                        <div class="info-section-title"> Flood Thresholds</div>
                         <ul class="info-list">
                             <li><strong style="color: #00FF00;">NORMAL (0.0m):</strong> No flooding expected</li>
                             <li><strong style="color: #FFFF00;">MINOR FLOODING (0.6m):</strong> Nuisance flooding, road closures</li>
@@ -1850,14 +1943,14 @@
                 title: 'Multi-Modal Risk Fusion',
                 html: `
                     <div class="info-section">
-                        <div class="info-section-title">⚠️ Compound Risk Score</div>
+                        <div class="info-section-title"> Compound Risk Score</div>
                         <div class="info-section-text">
                             The risk level (0-100) combines <strong>six independent data sources</strong> using a weighted fusion algorithm
                             developed for coastal hazard assessment.
                         </div>
                     </div>
                     <div class="info-section">
-                        <div class="info-section-title">📊 Risk Factors & Weights</div>
+                        <div class="info-section-title"> Risk Factors & Weights</div>
                         <ul class="info-list">
                             <li><strong>FEMA Flood Zones (30%):</strong> Official 100-year floodplain designation</li>
                             <li><strong>Coastal Erosion (25%):</strong> USGS shoreline change rates (m/year)</li>
@@ -1868,7 +1961,7 @@
                         </ul>
                     </div>
                     <div class="info-section">
-                        <div class="info-section-title">🎯 NOAA Station</div>
+                        <div class="info-section-title"> NOAA Station</div>
                         <div class="info-section-text">
                             The nearest NOAA tide gauge station to this colony, used for real-time water level monitoring.
                             Distance is calculated using haversine formula (great-circle distance).

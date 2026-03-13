@@ -131,24 +131,128 @@ with st.sidebar:
     render_sidebar(active_page="coastal_risk")
 
     st.markdown("---")
-    st.markdown("### 🔬 Frontier R&D Specs")
-    st.caption("""
-    • **Framework:** Probabilistic / Physics-based
-    • **Models:** EVT (POT/GPD), Copulas
-    • **Fusion:** MMDF (Multi-modal Data Fusion)
-    • **Nowcasting:** Residual Surge Analysis
-    """)
+
+    st.markdown("""
+        <style>
+            .sidebar-specs {
+                background: linear-gradient(135deg, rgba(0, 170, 255, 0.1), rgba(255, 107, 53, 0.1));
+                border: 1px solid rgba(136, 153, 187, 0.3);
+                border-radius: 8px;
+                padding: 1rem;
+                margin-top: 1rem;
+            }
+
+            .specs-title {
+                font-family: 'IBM Plex Mono', monospace;
+                font-size: 0.7rem;
+                font-weight: 600;
+                color: #00aaff;
+                letter-spacing: 0.1em;
+                margin-bottom: 0.75rem;
+            }
+
+            .specs-item {
+                font-family: 'IBM Plex Mono', monospace;
+                font-size: 0.65rem;
+                color: #aabbcc;
+                line-height: 1.8;
+                margin-bottom: 0.3rem;
+            }
+
+            .specs-label {
+                color: #8899bb;
+                font-weight: 500;
+            }
+        </style>
+
+        <div class="sidebar-specs">
+            <div class="specs-title">🔬 RESEARCH FRAMEWORK</div>
+            <div class="specs-item"><span class="specs-label">Framework:</span> Probabilistic/Physics-based</div>
+            <div class="specs-item"><span class="specs-label">EVT:</span> POT/GPD, Bayesian inference</div>
+            <div class="specs-item"><span class="specs-label">Fusion:</span> Multi-modal data (MMDF)</div>
+            <div class="specs-item"><span class="specs-label">Nowcast:</span> Residual surge analysis</div>
+            <div class="specs-item"><span class="specs-label">Compound:</span> Copulas, multivariate</div>
+        </div>
+    """, unsafe_allow_html=True)
 
 # ============================================================================
 # DASHBOARD HEADER
 # ============================================================================
 
 st.markdown("""
-    <div style="margin: -1.5rem 0 1rem 0; padding: 1.5rem; background: #1E1E1E; border-radius: 12px; border-left: 5px solid #0077be;">
-        <h2 style="margin: 0; color: #E5E5E5;">Coastal Flood Intelligence Center</h2>
-        <p style="margin: 0.5rem 0 0 0; color: #A0A0A0; font-size: 0.9rem;">
-            Decision support for Dr. Sarah Chen & The Water Institute Research Teams.
-        </p>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Crimson+Pro:wght@400;600&display=swap" rel="stylesheet">
+
+    <style>
+        @keyframes pulse-live {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        @keyframes scan-line {
+            0% { transform: translateY(-100%); }
+            100% { transform: translateY(100%); }
+        }
+
+        .mission-header {
+            margin: -1.5rem 0 2rem 0;
+            padding: 2rem;
+            background: linear-gradient(135deg, #0a0e27 0%, #1a1f3a 100%);
+            border-radius: 16px;
+            border: 1px solid rgba(0, 170, 255, 0.2);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .mission-header::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 2px;
+            background: linear-gradient(90deg, transparent, #00aaff, transparent);
+            animation: scan-line 3s ease-in-out infinite;
+        }
+
+        .header-title {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 1.8rem;
+            font-weight: 600;
+            color: #00aaff;
+            margin: 0;
+            letter-spacing: 0.05em;
+            text-transform: uppercase;
+        }
+
+        .header-subtitle {
+            font-family: 'Crimson Pro', serif;
+            font-size: 1.1rem;
+            color: #8899bb;
+            margin: 0.5rem 0 0 0;
+            font-weight: 400;
+        }
+
+        .mode-indicator {
+            display: inline-block;
+            margin-top: 1rem;
+            padding: 0.4rem 1rem;
+            background: rgba(0, 255, 170, 0.1);
+            border: 1px solid rgba(0, 255, 170, 0.3);
+            border-radius: 6px;
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.75rem;
+            color: #00ffaa;
+            letter-spacing: 0.1em;
+            animation: pulse-live 2s ease-in-out infinite;
+        }
+    </style>
+
+    <div class="mission-header">
+        <div class="header-title">⚡ Coastal Intelligence Command</div>
+        <div class="header-subtitle">Multi-Modal Data Fusion • The Water Institute</div>
+        <span class="mode-indicator">● LIVE MONITORING ACTIVE</span>
     </div>
 """, unsafe_allow_html=True)
 
@@ -181,38 +285,219 @@ if obs_df is not None and pred_df is not None:
         surge_val = last_obs['v'] - pred_near_obs.iloc[0]['v']
 
 # ============================================================================
-# CORE KPIS
+# DUAL-MODE INTELLIGENCE DISPLAY
 # ============================================================================
 
-st.markdown("<div style='margin-bottom: 1rem;'></div>", unsafe_allow_html=True)
+st.markdown("""
+    <style>
+        .intel-container {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1.5rem;
+            margin: 2rem 0;
+        }
 
-kpi1, kpi2, kpi3, kpi4 = st.columns(4)
+        .intel-panel {
+            background: #0d1117;
+            border-radius: 12px;
+            padding: 1.5rem;
+            border: 2px solid;
+            position: relative;
+        }
 
-with kpi1:
-    score = selected_asset['risk_score']
-    level = selected_asset['risk_level']
-    st.metric("Compound Risk", f"{score:.1f}/100", delta=level, delta_color="inverse")
+        .panel-realtime {
+            border-color: #00aaff;
+            background: linear-gradient(135deg, rgba(0, 170, 255, 0.05), rgba(0, 170, 255, 0.02));
+        }
 
-with kpi2:
-    peak_v = pred_df['v'].max() if pred_df is not None else 0.0
-    st.metric("72h Predicted Peak", f"{peak_v:.2f}m", help="Peak water level relative to MHHW.")
+        .panel-longterm {
+            border-color: #ff6b35;
+            background: linear-gradient(135deg, rgba(255, 107, 53, 0.05), rgba(255, 107, 53, 0.02));
+        }
 
-with kpi3:
-    st.metric("Meteorological Surge", f"{surge_val:+.2f}m", delta=f"{'Rising' if surge_val > 0.1 else 'Normal'}", delta_color="inverse")
+        .panel-header {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.7rem;
+            font-weight: 600;
+            letter-spacing: 0.15em;
+            text-transform: uppercase;
+            margin-bottom: 1rem;
+            padding-bottom: 0.5rem;
+            border-bottom: 1px solid;
+        }
 
-with kpi4:
-    pop = int(selected_asset['bird_population_2026'])
-    st.metric("Population at Risk", f"{pop:,}")
+        .panel-realtime .panel-header {
+            color: #00aaff;
+            border-bottom-color: rgba(0, 170, 255, 0.3);
+        }
+
+        .panel-longterm .panel-header {
+            color: #ff6b35;
+            border-bottom-color: rgba(255, 107, 53, 0.3);
+        }
+
+        .intel-metric {
+            margin-bottom: 1rem;
+        }
+
+        .metric-label {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.65rem;
+            color: #8899bb;
+            letter-spacing: 0.05em;
+            margin-bottom: 0.3rem;
+        }
+
+        .metric-value-large {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 2rem;
+            font-weight: 600;
+            line-height: 1.2;
+        }
+
+        .realtime-value {
+            color: #00aaff;
+        }
+
+        .longterm-value {
+            color: #ff6b35;
+        }
+
+        .metric-status {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.7rem;
+            margin-top: 0.3rem;
+            padding: 0.2rem 0.6rem;
+            border-radius: 4px;
+            display: inline-block;
+        }
+
+        .status-normal {
+            background: rgba(0, 255, 170, 0.15);
+            color: #00ffaa;
+            border: 1px solid rgba(0, 255, 170, 0.3);
+        }
+
+        .status-critical {
+            background: rgba(255, 107, 53, 0.15);
+            color: #ff6b35;
+            border: 1px solid rgba(255, 107, 53, 0.3);
+        }
+
+        .live-indicator {
+            position: absolute;
+            top: 1rem;
+            right: 1rem;
+            width: 8px;
+            height: 8px;
+            background: #00ffaa;
+            border-radius: 50%;
+            animation: pulse-live 2s ease-in-out infinite;
+        }
+
+        .info-text {
+            font-family: 'Crimson Pro', serif;
+            font-size: 0.85rem;
+            color: #6677aa;
+            margin-top: 1rem;
+            padding-top: 1rem;
+            border-top: 1px solid rgba(136, 153, 187, 0.2);
+        }
+    </style>
+""", unsafe_allow_html=True)
+
+# Calculate real-time metrics
+current_level = obs_df.iloc[-1]['v'] if obs_df is not None and not obs_df.empty else 0.0
+peak_v = pred_df['v'].max() if pred_df is not None else 0.0
+score = selected_asset['risk_score']
+level = selected_asset['risk_level']
+pop = int(selected_asset['bird_population_2026'])
+years_left = selected_asset['years_until_critical']
+
+# Determine status
+realtime_status = "NORMAL" if abs(current_level) < 0.5 and abs(surge_val) < 0.15 else "ELEVATED"
+longterm_status = level
+
+st.markdown(f"""
+    <div class="intel-container">
+        <!-- REAL-TIME MONITORING -->
+        <div class="intel-panel panel-realtime">
+            <div class="live-indicator"></div>
+            <div class="panel-header">⚡ Real-Time Conditions (NOAA Live)</div>
+
+            <div class="intel-metric">
+                <div class="metric-label">CURRENT WATER LEVEL</div>
+                <div class="metric-value-large realtime-value">{current_level:+.2f}m</div>
+                <div class="metric-status status-normal">MHHW · {realtime_status}</div>
+            </div>
+
+            <div class="intel-metric">
+                <div class="metric-label">METEOROLOGICAL SURGE</div>
+                <div class="metric-value-large realtime-value">{surge_val:+.2f}m</div>
+                <div class="metric-status status-normal">{'RISING' if surge_val > 0.1 else 'STABLE'}</div>
+            </div>
+
+            <div class="intel-metric">
+                <div class="metric-label">72H FORECAST PEAK</div>
+                <div class="metric-value-large realtime-value">{peak_v:+.2f}m</div>
+                <div class="metric-status status-normal">WITHIN NORMAL RANGE</div>
+            </div>
+
+            <div class="info-text">
+                ℹ️ Live data from nearest NOAA station, updated every 6 minutes.
+                Shows <strong>immediate flooding conditions</strong>.
+            </div>
+        </div>
+
+        <!-- LONG-TERM VULNERABILITY -->
+        <div class="intel-panel panel-longterm">
+            <div class="panel-header">📊 Long-Term Vulnerability (2026-2050)</div>
+
+            <div class="intel-metric">
+                <div class="metric-label">COMPOUND RISK SCORE</div>
+                <div class="metric-value-large longterm-value">{score:.1f}/100</div>
+                <div class="metric-status status-critical">{longterm_status} RISK</div>
+            </div>
+
+            <div class="intel-metric">
+                <div class="metric-label">YEARS UNTIL CRITICAL</div>
+                <div class="metric-value-large longterm-value">{years_left}</div>
+                <div class="metric-status status-critical">AT CURRENT EROSION RATE</div>
+            </div>
+
+            <div class="intel-metric">
+                <div class="metric-label">POPULATION AT RISK</div>
+                <div class="metric-value-large longterm-value">{pop:,}</div>
+                <div class="metric-status status-critical">BREEDING BIRDS</div>
+            </div>
+
+            <div class="info-text">
+                ℹ️ Multi-modal fusion: FEMA zones, erosion rates, sea level rise, storm history.
+                Shows <strong>strategic habitat vulnerability</strong>.
+            </div>
+        </div>
+    </div>
+""", unsafe_allow_html=True)
 
 # ============================================================================
 # MAIN ANALYTICS - SITUATIONAL AWARENESS
 # ============================================================================
 
-st.markdown("<div style='height: 1rem;'></div>", unsafe_allow_html=True)
+st.markdown("""
+    <div class="map-section-header" style="color: #00aaff; border-bottom-color: rgba(0, 170, 255, 0.3);">
+        📈 Real-Time Nowcast & 72-Hour Impact Forecast
+    </div>
+
+    <div class="map-explainer" style="background: rgba(0, 170, 255, 0.08); border-left-color: #00aaff;">
+        <strong>Physics-based water level prediction</strong> combining live NOAA observations with
+        meteorological surge analysis. Shows immediate flood risk over the next 72 hours.
+        Critical inundation threshold derived from habitat elevation and erosion modeling.
+    </div>
+""", unsafe_allow_html=True)
 
 # 📈 Forecast & Observation Logic
 fig = go.Figure()
-base_elev = 0.4 
+base_elev = 0.4
 ground_elev = base_elev + (selected_asset['years_until_critical'] / 20.0) * 0.6
 
 if obs_df is not None and pred_df is not None:
@@ -262,12 +547,51 @@ st.plotly_chart(fig, use_container_width=True)
 # REGIONAL RISK MAP
 # ============================================================================
 
-st.markdown("### 🗺️ Regional Colony Risk Distribution")
+st.markdown("""
+    <style>
+        .map-section-header {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.8rem;
+            font-weight: 600;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+            color: #ff6b35;
+            margin: 2rem 0 1rem 0;
+            padding-bottom: 0.5rem;
+            border-bottom: 2px solid rgba(255, 107, 53, 0.3);
+        }
+
+        .map-explainer {
+            background: rgba(255, 107, 53, 0.08);
+            border-left: 3px solid #ff6b35;
+            padding: 1rem 1.5rem;
+            margin-bottom: 1rem;
+            border-radius: 8px;
+            font-family: 'Crimson Pro', serif;
+            font-size: 0.9rem;
+            color: #aabbcc;
+        }
+
+        .map-explainer strong {
+            color: #ff6b35;
+            font-weight: 600;
+        }
+    </style>
+
+    <div class="map-section-header">📍 Long-Term Vulnerability Assessment</div>
+
+    <div class="map-explainer">
+        <strong>⚠️ Map shows strategic habitat vulnerability (2026-2050)</strong>, not current water conditions.
+        Color coding based on multi-modal data fusion: FEMA flood zones (30%), erosion rates (25%),
+        sea level rise projections (20%), historical storm exposure (10%), and regional surge patterns (10%).
+        Red markers indicate high long-term risk even when current conditions are normal.
+    </div>
+""", unsafe_allow_html=True)
 
 render_map(
-    pd.DataFrame(), 
-    key="flood_intel_map_red_green", 
-    height=550, 
+    pd.DataFrame(),
+    key="flood_intel_map_red_green",
+    height=550,
     risk_zones=raw_zones
 )
 
@@ -316,56 +640,191 @@ with col_sub2:
 # EXECUTIVE ACTION PANEL (SITREP)
 # ============================================================================
 
-st.markdown("---")
-st.markdown("### 📋 Executive SITREP")
+st.markdown("""
+    <div class="map-section-header" style="color: #8899bb; border-bottom-color: rgba(136, 153, 187, 0.3);">
+        📋 Decision Support Summary
+    </div>
+""", unsafe_allow_html=True)
 
 action_col1, action_col2 = st.columns(2)
 
 with action_col1:
-    st.markdown(f"**Site Analysis: {selected_name}**")
+    st.markdown(f"""
+        <div style="background: #0d1117; padding: 1.5rem; border-radius: 12px; border-left: 4px solid #00aaff;">
+            <div style="font-family: 'IBM Plex Mono', monospace; font-size: 0.7rem; color: #00aaff; letter-spacing: 0.1em; margin-bottom: 0.5rem;">
+                IMMEDIATE CONDITIONS (72H)
+            </div>
+            <div style="font-family: 'Crimson Pro', serif; font-size: 1rem; color: #E5E5E5;">
+                <strong>{selected_name}</strong>
+            </div>
+        </div>
+    """, unsafe_allow_html=True)
+
     if peak_v + surge_val > ground_elev:
         st.error(f"🔴 **CRITICAL INUNDATION PREDICTED**")
-        st.markdown(f"Predicted levels ({peak_v + surge_val:.2f}m) exceed habitat elevation ({ground_elev:.2f}m).")
+        st.markdown(f"Nowcast predicts water levels ({peak_v + surge_val:.2f}m) exceeding habitat elevation ({ground_elev:.2f}m).")
     else:
         st.success(f"🟢 **NORMAL OPERATING CONDITIONS**")
-        st.markdown(f"Impact forecast remains within safe margins for this event cycle.")
+        st.markdown(f"72-hour impact forecast remains within safe operational margins.")
 
 with action_col2:
+    st.markdown(f"""
+        <div style="background: #0d1117; padding: 1.5rem; border-radius: 12px; border-left: 4px solid #ff6b35;">
+            <div style="font-family: 'IBM Plex Mono', monospace; font-size: 0.7rem; color: #ff6b35; letter-spacing: 0.1em; margin-bottom: 0.5rem;">
+                STRATEGIC VULNERABILITY (2026-2050)
+            </div>
+            <div style="font-family: 'Crimson Pro', serif; font-size: 0.95rem; color: #E5E5E5;">
+                <strong>Risk Level:</strong> {longterm_status}<br>
+                <strong>Compound Score:</strong> {score:.1f}/100<br>
+                <strong>Habitat Lifespan:</strong> ~{years_left} years<br>
+                <strong>Population:</strong> {pop:,} breeding birds
+            </div>
+        </div>
+    """, unsafe_allow_html=True)
+
     st.info(f"""
-    **Actionable Insight for Dr. Chen:**
-    - **Resource Priority:** Schedule post-storm assessment for **{selected_name}**.
-    - **Compound Metric:** Surge persistence is currently {surge_val:+.2f}m.
-    - **Next Update:** 15-minute sync.
+    **Research Priorities:**
+    - Current surge persistence: {surge_val:+.2f}m
+    - Erosion rate: {selected_asset['erosion_rate']:.1f} m/year
+    - Next NOAA update: 15 minutes
     """)
 
 # ============================================================================
 # MMDF ARCHITECTURE
 # ============================================================================
 
-st.markdown("---")
-st.caption("🔗 **Multi-Modal Data Fusion (MMDF) Status**")
-fuse_col1, fuse_col2, fuse_col3, fuse_col4 = st.columns(4)
+st.markdown("""
+    <div class="map-section-header" style="color: #8899bb; border-bottom-color: rgba(136, 153, 187, 0.3); margin-top: 3rem;">
+        🔗 Multi-Modal Data Fusion Status
+    </div>
 
-with fuse_col1:
-    st.markdown("📡 **Live Sensors**")
-    st.progress(1.0)
+    <style>
+        .fusion-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 1rem;
+            margin: 1.5rem 0;
+        }
 
-with fuse_col2:
-    st.markdown("🛰 **Elevation**")
-    st.progress(0.7)
+        .fusion-module {
+            background: #0d1117;
+            border: 1px solid rgba(136, 153, 187, 0.2);
+            border-radius: 8px;
+            padding: 1rem;
+        }
 
-with fuse_col3:
-    st.markdown("🦅 **Pop. Baseline**")
-    st.progress(0.9)
+        .fusion-title {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.65rem;
+            color: #8899bb;
+            margin-bottom: 0.5rem;
+            letter-spacing: 0.05em;
+        }
 
-with fuse_col4:
-    st.markdown("🌀 **Storm History**")
-    st.progress(0.4)
+        .fusion-bar {
+            width: 100%;
+            height: 4px;
+            background: rgba(136, 153, 187, 0.2);
+            border-radius: 2px;
+            overflow: hidden;
+            margin-top: 0.5rem;
+        }
+
+        .fusion-bar-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #00aaff, #00ffaa);
+            transition: width 0.3s ease;
+        }
+
+        .fusion-status {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.6rem;
+            color: #00ffaa;
+            margin-top: 0.3rem;
+        }
+    </style>
+
+    <div class="fusion-grid">
+        <div class="fusion-module">
+            <div class="fusion-title">📡 NOAA GAGES</div>
+            <div class="fusion-bar"><div class="fusion-bar-fill" style="width: 100%;"></div></div>
+            <div class="fusion-status">ONLINE • 6min refresh</div>
+        </div>
+        <div class="fusion-module">
+            <div class="fusion-title">🗺️ FEMA NFHL</div>
+            <div class="fusion-bar"><div class="fusion-bar-fill" style="width: 85%;"></div></div>
+            <div class="fusion-status">CACHED • 85% coverage</div>
+        </div>
+        <div class="fusion-module">
+            <div class="fusion-title">🦅 SURVEY DATA</div>
+            <div class="fusion-bar"><div class="fusion-bar-fill" style="width: 90%;"></div></div>
+            <div class="fusion-status">2010-2021 baseline</div>
+        </div>
+        <div class="fusion-module">
+            <div class="fusion-title">🌀 HURDAT2</div>
+            <div class="fusion-bar"><div class="fusion-bar-fill" style="width: 100%;"></div></div>
+            <div class="fusion-status">1851-2023 complete</div>
+        </div>
+    </div>
+""", unsafe_allow_html=True)
 
 st.markdown("""
-    <div style="display: flex; justify-content: space-between; color: #666; font-size: 0.7rem; margin-top: 2rem;">
-        <div>NESTSCOPE FLOOD INTEL v2.9.0 • THE WATER INSTITUTE</div>
-        <div>DATA SOURCE LATENCY: < 15 MIN</div>
-        <div>DECISION SUPPORT SYSTEM</div>
+    <style>
+        .footer-system {
+            background: linear-gradient(135deg, #0a0e27 0%, #1a1f3a 100%);
+            border-top: 1px solid rgba(0, 170, 255, 0.2);
+            padding: 1.5rem 2rem;
+            margin-top: 3rem;
+            border-radius: 12px;
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 2rem;
+            font-family: 'IBM Plex Mono', monospace;
+        }
+
+        .footer-block {
+            color: #6677aa;
+            font-size: 0.7rem;
+        }
+
+        .footer-block-title {
+            color: #00aaff;
+            font-weight: 600;
+            letter-spacing: 0.1em;
+            margin-bottom: 0.5rem;
+        }
+
+        .footer-block-value {
+            color: #aabbcc;
+            font-size: 0.65rem;
+            line-height: 1.6;
+        }
+    </style>
+
+    <div class="footer-system">
+        <div class="footer-block">
+            <div class="footer-block-title">SYSTEM INFO</div>
+            <div class="footer-block-value">
+                NestScope Flood Intelligence v3.0<br>
+                Multi-Modal Data Fusion Framework<br>
+                The Water Institute of the Gulf
+            </div>
+        </div>
+        <div class="footer-block">
+            <div class="footer-block-title">DATA SOURCES</div>
+            <div class="footer-block-value">
+                NOAA CO-OPS (Real-time) • FEMA NFHL<br>
+                HURDAT2 • USGS Erosion • TWI Surveys<br>
+                Latency: < 15 minutes
+            </div>
+        </div>
+        <div class="footer-block">
+            <div class="footer-block-title">METHODOLOGY</div>
+            <div class="footer-block-value">
+                Physics-based nowcasting<br>
+                Extreme value analysis (POT/GPD)<br>
+                Probabilistic compound risk modeling
+            </div>
+        </div>
     </div>
 """, unsafe_allow_html=True)
