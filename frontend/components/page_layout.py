@@ -169,6 +169,18 @@ def render_sidebar(active_page: str = "home"):
         help="Real-time coastal flood risk monitoring (Expert tool)"
     )
 
+    # Quality & Evals section
+    render_sidebar_section("Quality & Evals")
+
+    if st.button(
+        "📊 NestEval",
+        use_container_width=True,
+        help="LLM evaluation dashboard — score NestChat answer quality",
+        type="primary" if active_page == "nesteval" else "secondary",
+        key="sb_nav_eval"
+    ):
+        st.switch_page("pages/07_eval_dashboard.py")
+
     # System Status section
     render_sidebar_section("System Status")
     render_service_status_link()

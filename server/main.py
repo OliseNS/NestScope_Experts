@@ -4847,6 +4847,141 @@ async def list_edge_scans(limit: int = 20):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+# ============================================================================
+# NESTEVAL — DeepEval LLM Evaluation Endpoints
+# ============================================================================
+#
+# WHAT IS DEEPEVAL?
+# DeepEval is an LLM evaluation framework. Think of it like a "judge LLM":
+# it reads NestChat's answers and scores them on two axes:
+#   1. Answer Relevancy  — Did the answer actually answer the question?
+#   2. Faithfulness      — Is the answer based on the retrieved data (no hallucination)?
+#
+# WHY BACKGROUND TASKS?
+# Each evaluation involves multiple LLM API calls (for both NestChat AND scoring).
+# This can take 2-5 minutes for 8 test cases. Using BackgroundTasks means the
+# POST /eval/run endpoint returns immediately while evals run in the background.
+# The frontend polls /eval/status every few seconds to check progress.
+#
+# FLOW:
+#   Browser "Run" button
+#       → POST /eval/run  (returns immediately with run_id)
+#       → Background thread runs EvalRunner.run()
+#       → Frontend polls GET /eval/status every 3s
+#       → When complete, frontend calls GET /eval/results
+# ============================================================================
+
+# Global state for tracking the current eval run.
+# This is a simple in-memory dict — fine for a single-server setup.
+# If you scale to multiple servers, you'd use Redis or a database instead.
+eval_state: dict = {
+    "running": False,        # Is an eval currently in progress?
+    "progress": 0,           # How many test cases have completed
+    "total": 0,              # Total number of test cases
+    "current_test": "",      # Description of the test currently running
+    "run_id": None,          # Unique ID for the current run (YYYYMMDD_HHMMSS)
+    "error": None,           # Error message if something went wrong
+}
+
+
+def run_eval_background():
+    """
+    Background function that runs the full evaluation suite.
+    Called via FastAPI's BackgroundTasks — runs in a separate thread.
+    """
+    try:
+        # Import here (inside function) to avoid circular imports at module load time.
+        # The EvalRunner needs chatbot and client, which are defined above in this file.
+        from server.evals.runner import EvalRunner
+
+        runner = EvalRunner(
+            chatbot=chatbot,          # The SQLChatbot instance defined earlier in this file
+            openai_client=client,     # The OpenRouter-backed OpenAI client
+            model_name=config['model']['name'],
+        )
+        runner.run(eval_state)
+
+    except Exception as e:
+        logger.error(f"❌ Eval run failed: {e}")
+        eval_state.update({
+            "running": False,
+            "error": str(e),
+            "current_test": "Failed",
+        })
+
+
+@app.post("/eval/run")
+async def trigger_eval_run(background_tasks: BackgroundTasks):
+    """
+    Trigger a DeepEval evaluation run in the background.
+
+    Returns immediately with a run_id. The eval runs in the background.
+    Poll GET /eval/status to track progress, then GET /eval/results when done.
+
+    Returns 409 Conflict if an eval is already running.
+    """
+    if eval_state["running"]:
+        raise HTTPException(
+            status_code=409,
+            detail="An evaluation is already running. Wait for it to complete."
+        )
+
+    # Schedule the eval to run in the background — this returns immediately
+    background_tasks.add_task(run_eval_background)
+
+    # Set running state optimistically before the thread starts
+    from datetime import timezone as tz
+    run_id = datetime.now(tz.utc).strftime("%Y%m%d_%H%M%S")
+    eval_state.update({
+        "running": True,
+        "run_id": run_id,
+        "progress": 0,
+        "current_test": "Starting...",
+        "error": None,
+    })
+
+    return {"status": "started", "run_id": run_id, "total_tests": len(__import__('server.evals.test_cases', fromlist=['NESTCHAT_TEST_CASES']).NESTCHAT_TEST_CASES)}
+
+
+@app.get("/eval/status")
+async def get_eval_status():
+    """
+    Check the current status of the evaluation run.
+
+    Frontend polls this every 3 seconds during a run.
+    Returns the global eval_state dict.
+    """
+    return {
+        "running": eval_state["running"],
+        "progress": eval_state["progress"],
+        "total": eval_state["total"],
+        "current_test": eval_state["current_test"],
+        "run_id": eval_state["run_id"],
+        "error": eval_state["error"],
+    }
+
+
+@app.get("/eval/results")
+async def get_eval_results():
+    """
+    Get the latest evaluation results.
+
+    Reads server/evals/results/latest.json (written by EvalRunner after each run).
+    Returns 404 if no eval has been run yet.
+    """
+    from pathlib import Path as _Path
+    results_path = _Path(__file__).parent / "evals" / "results" / "latest.json"
+
+    if not results_path.exists():
+        raise HTTPException(
+            status_code=404,
+            detail="No evaluation results found. Run an evaluation first."
+        )
+
+    with open(results_path, "r", encoding="utf-8") as f:
+        return json.load(f)
+
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)
