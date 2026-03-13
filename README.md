@@ -198,6 +198,15 @@ Open your browser and visit:
 - **Backend API Docs**: http://localhost:8000/docs
 - **Nestperts Labeller**: http://localhost:5000
 
+### Verification Steps
+ 1. pip install deepeval (or add to requirements.txt and reinstall)
+ 2. Start server: python -m uvicorn server.main:app --reload
+ 3. Test endpoint: curl -X POST http://localhost:8000/eval/run
+ 4. Check status: curl http://localhost:8000/eval/status
+ 5. Get results: curl http://localhost:8000/eval/results
+ 6. Start frontend: streamlit run frontend/app.py
+ 7. Navigate to the new "Eval Dashboard" page and click "Run Evaluation"
+
 ### First-Time User Guide
 
 1. **Try NestChat**: Go to "Nest Chat" page, ask "What colonies are in Texas?"

@@ -933,3 +933,70 @@ def explore_database() -> Dict[str, Any]:
         return response.json()
     except requests.exceptions.RequestException as e:
         return {"success": False, "error": str(e)}
+
+
+# ============================================================================
+# NESTEVAL — Evaluation API Functions
+# ============================================================================
+
+def run_evaluation() -> Dict[str, Any]:
+    """
+    Trigger a DeepEval evaluation run on the backend.
+
+    The run starts immediately but completes in the background.
+    Poll get_eval_status() to track progress.
+
+    Returns:
+        {"status": "started", "run_id": "...", "total_tests": 8}
+        or {"error": "..."} on failure / 409 if already running
+    """
+    from .config import API_BASE_URL
+    try:
+        response = requests.post(f"{API_BASE_URL}/eval/run", timeout=10)
+        if response.status_code == 409:
+            return {"error": "already_running", "message": response.json().get("detail", "")}
+        response.raise_for_status()
+        return response.json()
+    except requests.exceptions.RequestException as e:
+        return {"error": str(e)}
+
+
+def get_eval_status() -> Dict[str, Any]:
+    """
+    Check the current status of the evaluation run.
+
+    Returns:
+        {
+            "running": bool,
+            "progress": int,   # test cases completed
+            "total": int,      # total test cases
+            "current_test": str,
+            "run_id": str | None,
+            "error": str | None,
+        }
+    """
+    from .config import API_BASE_URL
+    try:
+        response = requests.get(f"{API_BASE_URL}/eval/status", timeout=5)
+        response.raise_for_status()
+        return response.json()
+    except requests.exceptions.RequestException as e:
+        return {"error": str(e), "running": False}
+
+
+def get_eval_results() -> Dict[str, Any]:
+    """
+    Fetch the latest evaluation results.
+
+    Returns the full results JSON from the last completed run,
+    or {"error": "no_results"} if no run has been completed yet.
+    """
+    from .config import API_BASE_URL
+    try:
+        response = requests.get(f"{API_BASE_URL}/eval/results", timeout=10)
+        if response.status_code == 404:
+            return {"error": "no_results"}
+        response.raise_for_status()
+        return response.json()
+    except requests.exceptions.RequestException as e:
+        return {"error": str(e)}
