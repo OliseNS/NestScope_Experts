@@ -153,14 +153,13 @@ def get_stats_from_backend() -> Dict[str, Any]:
         return {"success": False, "error": str(e)}
 
 
-def run_cv_inference(image_file, conf_threshold: float = 0.25, fast_mode: bool = True) -> Dict[str, Any]:
+def run_cv_inference(image_file, conf_threshold: float = 0.25) -> Dict[str, Any]:
     """
     Send an image to the backend for bird detection inference.
 
     Args:
         image_file: File-like object containing image data
         conf_threshold: Confidence threshold for detections
-        fast_mode: Enable fast mode for processing
 
     Returns:
         Dictionary containing detection results
@@ -172,7 +171,7 @@ def run_cv_inference(image_file, conf_threshold: float = 0.25, fast_mode: bool =
         response = requests.post(
             f"{API_BASE_URL}/cv/inference",
             files=files,
-            params={"conf_threshold": conf_threshold, "fast_mode": fast_mode},
+            params={"conf_threshold": conf_threshold},
             timeout=120
         )
         response.raise_for_status()
@@ -205,8 +204,7 @@ def get_backend_config() -> Dict[str, Any]:
                 "max_tokens": 1000
             },
             "cv": {
-                "default_confidence": 0.25,
-                "default_fast_mode": True
+                "default_confidence": 0.25
             }
         }
 
@@ -597,7 +595,7 @@ def get_mosaic_preview(colony_id: str, year: str) -> Optional[str]:
         return None
 
 
-def run_mosaic_inference(colony_id: str, year: str, conf: float = 0.25, fast_mode: bool = True) -> Dict[str, Any]:
+def run_mosaic_inference(colony_id: str, year: str, conf: float = 0.25) -> Dict[str, Any]:
     """
     Run NestVision bird detection on a center tile of a colony COG mosaic.
     Returns detection results with species_summary.
@@ -606,7 +604,7 @@ def run_mosaic_inference(colony_id: str, year: str, conf: float = 0.25, fast_mod
     try:
         r = requests.post(
             f"{API_BASE_URL}/cv/inference/mosaic",
-            params={"colony_id": colony_id, "year": year, "conf": conf, "fast_mode": fast_mode},
+            params={"colony_id": colony_id, "year": year, "conf": conf},
             timeout=90
         )
         r.raise_for_status()

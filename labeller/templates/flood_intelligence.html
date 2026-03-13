@@ -165,6 +165,92 @@
         position: relative;
     }
 
+    .map-fullscreen-btn {
+        position: absolute;
+        top: 10px;
+        right: 10px;
+        z-index: 1000;
+        background: rgba(30, 41, 59, 0.95);
+        border: 1px solid rgba(0, 217, 255, 0.3);
+        border-radius: 6px;
+        padding: 0.5rem;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        color: #00D9FF;
+    }
+
+    .map-fullscreen-btn:hover {
+        background: rgba(0, 217, 255, 0.1);
+        border-color: #00D9FF;
+        transform: scale(1.05);
+    }
+
+    .map-fullscreen-btn svg {
+        width: 20px;
+        height: 20px;
+        display: block;
+    }
+
+    .map-fullscreen-modal {
+        display: none;
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: #0F172A;
+        z-index: 9999;
+        padding: 1rem;
+    }
+
+    .map-fullscreen-modal.active {
+        display: block;
+    }
+
+    .map-fullscreen-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 1rem;
+        background: rgba(30, 41, 59, 0.8);
+        border-radius: 8px 8px 0 0;
+        margin-bottom: 1rem;
+    }
+
+    .map-fullscreen-title {
+        font-family: 'IBM Plex Mono', monospace;
+        font-size: 1rem;
+        font-weight: 600;
+        color: #00D9FF;
+    }
+
+    .map-fullscreen-close {
+        background: rgba(255, 75, 75, 0.2);
+        border: 1px solid #FF4B4B;
+        border-radius: 6px;
+        padding: 0.5rem 1rem;
+        color: #FF4B4B;
+        cursor: pointer;
+        font-family: 'IBM Plex Mono', monospace;
+        font-size: 0.85rem;
+        transition: all 0.2s ease;
+    }
+
+    .map-fullscreen-close:hover {
+        background: rgba(255, 75, 75, 0.3);
+    }
+
+    .map-fullscreen-container {
+        height: calc(100vh - 5rem);
+        border-radius: 0 0 8px 8px;
+        overflow: hidden;
+    }
+
+    .map-fullscreen-container #map-fullscreen {
+        height: 100%;
+        width: 100%;
+    }
+
     #map {
         height: 100%;
         width: 100%;
@@ -256,6 +342,169 @@
         padding-bottom: 0.5rem;
         border-bottom: 1px solid rgba(136, 153, 187, 0.2);
         color: #8899bb;
+    }
+
+    /* Warnings Panel - Accordion Style */
+    .warnings-panel {
+        background: linear-gradient(135deg, rgba(255, 165, 0, 0.1), rgba(255, 75, 75, 0.1));
+        border: 2px solid #FFA500;
+        border-radius: 12px;
+        margin-bottom: 2rem;
+        display: none;
+        overflow: hidden;
+    }
+
+    .warnings-panel.active {
+        display: block;
+    }
+
+    .warnings-panel.no-warnings {
+        background: linear-gradient(135deg, rgba(0, 255, 170, 0.05), rgba(0, 170, 255, 0.05));
+        border-color: #00ffaa;
+    }
+
+    .warnings-accordion-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 1rem 1.5rem;
+        cursor: pointer;
+        transition: background 0.2s ease;
+    }
+
+    .warnings-accordion-header:hover {
+        background: rgba(255, 255, 255, 0.03);
+    }
+
+    .warnings-header {
+        font-family: 'IBM Plex Mono', monospace;
+        font-size: 0.85rem;
+        font-weight: 600;
+        color: #FFA500;
+        letter-spacing: 0.05em;
+        margin: 0;
+    }
+
+    .warnings-panel.no-warnings .warnings-header {
+        color: #00ffaa;
+    }
+
+    .warnings-count {
+        font-family: 'IBM Plex Mono', monospace;
+        font-size: 0.7rem;
+        color: #8899bb;
+        margin-top: 0.25rem;
+    }
+
+    .warnings-chevron {
+        width: 20px;
+        height: 20px;
+        transition: transform 0.3s ease;
+        color: #8899bb;
+    }
+
+    .warnings-panel.expanded .warnings-chevron {
+        transform: rotate(180deg);
+    }
+
+    .warnings-body {
+        max-height: 0;
+        overflow: hidden;
+        transition: max-height 0.3s ease;
+    }
+
+    .warnings-panel.expanded .warnings-body {
+        max-height: 2000px;
+    }
+
+    .warnings-body-inner {
+        padding: 0 1.5rem 1.5rem 1.5rem;
+    }
+
+    .warnings-subheader {
+        font-family: 'IBM Plex Mono', monospace;
+        font-size: 0.7rem;
+        color: #8899bb;
+        margin-bottom: 1rem;
+    }
+
+    .warnings-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+        gap: 1rem;
+    }
+
+    .warning-item {
+        background: rgba(30, 41, 59, 0.8);
+        border-left: 4px solid;
+        padding: 1rem;
+        border-radius: 6px;
+        cursor: pointer;
+        transition: all 0.2s ease;
+    }
+
+    .warning-item:hover {
+        background: rgba(30, 41, 59, 1);
+        transform: translateX(4px);
+    }
+
+    .warning-item.major {
+        border-left-color: #FF4B4B;
+    }
+
+    .warning-item.moderate {
+        border-left-color: #FFA500;
+    }
+
+    .warning-item.minor {
+        border-left-color: #FFFF00;
+    }
+
+    .flood-category {
+        display: inline-block;
+        padding: 0.2rem 0.5rem;
+        border-radius: 4px;
+        font-size: 0.65rem;
+        font-weight: 700;
+        letter-spacing: 0.05em;
+        margin-bottom: 0.5rem;
+    }
+
+    .flood-major {
+        background: rgba(255, 75, 75, 0.2);
+        color: #FF4B4B;
+        border: 1px solid #FF4B4B;
+    }
+
+    .flood-moderate {
+        background: rgba(255, 165, 0, 0.2);
+        color: #FFA500;
+        border: 1px solid #FFA500;
+    }
+
+    .flood-minor {
+        background: rgba(255, 255, 0, 0.2);
+        color: #FFFF00;
+        border: 1px solid #FFFF00;
+    }
+
+    .warning-colony-name {
+        font-family: 'IBM Plex Mono', monospace;
+        font-size: 0.85rem;
+        font-weight: 600;
+        color: #E5E5E5;
+        margin-bottom: 0.5rem;
+    }
+
+    .warning-details {
+        font-family: 'IBM Plex Mono', monospace;
+        font-size: 0.7rem;
+        color: #94A3B8;
+    }
+
+    .warning-peak {
+        font-weight: 700;
+        color: #FFA500;
     }
 
     /* Nowcast Card */
@@ -913,6 +1162,30 @@
 
     <!-- Main Content (hidden initially) -->
     <div id="main-content" style="display: none;">
+
+        <!-- Warnings Panel - Accordion -->
+        <div class="warnings-panel" id="warnings-panel">
+            <div class="warnings-accordion-header" onclick="toggleWarningsPanel()">
+                <div>
+                    <div class="warnings-header" id="warnings-title">Flood Risk Forecast - Next 72 Hours</div>
+                    <div class="warnings-count" id="warnings-count">Checking water levels...</div>
+                </div>
+                <svg class="warnings-chevron" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                </svg>
+            </div>
+            <div class="warnings-body">
+                <div class="warnings-body-inner">
+                    <div class="warnings-subheader" id="warnings-subheader">Colonies at risk of minor, moderate, or major flooding based on NOAA predictions</div>
+                    <div class="warnings-grid" id="warnings-grid">
+                        <div style="color: #8899bb; font-size: 0.8rem; font-family: 'IBM Plex Mono', monospace;">
+                            Scanning high-risk colonies...
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <!-- Two Column Layout -->
         <div class="flood-grid">
             <!-- Left: Map -->
@@ -938,7 +1211,14 @@
                         </div>
                     </div>
                 </div>
-                <div class="map-container" id="map"></div>
+                <div class="map-container">
+                    <button class="map-fullscreen-btn" onclick="toggleMapFullscreen()" title="Fullscreen">
+                        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"/>
+                        </svg>
+                    </button>
+                    <div id="map"></div>
+                </div>
             </div>
 
             <!-- Right: Selected Colony Detail -->
@@ -1058,6 +1338,19 @@
 
     </div>
 
+    <!-- Map Fullscreen Modal -->
+    <div class="map-fullscreen-modal" id="map-fullscreen-modal">
+        <div class="map-fullscreen-header">
+            <div class="map-fullscreen-title">Coastal Flood Risk Map - Long-term Vulnerability Assessment</div>
+            <button class="map-fullscreen-close" onclick="toggleMapFullscreen()">
+                Close Fullscreen
+            </button>
+        </div>
+        <div class="map-fullscreen-container">
+            <div id="map-fullscreen"></div>
+        </div>
+    </div>
+
     <!-- Info Modal -->
     <div class="info-modal" id="info-modal" onclick="closeInfoModal()">
         <div class="info-modal-content" onclick="event.stopPropagation()">
@@ -1119,7 +1412,9 @@
 <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3.0.1/dist/chartjs-plugin-annotation.min.js"></script>
 <script>
     let map;
+    let mapFullscreen;
     let markers = [];
+    let markersFullscreen = [];
     let fullscreenChart;
     let selectedColony = null;
     let colonyData = {};
@@ -1128,6 +1423,7 @@
     let currentPredicted = [];
     let currentSurge = 0;
     let currentStation = null;
+    let zonesData = [];
     const API_BASE = "{{ api_base_url }}";
 
     const GULF_STATIONS = [
@@ -1144,6 +1440,236 @@
         await loadCachedData();
         setupSearch();
         setInterval(checkForUpdates, 60000); // Check every minute
+    }
+
+    // Check all high-risk colonies for upcoming flood warnings
+    async function checkAllWarnings(zones) {
+        const warningsPanel = document.getElementById('warnings-panel');
+        const warningsGrid = document.getElementById('warnings-grid');
+        const warnings = [];
+
+        // Only check HIGH and CRITICAL risk colonies (manageable set)
+        const highRiskColonies = zones.filter(z =>
+            z.risk_level === 'CRITICAL' || z.risk_level === 'HIGH'
+        );
+
+        warningsPanel.classList.add('active');
+        warningsGrid.innerHTML = `
+            <div style="color: #8899bb; font-size: 0.8rem; font-family: 'IBM Plex Mono', monospace;">
+                Scanning ${highRiskColonies.length} high-risk colonies for flooding conditions...<br>
+                <span style="font-size: 0.7rem; color: #6677aa;">Minor: 0.6m+ | Moderate: 1.0m+ | Major: 1.5m+</span>
+            </div>
+        `;
+
+        // Check in batches of 5 to avoid overwhelming API
+        const batchSize = 5;
+        for (let i = 0; i < highRiskColonies.length; i += batchSize) {
+            const batch = highRiskColonies.slice(i, i + batchSize);
+
+            await Promise.all(batch.map(async (colony) => {
+                try {
+                    const station = findNearestStation(colony.latitude, colony.longitude);
+                    const [observed, predicted] = await Promise.all([
+                        fetchNOAA(station.id, 'water_level', 24, false),
+                        fetchNOAA(station.id, 'predictions', 72, true)
+                    ]);
+
+                    if (observed && predicted && observed.data.length > 0 && predicted.data.length > 0) {
+                        const currentLevel = observed.data[observed.data.length - 1].v;
+                        const currentTime = new Date(observed.data[observed.data.length - 1].t);
+
+                        // Find predicted value at current time
+                        let predictedAtCurrent = null;
+                        let minTimeDiff = Infinity;
+                        predicted.data.forEach(p => {
+                            const pTime = new Date(p.t);
+                            const diff = Math.abs(pTime - currentTime);
+                            if (diff < minTimeDiff) {
+                                minTimeDiff = diff;
+                                predictedAtCurrent = p;
+                            }
+                        });
+
+                        const surge = predictedAtCurrent ? (currentLevel - predictedAtCurrent.v) : 0;
+                        const forecastPeak = Math.max(...predicted.data.map(p => p.v)) + surge;
+
+                        // NOAA Flood Categories (MHHW reference)
+                        // Minor: 0.6-1.0m (nuisance flooding, road closures)
+                        // Moderate: 1.0-1.5m (property damage, evacuations)
+                        // Major: >1.5m (severe damage, life-threatening)
+
+                        let floodCategory = null;
+                        let categoryLabel = null;
+
+                        if (forecastPeak >= 1.5) {
+                            floodCategory = 'major';
+                            categoryLabel = 'MAJOR FLOODING';
+                        } else if (forecastPeak >= 1.0) {
+                            floodCategory = 'moderate';
+                            categoryLabel = 'MODERATE FLOODING';
+                        } else if (forecastPeak >= 0.6) {
+                            floodCategory = 'minor';
+                            categoryLabel = 'MINOR FLOODING';
+                        }
+
+                        // Only add if flooding is predicted
+                        if (floodCategory) {
+                            // Find when peak occurs
+                            const peakData = predicted.data.find(p => (p.v + surge) === forecastPeak);
+                            const peakTime = peakData ? new Date(peakData.t) : null;
+                            const hoursUntilPeak = peakTime ? Math.round((peakTime - new Date()) / (1000 * 60 * 60)) : null;
+
+                            warnings.push({
+                                colony: colony,
+                                floodCategory: floodCategory,
+                                categoryLabel: categoryLabel,
+                                peak: forecastPeak,
+                                currentLevel: currentLevel,
+                                surge: surge,
+                                hoursUntilPeak: hoursUntilPeak
+                            });
+                        }
+                    }
+                } catch (error) {
+                    console.error(`Warning check failed for ${colony.colony_name}:`, error);
+                }
+            }));
+
+            // Update UI after each batch
+            updateWarningsDisplay(warnings, warningsPanel, warningsGrid);
+        }
+
+        // Final update
+        updateWarningsDisplay(warnings, warningsPanel, warningsGrid);
+    }
+
+    function toggleWarningsPanel() {
+        const panel = document.getElementById('warnings-panel');
+        panel.classList.toggle('expanded');
+    }
+
+    function toggleMapFullscreen() {
+        const modal = document.getElementById('map-fullscreen-modal');
+        const isOpening = !modal.classList.contains('active');
+
+        modal.classList.toggle('active');
+
+        if (isOpening) {
+            // Initialize fullscreen map
+            setTimeout(() => {
+                if (!mapFullscreen) {
+                    mapFullscreen = L.map('map-fullscreen', {
+                        center: [29.5, -90.0],
+                        zoom: 7,
+                        zoomControl: true
+                    });
+
+                    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                        attribution: '© OpenStreetMap contributors',
+                        maxZoom: 19,
+                        minZoom: 5
+                    }).addTo(mapFullscreen);
+
+                    // Add all markers from zonesData
+                    const bounds = [];
+                    zonesData.forEach(zone => {
+                        if (!zone.latitude || !zone.longitude) return;
+
+                        const color = zone.risk_level === 'CRITICAL' ? '#FF4B4B' :
+                                     zone.risk_level === 'HIGH' ? '#FFA500' :
+                                     zone.risk_level === 'MODERATE' ? '#FFFF00' : '#00FF00';
+
+                        const marker = L.circleMarker([zone.latitude, zone.longitude], {
+                            radius: 10,
+                            fillColor: color,
+                            color: '#fff',
+                            weight: 2,
+                            opacity: 1,
+                            fillOpacity: 0.8
+                        }).addTo(mapFullscreen);
+
+                        marker.bindPopup(`<strong>${zone.colony_name}</strong><br>Long-term Risk: ${zone.risk_level}<br>Score: ${zone.risk_score.toFixed(1)}/100`);
+                        markersFullscreen.push(marker);
+                        bounds.push([zone.latitude, zone.longitude]);
+                    });
+
+                    // Fit bounds
+                    if (bounds.length > 0) {
+                        mapFullscreen.fitBounds(bounds, { padding: [50, 50] });
+                    }
+                } else {
+                    // Refresh existing map
+                    setTimeout(() => mapFullscreen.invalidateSize(), 100);
+                }
+            }, 100);
+        }
+    }
+
+    function updateWarningsDisplay(warnings, panel, grid) {
+        panel.classList.remove('no-warnings');
+
+        const titleEl = document.getElementById('warnings-title');
+        const countEl = document.getElementById('warnings-count');
+        const subheaderEl = document.getElementById('warnings-subheader');
+
+        if (warnings.length === 0) {
+            // Show "all clear" message - compact by default
+            panel.classList.add('active', 'no-warnings');
+            panel.classList.remove('expanded'); // Start collapsed for "all clear"
+
+            titleEl.textContent = 'No Flood Warnings';
+            countEl.textContent = 'All colonies show normal conditions';
+            subheaderEl.textContent = 'All monitored colonies show normal water levels for the next 72 hours';
+
+            grid.innerHTML = `
+                <div style="color: #00ffaa; font-size: 0.85rem; font-family: 'IBM Plex Mono', monospace;">
+                    ✓ No colonies are forecasted to experience flooding conditions
+                </div>
+            `;
+            return;
+        }
+
+        // Sort by severity, then peak level
+        const severityOrder = { 'major': 0, 'moderate': 1, 'minor': 2 };
+        warnings.sort((a, b) => {
+            if (severityOrder[a.floodCategory] !== severityOrder[b.floodCategory]) {
+                return severityOrder[a.floodCategory] - severityOrder[b.floodCategory];
+            }
+            return b.peak - a.peak;
+        });
+
+        // Warnings present - auto-expand and show details
+        panel.classList.add('active', 'expanded');
+
+        titleEl.textContent = `${warnings.length} Flood Warning${warnings.length > 1 ? 's' : ''}`;
+
+        // Count by category
+        const majorCount = warnings.filter(w => w.floodCategory === 'major').length;
+        const moderateCount = warnings.filter(w => w.floodCategory === 'moderate').length;
+        const minorCount = warnings.filter(w => w.floodCategory === 'minor').length;
+
+        const countParts = [];
+        if (majorCount > 0) countParts.push(`${majorCount} Major`);
+        if (moderateCount > 0) countParts.push(`${moderateCount} Moderate`);
+        if (minorCount > 0) countParts.push(`${minorCount} Minor`);
+
+        countEl.textContent = countParts.join(' • ');
+        subheaderEl.textContent = 'Click any colony below to view detailed forecast';
+
+        grid.innerHTML = warnings.map(w => {
+            const timingText = w.hoursUntilPeak !== null ? `Peak in ${w.hoursUntilPeak}h` : 'Timing unknown';
+            return `
+                <div class="warning-item ${w.floodCategory}" onclick="selectColonyByName('${w.colony.colony_name}')">
+                    <div class="flood-category flood-${w.floodCategory}">${w.categoryLabel}</div>
+                    <div class="warning-colony-name">${w.colony.colony_name}</div>
+                    <div class="warning-details">
+                        Peak: <span class="warning-peak">${w.peak.toFixed(2)}m MHHW</span><br>
+                        ${timingText}<br>
+                        Current: ${w.currentLevel.toFixed(2)}m | Surge: ${w.surge >= 0 ? '+' : ''}${w.surge.toFixed(2)}m
+                    </div>
+                </div>
+            `;
+        }).join('');
     }
 
     // Load cached colony data
@@ -1176,6 +1702,9 @@
             document.getElementById('loading-state').style.display = 'none';
             document.getElementById('main-content').style.display = 'block';
 
+            // Store zones data for fullscreen
+            zonesData = result.data.zones;
+
             // Initialize map after container is visible
             setTimeout(() => {
                 initMap(result.data.zones);
@@ -1184,6 +1713,9 @@
                 if (result.data.zones.length > 0) {
                     selectColony(result.data.zones[0]);
                 }
+
+                // Check for warnings
+                checkAllWarnings(result.data.zones);
             }, 100);
 
         } catch (error) {
@@ -1246,52 +1778,99 @@
 
     // Initialize map
     function initMap(zones) {
+        console.log('initMap called with', zones.length, 'zones');
+
         if (!map) {
-            console.log('Initializing map...');
+            console.log('Creating new map instance...');
             const mapContainer = document.getElementById('map');
+
+            if (!mapContainer) {
+                console.error('Map container not found!');
+                return;
+            }
+
             console.log('Map container dimensions:', mapContainer.offsetWidth, 'x', mapContainer.offsetHeight);
 
-            // Start with default view (will be adjusted to fit bounds)
-            map = L.map('map').setView([29.5, -90.0], 7);
-            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                attribution: '© OpenStreetMap',
-                maxZoom: 19
-            }).addTo(map);
+            // Create map
+            try {
+                map = L.map('map', {
+                    center: [29.5, -90.0],
+                    zoom: 7,
+                    zoomControl: true
+                });
 
-            // Fix map size after initialization
-            setTimeout(() => {
-                console.log('Calling invalidateSize...');
-                map.invalidateSize();
-            }, 200);
+                console.log('Map object created');
 
-            console.log('Map initialized successfully');
+                // Add tile layer
+                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                    attribution: '© OpenStreetMap contributors',
+                    maxZoom: 19,
+                    minZoom: 5
+                }).addTo(map);
+
+                console.log('Tile layer added');
+
+                // Fix map size after initialization
+                setTimeout(() => {
+                    console.log('Calling invalidateSize...');
+                    map.invalidateSize();
+                }, 300);
+
+            } catch (error) {
+                console.error('Error creating map:', error);
+                return;
+            }
         } else {
+            console.log('Map already exists, clearing markers');
             markers.forEach(m => map.removeLayer(m));
             markers = [];
         }
 
+        // Validate zones data
+        if (!zones || zones.length === 0) {
+            console.error('No zones data to display');
+            return;
+        }
+
+        console.log('Adding', zones.length, 'markers...');
+
         // Add markers and collect bounds
         const bounds = [];
-        zones.forEach(zone => {
+        let markersAdded = 0;
+
+        zones.forEach((zone, index) => {
+            // Validate zone data
+            if (!zone.latitude || !zone.longitude) {
+                console.warn(`Zone ${index} missing coordinates:`, zone);
+                return;
+            }
+
             // Color by long-term risk level
             const color = zone.risk_level === 'CRITICAL' ? '#FF4B4B' :
                          zone.risk_level === 'HIGH' ? '#FFA500' :
                          zone.risk_level === 'MODERATE' ? '#FFFF00' : '#00FF00';
 
-            const marker = L.circleMarker([zone.latitude, zone.longitude], {
-                radius: 8,
-                fillColor: color,
-                color: '#fff',
-                weight: 2,
-                opacity: 1,
-                fillOpacity: 0.8
-            }).addTo(map);
+            try {
+                const marker = L.circleMarker([zone.latitude, zone.longitude], {
+                    radius: 8,
+                    fillColor: color,
+                    color: '#fff',
+                    weight: 2,
+                    opacity: 1,
+                    fillOpacity: 0.8
+                }).addTo(map);
 
-            marker.on('click', () => selectColony(zone));
-            marker.bindPopup(`<strong>${zone.colony_name}</strong><br>Long-term Risk: ${zone.risk_level}<br>Click for current conditions`);
-            markers.push(marker);
-            bounds.push([zone.latitude, zone.longitude]);
+                marker.on('click', () => selectColony(zone));
+                marker.bindPopup(`<strong>${zone.colony_name}</strong><br>Long-term Risk: ${zone.risk_level}<br>Click for current conditions`);
+                markers.push(marker);
+                bounds.push([zone.latitude, zone.longitude]);
+                markersAdded++;
+            } catch (error) {
+                console.error(`Error adding marker for ${zone.colony_name}:`, error);
+            }
         });
+
+        console.log(`Successfully added ${markersAdded} markers`);
 
         // Fit map to show all markers with padding
         if (bounds.length > 0) {
@@ -1530,7 +2109,29 @@
         const lineWidth = 5;
         const annotationWidth = 3;
 
+        // Custom plugin to draw vertical crosshair line
+        const crosshairPlugin = {
+            id: 'crosshair',
+            afterDatasetsDraw: (chart) => {
+                if (chart.crosshairX) {
+                    const ctx = chart.ctx;
+                    const chartArea = chart.chartArea;
+
+                    ctx.save();
+                    ctx.beginPath();
+                    ctx.setLineDash([5, 5]);
+                    ctx.strokeStyle = 'rgba(255, 255, 255, 0.6)';
+                    ctx.lineWidth = 2;
+                    ctx.moveTo(chart.crosshairX, chartArea.top);
+                    ctx.lineTo(chart.crosshairX, chartArea.bottom);
+                    ctx.stroke();
+                    ctx.restore();
+                }
+            }
+        };
+
         const newChart = new Chart(canvas, {
+            plugins: [crosshairPlugin],
             type: 'line',
             data: {
                 datasets: [
@@ -1541,7 +2142,7 @@
                         backgroundColor: gradientObserved,
                         borderWidth: lineWidth,
                         pointRadius: 0,
-                        tension: 0.4,
+                        tension: 0,
                         fill: true,
                         order: 1
                     },
@@ -1553,7 +2154,7 @@
                         borderWidth: lineWidth,
                         borderDash: [10, 5],
                         pointRadius: 0,
-                        tension: 0.4,
+                        tension: 0,
                         fill: true,
                         order: 2
                     }
@@ -1564,7 +2165,24 @@
                 maintainAspectRatio: false,
                 interaction: {
                     intersect: false,
-                    mode: 'index'
+                    mode: 'nearest',
+                    axis: 'x'
+                },
+                onHover: (event, activeElements, chart) => {
+                    if (activeElements.length > 0) {
+                        // Get the x position of the hovered data point
+                        const element = activeElements[0];
+                        const datasetIndex = element.datasetIndex;
+                        const index = element.index;
+                        const meta = chart.getDatasetMeta(datasetIndex);
+                        const point = meta.data[index];
+
+                        chart.crosshairX = point.x;
+                        chart.update('none');
+                    } else {
+                        chart.crosshairX = null;
+                        chart.update('none');
+                    }
                 },
                 plugins: {
                     legend: {
@@ -1591,10 +2209,14 @@
                         displayColors: true,
                         titleFont: { size: fontSize + 1, weight: 'bold' },
                         bodyFont: { size: fontSize, weight: '600' },
+                        caretSize: 8,
+                        caretPadding: 12,
                         callbacks: {
                             title: (items) => {
+                                if (items.length === 0) return '';
                                 const date = new Date(items[0].parsed.x);
                                 return date.toLocaleString('en-US', {
+                                    weekday: 'short',
                                     month: 'short',
                                     day: 'numeric',
                                     hour: '2-digit',
@@ -1602,9 +2224,27 @@
                                 });
                             },
                             label: (item) => {
-                                return `${item.dataset.label}: ${item.parsed.y.toFixed(2)} m MHHW`;
+                                const value = item.parsed.y.toFixed(3);
+                                return `${item.dataset.label}: ${value} m MHHW`;
+                            },
+                            footer: (items) => {
+                                if (items.length === 0) return '';
+                                // Show relative time
+                                const date = new Date(items[0].parsed.x);
+                                const now = new Date();
+                                const diffHours = Math.round((date - now) / (1000 * 60 * 60));
+
+                                if (diffHours > 0) {
+                                    return `\n+${diffHours}h from now`;
+                                } else if (diffHours < 0) {
+                                    return `\n${Math.abs(diffHours)}h ago`;
+                                } else {
+                                    return '\nNow';
+                                }
                             }
-                        }
+                        },
+                        footerFont: { size: fontSize - 2, style: 'italic' },
+                        footerColor: '#94A3B8'
                     },
                     annotation: {
                         annotations: {
@@ -1827,9 +2467,18 @@
     // Close fullscreen on Escape key
     document.addEventListener('keydown', (e) => {
         if (e.key === 'Escape') {
-            const modal = document.getElementById('fullscreen-modal');
-            if (modal.classList.contains('active')) {
+            // Check chart fullscreen
+            const chartModal = document.getElementById('fullscreen-modal');
+            if (chartModal && chartModal.classList.contains('active')) {
                 toggleFullscreen();
+                return;
+            }
+
+            // Check map fullscreen
+            const mapModal = document.getElementById('map-fullscreen-modal');
+            if (mapModal && mapModal.classList.contains('active')) {
+                toggleMapFullscreen();
+                return;
             }
         }
     });

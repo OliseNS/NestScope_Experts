@@ -2007,8 +2007,7 @@ async def get_config():
             "max_tokens": config['model']['max_tokens']
         },
         "cv": {
-            "default_confidence": config['cv']['default_confidence'],
-            "default_fast_mode": config['cv']['default_fast_mode']
+            "default_confidence": config['cv']['default_confidence']
         }
     }
 
@@ -2421,19 +2420,14 @@ async def get_cv_examples():
 @app.post("/cv/inference", response_model=CVInferenceResponse)
 async def run_cv_inference(
     file: UploadFile = File(...),
-    conf_threshold: float = 0.25,
-    fast_mode: bool = True
+    conf_threshold: float = 0.25
 ):
     """
-    Run bird detection inference on an uploaded image with SAHI and model selection
+    Run bird detection inference on an uploaded image with Swift model and SAHI
 
     Args:
         file: Uploaded image file
         conf_threshold: Confidence threshold for detections (default: 0.25)
-        fast_mode: Model selection mode (default: True)
-                   - True (Fast): Swift model - optimized for speed, good for quick previews
-                   - False (Max): Apex model - optimized for accuracy, better for final results
-                   Both modes use SAHI (Slicing Aided Hyper Inference) for large images
 
     Returns:
         CVInferenceResponse: Detection results with annotated image
@@ -2449,7 +2443,7 @@ async def run_cv_inference(
         image_bytes = await file.read()
 
         # Run inference
-        results = bird_detector.predict_from_bytes(image_bytes, conf_threshold, fast_mode=fast_mode)
+        results = bird_detector.predict_from_bytes(image_bytes, conf_threshold)
 
         # Convert annotated image to base64
         _, buffer = cv2.imencode('.jpg', results['annotated_image'])
@@ -2642,8 +2636,7 @@ async def stac_mosaic_preview(colony_id: str, year: str):
 async def cv_inference_on_mosaic(
     colony_id: str,
     year: str,
-    conf: float = 0.25,
-    fast_mode: bool = True,
+    conf: float = 0.25
 ):
     """
     Run NestVision bird detection on a 1024x1024 center tile of a COG mosaic.
@@ -2691,7 +2684,7 @@ async def cv_inference_on_mosaic(
         bgr = cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR)
         img_bytes = cv2.imencode('.jpg', bgr)[1].tobytes()
 
-        results = bird_detector.predict_from_bytes(img_bytes, conf_threshold=conf, fast_mode=fast_mode)
+        results = bird_detector.predict_from_bytes(img_bytes, conf_threshold=conf)
 
         annotated_bgr = results['annotated_image']
         _, buffer = cv2.imencode('.jpg', annotated_bgr, [cv2.IMWRITE_JPEG_QUALITY, 85])

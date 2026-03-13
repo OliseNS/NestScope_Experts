@@ -36,14 +36,11 @@ def _load_model_paths():
         with open(config_path, 'r') as f:
             config = yaml.safe_load(f)
 
-        model_fast = config['cv']['model_fast']
-        model_pro = config['cv']['model_pro']
+        model = config['cv']['model']
 
-        # Classifier paths — fix .pt → .onnx if needed
-        classifier_swift = config['cv'].get('classifier_swift', 'models/classifier_swift.onnx')
-        classifier_apex  = config['cv'].get('classifier_apex',  'models/classifier_apex.onnx')
-        classifier_swift = str(classifier_swift).replace('.pt', '.onnx')
-        classifier_apex  = str(classifier_apex).replace('.pt', '.onnx')
+        # Classifier path — fix .pt → .onnx if needed
+        classifier = config['cv'].get('classifier', 'models/classifier_swift.onnx')
+        classifier = str(classifier).replace('.pt', '.onnx')
 
         # Classifier confidence threshold
         classifier_threshold = config['cv'].get('classifier_confidence_threshold', 0.30)
@@ -51,66 +48,54 @@ def _load_model_paths():
         # Convert relative paths to absolute (relative to project root)
         project_root = Path(__file__).parent.parent.parent
 
-        if not os.path.isabs(model_fast):
-            model_fast = str(project_root / model_fast)
-        if not os.path.isabs(model_pro):
-            model_pro = str(project_root / model_pro)
-        if not os.path.isabs(classifier_swift):
-            classifier_swift = str(project_root / classifier_swift)
-        if not os.path.isabs(classifier_apex):
-            classifier_apex = str(project_root / classifier_apex)
+        if not os.path.isabs(model):
+            model = str(project_root / model)
+        if not os.path.isabs(classifier):
+            classifier = str(project_root / classifier)
 
-        return model_fast, model_pro, classifier_swift, classifier_apex, classifier_threshold
+        return model, classifier, classifier_threshold
     except Exception as e:
         print(f"Warning: Could not load model paths from config: {e}")
         # Fallback to default models
         models_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "models")
         return (
             os.path.join(models_dir, "swift.onnx"),
-            os.path.join(models_dir, "apex.onnx"),
             os.path.join(models_dir, "classifier_swift.onnx"),
-            os.path.join(models_dir, "classifier_apex.onnx"),
             0.30,  # Default threshold
         )
 
-MODEL_FAST, MODEL_PRO, CLASSIFIER_SWIFT, CLASSIFIER_APEX, CLASSIFIER_THRESHOLD = _load_model_paths()
+MODEL_PATH, CLASSIFIER_PATH, CLASSIFIER_THRESHOLD = _load_model_paths()
 print(f"✓ CV Models configured:")
-print(f"  Fast mode: {MODEL_FAST}")
-print(f"  Pro mode: {MODEL_PRO}")
-print(f"  Classifier (Swift): {CLASSIFIER_SWIFT}")
-print(f"  Classifier (Apex): {CLASSIFIER_APEX}")
+print(f"  Detection: {MODEL_PATH}")
+print(f"  Classifier: {CLASSIFIER_PATH}")
 print(f"  Classification threshold: {CLASSIFIER_THRESHOLD:.0%}")
 
 class BirdDetector:
-    """YOLO-based bird detection and counting with dynamic model loading"""
+    """YOLO-based bird detection and counting with Swift model"""
 
-    def __init__(self, model_fast=MODEL_FAST, model_pro=MODEL_PRO, imgsz=1024,
-                 classifier_swift=CLASSIFIER_SWIFT, classifier_apex=CLASSIFIER_APEX,
+    def __init__(self, model_path=MODEL_PATH, imgsz=1024,
+                 classifier_path=CLASSIFIER_PATH,
                  classifier_threshold=CLASSIFIER_THRESHOLD):
         """
-        Initialize the bird detector with support for multiple models
+        Initialize the bird detector
 
         Args:
-            model_fast: Path to the fast YOLO model (nano)
-            model_pro: Path to the pro YOLO model (small)
+            model_path: Path to the Swift YOLO model
             imgsz: Image size for inference (default: 1024)
-            classifier_swift: Path to the fast species classifier ONNX
-            classifier_apex: Path to the accurate species classifier ONNX
+            classifier_path: Path to the species classifier ONNX
             classifier_threshold: Minimum confidence for species classification (default: 0.30)
         """
-        self.model_fast_path = model_fast
-        self.model_pro_path = model_pro
+        self.model_path = model_path
         self.imgsz = imgsz
         self.current_model_path = None
         self.model = None
         # Classifier state (lazy-loaded on first use)
-        self.classifier_swift_path = classifier_swift
+        self.classifier_path = classifier_path
         self.classifier_threshold = classifier_threshold
-        self.classifier_apex_path = classifier_apex
         self.classifier_session = None
         self.classifier_path_loaded = None
-        # Start with fast model loaded by default
-        self._load_model(self.model_fast_path)
+        # Load the model
+        self._load_model(self.model_path)
 
     def _load_model(self, model_path):
         """
@@ -734,9 +719,9 @@ class BirdDetector:
             output = self.model.run(self.output_names, {self.input_name: preprocessed})
             return self._postprocess(output[0], scale, pad, conf_threshold)
 
-    def _load_classifier(self, fast_mode: bool):
+    def _load_classifier(self):
         """Lazy-load the species classifier ONNX session."""
-        path = self.classifier_swift_path if fast_mode else self.classifier_apex_path
+        path = self.classifier_path
         if self.classifier_path_loaded == path and self.classifier_session is not None:
             return
         if not os.path.exists(path):
@@ -752,13 +737,12 @@ class BirdDetector:
             print(f"Warning: Could not load classifier {path}: {e}")
             self.classifier_session = None
 
-    def classify_crop(self, crop_bgr: np.ndarray, fast_mode: bool = True, top_k: int = 1) -> dict:
+    def classify_crop(self, crop_bgr: np.ndarray, top_k: int = 1) -> dict:
         """
         Classify a bird crop into one of 25 species.
 
         Args:
             crop_bgr: Bird crop in BGR format (any size)
-            fast_mode: Use Swift classifier (True) or Apex (False)
             top_k: Number of top predictions to return (default: 1, max: 5)
 
         Returns:
@@ -769,7 +753,7 @@ class BirdDetector:
                 - group: Functional group (e.g., 'PELICAN') for color-coding
                 - top_predictions: List of top-k predictions if top_k > 1
         """
-        self._load_classifier(fast_mode)
+        self._load_classifier()
         if self.classifier_session is None:
             return {
                 'species_code': 'UNKNOWN',
@@ -854,14 +838,13 @@ class BirdDetector:
                 'top_predictions': []
             }
 
-    def _classify_detections(self, image_bgr: np.ndarray, detections: List[dict], fast_mode: bool = True) -> List[dict]:
+    def _classify_detections(self, image_bgr: np.ndarray, detections: List[dict]) -> List[dict]:
         """
         Run species classifier on each detected bird crop and add species info.
 
         Args:
             image_bgr: Full original image in BGR format
             detections: List of detection dicts with 'bbox' key
-            fast_mode: Use Swift (True) or Apex (False) classifier
 
         Returns:
             Same detections list with species info added:
@@ -879,7 +862,7 @@ class BirdDetector:
             crop = image_bgr[y1:y2, x1:x2]
 
             if crop.size > 0 and (x2 - x1) >= 5 and (y2 - y1) >= 5:
-                result = self.classify_crop(crop, fast_mode, top_k=1)
+                result = self.classify_crop(crop, top_k=1)
                 det['species_code'] = result['species_code']
                 det['species_name'] = result['species_name']
                 det['species_group'] = result['group']
@@ -932,18 +915,14 @@ class BirdDetector:
 
         return annotated_img
 
-    def predict(self, image_path, conf_threshold=0.25, use_sliding_window=True, fast_mode=True, verbose=True):
+    def predict(self, image_path, conf_threshold=0.25, use_sliding_window=True, verbose=True):
         """
-        Run inference on an image with SAHI and model selection
+        Run inference on an image with SAHI
 
         Args:
             image_path: Path to the input image
             conf_threshold: Confidence threshold for detections (default: 0.25)
             use_sliding_window: Whether to use smart slicing for large images (default: True)
-            fast_mode: Model selection mode (default: True)
-                - True (Fast): Swift model - optimized for speed, good for quick previews
-                - False (Max): Apex model - optimized for accuracy, better for final results
-                Both modes use SAHI (Slicing Aided Hyper Inference) for large images
             verbose: Whether to print progress messages (default: True)
 
         Returns:
@@ -956,11 +935,6 @@ class BirdDetector:
         if not os.path.exists(image_path):
             raise FileNotFoundError(f"Image not found at {image_path}")
 
-        # Load the appropriate model based on mode
-        target_model = self.model_fast_path if fast_mode else self.model_pro_path
-        mode_name = "Swift" if fast_mode else "Apex"
-        self._load_model(target_model)
-
         # Start timing
         start_time = time.perf_counter()
 
@@ -971,12 +945,12 @@ class BirdDetector:
         # ALWAYS use SAHI for large images, standard inference for small images
         if use_sliding_window and (height > self.imgsz or width > self.imgsz):
             if verbose:
-                print(f"[{mode_name} Mode] Processing {width}x{height} image with SAHI slicing...")
+                print(f"[Swift Mode] Processing {width}x{height} image with SAHI slicing...")
             detections = self._predict_with_sahi(image_path, conf_threshold, verbose=verbose)
         else:
             # Small image: use standard inference
             if verbose:
-                print(f"[{mode_name} Mode] Processing {width}x{height} image with standard inference...")
+                print(f"[Swift Mode] Processing {width}x{height} image with standard inference...")
             preprocessed, scale, pad = self._preprocess_image(original_img)
             output = self.model.run(self.output_names, {self.input_name: preprocessed})
             detections = self._postprocess(output[0], scale, pad, conf_threshold)
@@ -985,7 +959,7 @@ class BirdDetector:
         inference_time = time.perf_counter() - start_time
 
         # Classify each detected bird crop into a species group
-        detections = self._classify_detections(original_img, detections, fast_mode)
+        detections = self._classify_detections(original_img, detections)
 
         # Build species summary: {species_code: count}
         species_summary: dict = {}
@@ -1063,27 +1037,18 @@ class BirdDetector:
 
         return filtered_detections
 
-    def predict_from_bytes(self, image_bytes, conf_threshold=0.25, use_sliding_window=True, fast_mode=True):
+    def predict_from_bytes(self, image_bytes, conf_threshold=0.25, use_sliding_window=True):
         """
-        Run inference on image bytes (from uploaded file) with SAHI and model selection
+        Run inference on image bytes (from uploaded file) with SAHI
 
         Args:
             image_bytes: Image data as bytes
             conf_threshold: Confidence threshold for detections
             use_sliding_window: Whether to use smart slicing for large images (default: True)
-            fast_mode: Model selection mode (default: True)
-                - True (Fast): Swift model - optimized for speed, good for quick previews
-                - False (Max): Apex model - optimized for accuracy, better for final results
-                Both modes use SAHI (Slicing Aided Hyper Inference) for large images
 
         Returns:
             dict: Same as predict()
         """
-        # Load the appropriate model based on mode
-        target_model = self.model_fast_path if fast_mode else self.model_pro_path
-        mode_name = "Swift" if fast_mode else "Apex"
-        self._load_model(target_model)
-
         # Start timing
         start_time = time.perf_counter()
 
@@ -1094,7 +1059,7 @@ class BirdDetector:
 
         # ALWAYS use SAHI for large images, standard inference for small images
         if use_sliding_window and (height > self.imgsz or width > self.imgsz):
-            print(f"[{mode_name} Mode] Processing {width}x{height} image with SAHI slicing...")
+            print(f"[Swift Mode] Processing {width}x{height} image with SAHI slicing...")
             # Save image temporarily for SAHI
             import tempfile
             with tempfile.NamedTemporaryFile(suffix='.jpg', delete=False) as tmp_file:
@@ -1109,7 +1074,7 @@ class BirdDetector:
                     os.remove(tmp_path)
         else:
             # Small image: use standard inference
-            print(f"[{mode_name} Mode] Processing {width}x{height} image with standard inference...")
+            print(f"[Swift Mode] Processing {width}x{height} image with standard inference...")
             preprocessed, scale, pad = self._preprocess_image(img)
             output = self.model.run(self.output_names, {self.input_name: preprocessed})
             detections = self._postprocess(output[0], scale, pad, conf_threshold)
@@ -1118,7 +1083,7 @@ class BirdDetector:
         inference_time = time.perf_counter() - start_time
 
         # Classify each detected bird crop into a species group
-        detections = self._classify_detections(img, detections, fast_mode)
+        detections = self._classify_detections(img, detections)
 
         # Build species summary: {species_code: count}
         species_summary: dict = {}

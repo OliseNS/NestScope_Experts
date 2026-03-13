@@ -2421,7 +2421,6 @@ def sam_segment():
             result = detector.predict(
                 tmp_path,
                 conf_threshold=0.15,  # Lower threshold to catch more birds
-                fast_mode=True,
                 use_sliding_window=False,  # Crop is already small
                 verbose=False
             )
@@ -2486,7 +2485,6 @@ def classify_crop():
         data = request.json
         image_name = data.get('image_name')
         bbox = data.get('bbox')  # {x_center, y_center, width, height} in normalized coords
-        fast_mode = data.get('fast_mode', True)
         project_folder = data.get('project_id', 'nestvision')
 
         if not image_name or not bbox:
@@ -2531,7 +2529,7 @@ def classify_crop():
             return jsonify({'error': 'Invalid crop'}), 400
 
         # Classify (get top-5)
-        result = detector.classify_crop(crop, fast_mode=fast_mode, top_k=5)
+        result = detector.classify_crop(crop, top_k=5)
 
         # Return predictions
         return jsonify({
@@ -2542,6 +2540,92 @@ def classify_crop():
     except Exception as e:
         import traceback
         print(f"Classification error: {traceback.format_exc()}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/classify_all_birds', methods=['POST'])
+@api_annotator_required
+def classify_all_birds():
+    """Batch classify all birds in an image"""
+    try:
+        data = request.json
+        image_name = data.get('image_name')
+        boxes = data.get('boxes', [])  # List of bbox dicts
+        project_folder = data.get('project_id', 'nestvision')
+
+        if not image_name or not boxes:
+            return jsonify({'error': 'Missing image_name or boxes'}), 400
+
+        # Get image path
+        images_dir = os.path.join(PROJECTS_DIR, project_folder, 'images')
+        image_path = os.path.join(images_dir, image_name)
+
+        if not os.path.exists(image_path):
+            return jsonify({'error': f'Image not found: {image_name}'}), 404
+
+        # Load detector with classifier
+        detector = get_bird_detector()
+        if detector is None:
+            return jsonify({'error': 'Classifier not available'}), 500
+
+        # Read image once
+        import cv2
+        img = cv2.imread(image_path)
+        if img is None:
+            return jsonify({'error': 'Failed to load image'}), 500
+
+        height, width = img.shape[:2]
+
+        # Classify each bird
+        classified_boxes = []
+        for box in boxes:
+            # Convert normalized bbox to pixel coordinates
+            x_center = box['x_center'] * width
+            y_center = box['y_center'] * height
+            box_width = box['width'] * width
+            box_height = box['height'] * height
+
+            x1 = int(x_center - box_width / 2)
+            y1 = int(y_center - box_height / 2)
+            x2 = int(x_center + box_width / 2)
+            y2 = int(y_center + box_height / 2)
+
+            # Clamp to image bounds
+            x1, y1 = max(0, x1), max(0, y1)
+            x2, y2 = min(width, x2), min(height, y2)
+
+            # Extract crop
+            crop = img[y1:y2, x1:x2]
+
+            if crop.size == 0 or (x2 - x1) < 5 or (y2 - y1) < 5:
+                # Skip invalid boxes
+                classified_boxes.append({
+                    **box,
+                    'species': 'UNKNOWN',
+                    'species_name': 'Unknown',
+                    'confidence': 0.0
+                })
+                continue
+
+            # Classify (get top prediction)
+            result = detector.classify_crop(crop, top_k=1)
+
+            # Add classification result to box
+            classified_boxes.append({
+                **box,
+                'species': result['species_code'],
+                'species_name': result['species_name'],
+                'confidence': result['confidence']
+            })
+
+        # Return classified boxes
+        return jsonify({
+            'success': True,
+            'boxes': classified_boxes
+        })
+
+    except Exception as e:
+        import traceback
+        print(f"Batch classification error: {traceback.format_exc()}")
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/species', methods=['GET'])
