@@ -259,6 +259,9 @@ data/*.sql
 *.root  # ROOT (particle physics)
 annotated_dataset/*.json
 
+# Eval run results (generated artifacts, keep only .gitkeep)
+server/evals/results/*.json
+
 
 # Geospatial data (can be large)
 *.shp
