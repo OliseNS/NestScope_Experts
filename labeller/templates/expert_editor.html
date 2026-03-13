@@ -1306,6 +1306,9 @@
         <div class="canvas-container">
             <canvas id="annotation-canvas"></canvas>
 
+            <!-- Canvas Overlay (shows selection info) -->
+            <div class="canvas-overlay" style="display: none;"></div>
+
             <!-- Floating Preview -->
             <div class="floating-preview">
                 <div class="preview-title-float">
@@ -1333,7 +1336,7 @@
                 <div class="panel-header">
                     <div class="panel-title">
                         <i data-lucide="tag" style="width: 16px; height: 16px;"></i>
-                        <span>Species Identification</span>
+                        <span>Class Assignment</span>
                     </div>
                     <button class="panel-close" onclick="closeClassification()"><i data-lucide="x"></i></button>
                 </div>
@@ -1345,7 +1348,7 @@
                 <div class="panel-footer">
                     <div class="search-input-wrapper">
                         <i data-lucide="search" class="search-icon"></i>
-                        <input type="text" id="global-species-search" placeholder="Search species..." oninput="handleGlobalSearch(this.value)">
+                        <input type="text" id="global-species-search" placeholder="Search classes..." oninput="handleGlobalSearch(this.value)">
                     </div>
                 </div>
             </div>
@@ -1359,7 +1362,7 @@
 
         <!-- Bottom Class Bar -->
         <div class="bottom-class-bar" id="bottom-class-bar">
-            <button class="add-class-btn-float" onclick="showAddClassDialog()" title="Add New Species">
+            <button class="add-class-btn-float" onclick="showAddClassDialog()" title="Add New Class">
                 <i data-lucide="plus" style="width: 20px; height: 20px;"></i>
             </button>
             <div id="class-pills-container">
@@ -1395,6 +1398,8 @@ console.log('Image URL:', IMAGE_URL);
 console.log('Current image:', (CURRENT_INDEX + 1), 'of', TOTAL_IMAGES);
 console.log('Existing boxes:', EXISTING_BOXES.length);
 console.log('Species data:', SPECIES_DATA.length);
+console.log('First box:', EXISTING_BOXES[0]);
+console.log('Species data:', SPECIES_DATA);
 console.log('==============================');
 
 // Global state
@@ -2346,17 +2351,19 @@ function renderClassBar() {
             `;
         }).join('');
 
-    // Prepend a "None" / Unidentified option
+    // Only show "None" pill if there are unidentified boxes
     const noneActive = selectedSpecies === null ? 'active' : '';
     const unidentifiedCount = boxes.filter(b => !b.species).length;
-    
-    pillsHtml = `
-        <div class="class-pill ${noneActive}" onclick="selectSpecies(null)" title="Unidentified / Clear Selection">
-            <div class="class-color-dot" style="background: #7cb342"></div>
-            <span>None</span>
-            ${unidentifiedCount > 0 ? `<span class="class-count" style="margin-left: 5px; opacity: 0.7; font-size: 0.75rem;">(${unidentifiedCount})</span>` : ''}
-        </div>
-    ` + pillsHtml;
+
+    if (unidentifiedCount > 0) {
+        pillsHtml = `
+            <div class="class-pill ${noneActive}" onclick="selectSpecies(null)" title="Unclassified boxes">
+                <div class="class-color-dot" style="background: #7cb342"></div>
+                <span>None</span>
+                <span class="class-count" style="margin-left: 5px; opacity: 0.7; font-size: 0.75rem;">(${unidentifiedCount})</span>
+            </div>
+        ` + pillsHtml;
+    }
 
     container.innerHTML = pillsHtml;
 }
@@ -2769,27 +2776,21 @@ function updateOverlay() {
     const selectedBox = boxes.find(b => b.id === selectedBoxId);
     const overlay = document.querySelector('.canvas-overlay');
 
+    if (!overlay) {
+        console.warn('Canvas overlay element not found');
+        return;
+    }
+
     if (selectedBox) {
         const boxIndex = boxes.indexOf(selectedBox) + 1;
         const statusText = selectedBox.species
             ? `Bird #${boxIndex} (${selectedBox.species})`
             : `Bird #${boxIndex} - Not identified`;
 
-        // Update or create status line
-        let statusDiv = overlay.querySelector('.box-status');
-        if (!statusDiv) {
-            statusDiv = document.createElement('div');
-            statusDiv.className = 'box-status';
-            statusDiv.style.cssText = 'margin-top: 0.5rem; padding-top: 0.5rem; border-top: 1px solid rgba(83, 124, 138, 0.3); font-weight: 600; color: var(--orange-primary);';
-            overlay.insertBefore(statusDiv, overlay.children[2]);  // Insert before shortcuts
-        }
-        statusDiv.textContent = `Selected: ${statusText}`;
+        overlay.innerHTML = `Selected: ${statusText}`;
+        overlay.style.display = 'block';
     } else {
-        // Remove status if nothing selected
-        const statusDiv = overlay.querySelector('.box-status');
-        if (statusDiv) {
-            statusDiv.remove();
-        }
+        overlay.style.display = 'none';
     }
 }
 
@@ -3430,7 +3431,7 @@ async function selectSpecies(code) {
     }
 
     renderClassBar();
-    showToast(selectedSpecies ? `Selected ${displayName} for drawing` : 'Deselected species');
+    showToast(selectedSpecies ? `Selected ${displayName} for drawing` : 'Deselected class');
 }
 
 // Delete box
@@ -3580,9 +3581,29 @@ async function saveAndNext() {
     }
 }
 
-// Delete current image (for low-quality images)
-// Fast deletion without confirmation for quick purging of bad images
-async function deleteCurrentImage() {
+// Show delete confirmation modal
+function deleteCurrentImage() {
+    showDeleteConfirm();
+}
+
+function showDeleteConfirm() {
+    const modal = document.getElementById('delete-confirm-modal');
+    if (modal) {
+        modal.style.display = 'flex';
+    }
+}
+
+function hideDeleteConfirm() {
+    const modal = document.getElementById('delete-confirm-modal');
+    if (modal) {
+        modal.style.display = 'none';
+    }
+}
+
+// Actually delete the image after confirmation
+async function confirmDelete() {
+    hideDeleteConfirm();
+
     try {
         // Show deletion in progress
         showToast('Deleting image...', 'info');
@@ -3643,42 +3664,42 @@ function hideAddClassDialog() {
 
 async function addNewClass() {
     const input = document.getElementById('new-species-input');
-    const speciesName = input.value.trim();
+    const className = input.value.trim();
 
-    if (!speciesName) {
-        showToast('Please enter a species name', 'warning');
+    if (!className) {
+        showToast('Please enter a class name', 'warning');
         return;
     }
 
     try {
         // For now, just add to the local species candidates list
         // In a real system, this would POST to the backend to add to database
-        const newSpecies = {
-            code: speciesName.toUpperCase().replace(/\s+/g, '_'),
-            name: speciesName,
-            common_name: speciesName
+        const newClass = {
+            code: className.toUpperCase().replace(/\s+/g, '_'),
+            name: className,
+            common_name: className
         };
 
         // Add to candidates if not already present
-        if (!speciesCandidates.find(s => s.code === newSpecies.code)) {
-            speciesCandidates.push(newSpecies);
-            showToast(`Added "${speciesName}" to available species`, 'success');
+        if (!speciesCandidates.find(s => s.code === newClass.code)) {
+            speciesCandidates.push(newClass);
+            showToast(`Added "${className}" to available classes`, 'success');
         } else {
-            showToast(`"${speciesName}" already exists`, 'warning');
+            showToast(`"${className}" already exists`, 'warning');
         }
 
         hideAddClassDialog();
 
         // TODO: Optionally POST to backend to persist
-        // await fetch('/api/species/add', {
+        // await fetch('/api/classes/add', {
         //     method: 'POST',
         //     headers: { 'Content-Type': 'application/json' },
-        //     body: JSON.stringify({ species: newSpecies })
+        //     body: JSON.stringify({ class: newClass })
         // });
 
     } catch (error) {
-        console.error('Add species error:', error);
-        showToast('Failed to add species', 'error');
+        console.error('Add class error:', error);
+        showToast('Failed to add class', 'error');
     }
 }
 
@@ -3696,18 +3717,30 @@ function navigateToNext() {
 }
 
 function navigateToPrev() {
+    console.log('navigateToPrev called, hasUnsavedChanges:', hasUnsavedChanges);
+    if (hasUnsavedChanges) {
+        showToast('Please save your changes first', 'warning');
+        return false;
+    }
     if (PREV_INDEX !== null) {
         window.location.href = `/project/${PROJECT_ID}/editor/${USERNAME}/${PREV_INDEX}`;
     }
+    return true;
 }
 
 function navigateToImage(imageIndex) {
+    if (hasUnsavedChanges) {
+        showToast('Please save your changes first', 'warning');
+        document.getElementById('jump-input').value = CURRENT_INDEX + 1;
+        return false;
+    }
     if (imageIndex >= 0 && imageIndex < TOTAL_IMAGES) {
         window.location.href = `/project/${PROJECT_ID}/editor/${USERNAME}/${imageIndex}`;
     } else {
         alert(`Please enter a number between 1 and ${TOTAL_IMAGES}`);
         document.getElementById('jump-input').value = CURRENT_INDEX + 1;
     }
+    return true;
 }
 
 function handleJumpKeyPress(event) {
@@ -3722,6 +3755,10 @@ function handleJumpKeyPress(event) {
 // Update navigation button states based on save status
 function updateNavigationState() {
     const nextBtn = document.querySelector('.nav-btn[onclick="navigateToNext()"]');
+    const prevBtn = document.querySelector('.nav-btn[onclick="navigateToPrev()"]');
+    const jumpInput = document.getElementById('jump-input');
+
+    // Disable/enable next button
     if (nextBtn) {
         if (hasUnsavedChanges) {
             nextBtn.style.opacity = '0.4';
@@ -3731,6 +3768,33 @@ function updateNavigationState() {
             nextBtn.style.opacity = '1';
             nextBtn.style.cursor = 'pointer';
             nextBtn.title = 'Next Image (→)';
+        }
+    }
+
+    // Disable/enable prev button
+    if (prevBtn) {
+        if (hasUnsavedChanges) {
+            prevBtn.style.opacity = '0.4';
+            prevBtn.style.cursor = 'not-allowed';
+            prevBtn.title = 'Save changes first (Ctrl+S)';
+        } else {
+            prevBtn.style.opacity = '1';
+            prevBtn.style.cursor = 'pointer';
+            prevBtn.title = 'Previous Image (←)';
+        }
+    }
+
+    // Disable/enable jump input
+    if (jumpInput) {
+        jumpInput.disabled = hasUnsavedChanges;
+        if (hasUnsavedChanges) {
+            jumpInput.style.opacity = '0.4';
+            jumpInput.style.cursor = 'not-allowed';
+            jumpInput.title = 'Save changes first (Ctrl+S)';
+        } else {
+            jumpInput.style.opacity = '1';
+            jumpInput.style.cursor = 'text';
+            jumpInput.title = 'Jump to image number';
         }
     }
 }
@@ -3792,8 +3856,8 @@ document.addEventListener('keydown', (e) => {
     if (e.key === 'h' && !e.shiftKey && !e.ctrlKey) selectTool('pan');
     if (e.key === 'r' && !e.shiftKey && !e.ctrlKey) resetZoom();
 
-    // Save and continue: Ctrl+S (standard save shortcut)
-    if (e.key === 's' && e.ctrlKey) {
+    // Save and continue: Shift+Enter
+    if (e.key === 'Enter' && e.shiftKey && !e.ctrlKey) {
         e.preventDefault();
         saveAndNext();
     }
@@ -3877,24 +3941,24 @@ document.addEventListener('DOMContentLoaded', () => {
 });
     </script>
 
-    <!-- Add New Species Dialog -->
+    <!-- Add New Class Dialog -->
     <div id="add-class-modal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.7); z-index: 10000; align-items: center; justify-content: center;" onclick="if(event.target === this) hideAddClassDialog()">
         <div style="background: var(--surface); border-radius: 12px; padding: 2rem; max-width: 500px; width: 90%; box-shadow: 0 20px 60px rgba(0,0,0,0.5);">
             <h3 style="font-family: var(--font-serif); font-size: 1.5rem; margin-bottom: 1rem; color: var(--text-primary);">
-                ➕ Add New Species
+                ➕ Add New Class
             </h3>
             <p style="color: var(--text-muted); font-size: 0.875rem; margin-bottom: 1.5rem;">
-                Enter the species code (e.g., BRPE, GREG) or common name. This will be available for all annotations in this project.
+                Enter the class name. This will be available for all annotations in this project.
             </p>
 
             <div style="margin-bottom: 1rem;">
                 <label style="display: block; font-size: 0.875rem; font-weight: 600; margin-bottom: 0.5rem; color: var(--text-primary);">
-                    Species Code or Name
+                    Class Name
                 </label>
                 <input
                     type="text"
                     id="new-species-input"
-                    placeholder="e.g., BRPE or Brown Pelican"
+                    placeholder="e.g., bird or vehicle"
                     style="width: 100%; padding: 0.75rem; border: 2px solid rgba(83, 124, 138, 0.3); border-radius: 8px; background: var(--surface-light); color: var(--text-primary); font-size: 1rem; font-family: var(--font-sans);"
                     onkeypress="if(event.key === 'Enter') addNewClass()"
                 />
@@ -3913,7 +3977,37 @@ document.addEventListener('DOMContentLoaded', () => {
                     onclick="addNewClass()"
                     style="padding: 0.75rem 1.5rem;"
                 >
-                    Add Species
+                    Add Class
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Delete Image Confirmation Modal -->
+    <div id="delete-confirm-modal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.7); z-index: 10000; align-items: center; justify-content: center;" onclick="if(event.target === this) hideDeleteConfirm()">
+        <div style="background: var(--surface); border-radius: 12px; padding: 2rem; max-width: 500px; width: 90%; box-shadow: 0 20px 60px rgba(0,0,0,0.5);">
+            <h3 style="font-family: var(--font-serif); font-size: 1.5rem; margin-bottom: 1rem; color: var(--text-primary);">
+                ⚠️ Delete Image?
+            </h3>
+            <p style="color: var(--text-muted); font-size: 0.875rem; margin-bottom: 1.5rem;">
+                Are you sure you want to delete <strong style="color: var(--text-primary);">{{ image_name }}</strong>? This action cannot be undone and will permanently remove the image and all its annotations.
+            </p>
+
+            <div style="display: flex; gap: 0.75rem; justify-content: flex-end; margin-top: 1.5rem;">
+                <button
+                    class="btn-secondary"
+                    onclick="hideDeleteConfirm()"
+                    style="padding: 0.75rem 1.5rem;"
+                >
+                    Cancel
+                </button>
+                <button
+                    onclick="confirmDelete()"
+                    style="padding: 0.75rem 1.5rem; background: #dc2626; color: white; border: none; border-radius: 8px; font-weight: 600; cursor: pointer; transition: all 0.2s;"
+                    onmouseover="this.style.background='#b91c1c'"
+                    onmouseout="this.style.background='#dc2626'"
+                >
+                    Delete Image
                 </button>
             </div>
         </div>

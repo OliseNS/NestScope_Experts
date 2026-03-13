@@ -107,6 +107,10 @@ def load_projects():
         return projects
 
     for folder_name in os.listdir(PROJECTS_DIR):
+        # Skip hidden directories (starting with .)
+        if folder_name.startswith('.'):
+            continue
+
         project_path = os.path.join(PROJECTS_DIR, folder_name)
         if not os.path.isdir(project_path):
             continue
@@ -946,6 +950,45 @@ def editor(project_folder, username, image_index=0):
     if not os.path.exists(image_path):
         return f"Image not found: {image_name}", 404
 
+    # Load classes from project's data.yaml first
+    data_yaml_path = os.path.join(project_path, 'data.yaml')
+    class_list = []
+    class_names = {}  # Map class_id to class_name
+
+    if os.path.exists(data_yaml_path):
+        import yaml
+        with open(data_yaml_path, 'r') as f:
+            yaml_data = yaml.safe_load(f)
+            names = yaml_data.get('names', {})
+
+            # Handle both dict and list formats
+            if isinstance(names, dict):
+                # Dict format: {0: 'bird', 1: 'car'}
+                class_names = names
+                for class_id, class_name in names.items():
+                    class_list.append({
+                        'code': class_name,
+                        'name': class_name
+                    })
+            elif isinstance(names, list):
+                # List format: ['bird', 'car']
+                class_names = {i: name for i, name in enumerate(names)}
+                for i, class_name in enumerate(names):
+                    class_list.append({
+                        'code': class_name,
+                        'name': class_name
+                    })
+            else:
+                # Unexpected format, fallback to empty
+                class_names = {}
+    else:
+        # Fallback to species_list.json if data.yaml doesn't exist
+        species_file = os.path.join(APP_DIR, 'data', 'species_list.json')
+        if os.path.exists(species_file):
+            with open(species_file, 'r') as f:
+                data = json.load(f)
+                class_list = data.get('real_species', [])
+
     # Load existing labels (if any)
     label_file = os.path.splitext(image_name)[0] + '.txt'
     label_path = os.path.join(labels_dir, label_file)
@@ -956,29 +999,24 @@ def editor(project_folder, username, image_index=0):
             for line in f:
                 parts = line.strip().split()
                 if len(parts) >= 5:
+                    class_id = int(parts[0])
+                    # Use class name from data.yaml instead of species code from column 6
+                    class_name = class_names.get(class_id, None)
                     boxes.append({
-                        'class_id': int(parts[0]),
+                        'class_id': class_id,
                         'x_center': float(parts[1]),
                         'y_center': float(parts[2]),
                         'width': float(parts[3]),
                         'height': float(parts[4]),
-                        'species': parts[5] if len(parts) > 5 else None
+                        'species': class_name  # Use class name from data.yaml
                     })
-
-    # Load species list
-    species_file = os.path.join(APP_DIR, 'data', 'species_list.json')
-    species_list = []
-    if os.path.exists(species_file):
-        with open(species_file, 'r') as f:
-            data = json.load(f)
-            species_list = data.get('real_species', [])
 
     # Simple questions structure (can be expanded later)
     questions = [
         {
             "id": 0,
-            "text": "Select the bird species",
-            "type": "species_select"
+            "text": "Select the class",
+            "type": "class_select"
         }
     ]
 
@@ -995,6 +1033,7 @@ def editor(project_folder, username, image_index=0):
     logging.info(f"Editor loading: {username} - {image_name}")
     logging.info(f"Image URL: {image_url}")
     logging.info(f"Total images: {len(all_user_images)}")
+    logging.info(f"Loaded {len(class_list)} classes from data.yaml")
 
     return render_template('expert_editor.html',
                          username=username,
@@ -1006,7 +1045,7 @@ def editor(project_folder, username, image_index=0):
                          prev_index=prev_index,
                          next_index=next_index,
                          boxes=boxes,
-                         species_list=species_list,
+                         species_list=class_list,  # Keep as species_list for template compatibility
                          questions=questions,
                          back_url=f'/project/{project_folder}')
 

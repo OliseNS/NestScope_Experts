@@ -1,0 +1,6 @@
+{
+  "name": "NestVision_Stage_2",
+  "description": "Thanks to opensource dataset from the University of Queensland in Australia we have this modified dataset for our second stage of training. ",
+  "created_at": "2026-03-12T21:25:25.747479",
+  "import_type": "yolo"
+}

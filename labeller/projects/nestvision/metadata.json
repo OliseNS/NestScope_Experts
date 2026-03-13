@@ -1,6 +1,6 @@
 {
-  "name": "NestVision",
-  "description": "This is the dataset that trained the first detection model.",
+  "name": "NestVision_Stage1",
+  "description": "This is the first dataset that we hand labelled.",
   "created_at": "2026-03-10T02:31:29.688603",
   "import_type": "yolo"
 }
