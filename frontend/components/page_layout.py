@@ -4,9 +4,20 @@ Provides consistent page structure, header, and sidebar across all pages
 """
 
 import streamlit as st
+import base64
+import os
 from .sidebar import render_sidebar_section
 from .status import render_service_status_link
 from styles import get_custom_css
+
+
+def _get_logo_b64() -> str:
+    logo_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "logo1.png")
+    try:
+        with open(logo_path, "rb") as f:
+            return base64.b64encode(f.read()).decode()
+    except Exception:
+        return ""
 
 
 def init_page(page_title: str, page_icon: str = "🦅", layout: str = "wide"):
@@ -41,23 +52,30 @@ def init_page(page_title: str, page_icon: str = "🦅", layout: str = "wide"):
             min-height: 0 !important;
         }
 
-        /* Force Claude Code background color */
-        .stApp, [data-testid="stAppViewContainer"], .main {
-            background-color: #1e1e1e !important;
+        /* Glass theme background — deep dark gradient */
+        .stApp {
+            background: radial-gradient(ellipse 80% 60% at 10% 0%, rgba(217, 119, 87, 0.12) 0%, transparent 50%),
+                        radial-gradient(ellipse 60% 50% at 90% 80%, rgba(100, 160, 255, 0.08) 0%, transparent 50%),
+                        #0D0D12 !important;
+            background-attachment: fixed !important;
         }
 
-        [data-testid="stAppViewContainer"] > section:first-child {
-            background-color: #1e1e1e !important;
+        [data-testid="stAppViewContainer"],
+        [data-testid="stAppViewContainer"] > section:first-child,
+        .main {
+            background: transparent !important;
         }
 
-        /* Fixed header - REDUCED z-index to not block publish button */
+        /* Fixed header — frosted glass bar */
         .fixed-header {
             position: fixed;
             top: 0;
             left: 0;
             right: 0;
-            background: #1e1e1e;
-            border-bottom: 1px solid rgba(86, 184, 151, 0.2);
+            background: rgba(13, 13, 18, 0.75);
+            backdrop-filter: blur(24px);
+            -webkit-backdrop-filter: blur(24px);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.08);
             padding: 0.75rem 1.5rem;
             display: flex;
             align-items: center;
@@ -68,13 +86,13 @@ def init_page(page_title: str, page_icon: str = "🦅", layout: str = "wide"):
         /* Push main content down to account for fixed header */
         .main .block-container {
             padding-top: 4rem;
-            background-color: #1e1e1e !important;
+            background: transparent !important;
         }
 
         /* Ensure sidebar is below header */
         [data-testid="stSidebar"] {
             padding-top: 3.5rem;
-            background-color: #1e1e1e !important;
+            background: rgba(13, 13, 18, 0.7) !important;
         }
     </style>
     """, unsafe_allow_html=True)
@@ -88,13 +106,18 @@ def render_header(page_name: str = None):
     Args:
         page_name: Optional page name to display in header
     """
-    page_display = f' / {page_name}' if page_name else ''
+    page_display = f'<span style="color: #555; font-size: 0.8rem; margin-left: 0.25rem;">/ {page_name}</span>' if page_name else ''
+
+    logo_b64 = _get_logo_b64()
+    if logo_b64:
+        logo_html = f'<img src="data:image/png;base64,{logo_b64}" style="height: 26px; filter: invert(1); opacity: 0.85;" />'
+    else:
+        logo_html = '<span style="font-size: 1.1rem;">🦅</span><span style="font-size: 0.95rem; font-weight: 600; color: #E5E5E5; margin-left: 0.4rem;">NestScope</span>'
 
     st.markdown(f"""
         <div class="fixed-header">
-            <span style="font-size: 1.25rem;">🦅</span>
-            <span style="font-size: 0.95rem; font-weight: 600; color: #E5E5E5;">NestScope</span>
-            <span style="color: #666; font-size: 0.8rem;">{page_display}</span>
+            {logo_html}
+            {page_display}
         </div>
     """, unsafe_allow_html=True)
 

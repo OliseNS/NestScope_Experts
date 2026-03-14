@@ -778,9 +778,6 @@ if prompt:
 
             if has_lat and has_lon and not df.empty:
                 show_map = True
-                print(f"✅ MAP ENABLED: Found Latitude and Longitude columns")
-            else:
-                print(f"ℹ️  No map: has_lat={has_lat}, has_lon={has_lon}, empty={df.empty}")
 
             response_data = {
                 "role": "assistant",
@@ -798,15 +795,8 @@ if prompt:
             else:
                 tabs_to_render.append(("data", "📋 Data Table"))
 
-            # Debug: Always log map decision
-            print(f"🗺️  MAP DECISION: show_map={show_map}, df_empty={df.empty}")
-            print(f"   DataFrame columns: {list(df.columns)}")
-
             if show_map:
                 tabs_to_render.append(("map", "🗺️ Map View"))
-                print(f"✅ Map tab ADDED to tabs_to_render")
-            else:
-                print(f"❌ Map tab NOT added (show_map=False)")
 
             # Render visualization
             if len(tabs_to_render) > 1:

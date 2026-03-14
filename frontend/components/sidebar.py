@@ -4,40 +4,40 @@ Google Cloud-like sidebar organization
 """
 
 import streamlit as st
+import base64
+import os
+
+
+def _get_logo_b64() -> str:
+    logo_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "logo1.png")
+    try:
+        with open(logo_path, "rb") as f:
+            return base64.b64encode(f.read()).decode()
+    except Exception:
+        return ""
 
 
 def render_sidebar_header():
     """
-    Renders the Nestscope brand header at the top of the sidebar.
-    Google Cloud-style compact header.
+    Renders the NestScope brand header at the top of the sidebar.
     """
-    st.markdown("""
+    logo_b64 = _get_logo_b64()
+    if logo_b64:
+        logo_html = f'<img src="data:image/png;base64,{logo_b64}" style="width: 140px; filter: invert(1); opacity: 0.88;" />'
+    else:
+        logo_html = '<span style="font-size: 1.5rem;">🦅</span><span style="font-size: 1.25rem; font-weight: 600; color: #E5E5E5; margin-left: 0.5rem;">NestScope</span>'
+
+    st.markdown(f"""
         <div style="
             padding: 1rem 0.75rem 1.25rem;
             margin-bottom: 1rem;
             border-bottom: 1px solid rgba(255, 255, 255, 0.08);
         ">
+            {logo_html}
             <div style="
-                display: flex;
-                align-items: center;
-                gap: 0.75rem;
-                margin-bottom: 0.375rem;
-            ">
-                <div style="
-                    font-size: 1.5rem;
-                    line-height: 1;
-                ">🦅</div>
-                <div style="
-                    font-size: 1.25rem;
-                    font-weight: 600;
-                    letter-spacing: -0.015em;
-                    color: #E5E5E5;
-                ">NestScope</div>
-            </div>
-            <div style="
-                color: #A0A0A0;
+                color: #666;
                 font-size: 0.6875rem;
-                padding-left: 0.25rem;
+                margin-top: 0.375rem;
                 font-weight: 500;
                 letter-spacing: 0.02em;
             ">Avian Monitoring Suite</div>
