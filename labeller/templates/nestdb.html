@@ -1012,7 +1012,65 @@ let allTables = [];
 let tableData = [];
 let tableSchema = [];
 
-const API_BASE_URL = 'http://localhost:8000';
+const API_BASE_URL = '{{ api_base_url }}';
+let backendAvailable = false;
+
+// Check if backend is available
+async function checkBackend() {
+    try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 3000); // 3 second timeout
+
+        const response = await fetch(`${API_BASE_URL}/health`, {
+            method: 'GET',
+            signal: controller.signal
+        });
+
+        clearTimeout(timeoutId);
+        backendAvailable = response.ok;
+        return backendAvailable;
+    } catch (error) {
+        console.error('Backend unavailable:', error);
+        backendAvailable = false;
+        return false;
+    }
+}
+
+// Show backend unavailable warning
+function showBackendWarning() {
+    showToast('Backend unavailable. Make sure FastAPI is running on port 8000', 'error');
+
+    // Show persistent banner
+    const banner = document.createElement('div');
+    banner.id = 'backend-warning-banner';
+    banner.style.cssText = `
+        position: fixed;
+        top: 60px;
+        left: 0;
+        right: 0;
+        background: #f04438;
+        color: white;
+        padding: 0.75rem 1.5rem;
+        text-align: center;
+        z-index: 10000;
+        font-size: 0.875rem;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+    `;
+    banner.innerHTML = `
+        <strong>⚠️ Backend Connection Failed</strong> -
+        Cannot connect to ${API_BASE_URL}.
+        Make sure the FastAPI backend is running.
+        <button onclick="location.reload()" style="margin-left: 1rem; background: rgba(255,255,255,0.2); border: 1px solid white; color: white; padding: 0.25rem 0.75rem; border-radius: 4px; cursor: pointer;">
+            Retry
+        </button>
+    `;
+
+    // Remove existing banner if present
+    const existing = document.getElementById('backend-warning-banner');
+    if (existing) existing.remove();
+
+    document.body.appendChild(banner);
+}
 
 // Get current user info from hidden inputs (set by Flask session)
 let expertEmail = null;
@@ -1068,13 +1126,31 @@ document.addEventListener('DOMContentLoaded', () => {
 // ============================================================================
 async function loadTables() {
     try {
-        const response = await fetch(`${API_BASE_URL}/db/tables`);
+        // Check backend availability first
+        const isAvailable = await checkBackend();
+        if (!isAvailable) {
+            showBackendWarning();
+            return;
+        }
+
+        const response = await fetch(`${API_BASE_URL}/db/tables`, {
+            method: 'GET',
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        });
+
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+
         const data = await response.json();
         allTables = data.tables || [];
         renderTableList(allTables);
     } catch (error) {
         console.error('Error loading tables:', error);
-        showToast('Failed to load tables', 'error');
+        showToast(`Failed to load tables: ${error.message}`, 'error');
+        showBackendWarning();
     }
 }
 

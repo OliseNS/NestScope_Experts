@@ -774,11 +774,15 @@ def nestdb_page():
         </html>
         ''', 403
 
+    # Get API base URL from environment
+    api_base_url = os.getenv("API_BASE_URL", "http://localhost:8000")
+
     return render_template(
         'nestdb.html',
         active_page='nestdb',
         can_edit_db=True,
-        is_admin=is_admin(user_email)
+        is_admin=is_admin(user_email),
+        api_base_url=api_base_url
     )
 
 @app.route('/flood-intelligence')

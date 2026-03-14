@@ -1,0 +1,254 @@
+{% extends "base.html" %}
+
+{% block title %}NestScope - AI-Powered Gulf Coast Avian Monitoring{% endblock %}
+
+{% block content %}
+<div style="max-width: 1400px; margin: 0 auto; padding: 3rem 2rem;">
+    <!-- Hero Section -->
+    <div style="text-align: center; margin-bottom: 4rem;">
+        <h1 style="font-size: 3rem; font-weight: 700; margin-bottom: 1rem; color: var(--text-primary);">
+            Welcome to NestScope
+        </h1>
+        <p style="font-size: 1.25rem; color: var(--text-secondary); max-width: 700px; margin: 0 auto;">
+            AI-powered Gulf Coast avian monitoring and analytics platform
+        </p>
+    </div>
+
+    <!-- Feature Overview Card -->
+    <div style="background: linear-gradient(135deg, rgba(123, 171, 174, 0.08) 0%, rgba(123, 171, 174, 0.02) 100%);
+                border: 1px solid rgba(123, 171, 174, 0.2);
+                border-radius: 12px;
+                padding: 2rem;
+                margin-bottom: 3rem;">
+        <p style="color: var(--text-primary); font-size: 1rem; line-height: 1.7; margin: 0;">
+            Explore Gulf Coast bird colony data from 2010-2021 using natural language queries and AI-powered computer vision.
+            Ask questions, visualize trends, and detect birds in aerial imagery.
+        </p>
+    </div>
+
+    <!-- Feature Cards -->
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(350px, 1fr)); gap: 1.5rem; margin-bottom: 3rem;">
+        <!-- NestChat -->
+        <a href="/chat" style="text-decoration: none;">
+            <div style="background: var(--surface-base);
+                        border: 1px solid var(--surface-border);
+                        border-radius: 12px;
+                        padding: 2rem;
+                        height: 100%;
+                        transition: all 0.2s ease;
+                        cursor: pointer;"
+                 onmouseover="this.style.borderColor='#7BABAE'; this.style.transform='translateY(-4px)'"
+                 onmouseout="this.style.borderColor='var(--surface-border)'; this.style.transform='translateY(0)'">
+                <div style="display: inline-block;
+                            background: rgba(123, 171, 174, 0.15);
+                            border-radius: 8px;
+                            padding: 0.75rem;
+                            margin-bottom: 1.5rem;
+                            font-size: 2rem;">
+                    💬
+                </div>
+                <h3 style="color: var(--text-primary); margin: 0 0 0.75rem 0; font-size: 1.5rem; font-weight: 600;">NestChat</h3>
+                <p style="color: var(--text-secondary); font-size: 0.95rem; line-height: 1.6; margin-bottom: 1.5rem;">
+                    Natural language interface for querying bird survey data with intelligent visualizations and artifacts
+                </p>
+                <ul style="color: var(--text-primary); font-size: 0.9rem; line-height: 1.8; margin-left: 1.25rem; padding-left: 0;">
+                    <li>Ask questions in plain English</li>
+                    <li>Interactive charts and maps</li>
+                    <li>Embedded data artifacts</li>
+                    <li>Export to CSV format</li>
+                </ul>
+                <div style="margin-top: 1.5rem; padding-top: 1rem; border-top: 1px solid var(--surface-border);">
+                    <p style="font-size: 0.8rem; color: var(--text-tertiary); margin: 0;">
+                        ⚡ Powered by <code style="background: var(--bg-tertiary); padding: 2px 6px; border-radius: 3px; color: #7BABAE;">{{ config.model.name }}</code>
+                    </p>
+                </div>
+            </div>
+        </a>
+
+        <!-- NestVision -->
+        <a href="/vision" style="text-decoration: none;">
+            <div style="background: var(--surface-base);
+                        border: 1px solid var(--surface-border);
+                        border-radius: 12px;
+                        padding: 2rem;
+                        height: 100%;
+                        transition: all 0.2s ease;
+                        cursor: pointer;"
+                 onmouseover="this.style.borderColor='#7BABAE'; this.style.transform='translateY(-4px)'"
+                 onmouseout="this.style.borderColor='var(--surface-border)'; this.style.transform='translateY(0)'">
+                <div style="display: inline-block;
+                            background: rgba(123, 171, 174, 0.15);
+                            border-radius: 8px;
+                            padding: 0.75rem;
+                            margin-bottom: 1.5rem;
+                            font-size: 2rem;">
+                    🦅
+                </div>
+                <h3 style="color: var(--text-primary); margin: 0 0 0.75rem 0; font-size: 1.5rem; font-weight: 600;">NestVision</h3>
+                <p style="color: var(--text-secondary); font-size: 0.95rem; line-height: 1.6; margin-bottom: 1.5rem;">
+                    AI-powered computer vision for bird detection and counting in colony images
+                </p>
+                <ul style="color: var(--text-primary); font-size: 0.9rem; line-height: 1.8; margin-left: 1.25rem; padding-left: 0;">
+                    <li>Upload colony images</li>
+                    <li>Automatic bird detection</li>
+                    <li>Species classification</li>
+                    <li>Export annotated results</li>
+                </ul>
+                <div style="margin-top: 1.5rem; padding-top: 1rem; border-top: 1px solid var(--surface-border);">
+                    <p style="font-size: 0.8rem; color: var(--text-tertiary); margin: 0;">
+                        ⚡ Powered by <code style="background: var(--bg-tertiary); padding: 2px 6px; border-radius: 3px; color: #7BABAE;">Swift YOLO26</code>
+                    </p>
+                </div>
+            </div>
+        </a>
+
+        <!-- Expert Tools (Separate Platform) -->
+        <a href="http://localhost:5000" target="_blank" style="text-decoration: none;">
+            <div style="background: linear-gradient(135deg, rgba(217, 119, 87, 0.08), rgba(217, 119, 87, 0.02));
+                        border: 1px solid rgba(217, 119, 87, 0.3);
+                        border-radius: 12px;
+                        padding: 2rem;
+                        height: 100%;
+                        transition: all 0.2s ease;
+                        cursor: pointer;
+                        position: relative;"
+                 onmouseover="this.style.borderColor='rgba(217, 119, 87, 0.6)'; this.style.transform='translateY(-4px)'"
+                 onmouseout="this.style.borderColor='rgba(217, 119, 87, 0.3)'; this.style.transform='translateY(0)'">
+                <div style="display: inline-block;
+                            background: rgba(217, 119, 87, 0.15);
+                            border-radius: 8px;
+                            padding: 0.75rem;
+                            margin-bottom: 1.5rem;
+                            font-size: 2rem;">
+                    🔬
+                </div>
+                <div style="position: absolute; top: 1rem; right: 1rem; background: rgba(217, 119, 87, 0.2); color: #D97757; padding: 0.25rem 0.75rem; border-radius: 4px; font-size: 0.75rem; font-weight: 600;">
+                    🔐 AUTH REQUIRED
+                </div>
+                <h3 style="color: var(--text-primary); margin: 0 0 0.75rem 0; font-size: 1.5rem; font-weight: 600;">Expert Tools</h3>
+                <p style="color: var(--text-secondary); font-size: 0.95rem; line-height: 1.6; margin-bottom: 1.5rem;">
+                    Advanced annotation, database management, and intelligence tools for researchers
+                </p>
+                <ul style="color: var(--text-primary); font-size: 0.9rem; line-height: 1.8; margin-left: 1.25rem; padding-left: 0;">
+                    <li>Nestperts - Annotation platform</li>
+                    <li>NestDB - Database manager</li>
+                    <li>Flood Intelligence dashboard</li>
+                    <li>Documentation & help</li>
+                </ul>
+                <div style="margin-top: 1.5rem; padding-top: 1rem; border-top: 1px solid rgba(217, 119, 87, 0.2);">
+                    <p style="font-size: 0.8rem; color: var(--text-tertiary); margin: 0;">
+                        🔒 Separate authenticated platform on port <code style="background: var(--bg-tertiary); padding: 2px 6px; border-radius: 3px; color: #D97757;">5000</code>
+                    </p>
+                </div>
+            </div>
+        </a>
+    </div>
+
+    <!-- System Architecture Info -->
+    <div style="background: var(--bg-secondary); border: 1px solid var(--surface-border); border-radius: 12px; padding: 2rem; margin-bottom: 3rem;">
+        <h3 style="font-size: 1rem; font-weight: 600; color: var(--text-primary); margin: 0 0 1rem 0;">
+            🏗️ System Architecture
+        </h3>
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 1.5rem;">
+            <div>
+                <h4 style="font-size: 0.875rem; font-weight: 600; color: #7BABAE; margin: 0 0 0.5rem 0;">
+                    Public Tools (Port 8501)
+                </h4>
+                <p style="font-size: 0.875rem; color: var(--text-secondary); line-height: 1.6; margin: 0;">
+                    No authentication required. Built with FastAPI backend + lightweight web frontend.
+                </p>
+            </div>
+            <div>
+                <h4 style="font-size: 0.875rem; font-weight: 600; color: #D97757; margin: 0 0 0.5rem 0;">
+                    Expert Tools (Port 5000)
+                </h4>
+                <p style="font-size: 0.875rem; color: var(--text-secondary); line-height: 1.6; margin: 0;">
+                    OAuth authentication required. Flask-based platform with user management and advanced features.
+                </p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Dataset Metrics -->
+    <div style="margin-bottom: 3rem;">
+        <h3 style="font-size: 0.75rem;
+                   font-weight: 600;
+                   text-transform: uppercase;
+                   letter-spacing: 0.08em;
+                   color: var(--text-tertiary);
+                   margin-bottom: 1.5rem;">
+            Dataset Overview
+        </h3>
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1.5rem;">
+            <div style="background: var(--surface-base);
+                        border: 1px solid var(--surface-border);
+                        border-radius: 10px;
+                        padding: 1.5rem;
+                        text-align: center;">
+                <div style="font-size: 2rem; font-weight: 700; color: #7BABAE; margin-bottom: 0.5rem;">
+                    {{ stats.min_year }}-{{ stats.max_year }}
+                </div>
+                <div style="font-size: 0.875rem; color: var(--text-tertiary); text-transform: uppercase; letter-spacing: 0.05em;">
+                    Years
+                </div>
+            </div>
+            <div style="background: var(--surface-base);
+                        border: 1px solid var(--surface-border);
+                        border-radius: 10px;
+                        padding: 1.5rem;
+                        text-align: center;">
+                <div style="font-size: 2rem; font-weight: 700; color: #7BABAE; margin-bottom: 0.5rem;">
+                    {{ "{:,}".format(stats.total_colonies) if stats.total_colonies else "100+" }}
+                </div>
+                <div style="font-size: 0.875rem; color: var(--text-tertiary); text-transform: uppercase; letter-spacing: 0.05em;">
+                    Colonies
+                </div>
+            </div>
+            <div style="background: var(--surface-base);
+                        border: 1px solid var(--surface-border);
+                        border-radius: 10px;
+                        padding: 1.5rem;
+                        text-align: center;">
+                <div style="font-size: 2rem; font-weight: 700; color: #7BABAE; margin-bottom: 0.5rem;">
+                    {{ stats.total_species if stats.total_species else "20" }}+
+                </div>
+                <div style="font-size: 0.875rem; color: var(--text-tertiary); text-transform: uppercase; letter-spacing: 0.05em;">
+                    Species
+                </div>
+            </div>
+            <div style="background: var(--surface-base);
+                        border: 1px solid var(--surface-border);
+                        border-radius: 10px;
+                        padding: 1.5rem;
+                        text-align: center;">
+                <div style="font-size: 2rem; font-weight: 700; color: #7BABAE; margin-bottom: 0.5rem;">
+                    {{ "{:,}".format(stats.total_observations) if stats.total_observations else "100K+" }}
+                </div>
+                <div style="font-size: 0.875rem; color: var(--text-tertiary); text-transform: uppercase; letter-spacing: 0.05em;">
+                    Records
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Quick Start Guide -->
+    <div style="background: var(--surface-base);
+                border: 1px solid var(--surface-border);
+                border-radius: 12px;
+                padding: 2rem;">
+        <h3 style="font-size: 0.75rem;
+                   font-weight: 600;
+                   text-transform: uppercase;
+                   letter-spacing: 0.08em;
+                   color: var(--text-tertiary);
+                   margin-bottom: 1.5rem;">
+            Getting Started
+        </h3>
+        <ol style="color: var(--text-primary); font-size: 0.95rem; line-height: 2; margin: 0; padding-left: 1.5rem;">
+            <li><strong style="color: #7BABAE;">NestChat:</strong> Ask questions about bird populations, trends, and locations</li>
+            <li><strong style="color: #7BABAE;">NestVision:</strong> Upload images for automatic bird detection and counting</li>
+            <li><strong style="color: #7BABAE;">Export:</strong> Download results as CSV files or annotated images</li>
+        </ol>
+    </div>
+</div>
+{% endblock %}
