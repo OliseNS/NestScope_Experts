@@ -13,14 +13,20 @@ BACKEND_URL = "http://localhost:8000"
 
 def ask_question_agentic_streaming(question: str, conversation_history: Optional[List[Dict[str, str]]] = None) -> Generator[Dict[str, Any], None, None]:
     """
-    Stream chat responses from backend using SSE.
+    Stream chat responses from backend using SSE with agentic reasoning.
     Yields events as they arrive from the backend.
+
+    Uses the agentic endpoint which provides:
+    - Multi-step reasoning with validation
+    - Self-correction (up to 3 attempts)
+    - Detailed thinking process
+    - HTML artifact generation
 
     Args:
         question: User's question
         conversation_history: List of previous messages [{"role": "user"/"assistant", "content": "..."}]
     """
-    url = f"{BACKEND_URL}/ask/stream"
+    url = f"{BACKEND_URL}/ask/agentic/stream"  # CHANGED: Use agentic endpoint
     payload = {
         "question": question,
         "conversation_history": conversation_history or []

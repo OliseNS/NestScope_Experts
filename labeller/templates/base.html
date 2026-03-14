@@ -3,15 +3,13 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
-    <meta http-equiv="Pragma" content="no-cache">
-    <meta http-equiv="Expires" content="0">
     <title>{% block title %}Nestperts - Annotation Platform{% endblock %}</title>
 
-    <!-- Modern UI Fonts -->
+    <!-- Modern UI Fonts - Optimized with font-display:swap -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
+    <noscript><link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet"></noscript>
 
     <!-- Styles -->
     <link rel="stylesheet" href="{{ url_for('static', filename='css/theme.css') }}">
@@ -822,7 +820,7 @@
     <!-- Attribution Footer -->
     <div class="attribution-footer">
         <span class="attribution-text">Made For</span>
-        <img src="https://thewaterinstitute.org/images/img-logo.png" alt="The Water Institute" class="attribution-logo">
+        <img src="{{ url_for('static', filename='images/water-institute-logo.png') }}" alt="The Water Institute" class="attribution-logo" loading="lazy">
         <span class="attribution-by">by Team SONA</span>
     </div>
 

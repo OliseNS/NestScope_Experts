@@ -72,6 +72,54 @@ def vision():
     return render_template('vision.html', examples=examples)
 
 
+@app.route('/status')
+def status():
+    """System status page showing service health"""
+    import requests
+
+    services = {
+        "backend": {
+            "url": "http://localhost:8000",
+            "name": "FastAPI Backend",
+            "healthy": False,
+            "response_time": None,
+            "error": None
+        },
+        "labeller": {
+            "url": "http://localhost:5000",
+            "name": "Nestperts Platform",
+            "healthy": False,
+            "response_time": None,
+            "error": None
+        }
+    }
+
+    # Check backend
+    try:
+        import time
+        start = time.time()
+        response = requests.get(f"{services['backend']['url']}/health", timeout=5)
+        services['backend']['response_time'] = round((time.time() - start) * 1000, 2)
+        services['backend']['healthy'] = response.status_code == 200
+        if response.status_code == 200:
+            services['backend']['details'] = response.json()
+    except Exception as e:
+        services['backend']['error'] = str(e)
+
+    # Check labeller
+    try:
+        start = time.time()
+        response = requests.get(f"{services['labeller']['url']}/health", timeout=5)
+        services['labeller']['response_time'] = round((time.time() - start) * 1000, 2)
+        services['labeller']['healthy'] = response.status_code == 200
+        if response.status_code == 200:
+            services['labeller']['details'] = response.json()
+    except Exception as e:
+        services['labeller']['error'] = str(e)
+
+    return render_template('status.html', services=services)
+
+
 # ============================================================================
 # HEALTH & STATUS
 # ============================================================================

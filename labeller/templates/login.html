@@ -5,10 +5,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Sign In - Nestperts</title>
 
-    <!-- Modern UI Fonts -->
+    <!-- Modern UI Fonts - Optimized with font-display:swap -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
+    <noscript><link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet"></noscript>
 
     <style>
         * {
@@ -368,7 +369,7 @@
     <!-- Attribution Footer -->
     <div class="attribution">
         <span class="attribution-text">Made For</span>
-        <img src="https://thewaterinstitute.org/images/img-logo.png" alt="The Water Institute" class="attribution-logo">
+        <img src="/static/images/water-institute-logo.png" alt="The Water Institute" class="attribution-logo" loading="lazy">
         <span class="attribution-by">by Team SONA</span>
     </div>
 </body>

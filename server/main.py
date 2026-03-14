@@ -967,9 +967,9 @@ class SQLChatbot:
             {"role": "system", "content": self.system_prompt}
         ]
 
-        # Inject metadata as context (only once at the start)
-        if self.metadata and not conversation_history:
-            # Only add metadata for the first message to save tokens
+        # Inject metadata as context (ALWAYS include for SQL generation)
+        if self.metadata:
+            # Always add metadata so model understands schema for SQL generation
             metadata_context = self._format_metadata_context()
             messages.append({"role": "system", "content": metadata_context})
 
@@ -984,12 +984,28 @@ class SQLChatbot:
             "content": f"""Question: {user_question}
 
 CRITICAL REQUIREMENTS:
-1. Return ONLY the SQL query - no explanations, no markdown, no comments
-2. If the question involves locations, colonies, states, or mapping, you MUST include "Latitude" and "Longitude" columns in the SELECT and GROUP BY clauses.
-3. Add "WHERE "Latitude" IS NOT NULL AND "Longitude" IS NOT NULL" to ensure results can be mapped.
-4. Use exact column names: "ColonyName", "Latitude", "Longitude" (case-sensitive)
+1. Return ONLY a valid SQL SELECT query - NO explanations, NO markdown, NO HTML, NO JavaScript, NO comments
+2. Your response must START with "SELECT" or "WITH" (for CTEs) - nothing else
+3. Do NOT include: HTML tags (<html>, <script>), code blocks (```), explanations, or any text before/after the SQL
+4. If question involves locations/colonies/states: MUST include "Latitude", "Longitude" in SELECT and GROUP BY
+5. Add WHERE "Latitude" IS NOT NULL AND "Longitude" IS NOT NULL for mappable results
+6. Use exact column names: "ColonyName", "Latitude", "Longitude" (case-sensitive)
 
-Generate the SQL query now:"""
+WRONG (DO NOT DO THIS):
+```sql
+SELECT * FROM table;
+```
+
+WRONG (DO NOT DO THIS):
+Here's the query: SELECT * FROM table;
+
+WRONG (DO NOT DO THIS):
+<html><script>...</script></html>
+
+CORRECT (DO THIS):
+SELECT "ColonyName", "State" FROM "tblColonyTotals2010-2021_MayJuneCombined" WHERE "Year" = 2021;
+
+Generate the SQL query now (SQL ONLY, no other text):"""
         })
 
         try:
@@ -1017,6 +1033,15 @@ Generate the SQL query now:"""
                     idx = sql_query.upper().find(keyword)
                     sql_query = sql_query[idx:].strip()
                     break
+
+            # CRITICAL VALIDATION: Check if model generated garbage (HTML/JS instead of SQL)
+            sql_lower = sql_query.lower()
+            if any(tag in sql_lower for tag in ['<html>', '<script>', '<div>', '<body>', 'document.', 'function(', 'const ', 'let ', 'var ']):
+                return f"ERROR: Model generated HTML/JavaScript instead of SQL. This model is not suitable for SQL generation. Please use a better model (like Claude or GPT-4)."
+
+            # Verify it's actually SQL
+            if not (sql_query.upper().startswith('SELECT') or sql_query.upper().startswith('WITH')):
+                return f"ERROR: Invalid SQL - must start with SELECT or WITH. Got: {sql_query[:100]}..."
 
             # LAYER 2: Validate and enhance SQL for mapping
             enhanced_sql, was_modified, reason = validate_and_enhance_sql_for_mapping(sql_query)
@@ -1096,7 +1121,7 @@ Generate the SQL query now:"""
 
         system_prompt = """You are a helpful assistant that explains bird colony data query results.
 
-IMPORTANT: You can see the conversation history, so use it to provide contextual answers. If the user asks follow-up questions like "List them" or "Show me more details", refer to the previous context to understand what they're asking about.
+IMPORTANT: You can see the conversation history, so use it to provide contextual answers.
 
 Your task is to:
 1. Answer the user's question based on the SQL query results
@@ -1104,47 +1129,261 @@ Your task is to:
 3. Highlight interesting patterns or insights
 4. Use a conversational but informative tone
 5. If there are no results, explain why that might be
-6. If there's a query error, explain what went wrong in simple terms and suggest how to fix it
+6. If there's a query error, explain what went wrong in simple terms
+7. **GENERATE HTML ARTIFACTS for charts and trends ONLY**
 
-CRITICAL - VISUALIZATION DIRECTIVES (MANDATORY):
-You MUST include visualization directives at the END of your response on separate lines.
+## CRITICAL: HTML ARTIFACT GENERATION
 
-IMPORTANT: Check the query results to determine what visualizations to show:
+**Generate artifacts for charts and trends. Maps are handled automatically by the system.**
 
-**Use LINE CHARTS for:**
-- Time-series data with Year/Date columns showing TRENDS OVER TIME
-- Data where the x-axis represents a continuous temporal progression
-- Examples: yearly counts, monthly trends, population changes over years
-- Requirements: Must have 3+ data points, x-axis must be chronological
+**IMPORTANT: Keep artifacts CONCISE!**
+- Limit to top 10-20 data points for large datasets
+- Use compact HTML (minify if needed)
+- No code comments in artifacts
+- This ensures fast loading and clean user experience
 
-**Use BAR CHARTS for:**
-- Comparisons between categories (species, colonies, states, regions)
-- Rankings or "top N" lists
-- Categorical data where order doesn't represent time progression
-- Examples: top 10 species, comparison by colony name, counts by state
+### When to Create Artifacts:
+- ✅ Time-series data (years, dates) → Line chart artifact
+- ✅ Category comparisons (top species, colonies) → Bar chart artifact
+- ✅ Proportions/percentages (species composition, state breakdown) → Pie/Doughnut chart artifact
+- ✅ Trends over time → Line or multi-line chart artifact
+- ✅ Distributions → Histogram artifact
+- ❌ Geographic data (has Lat/Lon) → NO artifact, map auto-generates
+- ❌ Simple answers with <10 rows → Just explain
 
-**Use MAPS for:**
-- ANY results with Latitude AND Longitude columns → ALWAYS add [SHOW_MAP: true]
+### Artifact Format:
+Wrap complete HTML in artifact code blocks:
 
-**General Rules:**
-- You can include BOTH chart and map directives if appropriate
-- Only use [NO_VIZ] for errors, empty results, or purely informational queries
-- When in doubt: time-based = line, categorical = bar
+\`\`\`artifact
+<!DOCTYPE html>
+<html>
+<head>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1"></script>
+    <style>
+        body { margin: 20px; font-family: sans-serif; }
+        canvas { max-width: 100%; }
+        h3 { color: #7BABAE; margin-bottom: 20px; }
+    </style>
+</head>
+<body>
+    <h3>Chart Title Here</h3>
+    <canvas id="myChart"></canvas>
+    <script>
+        new Chart(document.getElementById('myChart'), {
+            type: 'line',
+            data: {
+                labels: [ACTUAL_YEARS_FROM_RESULTS],
+                datasets: [{
+                    label: 'Bird Count',
+                    data: [ACTUAL_COUNTS_FROM_RESULTS],
+                    borderColor: '#7BABAE',
+                    backgroundColor: 'rgba(123, 171, 174, 0.1)',
+                    tension: 0.4,
+                    fill: true
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: true,
+                scales: {
+                    y: { beginAtZero: true },
+                    x: { title: { display: true, text: 'Year' } }
+                }
+            }
+        });
+    </script>
+</body>
+</html>
+\`\`\`
 
-DIRECTIVE FORMAT (include these exact tags):
-- [SHOW_CHART: line] - for time-series trends (Year/Date on x-axis)
-- [SHOW_CHART: bar] - for categorical comparisons and rankings
-- [SHOW_MAP: true] - when results have Latitude and Longitude columns
-- [NO_VIZ] - only when truly no visualization is possible or useful
+### CRITICAL RULES:
+1. **Extract real data from results** - Use actual numbers from the query results table
+2. **Limit data points**: For large datasets (50+ rows), show only top 10-20 most significant entries
+3. **Column Selection**:
+   - For Y-axis: Use count columns (Birds, Nests, total_birds, bird_count)
+   - For X-axis: Use Year, Date, ColonyName, SpeciesName
+   - **NEVER use Latitude/Longitude for chart axes!**
+4. **Complete HTML**: Include Chart.js 4.4.1 via CDN
+5. **Colors**: #7BABAE (coastal teal), #D97757 (orange), #537C8A (ocean blue), #F04438 (red for declines)
+6. **NO MAP ARTIFACTS**: Maps are automatically rendered by the system when results have Lat/Lon
+7. **Keep it concise**: Minimize artifact size - use compact arrays, no comments in code
 
-EXAMPLES:
-- Query: "Brown pelican trends 2015-2021" → [SHOW_CHART: line]
-- Query: "Top 10 species in 2021" → [SHOW_CHART: bar]
-- Query: "Colonies in Louisiana" with lat/lon → [SHOW_MAP: true]
-- Query: "Yearly counts by colony" with lat/lon → BOTH [SHOW_MAP: true] and [SHOW_CHART: line]
-- Query: "Compare species diversity across colonies" → [SHOW_CHART: bar]
+### Example 1: Line Chart for Single Trend
 
-The visualization directives should be on the last line(s) of your response, after your explanation."""
+\`\`\`artifact
+<!DOCTYPE html>
+<html>
+<head>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1"></script>
+    <style>
+        body { margin: 20px; font-family: sans-serif; }
+        canvas { max-width: 100%; }
+        h3 { color: #7BABAE; margin-bottom: 20px; }
+    </style>
+</head>
+<body>
+    <h3>Brown Pelican Population Trends (2010-2021)</h3>
+    <canvas id="myChart"></canvas>
+    <script>
+        new Chart(document.getElementById('myChart'), {
+            type: 'line',
+            data: {
+                labels: [2010, 2015, 2021],
+                datasets: [{
+                    label: 'Bird Count',
+                    data: [45328, 69123, 112043],
+                    borderColor: '#7BABAE',
+                    backgroundColor: 'rgba(123, 171, 174, 0.1)',
+                    tension: 0.4,
+                    fill: true
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: true,
+                scales: { y: { beginAtZero: true } }
+            }
+        });
+    </script>
+</body>
+</html>
+\`\`\`
+
+### Example 2: Multi-Line Chart for Comparisons
+
+\`\`\`artifact
+<!DOCTYPE html>
+<html>
+<head>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1"></script>
+    <style>
+        body { margin: 20px; font-family: sans-serif; }
+        canvas { max-width: 100%; }
+        h3 { color: #7BABAE; margin-bottom: 20px; }
+    </style>
+</head>
+<body>
+    <h3>Colonies with Declining Populations</h3>
+    <canvas id="myChart"></canvas>
+    <script>
+        new Chart(document.getElementById('myChart'), {
+            type: 'line',
+            data: {
+                labels: [2010, 2015, 2021],
+                datasets: [
+                    {
+                        label: 'Breton Island',
+                        data: [38387, 28234, 14934],
+                        borderColor: '#F04438',
+                        tension: 0.4
+                    },
+                    {
+                        label: 'Felicity Island',
+                        data: [12403, 8432, 1868],
+                        borderColor: '#FD853A',
+                        tension: 0.4
+                    },
+                    {
+                        label: 'Marker 52 Spoil',
+                        data: [9122, 6234, 3736],
+                        borderColor: '#FEC84B',
+                        tension: 0.4
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: true,
+                scales: { y: { beginAtZero: true } }
+            }
+        });
+    </script>
+</body>
+</html>
+\`\`\`
+
+### Example 3: Bar Chart for Categories
+
+\`\`\`artifact
+<!DOCTYPE html>
+<html>
+<head>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1"></script>
+    <style>
+        body { margin: 20px; font-family: sans-serif; }
+        canvas { max-width: 100%; }
+        h3 { color: #7BABAE; margin-bottom: 20px; }
+    </style>
+</head>
+<body>
+    <h3>Top 5 Species by Count (2021)</h3>
+    <canvas id="myChart"></canvas>
+    <script>
+        new Chart(document.getElementById('myChart'), {
+            type: 'bar',
+            data: {
+                labels: ['Laughing Gull', 'Brown Pelican', 'Royal Tern', 'Sandwich Tern', 'Black Skimmer'],
+                datasets: [{
+                    label: 'Bird Count',
+                    data: [187456, 112043, 98234, 67821, 54293],
+                    backgroundColor: '#7BABAE'
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: true,
+                scales: { y: { beginAtZero: true } }
+            }
+        });
+    </script>
+</body>
+</html>
+\`\`\`
+
+### Example 4: Pie Chart for Proportions
+
+\`\`\`artifact
+<!DOCTYPE html>
+<html>
+<head>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1"></script>
+    <style>
+        body { margin: 20px; font-family: sans-serif; }
+        canvas { max-width: 600px; margin: 0 auto; }
+        h3 { color: #7BABAE; margin-bottom: 20px; text-align: center; }
+    </style>
+</head>
+<body>
+    <h3>Species Composition in Louisiana (2021)</h3>
+    <canvas id="myChart"></canvas>
+    <script>
+        new Chart(document.getElementById('myChart'), {
+            type: 'pie',
+            data: {
+                labels: ['Laughing Gull', 'Brown Pelican', 'Royal Tern', 'Sandwich Tern', 'Other'],
+                datasets: [{
+                    data: [35, 25, 18, 12, 10],
+                    backgroundColor: ['#7BABAE', '#D97757', '#537C8A', '#FEC84B', '#E8E6E3']
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: true,
+                plugins: {
+                    legend: { position: 'bottom' }
+                }
+            }
+        });
+    </script>
+</body>
+</html>
+\`\`\`
+
+**REMEMBER:**
+- Use artifacts for charts/trends ONLY
+- Maps are automatically generated when data has Lat/Lon columns
+- Always extract real data from query results
+- Never make up numbers!"""
 
         user_content = f"""Question: {user_question}
 
@@ -1198,7 +1437,7 @@ Please provide a clear, informative answer to the question based on these result
 
         system_prompt = """You are a helpful assistant that explains bird colony data query results.
 
-IMPORTANT: You can see the conversation history, so use it to provide contextual answers. If the user asks follow-up questions like "List them" or "Show me more details", refer to the previous context to understand what they're asking about.
+IMPORTANT: You can see the conversation history, so use it to provide contextual answers.
 
 Your task is to:
 1. Answer the user's question based on the SQL query results
@@ -1206,47 +1445,261 @@ Your task is to:
 3. Highlight interesting patterns or insights
 4. Use a conversational but informative tone
 5. If there are no results, explain why that might be
-6. If there's a query error, explain what went wrong in simple terms and suggest how to fix it
+6. If there's a query error, explain what went wrong in simple terms
+7. **GENERATE HTML ARTIFACTS for charts and trends ONLY**
 
-CRITICAL - VISUALIZATION DIRECTIVES (MANDATORY):
-You MUST include visualization directives at the END of your response on separate lines.
+## CRITICAL: HTML ARTIFACT GENERATION
 
-IMPORTANT: Check the query results to determine what visualizations to show:
+**Generate artifacts for charts and trends. Maps are handled automatically by the system.**
 
-**Use LINE CHARTS for:**
-- Time-series data with Year/Date columns showing TRENDS OVER TIME
-- Data where the x-axis represents a continuous temporal progression
-- Examples: yearly counts, monthly trends, population changes over years
-- Requirements: Must have 3+ data points, x-axis must be chronological
+**IMPORTANT: Keep artifacts CONCISE!**
+- Limit to top 10-20 data points for large datasets
+- Use compact HTML (minify if needed)
+- No code comments in artifacts
+- This ensures fast loading and clean user experience
 
-**Use BAR CHARTS for:**
-- Comparisons between categories (species, colonies, states, regions)
-- Rankings or "top N" lists
-- Categorical data where order doesn't represent time progression
-- Examples: top 10 species, comparison by colony name, counts by state
+### When to Create Artifacts:
+- ✅ Time-series data (years, dates) → Line chart artifact
+- ✅ Category comparisons (top species, colonies) → Bar chart artifact
+- ✅ Proportions/percentages (species composition, state breakdown) → Pie/Doughnut chart artifact
+- ✅ Trends over time → Line or multi-line chart artifact
+- ✅ Distributions → Histogram artifact
+- ❌ Geographic data (has Lat/Lon) → NO artifact, map auto-generates
+- ❌ Simple answers with <10 rows → Just explain
 
-**Use MAPS for:**
-- ANY results with Latitude AND Longitude columns → ALWAYS add [SHOW_MAP: true]
+### Artifact Format:
+Wrap complete HTML in artifact code blocks:
 
-**General Rules:**
-- You can include BOTH chart and map directives if appropriate
-- Only use [NO_VIZ] for errors, empty results, or purely informational queries
-- When in doubt: time-based = line, categorical = bar
+\`\`\`artifact
+<!DOCTYPE html>
+<html>
+<head>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1"></script>
+    <style>
+        body { margin: 20px; font-family: sans-serif; }
+        canvas { max-width: 100%; }
+        h3 { color: #7BABAE; margin-bottom: 20px; }
+    </style>
+</head>
+<body>
+    <h3>Chart Title Here</h3>
+    <canvas id="myChart"></canvas>
+    <script>
+        new Chart(document.getElementById('myChart'), {
+            type: 'line',
+            data: {
+                labels: [ACTUAL_YEARS_FROM_RESULTS],
+                datasets: [{
+                    label: 'Bird Count',
+                    data: [ACTUAL_COUNTS_FROM_RESULTS],
+                    borderColor: '#7BABAE',
+                    backgroundColor: 'rgba(123, 171, 174, 0.1)',
+                    tension: 0.4,
+                    fill: true
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: true,
+                scales: {
+                    y: { beginAtZero: true },
+                    x: { title: { display: true, text: 'Year' } }
+                }
+            }
+        });
+    </script>
+</body>
+</html>
+\`\`\`
 
-DIRECTIVE FORMAT (include these exact tags):
-- [SHOW_CHART: line] - for time-series trends (Year/Date on x-axis)
-- [SHOW_CHART: bar] - for categorical comparisons and rankings
-- [SHOW_MAP: true] - when results have Latitude and Longitude columns
-- [NO_VIZ] - only when truly no visualization is possible or useful
+### CRITICAL RULES:
+1. **Extract real data from results** - Use actual numbers from the query results table
+2. **Limit data points**: For large datasets (50+ rows), show only top 10-20 most significant entries
+3. **Column Selection**:
+   - For Y-axis: Use count columns (Birds, Nests, total_birds, bird_count)
+   - For X-axis: Use Year, Date, ColonyName, SpeciesName
+   - **NEVER use Latitude/Longitude for chart axes!**
+4. **Complete HTML**: Include Chart.js 4.4.1 via CDN
+5. **Colors**: #7BABAE (coastal teal), #D97757 (orange), #537C8A (ocean blue), #F04438 (red for declines)
+6. **NO MAP ARTIFACTS**: Maps are automatically rendered by the system when results have Lat/Lon
+7. **Keep it concise**: Minimize artifact size - use compact arrays, no comments in code
 
-EXAMPLES:
-- Query: "Brown pelican trends 2015-2021" → [SHOW_CHART: line]
-- Query: "Top 10 species in 2021" → [SHOW_CHART: bar]
-- Query: "Colonies in Louisiana" with lat/lon → [SHOW_MAP: true]
-- Query: "Yearly counts by colony" with lat/lon → BOTH [SHOW_MAP: true] and [SHOW_CHART: line]
-- Query: "Compare species diversity across colonies" → [SHOW_CHART: bar]
+### Example 1: Line Chart for Single Trend
 
-The visualization directives should be on the last line(s) of your response, after your explanation."""
+\`\`\`artifact
+<!DOCTYPE html>
+<html>
+<head>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1"></script>
+    <style>
+        body { margin: 20px; font-family: sans-serif; }
+        canvas { max-width: 100%; }
+        h3 { color: #7BABAE; margin-bottom: 20px; }
+    </style>
+</head>
+<body>
+    <h3>Brown Pelican Population Trends (2010-2021)</h3>
+    <canvas id="myChart"></canvas>
+    <script>
+        new Chart(document.getElementById('myChart'), {
+            type: 'line',
+            data: {
+                labels: [2010, 2015, 2021],
+                datasets: [{
+                    label: 'Bird Count',
+                    data: [45328, 69123, 112043],
+                    borderColor: '#7BABAE',
+                    backgroundColor: 'rgba(123, 171, 174, 0.1)',
+                    tension: 0.4,
+                    fill: true
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: true,
+                scales: { y: { beginAtZero: true } }
+            }
+        });
+    </script>
+</body>
+</html>
+\`\`\`
+
+### Example 2: Multi-Line Chart for Comparisons
+
+\`\`\`artifact
+<!DOCTYPE html>
+<html>
+<head>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1"></script>
+    <style>
+        body { margin: 20px; font-family: sans-serif; }
+        canvas { max-width: 100%; }
+        h3 { color: #7BABAE; margin-bottom: 20px; }
+    </style>
+</head>
+<body>
+    <h3>Colonies with Declining Populations</h3>
+    <canvas id="myChart"></canvas>
+    <script>
+        new Chart(document.getElementById('myChart'), {
+            type: 'line',
+            data: {
+                labels: [2010, 2015, 2021],
+                datasets: [
+                    {
+                        label: 'Breton Island',
+                        data: [38387, 28234, 14934],
+                        borderColor: '#F04438',
+                        tension: 0.4
+                    },
+                    {
+                        label: 'Felicity Island',
+                        data: [12403, 8432, 1868],
+                        borderColor: '#FD853A',
+                        tension: 0.4
+                    },
+                    {
+                        label: 'Marker 52 Spoil',
+                        data: [9122, 6234, 3736],
+                        borderColor: '#FEC84B',
+                        tension: 0.4
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: true,
+                scales: { y: { beginAtZero: true } }
+            }
+        });
+    </script>
+</body>
+</html>
+\`\`\`
+
+### Example 3: Bar Chart for Categories
+
+\`\`\`artifact
+<!DOCTYPE html>
+<html>
+<head>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1"></script>
+    <style>
+        body { margin: 20px; font-family: sans-serif; }
+        canvas { max-width: 100%; }
+        h3 { color: #7BABAE; margin-bottom: 20px; }
+    </style>
+</head>
+<body>
+    <h3>Top 5 Species by Count (2021)</h3>
+    <canvas id="myChart"></canvas>
+    <script>
+        new Chart(document.getElementById('myChart'), {
+            type: 'bar',
+            data: {
+                labels: ['Laughing Gull', 'Brown Pelican', 'Royal Tern', 'Sandwich Tern', 'Black Skimmer'],
+                datasets: [{
+                    label: 'Bird Count',
+                    data: [187456, 112043, 98234, 67821, 54293],
+                    backgroundColor: '#7BABAE'
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: true,
+                scales: { y: { beginAtZero: true } }
+            }
+        });
+    </script>
+</body>
+</html>
+\`\`\`
+
+### Example 4: Pie Chart for Proportions
+
+\`\`\`artifact
+<!DOCTYPE html>
+<html>
+<head>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1"></script>
+    <style>
+        body { margin: 20px; font-family: sans-serif; }
+        canvas { max-width: 600px; margin: 0 auto; }
+        h3 { color: #7BABAE; margin-bottom: 20px; text-align: center; }
+    </style>
+</head>
+<body>
+    <h3>Species Composition in Louisiana (2021)</h3>
+    <canvas id="myChart"></canvas>
+    <script>
+        new Chart(document.getElementById('myChart'), {
+            type: 'pie',
+            data: {
+                labels: ['Laughing Gull', 'Brown Pelican', 'Royal Tern', 'Sandwich Tern', 'Other'],
+                datasets: [{
+                    data: [35, 25, 18, 12, 10],
+                    backgroundColor: ['#7BABAE', '#D97757', '#537C8A', '#FEC84B', '#E8E6E3']
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: true,
+                plugins: {
+                    legend: { position: 'bottom' }
+                }
+            }
+        });
+    </script>
+</body>
+</html>
+\`\`\`
+
+**REMEMBER:**
+- Use artifacts for charts/trends ONLY
+- Maps are automatically generated when data has Lat/Lon columns
+- Always extract real data from query results
+- Never make up numbers!"""
 
         user_content = f"""Question: {user_question}
 
@@ -1365,67 +1818,42 @@ class AgenticSQLChatbot(SQLChatbot):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         # Load agentic configuration from config.yaml
-        self.max_attempts = config.get('agentic', {}).get('max_attempts', 3)
-        self.validation_temperature = config.get('agentic', {}).get('validation_temperature', 0.1)
-        self.analysis_temperature = config.get('agentic', {}).get('analysis_temperature', 0.3)
+        self.max_attempts = config.get('agentic', {}).get('max_attempts', 1)
+        self.enable_validation = config.get('agentic', {}).get('enable_validation', False)
+        self.enable_result_validation = config.get('agentic', {}).get('enable_result_validation', False)
 
     async def agentic_ask_stream(self, question: str, conversation_history: list = None):
         """
-        Process question with agentic reasoning and stream progress updates.
+        Fast-path query processing with streaming response.
 
-        Yields events:
-        - thinking_start: Agent begins reasoning
-        - thinking_step: Progress update with current step details
-        - sql_generated: SQL query created
-        - validation_start: Beginning validation
-        - validation_result: Validation passed/failed with feedback
-        - execution_start: Running query
-        - results_check: Checking if results make sense
-        - retry: Retrying with feedback
-        - success: Final results ready
-        - error: Critical error occurred
+        Optimized flow:
+        1. Generate SQL immediately (no pre-analysis)
+        2. Execute query
+        3. Stream answer with artifacts
+        4. Only retry on actual failure
+
+        This minimizes LLM calls and latency for fast Claude-like responses.
         """
 
         for attempt in range(1, self.max_attempts + 1):
             try:
-                # Step 1: Analyze question
+                # Step 1: Generate SQL (fast, no pre-validation)
                 if attempt == 1:
                     yield {
                         'type': 'thinking_step',
-                        'step': 'analyze',
+                        'step': 'generate_sql',
                         'attempt': attempt,
-                        'content': "Reading your question and understanding what you need...",
-                        'icon': '💭'
+                        'content': "Generating query...",
+                        'icon': '⚡'
                     }
                 else:
                     yield {
                         'type': 'thinking_step',
-                        'step': 'analyze',
+                        'step': 'retry',
                         'attempt': attempt,
-                        'content': f"I found an issue. Let me try a different approach... (Attempt {attempt}/{self.max_attempts})",
+                        'content': f"Retrying with corrections...",
                         'icon': '🔄'
                     }
-
-                analysis = await self._analyze_question(question, conversation_history)
-
-                # Emit detailed analysis for transparency
-                yield {
-                    'type': 'question_analysis',
-                    'attempt': attempt,
-                    'content': analysis,
-                    'icon': '🔍'
-                }
-
-                await asyncio.sleep(0.1)  # Small delay for UX
-
-                # Step 2: Generate SQL
-                yield {
-                    'type': 'thinking_step',
-                    'step': 'generate_sql',
-                    'attempt': attempt,
-                    'content': "Writing a database query to get this information...",
-                    'icon': '✏️'
-                }
 
                 sql_query = self.generate_sql_query(question, conversation_history=conversation_history)
 
@@ -1439,73 +1867,29 @@ class AgenticSQLChatbot(SQLChatbot):
                     'attempt': attempt
                 }
 
-                await asyncio.sleep(0.1)
-
-                # Step 3: Self-validate SQL
-                yield {
-                    'type': 'thinking_step',
-                    'step': 'validate_sql',
-                    'attempt': attempt,
-                    'content': "Double-checking my query to make sure it's correct...",
-                    'icon': '🔍'
-                }
-
-                validation = await self._validate_sql(sql_query, question, conversation_history)
-
-                # Emit detailed validation reasoning
-                yield {
-                    'type': 'validation_result',
-                    'is_valid': validation['is_valid'],
-                    'feedback': validation['feedback'],
-                    'reasoning': validation.get('reasoning', validation['feedback']),
-                    'attempt': attempt
-                }
-
-                if not validation['is_valid']:
-                    # SQL failed validation - retry with feedback
-                    yield {
-                        'type': 'retry',
-                        'attempt': attempt,
-                        'reason': validation['feedback'],
-                        'content': f"Hmm, I spotted an issue: {validation['feedback']}. Let me rewrite this..."
-                    }
-                    # Add validation feedback to conversation for next attempt
-                    if conversation_history is None:
-                        conversation_history = []
-                    conversation_history.append({
-                        'role': 'system',
-                        'content': f"Previous SQL had an issue: {validation['feedback']}. Please fix this in the next attempt."
-                    })
-                    continue  # Try again
-
-                await asyncio.sleep(0.1)
-
-                # Step 4: Execute query
-                yield {
-                    'type': 'thinking_step',
-                    'step': 'execute',
-                    'attempt': attempt,
-                    'content': "Running the query on the database...",
-                    'icon': '⚡'
-                }
-
+                # Step 2: Execute query immediately
                 results_df, error = self.execute_query(sql_query)
 
                 if error:
-                    # Query execution failed - retry with error feedback
-                    yield {
-                        'type': 'retry',
-                        'attempt': attempt,
-                        'reason': error,
-                        'content': f"The query didn't work: {error}. Let me fix it..."
-                    }
-                    if conversation_history is None:
-                        conversation_history = []
-                    conversation_history.append({
-                        'role': 'system',
-                        'content': f"Previous query failed with error: {error}. Please fix this."
-                    })
-                    continue  # Try again
+                    # Only retry if max_attempts > 1
+                    if attempt < self.max_attempts:
+                        yield {
+                            'type': 'retry',
+                            'attempt': attempt,
+                            'reason': error,
+                            'content': f"Query error: {error}. Fixing..."
+                        }
+                        if conversation_history is None:
+                            conversation_history = []
+                        conversation_history.append({
+                            'role': 'system',
+                            'content': f"Previous query failed: {error}. Fix the SQL."
+                        })
+                        continue
+                    else:
+                        # No retries, show error immediately
+                        yield {'type': 'error', 'content': f"Query failed: {error}"}
+                        return
 
                 results = results_df.to_dict(orient='records') if results_df is not None else None
                 results_count = len(results_df) if results_df is not None else 0
@@ -1517,52 +1901,7 @@ class AgenticSQLChatbot(SQLChatbot):
                     'attempt': attempt
                 }
 
-                await asyncio.sleep(0.1)
-
-                # Step 5: Validate results
-                yield {
-                    'type': 'thinking_step',
-                    'step': 'validate_results',
-                    'attempt': attempt,
-                    'content': "Verifying that these results make sense for your question...",
-                    'icon': '🔬'
-                }
-
-                result_validation = await self._validate_results(question, sql_query, results_df, conversation_history)
-
-                yield {
-                    'type': 'results_validation',
-                    'is_valid': result_validation['is_valid'],
-                    'feedback': result_validation['feedback'],
-                    'reasoning': result_validation.get('reasoning', result_validation['feedback']),
-                    'attempt': attempt
-                }
-
-                if not result_validation['is_valid'] and attempt < self.max_attempts:
-                    # Results look suspicious - retry with feedback
-                    yield {
-                        'type': 'retry',
-                        'attempt': attempt,
-                        'reason': result_validation['feedback'],
-                        'content': f"Wait, something doesn't look right: {result_validation['feedback']}. Let me reconsider..."
-                    }
-                    if conversation_history is None:
-                        conversation_history = []
-                    conversation_history.append({
-                        'role': 'system',
-                        'content': f"Previous query returned suspicious results: {result_validation['feedback']}. Please revise the SQL."
-                    })
-                    continue  # Try again
-
-                # Success! Generate final answer
-                yield {
-                    'type': 'thinking_step',
-                    'step': 'generate_answer',
-                    'attempt': attempt,
-                    'content': "Perfect! Now let me explain what I found...",
-                    'icon': '✨'
-                }
-
+                # Step 3: Stream answer immediately (no result validation)
                 yield {'type': 'answer_start'}
 
                 full_answer = ""
@@ -1571,27 +1910,16 @@ class AgenticSQLChatbot(SQLChatbot):
                     yield {'type': 'answer_chunk', 'content': chunk}
                     await asyncio.sleep(0)
 
-                # Parse visualization directives and get clean answer
-                viz_directives = parse_visualization_directives(full_answer, results_df)
-
-                # Send clean answer (without visualization directives)
+                # Send full answer WITH artifacts
                 yield {
                     'type': 'answer_end',
-                    'clean_answer': viz_directives['clean_answer']
-                }
-
-                # Send visualization directives separately
-                yield {
-                    'type': 'visualization',
-                    'show_chart': viz_directives['show_chart'],
-                    'chart_type': viz_directives['chart_type'],
-                    'show_map': viz_directives['show_map']
+                    'clean_answer': full_answer
                 }
 
                 yield {
                     'type': 'success',
                     'attempts_used': attempt,
-                    'content': 'Query completed successfully!'
+                    'content': 'Query completed!'
                 }
 
                 yield {'type': 'done'}
@@ -1603,15 +1931,15 @@ class AgenticSQLChatbot(SQLChatbot):
                         'type': 'retry',
                         'attempt': attempt,
                         'reason': str(e),
-                        'content': f"Unexpected error: {str(e)}. Retrying..."
+                        'content': f"Error: {str(e)}. Retrying..."
                     }
                     continue
                 else:
-                    yield {'type': 'error', 'content': f"Failed after {self.max_attempts} attempts: {str(e)}"}
+                    yield {'type': 'error', 'content': f"Failed: {str(e)}"}
                     return
 
         # If we get here, all attempts failed
-        yield {'type': 'error', 'content': f"Failed to generate accurate results after {self.max_attempts} attempts. Please try rephrasing your question."}
+        yield {'type': 'error', 'content': f"Failed after {self.max_attempts} attempts."}
 
     async def _analyze_question(self, question: str, conversation_history: list = None) -> dict:
         """

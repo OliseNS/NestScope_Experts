@@ -17,8 +17,10 @@ import uuid
 import zipfile
 import shutil
 import numpy as np
+import time
 from pathlib import Path
 from datetime import datetime
+from functools import lru_cache
 from werkzeug.utils import secure_filename
 from flask import Flask, render_template, request, jsonify, send_from_directory, send_file, redirect, url_for, session, flash
 from dotenv import load_dotenv
@@ -78,6 +80,16 @@ def before_request():
         # Allow unlimited content length
         request.environ['CONTENT_LENGTH'] = request.environ.get('CONTENT_LENGTH', '0')
 
+# Configure caching for static assets
+@app.after_request
+def add_header(response):
+    """Add caching headers for static assets to improve performance"""
+    if request.path.startswith('/static/'):
+        # Cache static assets for 1 day (86400 seconds)
+        # Includes CSS, JS, images, fonts
+        response.headers['Cache-Control'] = 'public, max-age=86400, immutable'
+    return response
+
 # ============================================================================
 # PROJECT MANAGEMENT
 # ============================================================================
@@ -85,6 +97,73 @@ def before_request():
 # Get the directory where app.py is located
 APP_DIR = os.path.dirname(os.path.abspath(__file__))
 PROJECTS_DIR = os.path.join(APP_DIR, 'projects')
+
+# ============================================================================
+# PERFORMANCE: IN-MEMORY CACHING
+# ============================================================================
+# Cache expensive operations to avoid repeated file I/O and calculations
+# Cache is invalidated when projects are modified (upload, delete, annotation)
+
+_cache = {
+    'project_stats': {},      # {project_folder: {'data': stats_dict, 'timestamp': time}}
+    'all_users_with_roles': {'data': None, 'timestamp': 0},  # Cache user list from DB
+    'user_contributions': {}, # {user_email: {'data': contributions_dict, 'timestamp': time}}
+}
+
+CACHE_TTL = 60  # Cache time-to-live in seconds (1 minute)
+
+def get_cached_project_stats(project_folder):
+    """Get cached project stats or calculate and cache them"""
+    cache_entry = _cache['project_stats'].get(project_folder)
+    now = time.time()
+
+    # Return cached data if fresh (less than 60 seconds old)
+    if cache_entry and (now - cache_entry['timestamp']) < CACHE_TTL:
+        return cache_entry['data']
+
+    # Calculate fresh stats and cache them
+    stats = calculate_project_stats(project_folder)
+    _cache['project_stats'][project_folder] = {
+        'data': stats,
+        'timestamp': now
+    }
+    return stats
+
+def get_cached_all_users_with_roles():
+    """Get cached user list from database"""
+    from labeller.auth import get_all_users_with_roles
+
+    cache_entry = _cache['all_users_with_roles']
+    now = time.time()
+
+    # Return cached data if fresh
+    if cache_entry['data'] and (now - cache_entry['timestamp']) < CACHE_TTL:
+        return cache_entry['data']
+
+    # Fetch fresh data and cache it
+    users = get_all_users_with_roles()
+    _cache['all_users_with_roles'] = {
+        'data': users,
+        'timestamp': now
+    }
+    return users
+
+def invalidate_project_cache(project_folder=None):
+    """Invalidate cache for a specific project or all projects"""
+    if project_folder:
+        # Clear cache for specific project
+        _cache['project_stats'].pop(project_folder, None)
+        # Also clear user contributions cache as it depends on projects
+        _cache['user_contributions'].clear()
+    else:
+        # Clear all caches
+        _cache['project_stats'].clear()
+        _cache['user_contributions'].clear()
+
+def invalidate_user_cache():
+    """Invalidate user-related caches"""
+    _cache['all_users_with_roles'] = {'data': None, 'timestamp': 0}
+    _cache['user_contributions'].clear()
 
 def ensure_directories():
     """Create necessary directories"""
@@ -584,15 +663,22 @@ def admin_delete_user():
 @app.route('/')
 @login_required
 def projects_dashboard():
-    """Main projects dashboard"""
+    """Main projects dashboard - OPTIMIZED with caching"""
     projects = load_projects()
     projects_list = []
 
-    # Get all auth users with their profile pictures
-    from labeller.auth import get_all_users_with_roles
+    # Aggregate stats (calculated inline to avoid double-calculation)
+    aggregate_stats = {
+        'total_projects': len(projects),
+        'total_images': 0,
+        'total_annotations': 0,
+        'active_users': set()
+    }
+
+    # Get all auth users with their profile pictures (CACHED)
     auth_users_dict = {}
     try:
-        all_auth_users = get_all_users_with_roles()
+        all_auth_users = get_cached_all_users_with_roles()
         # Index by both email and name for flexible lookup
         for u in all_auth_users:
             auth_users_dict[u['email']] = u
@@ -601,7 +687,12 @@ def projects_dashboard():
         print(f"Warning: Could not load auth users: {e}")
 
     for project_folder, metadata in projects.items():
-        stats = calculate_project_stats(project_folder)
+        # Use cached stats instead of recalculating every time
+        stats = get_cached_project_stats(project_folder)
+
+        # Aggregate stats inline
+        aggregate_stats['total_images'] += stats['total_images']
+        aggregate_stats['total_annotations'] += stats['total_annotations']
 
         # Get first image for thumbnail
         thumbnail_url = None
@@ -627,6 +718,9 @@ def projects_dashboard():
                 continue
             seen_emails.add(user_key)
 
+            # Track active users globally
+            aggregate_stats['active_users'].add(user_key)
+
             # Try to find user in auth database
             user_info = auth_users_dict.get(user_key, {})
             users_with_pics.append({
@@ -649,9 +743,12 @@ def projects_dashboard():
     # Sort by creation date (newest first)
     projects_list.sort(key=lambda x: x['created_at'], reverse=True)
 
+    # Convert active_users set to count
+    aggregate_stats['active_users'] = len(aggregate_stats['active_users'])
+
     return render_template('projects_dashboard.html',
                          projects=projects_list,
-                         stats=get_all_project_stats(),
+                         stats=aggregate_stats,
                          active_page='projects')
 
 @app.route('/project/<project_folder>')
@@ -662,7 +759,8 @@ def project_detail(project_folder):
     if not metadata:
         return "Project not found", 404
 
-    stats = calculate_project_stats(project_folder)
+    # Use cached stats for performance
+    stats = get_cached_project_stats(project_folder)
     project_path = os.path.join(PROJECTS_DIR, project_folder)
     images_dir = os.path.join(project_path, 'images')
     labels_dir = os.path.join(project_path, 'labels')
@@ -831,25 +929,32 @@ def flood_intelligence_page():
 @app.route('/users')
 @login_required
 def users_page():
-    """Global users management page - shows authenticated users via Google OAuth"""
-    from labeller.auth import get_all_users_with_roles
-
+    """Global users management page - OPTIMIZED with caching"""
     users_list = []
 
     try:
-        # Get authenticated users from auth database
-        auth_users = get_all_users_with_roles()
+        # Get authenticated users from auth database (CACHED)
+        auth_users = get_cached_all_users_with_roles()
 
-        # Enhance with project details
+        # Pre-load all project states ONCE (instead of loading per user)
+        projects = get_all_projects()
+        project_states = {}
+        for proj in projects:
+            project_states[proj['folder']] = {
+                'metadata': proj,
+                'state': load_project_state(proj['folder'])
+            }
+
+        # Build user contribution data efficiently
         for user in auth_users:
             user_projects = []
             total_completed = 0
             total_annotations = 0
 
-            # Scan all projects to find this user's contributions
-            projects = get_all_projects()
-            for proj in projects:
-                state = load_project_state(proj['folder'])
+            # Scan pre-loaded project states
+            for proj_folder, proj_data in project_states.items():
+                state = proj_data['state']
+
                 # Look up user by EMAIL (unique identifier)
                 # Note: Old projects may use name as key, new projects use email
                 user_data = state.get('users', {}).get(user['email'])
@@ -865,8 +970,8 @@ def users_page():
                     completed = user_data.get('completed', [])
 
                     project_info = {
-                        'folder': proj['folder'],
-                        'name': proj['name'],
+                        'folder': proj_folder,
+                        'name': proj_data['metadata']['name'],
                         'assigned': len(assigned),
                         'completed': len(completed)
                     }
@@ -874,11 +979,15 @@ def users_page():
                     total_completed += len(completed)
 
                     # Count annotations from completed images
-                    for img_name in completed:
-                        label_file = os.path.join(PROJECTS_DIR, proj['folder'], 'labels', f"{os.path.splitext(img_name)[0]}.txt")
-                        if os.path.exists(label_file):
-                            with open(label_file, 'r') as f:
-                                total_annotations += len(f.readlines())
+                    # OPTIMIZATION: Only count if user has completed images
+                    if completed:
+                        labels_dir = os.path.join(PROJECTS_DIR, proj_folder, 'labels')
+                        for img_name in completed:
+                            label_file = os.path.join(labels_dir, f"{os.path.splitext(img_name)[0]}.txt")
+                            if os.path.exists(label_file):
+                                # Read file once and count non-empty lines
+                                with open(label_file, 'r') as f:
+                                    total_annotations += sum(1 for line in f if line.strip())
 
             users_list.append({
                 'name': user['name'],
@@ -1261,6 +1370,9 @@ def assemble_and_create():
 
         # Clean up upload directory
         shutil.rmtree(temp_upload_dir, ignore_errors=True)
+
+        # Invalidate project cache since new project was created
+        invalidate_project_cache()
 
         logger.info("Project created successfully")
         logger.info("=" * 60)
@@ -1828,6 +1940,9 @@ def delete_project(project_folder):
         else:
             logger.warning(f"Project directory not found: {project_path}")
 
+        # Invalidate all project caches since we deleted a project
+        invalidate_project_cache()
+
         return jsonify({
             'success': True,
             'message': f'Project "{metadata["name"]}" deleted successfully',
@@ -2041,6 +2156,9 @@ def save_annotations():
                 completed.append(image_name)
                 user_data['completed'] = completed
                 save_project_state(project_folder, state)
+
+        # Invalidate cache since project stats changed
+        invalidate_project_cache(project_folder)
 
         return jsonify({'success': True})
 

@@ -199,22 +199,30 @@ class NestChat {
                                     // Update references
                                     if (event.type === 'answer_chunk') {
                                         fullAnswer += event.content;
-                                    } else if (event.type === 'sql_query') {
+                                    } else if (event.type === 'sql_query' || event.type === 'sql_generated') {
                                         sqlQuery = event.content;
                                     } else if (event.type === 'results') {
                                         results = event.content;
-                                    } else if (event.type === 'thinking_step') {
-                                        thinkingSteps.push(event.content);
+                                    } else if (event.type === 'thinking_step' || event.type === 'question_analysis' || event.type === 'validation_result') {
+                                        // Collect all thinking/reasoning steps
+                                        if (event.content) {
+                                            thinkingSteps.push(event.content);
+                                        } else if (event.reasoning) {
+                                            thinkingSteps.push(event.reasoning);
+                                        }
                                     } else if (event.type === 'answer_end') {
                                         if (event.clean_answer) {
                                             fullAnswer = event.clean_answer;
                                         }
-                                        contentDiv.innerHTML = this.formatMarkdown(fullAnswer);
 
-                                        // Add to conversation history
+                                        // Parse and extract artifacts from answer
+                                        const { cleanAnswer, artifacts } = this.parseArtifacts(fullAnswer);
+                                        contentDiv.innerHTML = this.formatMarkdown(cleanAnswer);
+
+                                        // Add to conversation history (without artifact blocks)
                                         this.conversationHistory.push({
                                             role: 'assistant',
-                                            content: fullAnswer
+                                            content: cleanAnswer
                                         });
 
                                         // Add reasoning section
@@ -222,10 +230,20 @@ class NestChat {
                                             this.addReasoningSection(messageDiv, thinkingSteps, sqlQuery);
                                         }
 
-                                        // Render artifacts
+                                        // Render HTML artifacts (charts only - NOT maps)
+                                        if (artifacts && artifacts.length > 0) {
+                                            artifacts.forEach(artifact => {
+                                                this.renderArtifact(messageDiv, artifact);
+                                            });
+                                        }
+
+                                        // Render data table (always show raw data)
                                         if (results && results.length > 0) {
                                             this.renderDataTable(messageDiv, results);
-                                            this.renderChart(messageDiv, results);
+                                        }
+
+                                        // Render map using Leaflet (traditional method)
+                                        if (results && results.length > 0) {
                                             this.renderMap(messageDiv, results);
                                         }
                                     } else if (event.type === 'done') {
@@ -256,9 +274,12 @@ class NestChat {
     handleStreamEvent(event, messageDiv, thinkingIndicator, contentDiv, state) {
         switch (event.type) {
             case 'thinking_step':
-                // Handled in main loop
+            case 'question_analysis':
+            case 'validation_result':
+                // These are handled in the reasoning section
                 break;
 
+            case 'sql_generated':
             case 'sql_query':
                 // Handled in main loop
                 break;
@@ -273,8 +294,10 @@ class NestChat {
                 break;
 
             case 'answer_chunk':
-                // Update content as it streams
-                contentDiv.innerHTML = this.formatMarkdown(state.fullAnswer + event.content);
+                // Update content as it streams, but hide artifact code blocks
+                const streamingText = state.fullAnswer + event.content;
+                const displayText = this.hideArtifactsDuringStreaming(streamingText);
+                contentDiv.innerHTML = this.formatMarkdown(displayText);
                 this.scrollToBottom();
                 break;
 
@@ -358,6 +381,83 @@ class NestChat {
         messageDiv.appendChild(reasoningDiv);
     }
 
+    hideArtifactsDuringStreaming(text) {
+        /**
+         * Replace artifact blocks with loading animations during streaming.
+         * This prevents users from seeing raw HTML code.
+         */
+        const artifactRegex = /```artifact\n([\s\S]*?)(?:```|$)/g;
+
+        let artifactCount = 0;
+        const textWithPlaceholders = text.replace(artifactRegex, (match) => {
+            artifactCount++;
+            return `\n\n<div class="artifact-loading" data-artifact-index="${artifactCount}">
+                <div class="artifact-loading-content">
+                    <div class="artifact-loading-spinner"></div>
+                    <div class="artifact-loading-text">Creating visualization...</div>
+                </div>
+            </div>\n\n`;
+        });
+
+        return textWithPlaceholders;
+    }
+
+    parseArtifacts(text) {
+        /**
+         * Parse artifact blocks from AI response.
+         * Artifacts are wrapped in ```artifact blocks.
+         * Returns: { cleanAnswer: string, artifacts: array }
+         */
+        const artifacts = [];
+        const artifactRegex = /```artifact\n([\s\S]*?)```/g;
+
+        let match;
+        let cleanAnswer = text;
+
+        // Extract all artifacts
+        while ((match = artifactRegex.exec(text)) !== null) {
+            artifacts.push({
+                html: match[1].trim(),
+                id: 'artifact-' + Date.now() + '-' + artifacts.length
+            });
+        }
+
+        // Remove artifact blocks from answer
+        cleanAnswer = text.replace(artifactRegex, '').trim();
+
+        return { cleanAnswer, artifacts };
+    }
+
+    renderArtifact(messageDiv, artifact) {
+        /**
+         * Render an HTML artifact in an isolated iframe.
+         */
+        const artifactContainer = document.createElement('div');
+        artifactContainer.className = 'artifact-container';
+        artifactContainer.id = artifact.id;
+
+        // Create iframe for isolated rendering
+        const iframe = document.createElement('iframe');
+        iframe.className = 'artifact-iframe';
+        iframe.sandbox = 'allow-scripts allow-same-origin';
+        iframe.srcdoc = artifact.html;
+
+        artifactContainer.appendChild(iframe);
+        messageDiv.appendChild(artifactContainer);
+
+        // Auto-adjust iframe height after load
+        iframe.addEventListener('load', () => {
+            try {
+                const iframeDoc = iframe.contentDocument || iframe.contentWindow.document;
+                const height = iframeDoc.body.scrollHeight;
+                iframe.style.height = Math.min(height + 20, 600) + 'px';
+            } catch (e) {
+                // Cross-origin restrictions - use default height
+                iframe.style.height = '500px';
+            }
+        });
+    }
+
     renderDataTable(messageDiv, data) {
         if (!data || data.length === 0) return;
 
@@ -398,90 +498,6 @@ class NestChat {
         `;
 
         messageDiv.appendChild(tableContainer);
-    }
-
-    renderChart(messageDiv, data) {
-        if (!data || data.length === 0) return;
-
-        // Auto-detect if data is suitable for charting
-        const columns = Object.keys(data[0]);
-        const numericColumns = columns.filter(col =>
-            data.every(row => !isNaN(parseFloat(row[col])) && row[col] !== null)
-        );
-
-        if (numericColumns.length === 0) return;
-
-        // Look for date/year columns
-        const dateColumn = columns.find(col =>
-            col.toLowerCase().includes('year') ||
-            col.toLowerCase().includes('date') ||
-            col.toLowerCase().includes('time')
-        );
-
-        if (!dateColumn) return;
-
-        // Create chart container
-        const chartContainer = document.createElement('div');
-        chartContainer.className = 'chart-container';
-        const canvasId = 'chart-' + Date.now();
-        chartContainer.innerHTML = `<canvas id="${canvasId}"></canvas>`;
-        messageDiv.appendChild(chartContainer);
-
-        // Prepare chart data
-        const labels = data.map(row => row[dateColumn]);
-        const datasets = numericColumns.slice(0, 3).map((col, idx) => ({
-            label: col,
-            data: data.map(row => parseFloat(row[col]) || 0),
-            borderColor: this.getChartColor(idx),
-            backgroundColor: this.getChartColor(idx, 0.1),
-            tension: 0.4,
-            fill: true
-        }));
-
-        // Render chart
-        setTimeout(() => {
-            const ctx = document.getElementById(canvasId);
-            if (ctx) {
-                new Chart(ctx, {
-                    type: 'line',
-                    data: { labels, datasets },
-                    options: {
-                        responsive: true,
-                        maintainAspectRatio: true,
-                        plugins: {
-                            legend: {
-                                labels: {
-                                    color: getComputedStyle(document.documentElement)
-                                        .getPropertyValue('--text-primary')
-                                }
-                            }
-                        },
-                        scales: {
-                            y: {
-                                ticks: {
-                                    color: getComputedStyle(document.documentElement)
-                                        .getPropertyValue('--text-secondary')
-                                },
-                                grid: {
-                                    color: getComputedStyle(document.documentElement)
-                                        .getPropertyValue('--surface-border')
-                                }
-                            },
-                            x: {
-                                ticks: {
-                                    color: getComputedStyle(document.documentElement)
-                                        .getPropertyValue('--text-secondary')
-                                },
-                                grid: {
-                                    color: getComputedStyle(document.documentElement)
-                                        .getPropertyValue('--surface-border')
-                                }
-                            }
-                        }
-                    }
-                });
-            }
-        }, 100);
     }
 
     renderMap(messageDiv, data) {
@@ -726,43 +742,164 @@ class NestChat {
             return;
         }
 
-        let html = `
-<!DOCTYPE html>
-<html>
+        let html = `<!DOCTYPE html>
+<html lang="en">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>NestChat Conversation - ${new Date().toLocaleDateString()}</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1"></script>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <style>
-        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 800px; margin: 40px auto; padding: 20px; }
-        .message { margin-bottom: 30px; }
-        .user { color: #7BABAE; font-weight: 600; }
-        .assistant { color: #D97757; font-weight: 600; }
-        .content { margin-top: 10px; line-height: 1.7; }
-        table { border-collapse: collapse; width: 100%; margin: 20px 0; }
-        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
-        th { background-color: #f2f2f2; }
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
+            background: white;
+            color: #1a1a1a;
+            line-height: 1.7;
+            padding: 40px 20px;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+        }
+        .header {
+            text-align: center;
+            padding-bottom: 32px;
+            margin-bottom: 48px;
+            border-bottom: 1px solid #e0e0e0;
+        }
+        .header h1 {
+            font-size: 2rem;
+            font-weight: 600;
+            margin-bottom: 8px;
+            color: #1a1a1a;
+        }
+        .header .meta {
+            font-size: 0.9rem;
+            color: #666;
+        }
+        .message {
+            margin-bottom: 40px;
+        }
+        .message-author {
+            font-weight: 600;
+            font-size: 0.875rem;
+            color: #666;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 8px;
+        }
+        .message-content {
+            color: #1a1a1a;
+            font-size: 1rem;
+        }
+        .message-content p {
+            margin-bottom: 16px;
+        }
+        .message-content h1,
+        .message-content h2,
+        .message-content h3 {
+            color: #1a1a1a;
+            margin: 24px 0 16px 0;
+            font-weight: 600;
+        }
+        .message-content h1 { font-size: 1.5rem; }
+        .message-content h2 { font-size: 1.25rem; }
+        .message-content h3 { font-size: 1.1rem; }
+        .message-content code {
+            background: #f5f5f5;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-family: 'Monaco', 'Consolas', monospace;
+            font-size: 0.9em;
+        }
+        .message-content ul,
+        .message-content ol {
+            margin-left: 24px;
+            margin-bottom: 16px;
+        }
+        .message-content li {
+            margin-bottom: 8px;
+        }
+        .data-table {
+            width: 100%;
+            margin: 24px 0;
+            border-collapse: collapse;
+            font-size: 0.9rem;
+        }
+        .data-table th {
+            background: #f5f5f5;
+            padding: 12px;
+            text-align: left;
+            font-weight: 600;
+            border-bottom: 2px solid #ddd;
+        }
+        .data-table td {
+            padding: 10px 12px;
+            border-bottom: 1px solid #eee;
+        }
+        .artifact-content {
+            margin: 24px 0;
+        }
+        .footer {
+            text-align: center;
+            padding-top: 40px;
+            margin-top: 60px;
+            border-top: 1px solid #e0e0e0;
+            color: #666;
+            font-size: 0.875rem;
+        }
     </style>
 </head>
 <body>
-    <h1>NestChat Conversation</h1>
-    <p>Downloaded: ${new Date().toLocaleString()}</p>
-    <hr>
+    <div class="container">
+        <div class="header">
+            <h1>NestChat Conversation</h1>
+            <div class="meta">${new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}</div>
+        </div>
         `;
 
         messages.forEach(msg => {
             const isUser = msg.classList.contains('user');
             const author = isUser ? 'You' : 'NestChat';
-            const content = msg.querySelector('.message-content').innerHTML;
+            const contentDiv = msg.querySelector('.message-content');
+            const content = contentDiv ? contentDiv.innerHTML : '';
 
             html += `
-    <div class="message">
-        <div class="${isUser ? 'user' : 'assistant'}">${author}</div>
-        <div class="content">${content}</div>
-    </div>
+            <div class="message">
+                <div class="message-author">${author}</div>
+                <div class="message-content">
+                    ${content}
+                </div>
             `;
+
+            // Include data tables
+            const tables = msg.querySelectorAll('.data-table');
+            tables.forEach((table) => {
+                html += `<div class="artifact-content">${table.outerHTML}</div>`;
+            });
+
+            // Include artifacts (iframes)
+            const artifacts = msg.querySelectorAll('.artifact-iframe');
+            artifacts.forEach((iframe) => {
+                const artifactHTML = iframe.srcdoc;
+                html += `<div class="artifact-content">${artifactHTML}</div>`;
+            });
+
+            html += `</div>`;
         });
 
         html += `
+        <div class="footer">
+            NestScope - AI-Powered Gulf Coast Avian Intelligence
+        </div>
+    </div>
 </body>
 </html>
         `;
@@ -771,11 +908,11 @@ class NestChat {
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = `nestchat-${Date.now()}.html`;
+        a.download = `nestchat-${new Date().toISOString().split('T')[0]}.html`;
         a.click();
         URL.revokeObjectURL(url);
 
-        showToast('Conversation downloaded', 'success');
+        showToast('Conversation downloaded! Open the HTML file in any browser.', 'success');
     }
 
     setInputState(enabled) {

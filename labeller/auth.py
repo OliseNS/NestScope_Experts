@@ -319,8 +319,10 @@ def admin_required(f):
         if 'user' not in session:
             return redirect(url_for('login', next=request.url))
 
-        user_email = session['user']['email']
-        if not is_admin(user_email):
+        # Use cached admin status from session (set during login)
+        # This avoids database query on every page load
+        is_admin_cached = session['user'].get('is_admin', False)
+        if not is_admin_cached:
             return jsonify({'error': 'Admin access required'}), 403
 
         return f(*args, **kwargs)
@@ -499,10 +501,11 @@ def annotator_required(f):
         if 'user' not in session:
             return redirect(url_for('login', next=request.url))
 
-        user_email = session['user']['email']
-        perms = get_user_permissions(user_email)
+        # Use cached permissions from session (set during login)
+        # This avoids database query on every page load
+        perms = session['user'].get('permissions', {})
 
-        if not perms['can_annotate']:
+        if not perms.get('can_annotate', False):
             return jsonify({'error': 'Annotator permission required'}), 403
 
         return f(*args, **kwargs)
@@ -523,10 +526,11 @@ def db_editor_required(f):
         if 'user' not in session:
             return redirect(url_for('login', next=request.url))
 
-        user_email = session['user']['email']
-        perms = get_user_permissions(user_email)
+        # Use cached permissions from session (set during login)
+        # This avoids database query on every page load
+        perms = session['user'].get('permissions', {})
 
-        if not perms['can_edit_db']:
+        if not perms.get('can_edit_db', False):
             return jsonify({'error': 'Database edit permission required'}), 403
 
         return f(*args, **kwargs)
@@ -539,10 +543,11 @@ def api_annotator_required(f):
         if 'user' not in session:
             return jsonify({'error': 'Authentication required'}), 401
 
-        user_email = session['user']['email']
-        perms = get_user_permissions(user_email)
+        # Use cached permissions from session (set during login)
+        # This avoids database query on every page load
+        perms = session['user'].get('permissions', {})
 
-        if not perms['can_annotate']:
+        if not perms.get('can_annotate', False):
             return jsonify({'error': 'Annotator permission required'}), 403
 
         return f(*args, **kwargs)
@@ -555,10 +560,11 @@ def api_db_editor_required(f):
         if 'user' not in session:
             return jsonify({'error': 'Authentication required'}), 401
 
-        user_email = session['user']['email']
-        perms = get_user_permissions(user_email)
+        # Use cached permissions from session (set during login)
+        # This avoids database query on every page load
+        perms = session['user'].get('permissions', {})
 
-        if not perms['can_edit_db']:
+        if not perms.get('can_edit_db', False):
             return jsonify({'error': 'Database edit permission required'}), 403
 
         return f(*args, **kwargs)
