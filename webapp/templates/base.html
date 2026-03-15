@@ -1,0 +1,393 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}NestScope - AI-Powered Avian Monitoring{% endblock %}</title>
+
+    <!-- Modern UI Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+    <!-- Styles -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/theme.css') }}">
+    {% block extra_css %}{% endblock %}
+
+    <!-- Theme (load immediately to prevent flash) -->
+    <script src="{{ url_for('static', filename='js/theme.js') }}"></script>
+
+    <style>
+        * {
+            font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+        }
+
+        /* Navbar */
+        .navbar {
+            background: #1a1a1a;
+            backdrop-filter: blur(12px);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+            padding: 0;
+            position: sticky;
+            top: 0;
+            z-index: 1000;
+        }
+
+        .navbar-content {
+            max-width: 1600px;
+            margin: 0 auto;
+            display: flex;
+            align-items: center;
+            padding: 0 1.5rem;
+            height: 60px;
+            gap: 1.5rem;
+        }
+
+        .navbar-brand {
+            display: flex;
+            align-items: center;
+            gap: 0.625rem;
+            text-decoration: none;
+            font-weight: 600;
+            font-size: 1.125rem;
+            color: #ffffff;
+            letter-spacing: -0.01em;
+            transition: color 0.2s ease;
+            flex-shrink: 0;
+        }
+
+        .navbar-brand:hover {
+            color: #7BABAE;
+        }
+
+        .navbar-brand-icon {
+            font-size: 1.5rem;
+            line-height: 1;
+        }
+
+        .navbar-nav {
+            display: flex;
+            align-items: center;
+            gap: 0.25rem;
+            list-style: none;
+            margin: 0;
+            padding: 0;
+        }
+
+        .nav-link {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.5rem 0.875rem;
+            color: rgba(255, 255, 255, 0.7);
+            text-decoration: none;
+            font-size: 0.875rem;
+            font-weight: 500;
+            border-radius: 6px;
+            transition: all 0.15s ease;
+            white-space: nowrap;
+        }
+
+        .nav-link:hover {
+            color: #ffffff;
+            background: rgba(255, 255, 255, 0.06);
+        }
+
+        .nav-link.active {
+            color: #7BABAE;
+            background: rgba(123, 171, 174, 0.1);
+        }
+
+        .navbar-actions {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            margin-left: auto;
+            flex-shrink: 0;
+        }
+
+        /* Theme Toggle */
+        .theme-toggle {
+            position: relative;
+            width: 51px;
+            height: 31px;
+            cursor: pointer;
+            user-select: none;
+            flex-shrink: 0;
+        }
+
+        .theme-toggle-track {
+            position: absolute;
+            inset: 0;
+            border-radius: 15.5px;
+            background: rgba(120, 120, 128, 0.32);
+            transition: background-color 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .theme-toggle-track.active {
+            background: #7BABAE;
+        }
+
+        .theme-toggle-thumb {
+            position: absolute;
+            top: 50%;
+            left: 2px;
+            transform: translateY(-50%);
+            width: 27px;
+            height: 27px;
+            border-radius: 50%;
+            background: #ffffff;
+            box-shadow: 0 3px 8px rgba(0, 0, 0, 0.15);
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.875rem;
+        }
+
+        .theme-toggle-track.active .theme-toggle-thumb {
+            transform: translateX(20px) translateY(-50%);
+        }
+
+        /* Light Mode */
+        [data-theme="light"] .navbar {
+            background: #ffffff;
+            border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+        }
+
+        [data-theme="light"] .navbar-brand {
+            color: #1a1a1a;
+        }
+
+        [data-theme="light"] .navbar-brand:hover {
+            color: #7BABAE;
+        }
+
+        [data-theme="light"] .nav-link {
+            color: rgba(0, 0, 0, 0.7);
+        }
+
+        [data-theme="light"] .nav-link:hover {
+            color: #1a1a1a;
+            background: rgba(0, 0, 0, 0.06);
+        }
+
+        [data-theme="light"] .nav-link.active {
+            color: #7BABAE;
+            background: rgba(123, 171, 174, 0.1);
+        }
+
+        /* Server Status Dots */
+        .status-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: #666;
+            transition: all 0.3s ease;
+            position: relative;
+            cursor: pointer;
+        }
+
+        .status-dot.healthy {
+            background: #4a9d5f;
+            box-shadow: 0 0 8px rgba(74, 157, 95, 0.6);
+        }
+
+        .status-dot.unhealthy {
+            background: #c74a4a;
+            box-shadow: 0 0 8px rgba(199, 74, 74, 0.6);
+        }
+
+        .status-dot.checking {
+            background: #f7b731;
+            animation: pulse 1.5s ease-in-out infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        /* Main Content */
+        main {
+            min-height: calc(100vh - 60px);
+            background: var(--bg-primary);
+        }
+    </style>
+</head>
+<body>
+    <!-- Navigation -->
+    <nav class="navbar">
+        <div class="navbar-content">
+            <!-- Brand -->
+            <a href="/" class="navbar-brand">
+                <div class="navbar-brand-icon">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 7c-1.5 0-3-1-4.5-1.5s-3-.5-4.5-.5c-1.5 0-3 1-4 2.5s-1 3.5.5 5 3.5 1.5 5 0 2-3 3.5-3.5 3 .5 4.5 1 3 1 4 0s1-2.5 0-4-2.5-1-4-1Z"/><path d="M8 13c-1 1-2 1.5-3 1.5s-2-.5-2.5-1.5.5-2.5 1.5-3"/><path d="M16 13c1 1 2 1.5 3 1.5s2-.5 2.5-1.5-.5-2.5-1.5-3"/><path d="M12 6v1"/></svg>
+                </div>
+                <span>NestScope</span>
+            </a>
+
+            <!-- Main Navigation -->
+            <ul class="navbar-nav">
+                <li>
+                    <a href="/" class="nav-link {% if request.path == '/' %}active{% endif %}">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+                        Home
+                    </a>
+                </li>
+                <li>
+                    <a href="/chat" class="nav-link {% if request.path == '/chat' %}active{% endif %}">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z"/></svg>
+                        NestChat
+                    </a>
+                </li>
+                <li>
+                    <a href="/vision" class="nav-link {% if request.path == '/vision' %}active{% endif %}">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
+                        NestVision
+                    </a>
+                </li>
+                <li style="margin-left: auto;">
+                    <a href="http://localhost:5000" target="_blank" class="nav-link" style="border: 1px solid rgba(123, 171, 174, 0.3); background: rgba(123, 171, 174, 0.05);">
+                        Expert Tools →
+                    </a>
+                </li>
+            </ul>
+
+            <!-- Right Actions -->
+            <div class="navbar-actions">
+                <!-- Server Status -->
+                <a href="/status" id="server-status" class="server-status" style="display: flex; align-items: center; gap: 0.5rem; margin-right: 1rem; cursor: pointer; text-decoration: none;" title="View system status">
+                    <div class="status-dot" id="backend-status" title="Backend"></div>
+                    <div class="status-dot" id="labeller-status" title="Expert Tools"></div>
+                </a>
+
+                <div class="theme-toggle" role="button" tabindex="0" aria-label="Toggle theme">
+                    <div class="theme-toggle-track">
+                        <div class="theme-toggle-thumb">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <main>
+        {% block content %}{% endblock %}
+    </main>
+
+    <!-- Toast Container -->
+    <div id="toast-container" style="position: fixed; top: 80px; right: 20px; z-index: 9999;"></div>
+
+    <!-- Common Scripts -->
+    <script>
+        // Toast notification utility
+        function showToast(message, type = 'info') {
+            const container = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+
+            const colors = {
+                success: '#4a9d5f',
+                error: '#c74a4a',
+                warning: '#d4a02f',
+                info: '#7BABAE'
+            };
+
+            toast.style.cssText = `
+                background: var(--surface-base);
+                border-left: 4px solid ${colors[type] || colors.info};
+                padding: 1rem 1.5rem;
+                border-radius: 8px;
+                box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+                margin-bottom: 1rem;
+                min-width: 300px;
+                animation: slideIn 0.3s ease-out;
+                color: var(--text-primary);
+            `;
+            toast.textContent = message;
+
+            container.appendChild(toast);
+
+            setTimeout(() => {
+                toast.style.animation = 'slideOut 0.3s ease-out';
+                setTimeout(() => toast.remove(), 300);
+            }, 3000);
+        }
+
+        // Add animation keyframes
+        const style = document.createElement('style');
+        style.textContent = `
+            @keyframes slideIn {
+                from {
+                    opacity: 0;
+                    transform: translateX(100px);
+                }
+                to {
+                    opacity: 1;
+                    transform: translateX(0);
+                }
+            }
+            @keyframes slideOut {
+                from {
+                    opacity: 1;
+                    transform: translateX(0);
+                }
+                to {
+                    opacity: 0;
+                    transform: translateX(100px);
+                }
+            }
+        `;
+        document.head.appendChild(style);
+
+        // Server Status Checker
+        async function checkServerStatus() {
+            const backendDot = document.getElementById('backend-status');
+            const labellerDot = document.getElementById('labeller-status');
+
+            if (!backendDot || !labellerDot) return;
+
+            // Set checking state
+            backendDot.className = 'status-dot checking';
+            labellerDot.className = 'status-dot checking';
+
+            try {
+                const response = await fetch('/api/services/status');
+                const services = await response.json();
+
+                // Update backend status
+                if (services.backend.healthy) {
+                    backendDot.className = 'status-dot healthy';
+                    backendDot.title = `Backend: Online (${services.backend.url})`;
+                } else {
+                    backendDot.className = 'status-dot unhealthy';
+                    backendDot.title = `Backend: Offline (${services.backend.url})`;
+                }
+
+                // Update labeller status
+                if (services.labeller.healthy) {
+                    labellerDot.className = 'status-dot healthy';
+                    labellerDot.title = `Expert Tools: Online (${services.labeller.url})`;
+                } else {
+                    labellerDot.className = 'status-dot unhealthy';
+                    labellerDot.title = `Expert Tools: Offline (${services.labeller.url})`;
+                }
+            } catch (error) {
+                console.error('Status check failed:', error);
+                backendDot.className = 'status-dot unhealthy';
+                labellerDot.className = 'status-dot unhealthy';
+            }
+        }
+
+        // Check status on load
+        checkServerStatus();
+
+        // Check every 30 seconds
+        setInterval(checkServerStatus, 30000);
+    </script>
+
+    {% block extra_js %}{% endblock %}
+</body>
+</html>

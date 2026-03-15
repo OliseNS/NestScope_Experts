@@ -163,19 +163,36 @@
 <div class="help-container">
     <!-- Hero -->
     <div class="help-hero animate-fade-in">
-        <h1>📚 NestScope Help & Documentation</h1>
+        <h1>NestScope Help & Documentation</h1>
         <p class="help-hero-subtitle">Comprehensive guide to using the NestScope avian monitoring platform</p>
     </div>
 
     <!-- Tabs -->
     <div class="help-tabs">
-        <button class="help-tab active" onclick="switchTab('overview')">📖 Overview</button>
-        <button class="help-tab" onclick="switchTab('nestchat')">💬 NestChat</button>
-        <button class="help-tab" onclick="switchTab('nestvision')">🦅 NestVision</button>
-        <button class="help-tab" onclick="switchTab('nestdb')">🗄️ NestDB</button>
-        <button class="help-tab" onclick="switchTab('nestperts')">🧑‍🔬 Nestperts</button>
-        <button class="help-tab" onclick="switchTab('troubleshooting')">🔧 Troubleshooting</button>
-        <button class="help-tab" onclick="switchTab('technical')">📚 Technical Ref</button>
+        <button class="help-tab active" onclick="switchTab('overview')">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: middle; margin-right: 4px;"><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1-2.5-2.5Z"/><path d="M8 7h6"/><path d="M8 11h8"/></svg>
+            Overview
+        </button>
+        <button class="help-tab" onclick="switchTab('nestchat')">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: middle; margin-right: 4px;"><path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z"/></svg>
+            NestChat
+        </button>
+        <button class="help-tab" onclick="switchTab('nestvision')">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: middle; margin-right: 4px;"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>
+            NestVision
+        </button>
+        <button class="help-tab" onclick="switchTab('nestperts')">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: middle; margin-right: 4px;"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="12" r="3"/></svg>
+            Nestperts
+        </button>
+        <button class="help-tab" onclick="switchTab('troubleshooting')">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: middle; margin-right: 4px;"><path d="m21 16-4 4-4-4"/><path d="M17 20V4"/><path d="m3 8 4-4 4 4"/><path d="M7 4v16"/></svg>
+            Troubleshooting
+        </button>
+        <button class="help-tab" onclick="switchTab('technical')">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: middle; margin-right: 4px;"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
+            Technical Ref
+        </button>
     </div>
 
     <!-- Tab Content -->
@@ -191,7 +208,10 @@
         <div class="help-section">
             <h3>Platform Components</h3>
 
-            <h4>🦅 Core Modules</h4>
+            <h4 style="display: flex; align-items: center; gap: 8px;">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--brand-primary);"><path d="M16 7c-1.5 0-3-1-4.5-1.5s-3-.5-4.5-.5c-1.5 0-3 1-4 2.5s-1 3.5.5 5 3.5 1.5 5 0 2-3 3.5-3.5 3 .5 4.5 1 3 1 4 0s1-2.5 0-4-2.5-1-4-1Z"/><path d="M8 13c-1 1-2 1.5-3 1.5s-2-.5-2.5-1.5.5-2.5 1.5-3"/><path d="M16 13c1 1 2 1.5 3 1.5s2-.5 2.5-1.5-.5-2.5-1.5-3"/><path d="M12 6v1"/></svg>
+                Core Modules
+            </h4>
             <ul>
                 <li><strong>NestChat</strong> - Natural language interface for querying bird data with AI-generated SQL</li>
                 <li><strong>NestVision</strong> - AI-powered bird detection and counting in aerial imagery</li>
@@ -390,7 +410,7 @@
             </ul>
 
             <div class="warning-box">
-                <strong>⚠️ Note:</strong> Classification is at the group level, not individual species. For precise species identification, use Nestperts for expert annotation.
+                <strong><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="color: var(--error); vertical-align: middle; margin-right: 4px;"><circle cx="12" cy="12" r="10"/><line x1="12" x2="12" y1="8" y2="12"/><line x1="12" x2="12.01" y1="16" y2="16"/></svg> Note:</strong> Classification is at the group level, not individual species. For precise species identification, use Nestperts for expert annotation.
             </div>
         </div>
 
@@ -462,14 +482,14 @@
             <h4>Editing Data</h4>
             <ol>
                 <li>Toggle Edit Mode ON</li>
-                <li>Click any cell to edit (except primary keys marked with 🔑)</li>
+                <li>Click any cell to edit (except primary keys marked with <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="color: var(--db-accent); vertical-align: middle; margin-right: 4px;"><path d="m15.5 7.5 2.3 2.3a1 1 0 0 0 1.4 0l2.1-2.1a1 1 0 0 0 0-1.4L19 4a1 1 0 0 0-1.4 0l-2.1 2.1a1 1 0 0 0 0 1.4ZM7 21l.4-4.5 10.1-10.1M7 21l4.5-.4L21.6 10.5M7 21l-3-3"/><path d="m14 7 3 3"/></svg>)</li>
                 <li>Make changes to values</li>
                 <li>Click "Save Changes" button</li>
                 <li>Changes are automatically versioned (Git commit created)</li>
             </ol>
 
             <div class="warning-box">
-                <strong>⚠️ Important:</strong> Primary key columns (marked with 🔑) cannot be edited. They are set automatically or must be unique.
+                <strong><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="color: var(--error); vertical-align: middle; margin-right: 4px;"><circle cx="12" cy="12" r="10"/><line x1="12" x2="12" y1="8" y2="12"/><line x1="12" x2="12.01" y1="16" y2="16"/></svg> Important:</strong> Primary key columns (marked with <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="color: var(--db-accent); vertical-align: middle; margin-right: 4px;"><path d="m15.5 7.5 2.3 2.3a1 1 0 0 0 1.4 0l2.1-2.1a1 1 0 0 0 0-1.4L19 4a1 1 0 0 0-1.4 0l-2.1 2.1a1 1 0 0 0 0 1.4ZM7 21l.4-4.5 10.1-10.1M7 21l4.5-.4L21.6 10.5M7 21l-3-3"/><path d="m14 7 3 3"/></svg>) cannot be edited. They are set automatically or must be unique.
             </div>
         </div>
 
@@ -530,7 +550,7 @@
             </ol>
 
             <div class="warning-box">
-                <strong>⚠️ Rollback Warning:</strong> Rolling back will undo ALL changes made after that commit. A safety snapshot is created, but use this feature carefully. Consider creating a manual checkpoint first.
+                <strong><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="color: var(--error); vertical-align: middle; margin-right: 4px;"><circle cx="12" cy="12" r="10"/><line x1="12" x2="12" y1="8" y2="12"/><line x1="12" x2="12.01" y1="16" y2="16"/></svg> Rollback Warning:</strong> Rolling back will undo ALL changes made after that commit. A safety snapshot is created, but use this feature carefully. Consider creating a manual checkpoint first.
             </div>
         </div>
     </div>
