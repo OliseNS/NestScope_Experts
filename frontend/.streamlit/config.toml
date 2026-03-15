@@ -1,0 +1,28 @@
+# Streamlit Configuration - Claude Code Dark Theme
+# Matches the aesthetic of Claude's code editor interface
+
+[theme]
+primaryColor = "#56B897"  # Teal accent (nature-inspired)
+backgroundColor = "#1e1e1e"  # Dark background matching Claude Code
+secondaryBackgroundColor = "#2d2d2d"  # Slightly lighter for cards
+textColor = "#d4d4d4"  # Light gray text
+font = "sans serif"
+
+[client]
+showErrorDetails = true
+toolbarMode = "minimal"
+
+[runner]
+magicEnabled = true
+fastReruns = true
+
+[server]
+headless = true
+enableCORS = true
+enableXsrfProtection = true
+port = 8501
+
+[browser]
+gatherUsageStats = false
+serverAddress = "localhost"
+serverPort = 8501

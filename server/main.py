@@ -787,31 +787,18 @@ class SQLChatbot:
         self.model = model or MODEL_NAME
         self.schema = None
         self.prompt_path = prompt_path or str(DEFAULT_PROMPT_PATH)
-        self.sql_prompt_path = SERVER_DIR / "sql_prompt.txt"
         self.system_prompt = self._load_system_prompt()
-        self.sql_prompt = self._load_sql_prompt()
         self.metadata = self._load_metadata()
-        self.full_metadata = self._load_full_metadata()
 
     def _load_system_prompt(self):
-        """Load the answer generation prompt from prompt.txt"""
+        """Load the focused system prompt from prompt.txt"""
         try:
             with open(self.prompt_path, 'r', encoding='utf-8') as f:
                 prompt = f.read()
-            print(f"✓ Answer prompt loaded from {self.prompt_path}")
+            print(f"✓ System prompt loaded from {self.prompt_path}")
             return prompt
         except FileNotFoundError:
             raise FileNotFoundError(f"System prompt file not found: {self.prompt_path}")
-
-    def _load_sql_prompt(self):
-        """Load the SQL generation prompt from sql_prompt.txt"""
-        try:
-            with open(self.sql_prompt_path, 'r', encoding='utf-8') as f:
-                prompt = f.read()
-            print(f"✓ SQL prompt loaded from {self.sql_prompt_path}")
-            return prompt
-        except FileNotFoundError:
-            raise FileNotFoundError(f"SQL prompt file not found: {self.sql_prompt_path}")
 
     def _load_metadata(self):
         """Load database metadata (prefers compressed essential metadata)"""
@@ -823,8 +810,6 @@ class SQLChatbot:
         # Priority: essential > extended > fallback
         for path, tier in [(essential_path, "essential"), (extended_path, "extended"), (fallback_path, "fallback")]:
             try:
-                if not os.path.exists(path):
-                    continue
                 with open(path, 'r', encoding='utf-8') as f:
                     metadata = json.load(f)
 
@@ -834,67 +819,15 @@ class SQLChatbot:
 
                 print(f"✓ Metadata loaded: {tier.upper()} tier from {path.name} (~{token_estimate:,} tokens)")
                 return metadata
-            except (FileNotFoundError, json.JSONDecodeError):
+            except FileNotFoundError:
                 continue
 
         print(f"⚠ Warning: No metadata found. Run: python scripts/compress_metadata.py")
         return None
 
-    def _load_full_metadata(self):
-        """Load full database metadata for admin tools"""
-        full_path = SERVER_DIR.parent / "data" / "database_metadata_enhanced.json"
-        try:
-            if os.path.exists(full_path):
-                with open(full_path, 'r', encoding='utf-8') as f:
-                    return json.load(f)
-        except Exception as e:
-            print(f"⚠️ Failed to load full metadata: {e}")
-        return None
-
-    def _format_nestdb_metadata_context(self):
-        """Format metadata specifically for NestDB admin interface using full schema"""
-        metadata = self.full_metadata or self.metadata
-        if not metadata:
-            return "No database metadata available. You are operating on an unknown SQLite database."
-
-        context = "# DATABASE SCHEMA (FULL ADMIN ACCESS)\n\n"
-        context += "The following tables and columns exist in the database. Use this information to generate accurate queries.\n\n"
-
-        tables = metadata.get('tables', {})
-        for table_name, table_info in tables.items():
-            context += f"## Table: {table_name}\n"
-            rows = table_info.get('row_count', 'unknown')
-            context += f"Estimated Rows: {rows}\n"
-
-            # Format columns with types and constraints
-            columns = table_info.get('columns', [])
-            if columns:
-                context += "Columns:\n"
-                for col in columns:
-                    if isinstance(col, dict):
-                        name = col.get('name')
-                        type_ = col.get('type', 'TEXT')
-                        pk = " (PRIMARY KEY)" if col.get('pk') else ""
-                        notnull = " (NOT NULL)" if col.get('notnull') else ""
-                        context += f"  - {name} {type_}{pk}{notnull}\n"
-                    else:
-                        context += f"  - {col}\n"
-            
-            # Add samples if available to show data format
-            samples = table_info.get('samples', []) or table_info.get('sample_data', [])
-            if samples:
-                context += "Sample Data (first 2 rows):\n"
-                for i, sample in enumerate(samples[:2]):
-                    context += f"  Row {i+1}: {json.dumps(sample)}\n"
-            
-            context += "\n"
-
-        return context
-
     def refresh_metadata(self):
         """Reload metadata from disk"""
         self.metadata = self._load_metadata()
-        self.full_metadata = self._load_full_metadata()
         self.schema = None # Force schema regeneration
         print("🔄 Chatbot metadata context refreshed")
 
@@ -1051,18 +984,19 @@ class SQLChatbot:
         return context
 
     def generate_sql_query(self, user_question, conversation_history=None):
-        """Generate SQL query from natural language using LLM with structured JSON output"""
-        # Build messages starting with SQL-specific prompt
+        """Generate SQL query from natural language using LLM with conversation context"""
+        # Build messages starting with system prompt
         messages = [
-            {"role": "system", "content": self.sql_prompt}
+            {"role": "system", "content": self.system_prompt}
         ]
 
-        # Inject metadata as context (ALWAYS include for SQL generation)
-        if self.metadata:
+        # Inject metadata as context (only once at the start)
+        if self.metadata and not conversation_history:
+            # Only add metadata for the first message to save tokens
             metadata_context = self._format_metadata_context()
             messages.append({"role": "system", "content": metadata_context})
 
-        # Add conversation history for context (last 3 exchanges)
+        # Add conversation history for context (last 3 exchanges to keep token usage reasonable)
         if conversation_history:
             for msg in conversation_history[-6:]:  # Last 3 Q&A pairs (6 messages)
                 messages.append(msg)
@@ -1070,7 +1004,15 @@ class SQLChatbot:
         # Add the current question
         messages.append({
             "role": "user",
-            "content": f"Question: {user_question}\n\nGenerate SQL query as JSON:"
+            "content": f"""Question: {user_question}
+
+CRITICAL REQUIREMENTS:
+1. Return ONLY the SQL query - no explanations, no markdown, no comments
+2. If the question involves locations, colonies, states, or mapping, you MUST include "Latitude" and "Longitude" columns in the SELECT and GROUP BY clauses.
+3. Add "WHERE "Latitude" IS NOT NULL AND "Longitude" IS NOT NULL" to ensure results can be mapped.
+4. Use exact column names: "ColonyName", "Latitude", "Longitude" (case-sensitive)
+
+Generate the SQL query now:"""
         })
 
         try:
@@ -1081,51 +1023,23 @@ class SQLChatbot:
                 max_tokens=config['model']['sql_max_tokens']
             )
 
-            response_text = response.choices[0].message.content.strip()
+            sql_query = response.choices[0].message.content.strip()
 
-            # Parse JSON response
-            try:
-                # Remove markdown code blocks if present
-                if response_text.startswith("```json"):
-                    response_text = response_text.split("```json")[1].split("```")[0].strip()
-                elif response_text.startswith("```"):
-                    response_text = response_text.split("```")[1].split("```")[0].strip()
+            # Clean up the query (remove markdown formatting if present)
+            if sql_query.startswith("```sql"):
+                # Extract content between ```sql and ```
+                sql_query = sql_query.split("```sql")[1].split("```")[0].strip()
+            elif sql_query.startswith("```"):
+                sql_query = sql_query.split("```")[1].split("```")[0].strip()
 
-                # Parse JSON
-                result = json.loads(response_text)
-                sql_query = result.get("sql", "")
-
-                if not sql_query:
-                    return "ERROR: No SQL query in JSON response"
-
-            except json.JSONDecodeError:
-                # Fallback: Try to extract raw SQL if JSON parsing fails
-                print(f"⚠ JSON parsing failed, attempting raw SQL extraction")
-                sql_query = response_text
-
-                # Remove markdown if present
-                if sql_query.startswith("```sql"):
-                    sql_query = sql_query.split("```sql")[1].split("```")[0].strip()
-                elif sql_query.startswith("```"):
-                    sql_query = sql_query.split("```")[1].split("```")[0].strip()
-
-                # Try to find SELECT or WITH
-                sql_keywords = ['SELECT', 'WITH']
-                for keyword in sql_keywords:
-                    if keyword in sql_query.upper():
-                        idx = sql_query.upper().find(keyword)
-                        sql_query = sql_query[idx:].strip()
-                        break
-
-            # Security validation: Verify it's actually SQL
-            sql_upper = sql_query.strip().upper()
-            if not (sql_upper.startswith('SELECT') or sql_upper.startswith('WITH')):
-                return f"ERROR: Invalid SQL - must start with SELECT or WITH. Got: {sql_query[:100]}..."
-
-            # Check for HTML/JS contamination
-            sql_lower = sql_query.lower()
-            if any(tag in sql_lower for tag in ['<html>', '<script>', '<div>', '<body>', 'document.', 'function(']):
-                return f"ERROR: Model generated HTML/JavaScript instead of SQL. Got: {sql_query[:100]}..."
+            # Remove any remaining explanatory text before SELECT/WITH
+            # SECURITY: Only look for read-only SQL keywords
+            sql_keywords = ['SELECT', 'WITH']
+            for keyword in sql_keywords:
+                if keyword in sql_query.upper():
+                    idx = sql_query.upper().find(keyword)
+                    sql_query = sql_query[idx:].strip()
+                    break
 
             # LAYER 2: Validate and enhance SQL for mapping
             enhanced_sql, was_modified, reason = validate_and_enhance_sql_for_mapping(sql_query)
@@ -1205,7 +1119,7 @@ class SQLChatbot:
 
         system_prompt = """You are a helpful assistant that explains bird colony data query results.
 
-IMPORTANT: You can see the conversation history, so use it to provide contextual answers.
+IMPORTANT: You can see the conversation history, so use it to provide contextual answers. If the user asks follow-up questions like "List them" or "Show me more details", refer to the previous context to understand what they're asking about.
 
 Your task is to:
 1. Answer the user's question based on the SQL query results
@@ -1213,261 +1127,47 @@ Your task is to:
 3. Highlight interesting patterns or insights
 4. Use a conversational but informative tone
 5. If there are no results, explain why that might be
-6. If there's a query error, explain what went wrong in simple terms
-7. **GENERATE HTML ARTIFACTS for charts and trends ONLY**
+6. If there's a query error, explain what went wrong in simple terms and suggest how to fix it
 
-## CRITICAL: HTML ARTIFACT GENERATION
+CRITICAL - VISUALIZATION DIRECTIVES (MANDATORY):
+You MUST include visualization directives at the END of your response on separate lines.
 
-**Generate artifacts for charts and trends. Maps are handled automatically by the system.**
+IMPORTANT: Check the query results to determine what visualizations to show:
 
-**IMPORTANT: Keep artifacts CONCISE!**
-- Limit to top 10-20 data points for large datasets
-- Use compact HTML (minify if needed)
-- No code comments in artifacts
-- This ensures fast loading and clean user experience
+**Use LINE CHARTS for:**
+- Time-series data with Year/Date columns showing TRENDS OVER TIME
+- Data where the x-axis represents a continuous temporal progression
+- Examples: yearly counts, monthly trends, population changes over years
+- Requirements: Must have 3+ data points, x-axis must be chronological
 
-### When to Create Artifacts:
-- ✅ Time-series data (years, dates) → Line chart artifact
-- ✅ Category comparisons (top species, colonies) → Bar chart artifact
-- ✅ Proportions/percentages (species composition, state breakdown) → Pie/Doughnut chart artifact
-- ✅ Trends over time → Line or multi-line chart artifact
-- ✅ Distributions → Histogram artifact
-- ❌ Geographic data (has Lat/Lon) → NO artifact, map auto-generates
-- ❌ Simple answers with <10 rows → Just explain
+**Use BAR CHARTS for:**
+- Comparisons between categories (species, colonies, states, regions)
+- Rankings or "top N" lists
+- Categorical data where order doesn't represent time progression
+- Examples: top 10 species, comparison by colony name, counts by state
 
-### Artifact Format:
-Wrap complete HTML in artifact code blocks:
+**Use MAPS for:**
+- ANY results with Latitude AND Longitude columns → ALWAYS add [SHOW_MAP: true]
 
-\`\`\`artifact
-<!DOCTYPE html>
-<html>
-<head>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1"></script>
-    <style>
-        body { margin: 20px; font-family: sans-serif; }
-        canvas { max-width: 100%; }
-        h3 { color: #7BABAE; margin-bottom: 20px; }
-    </style>
-</head>
-<body>
-    <h3>Chart Title Here</h3>
-    <canvas id="myChart"></canvas>
-    <script>
-        new Chart(document.getElementById('myChart'), {
-            type: 'line',
-            data: {
-                labels: [ACTUAL_YEARS_FROM_RESULTS],
-                datasets: [{
-                    label: 'Bird Count',
-                    data: [ACTUAL_COUNTS_FROM_RESULTS],
-                    borderColor: '#7BABAE',
-                    backgroundColor: 'rgba(123, 171, 174, 0.1)',
-                    tension: 0.4,
-                    fill: true
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: true,
-                scales: {
-                    y: { beginAtZero: true },
-                    x: { title: { display: true, text: 'Year' } }
-                }
-            }
-        });
-    </script>
-</body>
-</html>
-\`\`\`
+**General Rules:**
+- You can include BOTH chart and map directives if appropriate
+- Only use [NO_VIZ] for errors, empty results, or purely informational queries
+- When in doubt: time-based = line, categorical = bar
 
-### CRITICAL RULES:
-1. **Extract real data from results** - Use actual numbers from the query results table
-2. **Limit data points**: For large datasets (50+ rows), show only top 10-20 most significant entries
-3. **Column Selection**:
-   - For Y-axis: Use count columns (Birds, Nests, total_birds, bird_count)
-   - For X-axis: Use Year, Date, ColonyName, SpeciesName
-   - **NEVER use Latitude/Longitude for chart axes!**
-4. **Complete HTML**: Include Chart.js 4.4.1 via CDN
-5. **Colors**: #7BABAE (coastal teal), #D97757 (orange), #537C8A (ocean blue), #F04438 (red for declines)
-6. **NO MAP ARTIFACTS**: Maps are automatically rendered by the system when results have Lat/Lon
-7. **Keep it concise**: Minimize artifact size - use compact arrays, no comments in code
+DIRECTIVE FORMAT (include these exact tags):
+- [SHOW_CHART: line] - for time-series trends (Year/Date on x-axis)
+- [SHOW_CHART: bar] - for categorical comparisons and rankings
+- [SHOW_MAP: true] - when results have Latitude and Longitude columns
+- [NO_VIZ] - only when truly no visualization is possible or useful
 
-### Example 1: Line Chart for Single Trend
+EXAMPLES:
+- Query: "Brown pelican trends 2015-2021" → [SHOW_CHART: line]
+- Query: "Top 10 species in 2021" → [SHOW_CHART: bar]
+- Query: "Colonies in Louisiana" with lat/lon → [SHOW_MAP: true]
+- Query: "Yearly counts by colony" with lat/lon → BOTH [SHOW_MAP: true] and [SHOW_CHART: line]
+- Query: "Compare species diversity across colonies" → [SHOW_CHART: bar]
 
-\`\`\`artifact
-<!DOCTYPE html>
-<html>
-<head>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1"></script>
-    <style>
-        body { margin: 20px; font-family: sans-serif; }
-        canvas { max-width: 100%; }
-        h3 { color: #7BABAE; margin-bottom: 20px; }
-    </style>
-</head>
-<body>
-    <h3>Brown Pelican Population Trends (2010-2021)</h3>
-    <canvas id="myChart"></canvas>
-    <script>
-        new Chart(document.getElementById('myChart'), {
-            type: 'line',
-            data: {
-                labels: [2010, 2015, 2021],
-                datasets: [{
-                    label: 'Bird Count',
-                    data: [45328, 69123, 112043],
-                    borderColor: '#7BABAE',
-                    backgroundColor: 'rgba(123, 171, 174, 0.1)',
-                    tension: 0.4,
-                    fill: true
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: true,
-                scales: { y: { beginAtZero: true } }
-            }
-        });
-    </script>
-</body>
-</html>
-\`\`\`
-
-### Example 2: Multi-Line Chart for Comparisons
-
-\`\`\`artifact
-<!DOCTYPE html>
-<html>
-<head>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1"></script>
-    <style>
-        body { margin: 20px; font-family: sans-serif; }
-        canvas { max-width: 100%; }
-        h3 { color: #7BABAE; margin-bottom: 20px; }
-    </style>
-</head>
-<body>
-    <h3>Colonies with Declining Populations</h3>
-    <canvas id="myChart"></canvas>
-    <script>
-        new Chart(document.getElementById('myChart'), {
-            type: 'line',
-            data: {
-                labels: [2010, 2015, 2021],
-                datasets: [
-                    {
-                        label: 'Breton Island',
-                        data: [38387, 28234, 14934],
-                        borderColor: '#F04438',
-                        tension: 0.4
-                    },
-                    {
-                        label: 'Felicity Island',
-                        data: [12403, 8432, 1868],
-                        borderColor: '#FD853A',
-                        tension: 0.4
-                    },
-                    {
-                        label: 'Marker 52 Spoil',
-                        data: [9122, 6234, 3736],
-                        borderColor: '#FEC84B',
-                        tension: 0.4
-                    }
-                ]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: true,
-                scales: { y: { beginAtZero: true } }
-            }
-        });
-    </script>
-</body>
-</html>
-\`\`\`
-
-### Example 3: Bar Chart for Categories
-
-\`\`\`artifact
-<!DOCTYPE html>
-<html>
-<head>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1"></script>
-    <style>
-        body { margin: 20px; font-family: sans-serif; }
-        canvas { max-width: 100%; }
-        h3 { color: #7BABAE; margin-bottom: 20px; }
-    </style>
-</head>
-<body>
-    <h3>Top 5 Species by Count (2021)</h3>
-    <canvas id="myChart"></canvas>
-    <script>
-        new Chart(document.getElementById('myChart'), {
-            type: 'bar',
-            data: {
-                labels: ['Laughing Gull', 'Brown Pelican', 'Royal Tern', 'Sandwich Tern', 'Black Skimmer'],
-                datasets: [{
-                    label: 'Bird Count',
-                    data: [187456, 112043, 98234, 67821, 54293],
-                    backgroundColor: '#7BABAE'
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: true,
-                scales: { y: { beginAtZero: true } }
-            }
-        });
-    </script>
-</body>
-</html>
-\`\`\`
-
-### Example 4: Pie Chart for Proportions
-
-\`\`\`artifact
-<!DOCTYPE html>
-<html>
-<head>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1"></script>
-    <style>
-        body { margin: 20px; font-family: sans-serif; }
-        canvas { max-width: 600px; margin: 0 auto; }
-        h3 { color: #7BABAE; margin-bottom: 20px; text-align: center; }
-    </style>
-</head>
-<body>
-    <h3>Species Composition in Louisiana (2021)</h3>
-    <canvas id="myChart"></canvas>
-    <script>
-        new Chart(document.getElementById('myChart'), {
-            type: 'pie',
-            data: {
-                labels: ['Laughing Gull', 'Brown Pelican', 'Royal Tern', 'Sandwich Tern', 'Other'],
-                datasets: [{
-                    data: [35, 25, 18, 12, 10],
-                    backgroundColor: ['#7BABAE', '#D97757', '#537C8A', '#FEC84B', '#E8E6E3']
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: true,
-                plugins: {
-                    legend: { position: 'bottom' }
-                }
-            }
-        });
-    </script>
-</body>
-</html>
-\`\`\`
-
-**REMEMBER:**
-- Use artifacts for charts/trends ONLY
-- Maps are automatically generated when data has Lat/Lon columns
-- Always extract real data from query results
-- Never make up numbers!"""
+The visualization directives should be on the last line(s) of your response, after your explanation."""
 
         user_content = f"""Question: {user_question}
 
@@ -1521,7 +1221,7 @@ Please provide a clear, informative answer to the question based on these result
 
         system_prompt = """You are a helpful assistant that explains bird colony data query results.
 
-IMPORTANT: You can see the conversation history, so use it to provide contextual answers.
+IMPORTANT: You can see the conversation history, so use it to provide contextual answers. If the user asks follow-up questions like "List them" or "Show me more details", refer to the previous context to understand what they're asking about.
 
 Your task is to:
 1. Answer the user's question based on the SQL query results
@@ -1529,261 +1229,47 @@ Your task is to:
 3. Highlight interesting patterns or insights
 4. Use a conversational but informative tone
 5. If there are no results, explain why that might be
-6. If there's a query error, explain what went wrong in simple terms
-7. **GENERATE HTML ARTIFACTS for charts and trends ONLY**
+6. If there's a query error, explain what went wrong in simple terms and suggest how to fix it
 
-## CRITICAL: HTML ARTIFACT GENERATION
+CRITICAL - VISUALIZATION DIRECTIVES (MANDATORY):
+You MUST include visualization directives at the END of your response on separate lines.
 
-**Generate artifacts for charts and trends. Maps are handled automatically by the system.**
+IMPORTANT: Check the query results to determine what visualizations to show:
 
-**IMPORTANT: Keep artifacts CONCISE!**
-- Limit to top 10-20 data points for large datasets
-- Use compact HTML (minify if needed)
-- No code comments in artifacts
-- This ensures fast loading and clean user experience
+**Use LINE CHARTS for:**
+- Time-series data with Year/Date columns showing TRENDS OVER TIME
+- Data where the x-axis represents a continuous temporal progression
+- Examples: yearly counts, monthly trends, population changes over years
+- Requirements: Must have 3+ data points, x-axis must be chronological
 
-### When to Create Artifacts:
-- ✅ Time-series data (years, dates) → Line chart artifact
-- ✅ Category comparisons (top species, colonies) → Bar chart artifact
-- ✅ Proportions/percentages (species composition, state breakdown) → Pie/Doughnut chart artifact
-- ✅ Trends over time → Line or multi-line chart artifact
-- ✅ Distributions → Histogram artifact
-- ❌ Geographic data (has Lat/Lon) → NO artifact, map auto-generates
-- ❌ Simple answers with <10 rows → Just explain
+**Use BAR CHARTS for:**
+- Comparisons between categories (species, colonies, states, regions)
+- Rankings or "top N" lists
+- Categorical data where order doesn't represent time progression
+- Examples: top 10 species, comparison by colony name, counts by state
 
-### Artifact Format:
-Wrap complete HTML in artifact code blocks:
+**Use MAPS for:**
+- ANY results with Latitude AND Longitude columns → ALWAYS add [SHOW_MAP: true]
 
-\`\`\`artifact
-<!DOCTYPE html>
-<html>
-<head>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1"></script>
-    <style>
-        body { margin: 20px; font-family: sans-serif; }
-        canvas { max-width: 100%; }
-        h3 { color: #7BABAE; margin-bottom: 20px; }
-    </style>
-</head>
-<body>
-    <h3>Chart Title Here</h3>
-    <canvas id="myChart"></canvas>
-    <script>
-        new Chart(document.getElementById('myChart'), {
-            type: 'line',
-            data: {
-                labels: [ACTUAL_YEARS_FROM_RESULTS],
-                datasets: [{
-                    label: 'Bird Count',
-                    data: [ACTUAL_COUNTS_FROM_RESULTS],
-                    borderColor: '#7BABAE',
-                    backgroundColor: 'rgba(123, 171, 174, 0.1)',
-                    tension: 0.4,
-                    fill: true
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: true,
-                scales: {
-                    y: { beginAtZero: true },
-                    x: { title: { display: true, text: 'Year' } }
-                }
-            }
-        });
-    </script>
-</body>
-</html>
-\`\`\`
+**General Rules:**
+- You can include BOTH chart and map directives if appropriate
+- Only use [NO_VIZ] for errors, empty results, or purely informational queries
+- When in doubt: time-based = line, categorical = bar
 
-### CRITICAL RULES:
-1. **Extract real data from results** - Use actual numbers from the query results table
-2. **Limit data points**: For large datasets (50+ rows), show only top 10-20 most significant entries
-3. **Column Selection**:
-   - For Y-axis: Use count columns (Birds, Nests, total_birds, bird_count)
-   - For X-axis: Use Year, Date, ColonyName, SpeciesName
-   - **NEVER use Latitude/Longitude for chart axes!**
-4. **Complete HTML**: Include Chart.js 4.4.1 via CDN
-5. **Colors**: #7BABAE (coastal teal), #D97757 (orange), #537C8A (ocean blue), #F04438 (red for declines)
-6. **NO MAP ARTIFACTS**: Maps are automatically rendered by the system when results have Lat/Lon
-7. **Keep it concise**: Minimize artifact size - use compact arrays, no comments in code
+DIRECTIVE FORMAT (include these exact tags):
+- [SHOW_CHART: line] - for time-series trends (Year/Date on x-axis)
+- [SHOW_CHART: bar] - for categorical comparisons and rankings
+- [SHOW_MAP: true] - when results have Latitude and Longitude columns
+- [NO_VIZ] - only when truly no visualization is possible or useful
 
-### Example 1: Line Chart for Single Trend
+EXAMPLES:
+- Query: "Brown pelican trends 2015-2021" → [SHOW_CHART: line]
+- Query: "Top 10 species in 2021" → [SHOW_CHART: bar]
+- Query: "Colonies in Louisiana" with lat/lon → [SHOW_MAP: true]
+- Query: "Yearly counts by colony" with lat/lon → BOTH [SHOW_MAP: true] and [SHOW_CHART: line]
+- Query: "Compare species diversity across colonies" → [SHOW_CHART: bar]
 
-\`\`\`artifact
-<!DOCTYPE html>
-<html>
-<head>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1"></script>
-    <style>
-        body { margin: 20px; font-family: sans-serif; }
-        canvas { max-width: 100%; }
-        h3 { color: #7BABAE; margin-bottom: 20px; }
-    </style>
-</head>
-<body>
-    <h3>Brown Pelican Population Trends (2010-2021)</h3>
-    <canvas id="myChart"></canvas>
-    <script>
-        new Chart(document.getElementById('myChart'), {
-            type: 'line',
-            data: {
-                labels: [2010, 2015, 2021],
-                datasets: [{
-                    label: 'Bird Count',
-                    data: [45328, 69123, 112043],
-                    borderColor: '#7BABAE',
-                    backgroundColor: 'rgba(123, 171, 174, 0.1)',
-                    tension: 0.4,
-                    fill: true
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: true,
-                scales: { y: { beginAtZero: true } }
-            }
-        });
-    </script>
-</body>
-</html>
-\`\`\`
-
-### Example 2: Multi-Line Chart for Comparisons
-
-\`\`\`artifact
-<!DOCTYPE html>
-<html>
-<head>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1"></script>
-    <style>
-        body { margin: 20px; font-family: sans-serif; }
-        canvas { max-width: 100%; }
-        h3 { color: #7BABAE; margin-bottom: 20px; }
-    </style>
-</head>
-<body>
-    <h3>Colonies with Declining Populations</h3>
-    <canvas id="myChart"></canvas>
-    <script>
-        new Chart(document.getElementById('myChart'), {
-            type: 'line',
-            data: {
-                labels: [2010, 2015, 2021],
-                datasets: [
-                    {
-                        label: 'Breton Island',
-                        data: [38387, 28234, 14934],
-                        borderColor: '#F04438',
-                        tension: 0.4
-                    },
-                    {
-                        label: 'Felicity Island',
-                        data: [12403, 8432, 1868],
-                        borderColor: '#FD853A',
-                        tension: 0.4
-                    },
-                    {
-                        label: 'Marker 52 Spoil',
-                        data: [9122, 6234, 3736],
-                        borderColor: '#FEC84B',
-                        tension: 0.4
-                    }
-                ]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: true,
-                scales: { y: { beginAtZero: true } }
-            }
-        });
-    </script>
-</body>
-</html>
-\`\`\`
-
-### Example 3: Bar Chart for Categories
-
-\`\`\`artifact
-<!DOCTYPE html>
-<html>
-<head>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1"></script>
-    <style>
-        body { margin: 20px; font-family: sans-serif; }
-        canvas { max-width: 100%; }
-        h3 { color: #7BABAE; margin-bottom: 20px; }
-    </style>
-</head>
-<body>
-    <h3>Top 5 Species by Count (2021)</h3>
-    <canvas id="myChart"></canvas>
-    <script>
-        new Chart(document.getElementById('myChart'), {
-            type: 'bar',
-            data: {
-                labels: ['Laughing Gull', 'Brown Pelican', 'Royal Tern', 'Sandwich Tern', 'Black Skimmer'],
-                datasets: [{
-                    label: 'Bird Count',
-                    data: [187456, 112043, 98234, 67821, 54293],
-                    backgroundColor: '#7BABAE'
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: true,
-                scales: { y: { beginAtZero: true } }
-            }
-        });
-    </script>
-</body>
-</html>
-\`\`\`
-
-### Example 4: Pie Chart for Proportions
-
-\`\`\`artifact
-<!DOCTYPE html>
-<html>
-<head>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1"></script>
-    <style>
-        body { margin: 20px; font-family: sans-serif; }
-        canvas { max-width: 600px; margin: 0 auto; }
-        h3 { color: #7BABAE; margin-bottom: 20px; text-align: center; }
-    </style>
-</head>
-<body>
-    <h3>Species Composition in Louisiana (2021)</h3>
-    <canvas id="myChart"></canvas>
-    <script>
-        new Chart(document.getElementById('myChart'), {
-            type: 'pie',
-            data: {
-                labels: ['Laughing Gull', 'Brown Pelican', 'Royal Tern', 'Sandwich Tern', 'Other'],
-                datasets: [{
-                    data: [35, 25, 18, 12, 10],
-                    backgroundColor: ['#7BABAE', '#D97757', '#537C8A', '#FEC84B', '#E8E6E3']
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: true,
-                plugins: {
-                    legend: { position: 'bottom' }
-                }
-            }
-        });
-    </script>
-</body>
-</html>
-\`\`\`
-
-**REMEMBER:**
-- Use artifacts for charts/trends ONLY
-- Maps are automatically generated when data has Lat/Lon columns
-- Always extract real data from query results
-- Never make up numbers!"""
+The visualization directives should be on the last line(s) of your response, after your explanation."""
 
         user_content = f"""Question: {user_question}
 
@@ -1886,13 +1372,15 @@ Please provide a clear, informative answer to the question based on these result
 
 class AgenticSQLChatbot(SQLChatbot):
     """
-    5-Phase Agentic Text-to-SQL Pipeline
+    Agentic chatbot with multi-step reasoning and self-correction.
 
-    Phase 1: Context & Setup (auto)
-    Phase 2: Chain-of-Thought Planning (explicit reasoning)
-    Phase 3: SQL Generation (from plan)
-    Phase 4: Result Evaluation (check sufficiency)
-    Phase 5: Final Answer & Artifacts (streaming)
+    The agent follows these steps:
+    1. Analyze the question - understand what's being asked
+    2. Generate SQL - create a candidate query
+    3. Self-validate SQL - check for common mistakes
+    4. Execute query - run the SQL
+    5. Validate results - check if results make sense
+    6. Retry if needed - regenerate with feedback (configurable max attempts)
 
     Progress is streamed to the frontend in real-time.
     """
@@ -1901,15 +1389,9 @@ class AgenticSQLChatbot(SQLChatbot):
         super().__init__(*args, **kwargs)
         # Load agentic configuration from config.yaml
         self.max_attempts = config.get('agentic', {}).get('max_attempts', 3)
-        self.enable_reasoning = config.get('agentic', {}).get('enable_reasoning', True)
-        self.enable_result_validation = config.get('agentic', {}).get('enable_result_validation', False)
+        self.validation_temperature = config.get('agentic', {}).get('validation_temperature', 0.1)
+        self.analysis_temperature = config.get('agentic', {}).get('analysis_temperature', 0.3)
 
-<<<<<<< HEAD
-        # Load phase-specific prompts
-        self.reasoning_prompt = self._load_phase_prompt("sql_prompt_reasoning.txt")
-        self.generation_prompt = self._load_phase_prompt("sql_prompt_generation.txt")
-        self.evaluation_prompt = self._load_phase_prompt("sql_prompt_evaluation.txt")
-=======
     async def agentic_ask_stream(self, question: str, conversation_history: list = None):
         """
         Process question with agentic reasoning and stream progress updates.
@@ -2222,27 +1704,82 @@ Now analyze the user's actual question with this same level of detail."""}
                 messages.append(msg)
 
         messages.append({"role": "user", "content": f"Question: {question}"})
->>>>>>> origin/master
 
-    def _load_phase_prompt(self, filename):
-        """Load a phase-specific prompt file"""
         try:
-            path = SERVER_DIR / filename
-            with open(path, 'r', encoding='utf-8') as f:
-                return f.read()
-        except FileNotFoundError:
-            print(f"⚠ Warning: {filename} not found, using fallback")
-            return ""
+            response = client.chat.completions.create(
+                model=self.model,
+                messages=messages,
+                temperature=self.analysis_temperature,
+                max_tokens=500  # Ensure JSON doesn't get truncated
+            )
 
-    def _phase2_reasoning(self, question: str, conversation_history: list = None) -> dict:
+            analysis_text = response.choices[0].message.content.strip()
+
+            # Remove markdown code blocks if present
+            if analysis_text.startswith("```"):
+                parts = analysis_text.split("```")
+                if len(parts) >= 2:
+                    analysis_text = parts[1]
+                    if analysis_text.startswith("json"):
+                        analysis_text = analysis_text[4:].strip()
+                analysis_text = analysis_text.strip()
+
+            # Try to parse as JSON
+            try:
+                analysis = json.loads(analysis_text)
+                # Ensure step_by_step_reasoning exists and is properly formatted
+                if 'step_by_step_reasoning' not in analysis:
+                    analysis['step_by_step_reasoning'] = [analysis.get('summary', 'Analyzing question...')]
+                elif not isinstance(analysis['step_by_step_reasoning'], list):
+                    # If it's not a list, convert to list
+                    analysis['step_by_step_reasoning'] = [str(analysis['step_by_step_reasoning'])]
+
+                # Ensure all required fields exist
+                analysis.setdefault('summary', 'Analyzing question...')
+                analysis.setdefault('entities', {})
+                analysis.setdefault('question_type', 'query')
+                analysis.setdefault('tables_needed', [])
+                analysis.setdefault('needs_coordinates', False)
+
+            except json.JSONDecodeError as e:
+                # JSON parsing failed - provide a simple fallback
+                # Extract just the summary if possible
+                import re
+                summary_match = re.search(r'"summary":\s*"([^"]+)"', analysis_text)
+                summary = summary_match.group(1) if summary_match else "Query bird count data by year"
+
+                analysis = {
+                    "summary": summary,
+                    "entities": {},
+                    "question_type": "query",
+                    "tables_needed": ["tblColonyTotals2010-2021_MayJuneCombined"],
+                    "needs_coordinates": False,
+                    "step_by_step_reasoning": [
+                        "Parsing the question to understand what data is needed",
+                        "Identifying the correct table for bird count aggregation",
+                        "Planning the SQL query structure"
+                    ]
+                }
+
+            return analysis
+        except Exception as e:
+            return {
+                "summary": "Could not analyze question",
+                "entities": {},
+                "question_type": "unknown",
+                "tables_needed": [],
+                "needs_coordinates": False,
+                "step_by_step_reasoning": ["Error analyzing question"]
+            }
+
+    async def _validate_sql(self, sql_query: str, question: str, conversation_history: list = None) -> dict:
         """
-        Phase 2: Chain-of-Thought Planning
-        Returns reasoning plan as JSON
+        Expert SQL validation with detailed checklist of what was verified.
+        Returns structured validation with explicit checks.
         """
+
+        # Pure LLM validation - no hard-coded rules
         messages = [
-<<<<<<< HEAD
-            {"role": "system", "content": self.reasoning_prompt}
-=======
             {"role": "system", "content": """You are a Principal Data Engineer and Ecologist.
 Validate the SQL query against high-level scientific and structural principles.
 
@@ -2278,140 +1815,119 @@ Respond with a JSON object:
 
 Include ONLY the checks that apply to this specific query.
 Be technically rigorous."""}
->>>>>>> origin/master
         ]
-
-        # Add metadata context
-        if self.metadata:
-            messages.append({"role": "system", "content": self._format_metadata_context()})
-
-        # Add conversation history
-        if conversation_history:
-            for msg in conversation_history[-6:]:
-                messages.append(msg)
 
         messages.append({
             "role": "user",
-            "content": f"Question: {question}\n\nProvide your reasoning plan as JSON:"
+            "content": f"""Question: {question}
+
+SQL Query:
+{sql_query}
+
+Validate (respond with JSON only):"""
         })
 
         try:
             response = client.chat.completions.create(
                 model=self.model,
                 messages=messages,
-                temperature=0.1,  # Low temp for structured reasoning
-                max_tokens=500
+                temperature=self.validation_temperature,
+                max_tokens=300  # Allow for detailed checklist
             )
 
-            response_text = response.choices[0].message.content.strip()
+            validation_text = response.choices[0].message.content.strip()
 
-            # Parse JSON
-            if response_text.startswith("```json"):
-                response_text = response_text.split("```json")[1].split("```")[0].strip()
-            elif response_text.startswith("```"):
-                response_text = response_text.split("```")[1].split("```")[0].strip()
+            # Remove markdown code blocks if present
+            if validation_text.startswith("```"):
+                validation_text = validation_text.split("```")[1]
+                if validation_text.startswith("json"):
+                    validation_text = validation_text[4:].strip()
+                validation_text = validation_text.strip()
 
-            reasoning_plan = json.loads(response_text)
-            return reasoning_plan
+            try:
+                validation = json.loads(validation_text)
+                # Ensure required fields exist
+                if 'is_valid' not in validation:
+                    validation['is_valid'] = True
+                if 'feedback' not in validation:
+                    validation['feedback'] = "Query structure validated"
+                if 'reasoning' not in validation:
+                    validation['reasoning'] = {"summary": validation.get('feedback', "Validation performed")}
+            except json.JSONDecodeError:
+                # If JSON parsing fails, be lenient and assume valid
+                # Only mark as invalid if we see clear negative indicators
+                text_lower = validation_text.lower()
+                if any(word in text_lower for word in ["invalid", "error", "wrong", "incorrect", "missing"]):
+                    validation = {
+                        "is_valid": False,
+                        "feedback": validation_text[:100],
+                        "reasoning": {"summary": validation_text}
+                    }
+                else:
+                    validation = {
+                        "is_valid": True,
+                        "feedback": "Query structure validated",
+                        "reasoning": {"summary": validation_text}
+                    }
 
+            return validation
         except Exception as e:
-            print(f"⚠ Phase 2 reasoning failed: {e}")
-            # Fallback: skip reasoning phase
+            # On error, assume valid and proceed
             return {
-                "question_type": "unknown",
-                "reasoning": f"Reasoning phase skipped due to error: {e}"
+                "is_valid": True,
+                "feedback": "Query structure validated",
+                "reasoning": {"summary": "Validation check performed"}
             }
 
-    def _phase3_sql_generation(self, question: str, reasoning_plan: dict, conversation_history: list = None) -> str:
+    async def _validate_results(self, question: str, sql_query: str, results_df, conversation_history: list = None) -> dict:
         """
-        Phase 3: SQL Generation from Reasoning Plan
-        Returns SQL query as string
+        Final validation with detailed reasoning about result quality.
+        Returns structured validation showing what was checked.
         """
-        messages = [
-            {"role": "system", "content": self.generation_prompt}
-        ]
-
-        # Add metadata context
-        if self.metadata:
-            messages.append({"role": "system", "content": self._format_metadata_context()})
-
-        # Add reasoning plan as context
-        messages.append({
-            "role": "assistant",
-            "content": f"Reasoning Plan:\n{json.dumps(reasoning_plan, indent=2)}"
-        })
-
-        # Add conversation history for error corrections
-        if conversation_history:
-            for msg in conversation_history[-6:]:
-                messages.append(msg)
-
-        messages.append({
-            "role": "user",
-            "content": f"Question: {question}\n\nGenerate SQL as JSON based on the reasoning plan:"
-        })
-
-        try:
-            response = client.chat.completions.create(
-                model=self.model,
-                messages=messages,
-                temperature=config['model']['sql_temperature'],
-                max_tokens=config['model']['sql_max_tokens']
-            )
-
-            response_text = response.choices[0].message.content.strip()
-
-            # Parse JSON
-            if response_text.startswith("```json"):
-                response_text = response_text.split("```json")[1].split("```")[0].strip()
-            elif response_text.startswith("```"):
-                response_text = response_text.split("```")[1].split("```")[0].strip()
-
-            result = json.loads(response_text)
-            sql_query = result.get("sql", "")
-
-            if not sql_query:
-                return "ERROR: No SQL in JSON response"
-
-            # Validate it's read-only SQL
-            sql_upper = sql_query.strip().upper()
-            if not (sql_upper.startswith('SELECT') or sql_upper.startswith('WITH')):
-                return f"ERROR: Invalid SQL - must start with SELECT or WITH"
-
-            return sql_query
-
-        except json.JSONDecodeError:
-            # Fallback: try to extract raw SQL
-            print(f"⚠ JSON parsing failed in Phase 3")
-            if response_text.upper().startswith('SELECT') or response_text.upper().startswith('WITH'):
-                return response_text
-            return f"ERROR: Could not parse SQL from response"
-        except Exception as e:
-            return f"ERROR: {e}"
-
-    def _phase4_evaluation(self, question: str, sql_query: str, results_df) -> dict:
-        """
-        Phase 4: Result Evaluation
-        Returns evaluation as JSON: {sufficient: bool, reason: str, follow_up_sql: str}
-        """
-        if not self.enable_result_validation:
-            # Skip evaluation if disabled
-            return {"sufficient": True, "reason": "Evaluation disabled"}
 
         if results_df is None or len(results_df) == 0:
             return {
-                "sufficient": False,
-                "reason": "No results returned - query may need adjustment"
+                "is_valid": True,
+                "feedback": "Empty result set (may be expected based on filters)",
+                "reasoning": {
+                    "row_count_check": "0 rows returned",
+                    "empty_is_expected": "May be valid if no data matches the filters"
+                }
             }
 
-        # Format results summary
-        results_summary = f"Rows: {len(results_df)}\n"
+        # Format sample for the model
+        results_summary = f"Total Rows: {len(results_df)}\n"
         results_summary += f"Columns: {', '.join(results_df.columns)}\n"
         if len(results_df) > 0:
-            results_summary += f"Sample: {results_df.iloc[0].to_dict()}"
+            results_summary += f"Sample Row 1: {results_df.iloc[0].to_dict()}"
+            if len(results_df) > 1:
+                results_summary += f"\nSample Row 2: {results_df.iloc[1].to_dict()}"
 
         messages = [
-            {"role": "system", "content": self.evaluation_prompt}
+            {"role": "system", "content": """You are a Senior Data Scientist performing QA.
+Cross-reference the question, SQL, and actual results for logical consistency.
+
+RESULT QUALITY CHECKLIST:
+1. Row Count: Is the number of rows reasonable for this query type?
+2. Column Match: Do the columns match what the question asked for?
+3. Value Ranges: Are the numeric values realistic for bird monitoring?
+4. Entity Match: Do years/species/locations match the question filters?
+5. Data Types: Are columns the expected types (numbers vs text)?
+
+Respond with JSON:
+{
+  "is_valid": true/false,
+  "feedback": "One-sentence summary",
+  "reasoning": {
+    "row_count_check": "X rows returned, reasonable for this query",
+    "column_check": "Columns match question intent",
+    "value_check": "Numbers are realistic for bird populations",
+    "entity_check": "Years/species match filters",
+    "issues_found": []
+  }
+}
+
+Include ONLY checks that apply. Be specific about numbers."""}
         ]
 
         messages.append({
@@ -2424,226 +1940,51 @@ SQL Query:
 Results Summary:
 {results_summary}
 
-Evaluate as JSON:"""
+Validate (respond with JSON):"""
         })
 
         try:
             response = client.chat.completions.create(
                 model=self.model,
                 messages=messages,
-                temperature=0.1,
-                max_tokens=300
+                temperature=self.validation_temperature,
+                max_tokens=300  # Allow for detailed reasoning
             )
 
-            response_text = response.choices[0].message.content.strip()
+            validation_text = response.choices[0].message.content.strip()
 
-            # Parse JSON
-            if response_text.startswith("```json"):
-                response_text = response_text.split("```json")[1].split("```")[0].strip()
-            elif response_text.startswith("```"):
-                response_text = response_text.split("```")[1].split("```")[0].strip()
+            # Remove markdown code blocks if present
+            if validation_text.startswith("```"):
+                validation_text = validation_text.split("```")[1]
+                if validation_text.startswith("json"):
+                    validation_text = validation_text[4:].strip()
+                validation_text = validation_text.strip()
 
-            evaluation = json.loads(response_text)
-            return evaluation
-
-        except Exception as e:
-            print(f"⚠ Phase 4 evaluation failed: {e}")
-            # Default: assume sufficient
-            return {"sufficient": True, "reason": "Evaluation check performed"}
-
-    async def agentic_ask_stream(self, question: str, conversation_history: list = None):
-        """
-        5-Phase Agentic Text-to-SQL Pipeline with Streaming
-
-        Phase 1: Context & Setup (automatic - metadata loaded in __init__)
-        Phase 2: Chain-of-Thought Planning (explicit reasoning, optional)
-        Phase 3: SQL Generation (from reasoning plan or direct)
-        Phase 4: Result Evaluation (optional - check sufficiency)
-        Phase 5: Final Answer & Artifacts (streaming)
-
-        Self-correction: Max 3 retries on execution errors
-        """
-
-        reasoning_plan = None
-
-        for attempt in range(1, self.max_attempts + 1):
             try:
-                # PHASE 2: Chain-of-Thought Planning (only on first attempt if enabled)
-                if attempt == 1 and self.enable_reasoning:
-                    yield {
-                        'type': 'thinking_step',
-                        'step': 'reasoning',
-                        'attempt': attempt,
-                        'content': "Analyzing question structure...",
-                        'icon': '🧠'
-                    }
-
-                    reasoning_plan = self._phase2_reasoning(question, conversation_history)
-
-                    if reasoning_plan:
-                        yield {
-                            'type': 'reasoning_complete',
-                            'content': reasoning_plan.get('reasoning', 'Query plan generated'),
-                            'plan': reasoning_plan
-                        }
-
-                # PHASE 3: SQL Generation
-                if attempt == 1:
-                    yield {
-                        'type': 'thinking_step',
-                        'step': 'generate_sql',
-                        'attempt': attempt,
-                        'content': "Generating query...",
-                        'icon': '⚡'
-                    }
-                else:
-                    yield {
-                        'type': 'thinking_step',
-                        'step': 'retry',
-                        'attempt': attempt,
-                        'content': f"Retrying with corrections (attempt {attempt}/{self.max_attempts})...",
-                        'icon': '🔄'
-                    }
-
-                # Generate SQL (with or without reasoning plan)
-                if reasoning_plan and self.enable_reasoning:
-                    sql_query = self._phase3_sql_generation(question, reasoning_plan, conversation_history)
-                else:
-                    # Fallback to direct generation if reasoning disabled or failed
-                    sql_query = self.generate_sql_query(question, conversation_history)
-
-                # Handle SQL generation errors
-                if sql_query.startswith("ERROR"):
-                    if attempt < self.max_attempts:
-                        yield {
-                            'type': 'retry',
-                            'attempt': attempt,
-                            'reason': sql_query,
-                            'content': f"SQL generation error. Retrying..."
-                        }
-                        # Add error to conversation history for next attempt
-                        if conversation_history is None:
-                            conversation_history = []
-                        conversation_history.append({
-                            'role': 'system',
-                            'content': f"Previous attempt failed: {sql_query}\n\nGenerate corrected SQL."
-                        })
-                        continue
-                    else:
-                        yield {'type': 'error', 'content': sql_query}
-                        return
-
-                yield {
-                    'type': 'sql_generated',
-                    'content': sql_query,
-                    'attempt': attempt
+                validation = json.loads(validation_text)
+                # Ensure required fields
+                if 'is_valid' not in validation:
+                    validation['is_valid'] = True
+                if 'feedback' not in validation:
+                    validation['feedback'] = "Results validated"
+                if 'reasoning' not in validation:
+                    validation['reasoning'] = {"summary": validation.get('feedback', "Results check performed")}
+            except json.JSONDecodeError:
+                # Default to valid
+                validation = {
+                    "is_valid": True,
+                    "feedback": "Results validated",
+                    "reasoning": {"summary": validation_text}
                 }
 
-                # Execute query
-                results_df, error = self.execute_query(sql_query)
-
-                # Handle execution errors with retry
-                if error:
-                    if attempt < self.max_attempts:
-                        yield {
-                            'type': 'retry',
-                            'attempt': attempt,
-                            'reason': error,
-                            'content': f"Query error: {error[:200]}... Fixing..."
-                        }
-                        # Add detailed error feedback to conversation history
-                        if conversation_history is None:
-                            conversation_history = []
-                        conversation_history.append({
-                            'role': 'system',
-                            'content': f"""Previous SQL query failed with error:
-{error}
-
-SQL that failed:
-{sql_query}
-
-Fix the SQL and return corrected JSON with {"sql": "..."} format."""
-                        })
-                        continue
-                    else:
-                        # All attempts exhausted
-                        yield {'type': 'error', 'content': f"Query failed: {error}"}
-                        return
-
-                # Execution succeeded
-                results = results_df.to_dict(orient='records') if results_df is not None else None
-                results_count = len(results_df) if results_df is not None else 0
-
-                yield {
-                    'type': 'results',
-                    'content': results,
-                    'count': results_count,
-                    'attempt': attempt
-                }
-
-                # PHASE 4: Result Evaluation (optional)
-                if self.enable_result_validation:
-                    yield {
-                        'type': 'thinking_step',
-                        'step': 'evaluation',
-                        'content': "Evaluating results...",
-                        'icon': '✓'
-                    }
-
-                    evaluation = self._phase4_evaluation(question, sql_query, results_df)
-
-                    if not evaluation.get('sufficient', True):
-                        yield {
-                            'type': 'evaluation_warning',
-                            'content': evaluation.get('reason', 'Results may be incomplete'),
-                            'evaluation': evaluation
-                        }
-                        # Note: Follow-up query execution not implemented yet
-                        # For now, proceed with current results
-
-                # PHASE 5: Final Answer & Artifacts (streaming)
-                yield {'type': 'answer_start'}
-
-                full_answer = ""
-                for chunk in self.generate_answer_stream(question, sql_query, results_df, conversation_history=conversation_history):
-                    full_answer += chunk
-                    yield {'type': 'answer_chunk', 'content': chunk}
-                    await asyncio.sleep(0)
-
-                # Send complete answer
-                yield {
-                    'type': 'answer_end',
-                    'clean_answer': full_answer
-                }
-
-                yield {
-                    'type': 'success',
-                    'attempts_used': attempt,
-                    'content': f'Query completed in {attempt} attempt(s)!'
-                }
-
-                yield {'type': 'done'}
-                return
-
-            except Exception as e:
-                print(f"❌ Exception in agentic pipeline: {e}")
-                import traceback
-                traceback.print_exc()
-
-                if attempt < self.max_attempts:
-                    yield {
-                        'type': 'retry',
-                        'attempt': attempt,
-                        'reason': str(e),
-                        'content': f"Pipeline error: {str(e)[:200]}... Retrying..."
-                    }
-                    continue
-                else:
-                    yield {'type': 'error', 'content': f"Pipeline failed: {str(e)}"}
-                    return
-
-        # All attempts exhausted
-        yield {'type': 'error', 'content': f'Query failed after {self.max_attempts} attempts'}
+            return validation
+        except Exception as e:
+            # On error, assume valid
+            return {
+                "is_valid": True,
+                "feedback": "Results validated",
+                "reasoning": {"summary": "Results check performed"}
+            }
 
 
 # Initialize chatbot and bird detector
@@ -2973,45 +2314,51 @@ async def nestdb_generate_query(request: QuestionRequest):
         if request.model:
             chatbot.model = request.model
 
-        # Build focused system prompt for NestDB (replaces the conversational prompt.txt)
-        nestdb_system_prompt = """You are the NestDB SQL Expert. Your role is to generate precise SQLite queries for database administrators.
-
-CORE RULES:
-1. Return ONLY the SQL query/queries - no explanations, no markdown, no comments.
-2. You have FULL permissions: SELECT, INSERT, UPDATE, DELETE, CREATE, ALTER, DROP, etc.
-3. This is an admin interface - generate the most efficient and correct SQL based on the schema provided.
-4. Use double quotes for all table and column names to avoid conflicts with reserved words.
-5. For SQLite, use proper syntax (e.g., AUTOINCREMENT, not AUTO_INCREMENT).
-6. **MULTI-STATEMENT SUPPORT**: You can generate multiple SQL statements separated by semicolons.
-7. If asked to "create a table and add data", you MUST generate both the CREATE TABLE and the INSERT statements.
-8. If the user refers to a table that doesn't exist, and the intent is to create it, generate the CREATE TABLE statement first.
-"""
-
+        # Build messages for SQL generation (similar to generate_sql_query but without coordinate requirements)
         messages = [
-            {"role": "system", "content": nestdb_system_prompt}
+            {"role": "system", "content": chatbot.system_prompt}
         ]
 
-        # Inject FULL metadata context specifically for NestDB
-        metadata_context = chatbot._format_nestdb_metadata_context()
-        messages.append({"role": "system", "content": metadata_context})
+        # Inject metadata as context (only once at the start)
+        if chatbot.metadata and not request.conversation_history:
+            metadata_context = chatbot._format_metadata_context()
+            messages.append({"role": "system", "content": metadata_context})
 
         # Add conversation history (last 3 exchanges)
         if request.conversation_history:
             for msg in request.conversation_history[-6:]:
                 messages.append(msg)
 
-        # Add the current question
+        # Add the current question with NestDB-specific instructions
         messages.append({
             "role": "user",
-            "content": f"Question: {request.question}\n\nGenerate SQL query/queries:"
+            "content": f"""Question: {request.question}
+
+INSTRUCTIONS FOR NESTDB ADMIN INTERFACE:
+1. Return ONLY the SQL query/queries - no explanations, no markdown, no comments
+2. You can generate ANY valid SQL operation: SELECT, INSERT, UPDATE, DELETE, CREATE, ALTER, DROP, etc.
+3. This is an admin interface, so write operations are allowed
+4. Use exact column names from the schema (case-sensitive)
+5. For SQLite, use proper syntax (e.g., AUTOINCREMENT, not AUTO_INCREMENT)
+6. **IMPORTANT**: You can generate MULTIPLE SQL statements separated by semicolons
+   - If the user asks to "create a table and insert data", generate BOTH statements:
+     CREATE TABLE ...; INSERT INTO ...;
+   - Always complete multi-step operations in a single response
+   - Each statement should end with a semicolon
+7. Be smart and helpful - understand the user's intent fully
+   - "Create a table and add data" = CREATE TABLE + INSERT statements
+   - "Set up a test table" = CREATE TABLE + INSERT sample data
+   - Think through what the user actually needs
+
+Generate the complete SQL query/queries now:"""
         })
 
         try:
             response = client.chat.completions.create(
                 model=chatbot.model,
                 messages=messages,
-                temperature=0.1,  # Low temperature for precision
-                max_tokens=config['model'].get('sql_max_tokens', 2000)
+                temperature=config['model']['sql_temperature'],
+                max_tokens=config['model']['sql_max_tokens']
             )
 
             sql_query = response.choices[0].message.content.strip()
@@ -3022,18 +2369,22 @@ CORE RULES:
             elif sql_query.startswith("```"):
                 sql_query = sql_query.split("```")[1].split("```")[0].strip()
 
-            # Remove any leading/trailing whitespace
-            sql_query = sql_query.strip()
+            # Remove any remaining explanatory text before SQL keywords
+            sql_keywords = ['SELECT', 'WITH', 'INSERT', 'UPDATE', 'DELETE', 'CREATE', 'ALTER', 'DROP', 'PRAGMA']
+            for keyword in sql_keywords:
+                if keyword in sql_query.upper():
+                    idx = sql_query.upper().find(keyword)
+                    sql_query = sql_query[idx:].strip()
+                    break
 
             # Detect if this is a write operation
-            query_upper = sql_query.upper()
+            query_upper = sql_query.strip().upper()
             write_keywords = ['INSERT', 'UPDATE', 'DELETE', 'DROP', 'CREATE', 'ALTER', 'TRUNCATE', 'REPLACE']
             is_write_operation = any(kw in query_upper for kw in write_keywords)
 
             return {
                 "sql_query": sql_query,
-                "is_write_operation": is_write_operation,
-                "model_used": chatbot.model
+                "is_write_operation": is_write_operation
             }
 
         except Exception as e:
