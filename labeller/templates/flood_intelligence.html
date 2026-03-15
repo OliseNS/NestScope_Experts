@@ -2536,7 +2536,6 @@
             // Draw fullscreen chart
             setTimeout(() => {
                 drawWaterLevelChart(currentObserved, currentPredicted, currentSurge);
-                if (selectedRPPeriod) addRPLineToChart(selectedRPPeriod);
             }, 100);
         }
     }
@@ -2903,7 +2902,6 @@ function selectReturnPeriod(period) {
     });
 
     updateRPContext(period);
-    addRPLineToChart(period);
 }
 
 function updateRPContext(period) {
