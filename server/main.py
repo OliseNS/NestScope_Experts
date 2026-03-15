@@ -424,7 +424,7 @@ def get_user_info(email: str) -> Dict[str, str]:
 MODEL_NAME = config['model']['name']
 
 # Get the directory where this file is located
-DEFAULT_PROMPT_PATH = SERVER_DIR / "prompt.txt"
+DEFAULT_PROMPT_PATH = SERVER_DIR / "prompts" / "prompt.txt"
 
 def parse_visualization_directives(answer_text: str, results_df=None) -> Dict[str, Any]:
     """
@@ -764,7 +764,7 @@ class SQLChatbot:
         self.model = model or MODEL_NAME
         self.schema = None
         self.prompt_path = prompt_path or str(DEFAULT_PROMPT_PATH)
-        self.sql_prompt_path = SERVER_DIR / "sql_prompt.txt"
+        self.sql_prompt_path = SERVER_DIR / "prompts" / "sql_prompt.txt"
         self.system_prompt = self._load_system_prompt()
         self.sql_prompt = self._load_sql_prompt()
         self.metadata = self._load_metadata()
@@ -1889,7 +1889,7 @@ class AgenticSQLChatbot(SQLChatbot):
     def _load_phase_prompt(self, filename):
         """Load a phase-specific prompt file"""
         try:
-            path = SERVER_DIR / filename
+            path = SERVER_DIR / "prompts" / filename
             with open(path, 'r', encoding='utf-8') as f:
                 return f.read()
         except FileNotFoundError:
