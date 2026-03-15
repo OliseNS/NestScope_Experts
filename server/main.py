@@ -333,6 +333,25 @@ class VersionRollbackResponse(BaseModel):
     new_commit: Optional[str] = None
     error: Optional[str] = None
 
+# Edge Detection Models (Jetson Nano integration)
+class EdgeScanRequest(BaseModel):
+    """Incoming scan results from edge devices like Jetson Nano"""
+    device_name: str
+    image_name: str
+    bird_count: int
+    detections: List[Dict[str, Any]]
+    inference_time: float
+    image_width: int
+    image_height: int
+    timestamp: str
+    confidence_threshold: float = 0.25
+
+class EdgeScanResponse(BaseModel):
+    success: bool
+    scan_id: Optional[int] = None
+    message: Optional[str] = None
+    error: Optional[str] = None
+
 # Database configuration
 # .env override takes priority, otherwise use config.yaml default
 DB_PATH = os.getenv("DB_PATH", config['database']['default_path'])
@@ -540,6 +559,10 @@ def validate_and_enhance_sql_for_mapping(sql_query: str) -> tuple[str, bool, str
     import re
 
     sql_upper = sql_query.upper()
+
+    # edge_scans is a standalone table — skip all colony validation
+    if 'EDGE_SCANS' in sql_upper:
+        return sql_query, False, "Edge scans query - no coordinate enhancement needed"
 
     # Detect if this is a colony-related query
     colony_indicators = [
@@ -1881,10 +1904,325 @@ class AgenticSQLChatbot(SQLChatbot):
         self.enable_reasoning = config.get('agentic', {}).get('enable_reasoning', True)
         self.enable_result_validation = config.get('agentic', {}).get('enable_result_validation', False)
 
+<<<<<<< HEAD
         # Load phase-specific prompts
         self.reasoning_prompt = self._load_phase_prompt("sql_prompt_reasoning.txt")
         self.generation_prompt = self._load_phase_prompt("sql_prompt_generation.txt")
         self.evaluation_prompt = self._load_phase_prompt("sql_prompt_evaluation.txt")
+=======
+    async def agentic_ask_stream(self, question: str, conversation_history: list = None):
+        """
+        Process question with agentic reasoning and stream progress updates.
+
+        Yields events:
+        - thinking_start: Agent begins reasoning
+        - thinking_step: Progress update with current step details
+        - sql_generated: SQL query created
+        - validation_start: Beginning validation
+        - validation_result: Validation passed/failed with feedback
+        - execution_start: Running query
+        - results_check: Checking if results make sense
+        - retry: Retrying with feedback
+        - success: Final results ready
+        - error: Critical error occurred
+        """
+
+        for attempt in range(1, self.max_attempts + 1):
+            try:
+                # Step 1: Analyze question
+                if attempt == 1:
+                    yield {
+                        'type': 'thinking_step',
+                        'step': 'analyze',
+                        'attempt': attempt,
+                        'content': "Reading your question and understanding what you need...",
+                        'icon': '💭'
+                    }
+                else:
+                    yield {
+                        'type': 'thinking_step',
+                        'step': 'analyze',
+                        'attempt': attempt,
+                        'content': f"I found an issue. Let me try a different approach... (Attempt {attempt}/{self.max_attempts})",
+                        'icon': '🔄'
+                    }
+
+                analysis = await self._analyze_question(question, conversation_history)
+
+                # Emit detailed analysis for transparency
+                yield {
+                    'type': 'question_analysis',
+                    'attempt': attempt,
+                    'content': analysis,
+                    'icon': '🔍'
+                }
+
+                await asyncio.sleep(0.1)  # Small delay for UX
+
+                # Step 2: Generate SQL
+                yield {
+                    'type': 'thinking_step',
+                    'step': 'generate_sql',
+                    'attempt': attempt,
+                    'content': "Writing a database query to get this information...",
+                    'icon': '✏️'
+                }
+
+                sql_query = self.generate_sql_query(question, conversation_history=conversation_history)
+
+                if sql_query.startswith("ERROR"):
+                    yield {'type': 'error', 'content': sql_query}
+                    return
+
+                yield {
+                    'type': 'sql_generated',
+                    'content': sql_query,
+                    'attempt': attempt
+                }
+
+                await asyncio.sleep(0.1)
+
+                # Step 3: Self-validate SQL
+                yield {
+                    'type': 'thinking_step',
+                    'step': 'validate_sql',
+                    'attempt': attempt,
+                    'content': "Double-checking my query to make sure it's correct...",
+                    'icon': '🔍'
+                }
+
+                validation = await self._validate_sql(sql_query, question, conversation_history)
+
+                # Emit detailed validation reasoning
+                yield {
+                    'type': 'validation_result',
+                    'is_valid': validation['is_valid'],
+                    'feedback': validation['feedback'],
+                    'reasoning': validation.get('reasoning', validation['feedback']),
+                    'attempt': attempt
+                }
+
+                if not validation['is_valid']:
+                    # SQL failed validation - retry with feedback
+                    yield {
+                        'type': 'retry',
+                        'attempt': attempt,
+                        'reason': validation['feedback'],
+                        'content': f"Hmm, I spotted an issue: {validation['feedback']}. Let me rewrite this..."
+                    }
+                    # Add validation feedback to conversation for next attempt
+                    if conversation_history is None:
+                        conversation_history = []
+                    conversation_history.append({
+                        'role': 'system',
+                        'content': f"Previous SQL had an issue: {validation['feedback']}. Please fix this in the next attempt."
+                    })
+                    continue  # Try again
+
+                await asyncio.sleep(0.1)
+
+                # Step 4: Execute query
+                yield {
+                    'type': 'thinking_step',
+                    'step': 'execute',
+                    'attempt': attempt,
+                    'content': "Running the query on the database...",
+                    'icon': '⚡'
+                }
+
+                results_df, error = self.execute_query(sql_query)
+
+                if error:
+                    # Query execution failed - retry with error feedback
+                    yield {
+                        'type': 'retry',
+                        'attempt': attempt,
+                        'reason': error,
+                        'content': f"The query didn't work: {error}. Let me fix it..."
+                    }
+                    if conversation_history is None:
+                        conversation_history = []
+                    conversation_history.append({
+                        'role': 'system',
+                        'content': f"Previous query failed with error: {error}. Please fix this."
+                    })
+                    continue  # Try again
+
+                results = results_df.to_dict(orient='records') if results_df is not None else None
+                results_count = len(results_df) if results_df is not None else 0
+
+                yield {
+                    'type': 'results',
+                    'content': results,
+                    'count': results_count,
+                    'attempt': attempt
+                }
+
+                await asyncio.sleep(0.1)
+
+                # Step 5: Validate results
+                yield {
+                    'type': 'thinking_step',
+                    'step': 'validate_results',
+                    'attempt': attempt,
+                    'content': "Verifying that these results make sense for your question...",
+                    'icon': '🔬'
+                }
+
+                result_validation = await self._validate_results(question, sql_query, results_df, conversation_history)
+
+                yield {
+                    'type': 'results_validation',
+                    'is_valid': result_validation['is_valid'],
+                    'feedback': result_validation['feedback'],
+                    'reasoning': result_validation.get('reasoning', result_validation['feedback']),
+                    'attempt': attempt
+                }
+
+                if not result_validation['is_valid'] and attempt < self.max_attempts:
+                    # Results look suspicious - retry with feedback
+                    yield {
+                        'type': 'retry',
+                        'attempt': attempt,
+                        'reason': result_validation['feedback'],
+                        'content': f"Wait, something doesn't look right: {result_validation['feedback']}. Let me reconsider..."
+                    }
+                    if conversation_history is None:
+                        conversation_history = []
+                    conversation_history.append({
+                        'role': 'system',
+                        'content': f"Previous query returned suspicious results: {result_validation['feedback']}. Please revise the SQL."
+                    })
+                    continue  # Try again
+
+                # Success! Generate final answer
+                yield {
+                    'type': 'thinking_step',
+                    'step': 'generate_answer',
+                    'attempt': attempt,
+                    'content': "Perfect! Now let me explain what I found...",
+                    'icon': '✨'
+                }
+
+                yield {'type': 'answer_start'}
+
+                full_answer = ""
+                for chunk in self.generate_answer_stream(question, sql_query, results_df, conversation_history=conversation_history):
+                    full_answer += chunk
+                    yield {'type': 'answer_chunk', 'content': chunk}
+                    await asyncio.sleep(0)
+
+                # Parse visualization directives and get clean answer
+                viz_directives = parse_visualization_directives(full_answer, results_df)
+
+                # Send clean answer (without visualization directives)
+                yield {
+                    'type': 'answer_end',
+                    'clean_answer': viz_directives['clean_answer']
+                }
+
+                # Send visualization directives separately
+                yield {
+                    'type': 'visualization',
+                    'show_chart': viz_directives['show_chart'],
+                    'chart_type': viz_directives['chart_type'],
+                    'show_map': viz_directives['show_map']
+                }
+
+                yield {
+                    'type': 'success',
+                    'attempts_used': attempt,
+                    'content': 'Query completed successfully!'
+                }
+
+                yield {'type': 'done'}
+                return
+
+            except Exception as e:
+                if attempt < self.max_attempts:
+                    yield {
+                        'type': 'retry',
+                        'attempt': attempt,
+                        'reason': str(e),
+                        'content': f"Unexpected error: {str(e)}. Retrying..."
+                    }
+                    continue
+                else:
+                    yield {'type': 'error', 'content': f"Failed after {self.max_attempts} attempts: {str(e)}"}
+                    return
+
+        # If we get here, all attempts failed
+        yield {'type': 'error', 'content': f"Failed to generate accurate results after {self.max_attempts} attempts. Please try rephrasing your question."}
+
+    async def _analyze_question(self, question: str, conversation_history: list = None) -> dict:
+        """
+        Analyze the question with high-fidelity reasoning to understand intent, entities, and constraints.
+        This provides the foundation for accurate SQL generation.
+        """
+
+        messages = [
+            {"role": "system", "content": """You are an expert data analyst specializing in Gulf Coast avian ecology.
+Analyze the natural language question to extract deep semantic meaning, entities, and logical constraints.
+
+CRITICAL: The "step_by_step_reasoning" field must contain DETAILED, SPECIFIC analysis of THIS question.
+NOT generic placeholders like "Parsing the question" but ACTUAL reasoning.
+
+## KNOWLEDGE BASE: COMMON JOIN PATTERNS & METRICS
+1. **Species Diversity (Richness)**: `COUNT(DISTINCT SpeciesCode)` - requires `tblColonyTotals...`
+2. **Abundance (Population)**: `SUM(Birds)` - requires `tblColonyTotals...`
+3. **Nesting Effort**: `SUM(Nests)` - requires `tblColonyTotals...`
+4. **Species Names**: Join `tblColonyTotals...` with `tblSpeciesCodes` on `SpeciesCode`.
+5. **Species Groups**: Join `tblColonyTotals...` with `tblSpeciesCodes` on `SpeciesCode`.
+6. **Temporal Trends**: Always include `Year` in SELECT and GROUP BY.
+7. **Mapping Requirements**: ALWAYS include `Latitude` and `Longitude` for any colony-based query.
+8. **Edge Device Scans**: Use `edge_scans` table for ANY question about scans, Jetson, edge devices, drones, helicopters, real-time detections, or "last scan". This is a SEPARATE table from colony data — do NOT use tblColonyTotals for edge queries.
+
+## GOLD-STANDARD FEW-SHOT EXAMPLES
+
+**Q1: "Which colonies support the highest biodiversity in Louisiana?"**
+**Reasoning**: User wants species diversity (count of unique species) per colony, filtered for State='LA'. Requires tblColonyTotals table. Needs Latitude/Longitude for mapping.
+**Query Plan**: SELECT ColonyName, State, Latitude, Longitude, COUNT(DISTINCT SpeciesCode) as species_count FROM tblColonyTotals... WHERE State='LA' AND Latitude IS NOT NULL GROUP BY ColonyName, State, Latitude, Longitude ORDER BY species_count DESC
+
+**Q2: "Show the trend of Brown Pelican population from 2010 to 2021"**
+**Reasoning**: User wants temporal trend (Sum of Birds by Year) for a specific species (Brown Pelican). Must join with tblSpeciesCodes to filter by name. 
+**Query Plan**: SELECT ct.Year, SUM(ct.Birds) as total_birds FROM tblColonyTotals... ct JOIN tblSpeciesCodes sc ON ct.SpeciesCode = sc.SpeciesCode WHERE sc.SpeciesName = 'Brown Pelican' GROUP BY ct.Year ORDER BY ct.Year
+
+Respond with ONLY a valid JSON object (no markdown, no extra text):
+
+{
+  "summary": "Deep semantic summary of the user's intent (2-3 sentences explaining WHAT they want to know and WHY)",
+  "question_type": "count | trend | comparison | list | distribution | spatial_analysis",
+  "entities": {
+    "species": ["Specific species mentioned or 'all species'"],
+    "locations": ["Specific states/colonies or 'all Gulf Coast'"],
+    "time_range": "Specific years (e.g., '2015-2021') or 'all available years (2010-2021)'",
+    "metrics": ["Exact metrics: 'Bird Count', 'Nest Count', 'Species Diversity', etc."]
+  },
+  "constraints": [
+    "SPECIFIC filters extracted from question (e.g., 'State must be Louisiana', 'Year >= 2015', 'Exclude colonies with NULL coordinates')"
+  ],
+  "tables_needed": ["Exact table names needed: tblColonyTotals2010-2021_MayJuneCombined, etc."],
+  "needs_coordinates": true/false,
+  "step_by_step_reasoning": [
+    "1. Intent: [SPECIFIC explanation of what user wants - not generic]",
+    "2. Data Location: [WHY choosing specific table - cite table purpose]",
+    "3. Metrics Needed: [EXACT columns to query and aggregate - e.g., 'COUNT(DISTINCT SpeciesCode) for diversity']",
+    "4. Filters Required: [SPECIFIC WHERE clause logic - e.g., 'WHERE State=LA AND Year BETWEEN 2015 AND 2021']",
+    "5. Grouping: [If applicable, explain GROUP BY - e.g., 'GROUP BY ColonyName to show per-colony diversity']",
+    "6. Spatial Data: [If coordinates needed, explain WHY - e.g., 'Need Lat/Lon to map biodiversity hotspots on Gulf Coast']",
+    "7. Expected Output: [Describe expected result structure - e.g., '445 rows, each colony with species_count column']"
+  ]
+}
+
+Now analyze the user's actual question with this same level of detail."""}
+        ]
+
+        if conversation_history:
+            for msg in conversation_history[-4:]:
+                messages.append(msg)
+
+        messages.append({"role": "user", "content": f"Question: {question}"})
+>>>>>>> origin/master
 
     def _load_phase_prompt(self, filename):
         """Load a phase-specific prompt file"""
@@ -1902,7 +2240,45 @@ class AgenticSQLChatbot(SQLChatbot):
         Returns reasoning plan as JSON
         """
         messages = [
+<<<<<<< HEAD
             {"role": "system", "content": self.reasoning_prompt}
+=======
+            {"role": "system", "content": """You are a Principal Data Engineer and Ecologist.
+Validate the SQL query against high-level scientific and structural principles.
+
+⚡ EDGE DEVICE QUERIES (ALWAYS VALID):
+If the SQL queries the `edge_scans` table, it is ALWAYS VALID.
+edge_scans stores real-time bird detections from Jetson Nano / edge devices.
+It uses plain column names (no double quotes needed), has NO Latitude/Longitude,
+and does NOT use tblColonyTotals. Do NOT apply colony data rules to edge_scans.
+Mark these as is_valid=true immediately.
+
+🚨 STRUCTURAL INTEGRITY CHECKLIST (for colony data queries ONLY):
+1. Table Selection: Does it use tblColonyTotals for bird counts (not tblSpeciesData)?
+2. Aggregation: Does it use SUM(Birds/Nests) for counts (not COUNT(*))?
+3. Spatial Data: If querying locations, are Latitude/Longitude included?
+4. GROUP BY: If aggregating, are Lat/Lon in GROUP BY clause?
+5. NULL Handling: Does it filter "Latitude IS NOT NULL AND Longitude IS NOT NULL"?
+6. Column Names: Are all columns wrapped in double quotes?
+7. Joins: If joining tblSpeciesCodes, is the join key correct?
+
+Respond with a JSON object:
+{
+  "is_valid": true/false,
+  "feedback": "One-sentence summary: pass or what's wrong",
+  "reasoning": {
+    "table_check": "Uses correct table (tblColonyTotals for bird counts)",
+    "aggregation_check": "Uses SUM(Birds) for population counts",
+    "spatial_check": "Includes Latitude/Longitude for mapping",
+    "group_by_check": "Coordinates included in GROUP BY",
+    "null_check": "Filters NULL coordinates",
+    "issues_found": []
+  }
+}
+
+Include ONLY the checks that apply to this specific query.
+Be technically rigorous."""}
+>>>>>>> origin/master
         ]
 
         # Add metadata context
@@ -4992,6 +5368,260 @@ async def get_flood_database_stats():
         return stats
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# ============================================================================
+# EDGE DEVICE INTEGRATION (Jetson Nano)
+# ============================================================================
+# This section handles results from edge devices running bird detection locally.
+# The Jetson Nano runs jetson_detect.py, which sends results here via HTTP.
+# Results are stored in the edge_scans table so NestChat can query them.
+
+def _init_edge_scans_table():
+    """Create the edge_scans table if it doesn't exist.
+    
+    This table stores bird detection results from edge devices (e.g. Jetson Nano).
+    NestChat can then answer questions like 'How many birds in the last scan?'
+    """
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        conn.execute('''
+            CREATE TABLE IF NOT EXISTS edge_scans (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                device_name TEXT NOT NULL,
+                image_name TEXT NOT NULL,
+                bird_count INTEGER NOT NULL,
+                inference_time REAL,
+                image_width INTEGER,
+                image_height INTEGER,
+                confidence_threshold REAL,
+                detections_json TEXT,
+                scanned_at TEXT NOT NULL,
+                received_at TEXT NOT NULL DEFAULT (datetime('now'))
+            )
+        ''')
+        conn.commit()
+        conn.close()
+        print("\u2713 Edge scans table ready")
+    except Exception as e:
+        print(f"\u26a0\ufe0f  Warning: Could not initialize edge_scans table: {e}")
+
+# Initialize the table on server startup
+_init_edge_scans_table()
+
+
+@app.post("/edge/scan", response_model=EdgeScanResponse)
+async def receive_edge_scan(scan: EdgeScanRequest):
+    """
+    Receive bird detection results from an edge device (e.g. Jetson Nano).
+
+    The Jetson runs detection locally, then sends the results here.
+    We store them in the database so NestChat can query:
+    - "How many birds were detected in the last scan?"
+    - "Show me all edge scans from today"
+    - "What device detected the most birds?"
+
+    Args:
+        scan: Detection results from edge device
+
+    Returns:
+        EdgeScanResponse with scan_id on success
+    """
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        cursor = conn.cursor()
+        cursor.execute('''
+            INSERT INTO edge_scans
+                (device_name, image_name, bird_count, inference_time,
+                 image_width, image_height, confidence_threshold,
+                 detections_json, scanned_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ''', (
+            scan.device_name,
+            scan.image_name,
+            scan.bird_count,
+            scan.inference_time,
+            scan.image_width,
+            scan.image_height,
+            scan.confidence_threshold,
+            json.dumps(scan.detections),
+            scan.timestamp
+        ))
+        conn.commit()
+        scan_id = cursor.lastrowid
+        conn.close()
+
+        print(f"[Edge] Scan #{scan_id} from {scan.device_name}: "
+              f"{scan.bird_count} birds in {scan.image_name}")
+
+        return EdgeScanResponse(
+            success=True,
+            scan_id=scan_id,
+            message=f"Scan saved: {scan.bird_count} birds detected by {scan.device_name}"
+        )
+
+    except Exception as e:
+        return EdgeScanResponse(
+            success=False,
+            error=str(e)
+        )
+
+
+@app.get("/edge/scans")
+async def list_edge_scans(limit: int = 20):
+    """
+    List recent edge device scans.
+    Useful for checking if the Jetson is sending data correctly.
+    """
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        cursor.execute(
+            'SELECT id, device_name, image_name, bird_count, inference_time, '
+            'scanned_at, received_at FROM edge_scans ORDER BY id DESC LIMIT ?',
+            (min(limit, 100),)
+        )
+        rows = [dict(row) for row in cursor.fetchall()]
+        conn.close()
+        return {"scans": rows, "count": len(rows)}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ============================================================================
+# NESTEVAL — DeepEval LLM Evaluation Endpoints
+# ============================================================================
+#
+# WHAT IS DEEPEVAL?
+# DeepEval is an LLM evaluation framework. Think of it like a "judge LLM":
+# it reads NestChat's answers and scores them on two axes:
+#   1. Answer Relevancy  — Did the answer actually answer the question?
+#   2. Faithfulness      — Is the answer based on the retrieved data (no hallucination)?
+#
+# WHY BACKGROUND TASKS?
+# Each evaluation involves multiple LLM API calls (for both NestChat AND scoring).
+# This can take 2-5 minutes for 8 test cases. Using BackgroundTasks means the
+# POST /eval/run endpoint returns immediately while evals run in the background.
+# The frontend polls /eval/status every few seconds to check progress.
+#
+# FLOW:
+#   Browser "Run" button
+#       → POST /eval/run  (returns immediately with run_id)
+#       → Background thread runs EvalRunner.run()
+#       → Frontend polls GET /eval/status every 3s
+#       → When complete, frontend calls GET /eval/results
+# ============================================================================
+
+# Global state for tracking the current eval run.
+# This is a simple in-memory dict — fine for a single-server setup.
+# If you scale to multiple servers, you'd use Redis or a database instead.
+eval_state: dict = {
+    "running": False,        # Is an eval currently in progress?
+    "progress": 0,           # How many test cases have completed
+    "total": 0,              # Total number of test cases
+    "current_test": "",      # Description of the test currently running
+    "run_id": None,          # Unique ID for the current run (YYYYMMDD_HHMMSS)
+    "error": None,           # Error message if something went wrong
+}
+
+
+def run_eval_background():
+    """
+    Background function that runs the full evaluation suite.
+    Called via FastAPI's BackgroundTasks — runs in a separate thread.
+    """
+    try:
+        # Import here (inside function) to avoid circular imports at module load time.
+        # The EvalRunner needs chatbot and client, which are defined above in this file.
+        from server.evals.runner import EvalRunner
+
+        runner = EvalRunner(
+            chatbot=chatbot,          # The SQLChatbot instance defined earlier in this file
+            openai_client=client,     # The OpenRouter-backed OpenAI client
+            model_name=config['model']['name'],
+        )
+        runner.run(eval_state)
+
+    except Exception as e:
+        logger.error(f"❌ Eval run failed: {e}")
+        eval_state.update({
+            "running": False,
+            "error": str(e),
+            "current_test": "Failed",
+        })
+
+
+@app.post("/eval/run")
+async def trigger_eval_run(background_tasks: BackgroundTasks):
+    """
+    Trigger a DeepEval evaluation run in the background.
+
+    Returns immediately with a run_id. The eval runs in the background.
+    Poll GET /eval/status to track progress, then GET /eval/results when done.
+
+    Returns 409 Conflict if an eval is already running.
+    """
+    if eval_state["running"]:
+        raise HTTPException(
+            status_code=409,
+            detail="An evaluation is already running. Wait for it to complete."
+        )
+
+    # Schedule the eval to run in the background — this returns immediately
+    background_tasks.add_task(run_eval_background)
+
+    # Set running state optimistically before the thread starts
+    from datetime import timezone as tz
+    run_id = datetime.now(tz.utc).strftime("%Y%m%d_%H%M%S")
+    eval_state.update({
+        "running": True,
+        "run_id": run_id,
+        "progress": 0,
+        "current_test": "Starting...",
+        "error": None,
+    })
+
+    return {"status": "started", "run_id": run_id, "total_tests": len(__import__('server.evals.test_cases', fromlist=['NESTCHAT_TEST_CASES']).NESTCHAT_TEST_CASES)}
+
+
+@app.get("/eval/status")
+async def get_eval_status():
+    """
+    Check the current status of the evaluation run.
+
+    Frontend polls this every 3 seconds during a run.
+    Returns the global eval_state dict.
+    """
+    return {
+        "running": eval_state["running"],
+        "progress": eval_state["progress"],
+        "total": eval_state["total"],
+        "current_test": eval_state["current_test"],
+        "run_id": eval_state["run_id"],
+        "error": eval_state["error"],
+    }
+
+
+@app.get("/eval/results")
+async def get_eval_results():
+    """
+    Get the latest evaluation results.
+
+    Reads server/evals/results/latest.json (written by EvalRunner after each run).
+    Returns 404 if no eval has been run yet.
+    """
+    from pathlib import Path as _Path
+    results_path = _Path(__file__).parent / "evals" / "results" / "latest.json"
+
+    if not results_path.exists():
+        raise HTTPException(
+            status_code=404,
+            detail="No evaluation results found. Run an evaluation first."
+        )
+
+    with open(results_path, "r", encoding="utf-8") as f:
+        return json.load(f)
 
 
 if __name__ == "__main__":

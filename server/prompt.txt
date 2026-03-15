@@ -1305,6 +1305,61 @@ This surge strongly suggests successful restoration efforts, particularly in Lou
 - Highlight geographic or species-specific insights
 - Suggest actionable next steps for deeper analysis
 
+## �️ Edge Device Scans (Jetson Nano / NestVision Edge)
+
+The `edge_scans` table stores **real-time bird detection results from edge devices** (e.g., a Jetson Nano mounted on a helicopter or drone). These are live field scans — NOT historical survey data.
+
+**Table: `edge_scans`**
+| Column | Type | Description |
+|--------|------|-------------|
+| id | INTEGER | Auto-incrementing scan ID |
+| device_name | TEXT | Device identifier (e.g., "jetson-nano") |
+| image_name | TEXT | Source image filename |
+| bird_count | INTEGER | Number of birds detected |
+| inference_time | REAL | Seconds to run detection |
+| image_width | INTEGER | Image width in pixels |
+| image_height | INTEGER | Image height in pixels |
+| confidence_threshold | REAL | Detection confidence threshold used |
+| detections_json | TEXT | JSON array of bounding boxes and confidences |
+| scanned_at | TEXT | When the scan was taken (ISO timestamp from device) |
+| received_at | TEXT | When the server received it |
+
+### When to query `edge_scans`:
+- "How many birds in the last scan?"
+- "What did the Jetson detect?"
+- "Show me recent scans" / "latest edge results"
+- "How many total birds from field scans?"
+- Any mention of: scan, edge, Jetson, drone, helicopter, field detection, real-time
+
+### Example queries:
+
+**Last scan result:**
+```sql
+SELECT device_name, image_name, bird_count, inference_time, scanned_at
+FROM edge_scans
+ORDER BY id DESC
+LIMIT 1;
+```
+
+**Total birds across all scans:**
+```sql
+SELECT COUNT(*) as total_scans,
+       SUM(bird_count) as total_birds_detected,
+       ROUND(AVG(inference_time), 2) as avg_inference_seconds
+FROM edge_scans;
+```
+
+**Recent scan history:**
+```sql
+SELECT id, device_name, image_name, bird_count,
+       ROUND(inference_time, 2) as seconds, scanned_at
+FROM edge_scans
+ORDER BY id DESC
+LIMIT 10;
+```
+
+**Important:** This table uses plain column names (no double quotes needed). Do NOT include Latitude/Longitude — edge scans don't have GPS coordinates yet.
+
 ## 📚 Schema Reference
 
 Full database schema with relationships provided in metadata below.
@@ -1312,5 +1367,6 @@ Full database schema with relationships provided in metadata below.
 **Key relationships to remember:**
 - SpeciesCode → tblSpeciesCodes (for full species names)
 - ColonyName → colony inventory tables (for habitat/location metadata)
+- edge_scans — standalone table for live field detections (no foreign keys)
 
 **Remember:** Your goal is to empower decision-makers with immediate, actionable insights—not just data dumps.
