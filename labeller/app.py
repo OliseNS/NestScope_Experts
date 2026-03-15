@@ -17,10 +17,8 @@ import uuid
 import zipfile
 import shutil
 import numpy as np
-import time
 from pathlib import Path
 from datetime import datetime
-from functools import lru_cache
 from werkzeug.utils import secure_filename
 from flask import Flask, render_template, request, jsonify, send_from_directory, send_file, redirect, url_for, session, flash
 from dotenv import load_dotenv
@@ -80,16 +78,6 @@ def before_request():
         # Allow unlimited content length
         request.environ['CONTENT_LENGTH'] = request.environ.get('CONTENT_LENGTH', '0')
 
-# Configure caching for static assets
-@app.after_request
-def add_header(response):
-    """Add caching headers for static assets to improve performance"""
-    if request.path.startswith('/static/'):
-        # Cache static assets for 1 day (86400 seconds)
-        # Includes CSS, JS, images, fonts
-        response.headers['Cache-Control'] = 'public, max-age=86400, immutable'
-    return response
-
 # ============================================================================
 # PROJECT MANAGEMENT
 # ============================================================================
@@ -97,73 +85,6 @@ def add_header(response):
 # Get the directory where app.py is located
 APP_DIR = os.path.dirname(os.path.abspath(__file__))
 PROJECTS_DIR = os.path.join(APP_DIR, 'projects')
-
-# ============================================================================
-# PERFORMANCE: IN-MEMORY CACHING
-# ============================================================================
-# Cache expensive operations to avoid repeated file I/O and calculations
-# Cache is invalidated when projects are modified (upload, delete, annotation)
-
-_cache = {
-    'project_stats': {},      # {project_folder: {'data': stats_dict, 'timestamp': time}}
-    'all_users_with_roles': {'data': None, 'timestamp': 0},  # Cache user list from DB
-    'user_contributions': {}, # {user_email: {'data': contributions_dict, 'timestamp': time}}
-}
-
-CACHE_TTL = 60  # Cache time-to-live in seconds (1 minute)
-
-def get_cached_project_stats(project_folder):
-    """Get cached project stats or calculate and cache them"""
-    cache_entry = _cache['project_stats'].get(project_folder)
-    now = time.time()
-
-    # Return cached data if fresh (less than 60 seconds old)
-    if cache_entry and (now - cache_entry['timestamp']) < CACHE_TTL:
-        return cache_entry['data']
-
-    # Calculate fresh stats and cache them
-    stats = calculate_project_stats(project_folder)
-    _cache['project_stats'][project_folder] = {
-        'data': stats,
-        'timestamp': now
-    }
-    return stats
-
-def get_cached_all_users_with_roles():
-    """Get cached user list from database"""
-    from labeller.auth import get_all_users_with_roles
-
-    cache_entry = _cache['all_users_with_roles']
-    now = time.time()
-
-    # Return cached data if fresh
-    if cache_entry['data'] and (now - cache_entry['timestamp']) < CACHE_TTL:
-        return cache_entry['data']
-
-    # Fetch fresh data and cache it
-    users = get_all_users_with_roles()
-    _cache['all_users_with_roles'] = {
-        'data': users,
-        'timestamp': now
-    }
-    return users
-
-def invalidate_project_cache(project_folder=None):
-    """Invalidate cache for a specific project or all projects"""
-    if project_folder:
-        # Clear cache for specific project
-        _cache['project_stats'].pop(project_folder, None)
-        # Also clear user contributions cache as it depends on projects
-        _cache['user_contributions'].clear()
-    else:
-        # Clear all caches
-        _cache['project_stats'].clear()
-        _cache['user_contributions'].clear()
-
-def invalidate_user_cache():
-    """Invalidate user-related caches"""
-    _cache['all_users_with_roles'] = {'data': None, 'timestamp': 0}
-    _cache['user_contributions'].clear()
 
 def ensure_directories():
     """Create necessary directories"""
@@ -663,22 +584,15 @@ def admin_delete_user():
 @app.route('/')
 @login_required
 def projects_dashboard():
-    """Main projects dashboard - OPTIMIZED with caching"""
+    """Main projects dashboard"""
     projects = load_projects()
     projects_list = []
 
-    # Aggregate stats (calculated inline to avoid double-calculation)
-    aggregate_stats = {
-        'total_projects': len(projects),
-        'total_images': 0,
-        'total_annotations': 0,
-        'active_users': set()
-    }
-
-    # Get all auth users with their profile pictures (CACHED)
+    # Get all auth users with their profile pictures
+    from labeller.auth import get_all_users_with_roles
     auth_users_dict = {}
     try:
-        all_auth_users = get_cached_all_users_with_roles()
+        all_auth_users = get_all_users_with_roles()
         # Index by both email and name for flexible lookup
         for u in all_auth_users:
             auth_users_dict[u['email']] = u
@@ -687,12 +601,7 @@ def projects_dashboard():
         print(f"Warning: Could not load auth users: {e}")
 
     for project_folder, metadata in projects.items():
-        # Use cached stats instead of recalculating every time
-        stats = get_cached_project_stats(project_folder)
-
-        # Aggregate stats inline
-        aggregate_stats['total_images'] += stats['total_images']
-        aggregate_stats['total_annotations'] += stats['total_annotations']
+        stats = calculate_project_stats(project_folder)
 
         # Get first image for thumbnail
         thumbnail_url = None
@@ -718,9 +627,6 @@ def projects_dashboard():
                 continue
             seen_emails.add(user_key)
 
-            # Track active users globally
-            aggregate_stats['active_users'].add(user_key)
-
             # Try to find user in auth database
             user_info = auth_users_dict.get(user_key, {})
             users_with_pics.append({
@@ -743,12 +649,9 @@ def projects_dashboard():
     # Sort by creation date (newest first)
     projects_list.sort(key=lambda x: x['created_at'], reverse=True)
 
-    # Convert active_users set to count
-    aggregate_stats['active_users'] = len(aggregate_stats['active_users'])
-
     return render_template('projects_dashboard.html',
                          projects=projects_list,
-                         stats=aggregate_stats,
+                         stats=get_all_project_stats(),
                          active_page='projects')
 
 @app.route('/project/<project_folder>')
@@ -759,8 +662,7 @@ def project_detail(project_folder):
     if not metadata:
         return "Project not found", 404
 
-    # Use cached stats for performance
-    stats = get_cached_project_stats(project_folder)
+    stats = calculate_project_stats(project_folder)
     project_path = os.path.join(PROJECTS_DIR, project_folder)
     images_dir = os.path.join(project_path, 'images')
     labels_dir = os.path.join(project_path, 'labels')
@@ -872,15 +774,11 @@ def nestdb_page():
         </html>
         ''', 403
 
-    # Get API base URL from environment
-    api_base_url = os.getenv("API_BASE_URL", "http://localhost:8000")
-
     return render_template(
         'nestdb.html',
         active_page='nestdb',
         can_edit_db=True,
-        is_admin=is_admin(user_email),
-        api_base_url=api_base_url
+        is_admin=is_admin(user_email)
     )
 
 @app.route('/flood-intelligence')
@@ -929,32 +827,25 @@ def flood_intelligence_page():
 @app.route('/users')
 @login_required
 def users_page():
-    """Global users management page - OPTIMIZED with caching"""
+    """Global users management page - shows authenticated users via Google OAuth"""
+    from labeller.auth import get_all_users_with_roles
+
     users_list = []
 
     try:
-        # Get authenticated users from auth database (CACHED)
-        auth_users = get_cached_all_users_with_roles()
+        # Get authenticated users from auth database
+        auth_users = get_all_users_with_roles()
 
-        # Pre-load all project states ONCE (instead of loading per user)
-        projects = get_all_projects()
-        project_states = {}
-        for proj in projects:
-            project_states[proj['folder']] = {
-                'metadata': proj,
-                'state': load_project_state(proj['folder'])
-            }
-
-        # Build user contribution data efficiently
+        # Enhance with project details
         for user in auth_users:
             user_projects = []
             total_completed = 0
             total_annotations = 0
 
-            # Scan pre-loaded project states
-            for proj_folder, proj_data in project_states.items():
-                state = proj_data['state']
-
+            # Scan all projects to find this user's contributions
+            projects = get_all_projects()
+            for proj in projects:
+                state = load_project_state(proj['folder'])
                 # Look up user by EMAIL (unique identifier)
                 # Note: Old projects may use name as key, new projects use email
                 user_data = state.get('users', {}).get(user['email'])
@@ -970,8 +861,8 @@ def users_page():
                     completed = user_data.get('completed', [])
 
                     project_info = {
-                        'folder': proj_folder,
-                        'name': proj_data['metadata']['name'],
+                        'folder': proj['folder'],
+                        'name': proj['name'],
                         'assigned': len(assigned),
                         'completed': len(completed)
                     }
@@ -979,15 +870,11 @@ def users_page():
                     total_completed += len(completed)
 
                     # Count annotations from completed images
-                    # OPTIMIZATION: Only count if user has completed images
-                    if completed:
-                        labels_dir = os.path.join(PROJECTS_DIR, proj_folder, 'labels')
-                        for img_name in completed:
-                            label_file = os.path.join(labels_dir, f"{os.path.splitext(img_name)[0]}.txt")
-                            if os.path.exists(label_file):
-                                # Read file once and count non-empty lines
-                                with open(label_file, 'r') as f:
-                                    total_annotations += sum(1 for line in f if line.strip())
+                    for img_name in completed:
+                        label_file = os.path.join(PROJECTS_DIR, proj['folder'], 'labels', f"{os.path.splitext(img_name)[0]}.txt")
+                        if os.path.exists(label_file):
+                            with open(label_file, 'r') as f:
+                                total_annotations += len(f.readlines())
 
             users_list.append({
                 'name': user['name'],
@@ -1370,9 +1257,6 @@ def assemble_and_create():
 
         # Clean up upload directory
         shutil.rmtree(temp_upload_dir, ignore_errors=True)
-
-        # Invalidate project cache since new project was created
-        invalidate_project_cache()
 
         logger.info("Project created successfully")
         logger.info("=" * 60)
@@ -1940,9 +1824,6 @@ def delete_project(project_folder):
         else:
             logger.warning(f"Project directory not found: {project_path}")
 
-        # Invalidate all project caches since we deleted a project
-        invalidate_project_cache()
-
         return jsonify({
             'success': True,
             'message': f'Project "{metadata["name"]}" deleted successfully',
@@ -2129,55 +2010,6 @@ def save_annotations():
                     line = f"{class_id} {x_center} {y_center} {width} {height}"
                 f.write(line + '\n')
 
-        # Update data.yaml with new species (if any)
-        species_in_boxes = set()
-        for box in boxes:
-            species = box.get('species')
-            if species:  # Only add non-empty species
-                species_in_boxes.add(species)
-
-        if species_in_boxes:
-            # Load current data.yaml
-            data_yaml = load_data_yaml(project_folder)
-            if not data_yaml:
-                # Create default data.yaml if it doesn't exist
-                data_yaml = {
-                    'path': '.',
-                    'train': 'images',
-                    'val': 'images',
-                    'test': 'images',
-                    'names': {0: 'Bird'}
-                }
-
-            # Get existing class names (convert keys to int if they're strings)
-            names = data_yaml.get('names', {})
-            # Normalize to {int: str} format
-            names_normalized = {}
-            for k, v in names.items():
-                names_normalized[int(k)] = v
-
-            # Find species codes that exist in names values
-            existing_species = set(names_normalized.values())
-
-            # Find new species to add
-            new_species = species_in_boxes - existing_species
-
-            if new_species:
-                # Get next available class ID
-                max_class_id = max(names_normalized.keys()) if names_normalized else -1
-                next_class_id = max_class_id + 1
-
-                # Add new species
-                for species_code in sorted(new_species):  # Sort for consistency
-                    names_normalized[next_class_id] = species_code
-                    print(f"Added new species to data.yaml: {next_class_id} -> {species_code}")
-                    next_class_id += 1
-
-                # Update data.yaml
-                data_yaml['names'] = names_normalized
-                save_data_yaml(project_folder, data_yaml)
-                print(f"Updated data.yaml with {len(new_species)} new species")
-
         # Update user progress
         state = load_project_state(project_folder)
 
@@ -2206,43 +2038,7 @@ def save_annotations():
                 user_data['completed'] = completed
                 save_project_state(project_folder, state)
 
-        # Invalidate cache since project stats changed
-        invalidate_project_cache(project_folder)
-
         return jsonify({'success': True})
-
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
-
-@app.route('/api/get_project_classes', methods=['POST'])
-@api_annotator_required
-def get_project_classes():
-    """Get updated class list from project's data.yaml"""
-    try:
-        data = request.json
-        project_folder = data.get('project_id')
-
-        if not project_folder:
-            return jsonify({'error': 'Missing project_id'}), 400
-
-        # Load data.yaml
-        data_yaml = load_data_yaml(project_folder)
-        if not data_yaml:
-            return jsonify({'classes': []})
-
-        # Get class names
-        names = data_yaml.get('names', {})
-
-        # Convert to list format expected by frontend
-        class_list = []
-        for class_id, class_name in names.items():
-            class_list.append({
-                'id': int(class_id),
-                'code': class_name,
-                'name': class_name  # Use code as name for now
-            })
-
-        return jsonify({'classes': class_list})
 
     except Exception as e:
         return jsonify({'error': str(e)}), 500
@@ -2560,10 +2356,13 @@ def get_wikipedia_images_func(species_name, max_images=5, offset=0):
 @api_annotator_required
 def sam_segment():
     """
-    Segment birds using MobileSAM with point prompts
+    Smart bird detection using YOLO detector (much faster than SAM)
 
-    Uses the MobileSAM model (models/mobile_sam.pt) to generate precise
-    bounding boxes from user click points.
+    Instead of using MobileSAM, we use the existing ONNX YOLO detector
+    to find birds near the clicked location. This is:
+    - 10x faster (ONNX vs PyTorch)
+    - More accurate for birds
+    - Already uses GPU if available
     """
     try:
         data = request.json
@@ -2581,110 +2380,102 @@ def sam_segment():
         if not os.path.exists(image_path):
             return jsonify({'error': f'Image not found: {image_name}'}), 404
 
-        # Load MobileSAM model
-        from ultralytics import SAM
-        model_path = os.path.join(PROJECT_ROOT, 'models', 'mobile_sam.pt')
+        # Load bird detector with ONNX
+        detector = get_bird_detector()
+        if detector is None:
+            return jsonify({'error': 'Bird detector not available'}), 500
 
-        if not os.path.exists(model_path):
-            return jsonify({'error': f'MobileSAM model not found at {model_path}'}), 500
-
-        # Initialize SAM model (cached globally for efficiency)
-        if not hasattr(sam_segment, 'sam_model'):
-            print(f"Loading MobileSAM from {model_path}...")
-            sam_segment.sam_model = SAM(model_path)
-            print("MobileSAM loaded successfully")
-
-        model = sam_segment.sam_model
-
-        # Read image to get dimensions
+        # Read image
         import cv2
         img = cv2.imread(image_path)
         height, width = img.shape[:2]
 
-        # Convert normalized coords to pixel coords
-        pixel_points = []
-        for point in points:
-            pixel_x = int(point[0] * width)
-            pixel_y = int(point[1] * height)
-            pixel_points.append([pixel_x, pixel_y])
+        # Convert normalized click to pixel coordinates
+        click_x = int(points[0][0] * width)
+        click_y = int(points[0][1] * height)
 
-        # Run SAM prediction with point prompts
-        # Points format: [[x1, y1], [x2, y2], ...] in pixel coordinates
-        # Labels: 1 for foreground points
-        results = model.predict(
-            image_path,
-            points=pixel_points,
-            labels=[1] * len(pixel_points),  # All points are foreground
-            verbose=False
-        )
+        # Create a crop around the click point (400x400 pixels)
+        crop_size = 400
+        x1 = max(0, click_x - crop_size // 2)
+        y1 = max(0, click_y - crop_size // 2)
+        x2 = min(width, x1 + crop_size)
+        y2 = min(height, y1 + crop_size)
 
-        # Extract bounding boxes from masks
-        boxes = []
-        if results and len(results) > 0:
-            result = results[0]  # First result
+        # Adjust if crop goes out of bounds
+        if x2 - x1 < crop_size:
+            x1 = max(0, x2 - crop_size)
+        if y2 - y1 < crop_size:
+            y1 = max(0, y2 - crop_size)
 
-            # Check if we have masks
-            if hasattr(result, 'masks') and result.masks is not None:
-                masks = result.masks.data.cpu().numpy()  # Shape: (N, H, W)
+        # Extract crop
+        crop = img[y1:y2, x1:x2]
 
-                for mask in masks:
-                    # Find bounding box from mask
-                    # mask is a 2D boolean/float array
-                    rows = np.any(mask > 0.5, axis=1)
-                    cols = np.any(mask > 0.5, axis=0)
+        # Save crop temporarily for YOLO detection
+        import tempfile
+        with tempfile.NamedTemporaryFile(suffix='.jpg', delete=False) as tmp_file:
+            tmp_path = tmp_file.name
+            cv2.imwrite(tmp_path, crop)
 
-                    if not np.any(rows) or not np.any(cols):
-                        continue  # Empty mask
+        try:
+            # Run YOLO detection on crop with low confidence threshold
+            result = detector.predict(
+                tmp_path,
+                conf_threshold=0.15,  # Lower threshold to catch more birds
+                use_sliding_window=False,  # Crop is already small
+                verbose=False
+            )
 
-                    y1, y2 = np.where(rows)[0][[0, -1]]
-                    x1, x2 = np.where(cols)[0][[0, -1]]
+            # Convert crop-relative detections to full image coordinates
+            boxes = []
+            for det in result['detections']:
+                bbox = det['bbox']  # [x1, y1, x2, y2] in crop coordinates
 
-                    # Validate mask size (filter out masks that are too large or too small)
-                    mask_width = x2 - x1
-                    mask_height = y2 - y1
-                    mask_area = mask_width * mask_height
-                    image_area = width * height
+                # Convert to full image coordinates
+                full_x1 = (bbox[0] + x1) / width
+                full_y1 = (bbox[1] + y1) / height
+                full_x2 = (bbox[2] + x1) / width
+                full_y2 = (bbox[3] + y1) / height
 
-                    # Skip masks that are >30% of image (probably wrong) or <50 pixels
-                    if mask_area > 0.3 * image_area or mask_area < 50:
-                        continue
+                # Convert to YOLO format (center + size)
+                x_center = (full_x1 + full_x2) / 2
+                y_center = (full_y1 + full_y2) / 2
+                box_width = full_x2 - full_x1
+                box_height = full_y2 - full_y1
 
-                    # Add 5% padding to the bounding box
-                    padding_x = int(mask_width * 0.05)
-                    padding_y = int(mask_height * 0.05)
+                # Only include boxes near the click point (within 150 pixels)
+                box_center_x = x_center * width
+                box_center_y = y_center * height
+                distance = ((box_center_x - click_x)**2 + (box_center_y - click_y)**2)**0.5
 
-                    x1 = max(0, x1 - padding_x)
-                    y1 = max(0, y1 - padding_y)
-                    x2 = min(width, x2 + padding_x)
-                    y2 = min(height, y2 + padding_y)
-
-                    # Convert to normalized YOLO format
-                    x_center = (x1 + x2) / 2 / width
-                    y_center = (y1 + y2) / 2 / height
-                    box_width = (x2 - x1) / width
-                    box_height = (y2 - y1) / height
-
+                if distance < 150:  # 150 pixel radius
                     boxes.append({
-                        'x_center': float(x_center),
-                        'y_center': float(y_center),
-                        'width': float(box_width),
-                        'height': float(box_height),
-                        'confidence': 1.0  # SAM doesn't provide confidence
+                        'x_center': x_center,
+                        'y_center': y_center,
+                        'width': box_width,
+                        'height': box_height,
+                        'confidence': det.get('confidence', 0.0)
                     })
 
-        if not boxes:
-            return jsonify({'error': 'No bird detected at this location. Try clicking directly on a bird.'}), 404
+            # Sort by distance to click (closest first)
+            if boxes:
+                boxes.sort(key=lambda b: ((b['x_center']*width - click_x)**2 +
+                                         (b['y_center']*height - click_y)**2))
 
-        return jsonify({
-            'success': True,
-            'boxes': boxes[:3],  # Return max 3 boxes (in case of overlapping masks)
-            'count': len(boxes[:3])
-        })
+            return jsonify({
+                'success': True,
+                'boxes': boxes[:3],  # Return max 3 closest birds
+                'count': len(boxes[:3])
+            })
+
+        finally:
+            # Clean up temp file
+            if os.path.exists(tmp_path):
+                os.remove(tmp_path)
 
     except Exception as e:
         import traceback
-        print(f"SAM segmentation error: {traceback.format_exc()}")
-        return jsonify({'error': f'Segmentation failed: {str(e)}'}), 500
+        print(f"Bird detection error: {traceback.format_exc()}")
+        return jsonify({'error': str(e)}), 500
 
 @app.route('/api/classify_crop', methods=['POST'])
 @api_annotator_required

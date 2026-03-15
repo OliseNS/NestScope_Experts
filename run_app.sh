@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# NestScope - Run FastAPI backend + Flask webapp + Nestperts
+# NestScope - Run both FastAPI server and Streamlit client concurrently
 
 # Colors for output
 GREEN='\033[0;32m'
@@ -103,8 +103,8 @@ fi
 if ! $PYTHON_CMD -c "import uvicorn" &> /dev/null; then
     MISSING_DEPS+=("uvicorn")
 fi
-if ! $PYTHON_CMD -c "import flask" &> /dev/null; then
-    MISSING_DEPS+=("flask")
+if ! $PYTHON_CMD -c "import streamlit" &> /dev/null; then
+    MISSING_DEPS+=("streamlit")
 fi
 
 if [ ${#MISSING_DEPS[@]} -gt 0 ]; then
@@ -134,15 +134,9 @@ cleanup() {
 # Trap Ctrl+C and call cleanup
 trap cleanup INT TERM
 
-# Get absolute paths to directories (before starting services)
-PROJECT_ROOT="$(pwd)"
-WEBAPP_DIR="$PROJECT_ROOT/webapp"
-LABELLER_DIR="$PROJECT_ROOT/labeller"
-LOGS_DIR="$PROJECT_ROOT/logs"
-
 # Start FastAPI server in background
 echo -e "${GREEN}Starting FastAPI server on http://localhost:8000${NC}"
-$PYTHON_CMD -m uvicorn server.main:app --host 0.0.0.0 --port 8000 --reload > "$LOGS_DIR/server.log" 2>&1 &
+$PYTHON_CMD -m uvicorn server.main:app --host 0.0.0.0 --port 8000 --reload > logs/server.log 2>&1 &
 SERVER_PID=$!
 
 # Wait for server to start with retry logic
@@ -168,71 +162,34 @@ if [ "$SERVER_READY" = false ]; then
     echo -e "${YELLOW}Continuing anyway...${NC}"
 fi
 
-# Start Flask webapp in background
-echo -e "${GREEN}Starting Flask webapp on http://localhost:8501${NC}"
-(cd "$WEBAPP_DIR" && $PYTHON_CMD app.py) > "$LOGS_DIR/webapp.log" 2>&1 &
+# Start Streamlit client in background
+echo -e "${GREEN}Starting Streamlit client on http://localhost:8501${NC}"
+$PYTHON_CMD -m streamlit run frontend/app.py --server.port 8501 > logs/streamlit.log 2>&1 &
 CLIENT_PID=$!
 
-# Wait a bit for Flask to start
-sleep 2
-
-# Start Nestperts V2 Flask app in background
-echo -e "${GREEN}Starting Nestperts V2 app on http://localhost:5000${NC}"
-
-# Make sure port 5000 is free
-if lsof -Pi :5000 -sTCP:LISTEN -t >/dev/null 2>&1 ; then
-    echo -e "${YELLOW}⚠ Port 5000 already in use. Killing existing process...${NC}"
-    lsof -ti:5000 | xargs kill -9 2>/dev/null || true
-    sleep 1
-fi
-
-# Start with explicit environment and error logging
-# Run from the labeller directory itself (so relative imports work)
-(cd "$LABELLER_DIR" && FLASK_ENV=development $PYTHON_CMD app.py) > "$LOGS_DIR/nestperts.log" 2>&1 &
-LABELLER_PID=$!
-
-# Give it time to start
+# Wait a bit for Streamlit to start
 sleep 3
 
-# Check if process is still running
-if ps -p $LABELLER_PID > /dev/null 2>&1; then
-    echo -e "${GREEN}✓ Nestperts process started (PID: $LABELLER_PID)${NC}"
+# Start Nestperts V2 Flask app in background with unlimited uploads
+echo -e "${GREEN}Starting Nestperts V2 app on http://localhost:5000 (unlimited uploads)${NC}"
+cd labeller && bash run_nestperts.sh > ../logs/nestperts.log 2>&1 &
+LABELLER_PID=$!
+cd ..
 
-    # Wait a bit more for server to be ready
-    sleep 2
-
-    # Try to connect
-    if curl -s http://localhost:5000/health > /dev/null 2>&1; then
-        echo -e "${GREEN}✓ Nestperts health check passed${NC}"
-    else
-        echo -e "${YELLOW}⚠ Nestperts started but health check failed${NC}"
-        echo -e "${YELLOW}  It may still be initializing. Check logs/nestperts.log${NC}"
-    fi
-else
-    echo -e "${RED}✗ Nestperts failed to start!${NC}"
-    echo -e "${YELLOW}  Last 20 lines of $LOGS_DIR/nestperts.log:${NC}"
-    tail -20 "$LOGS_DIR/nestperts.log" 2>/dev/null || echo "  Log file not found"
-    echo -e "${YELLOW}  Continuing anyway...${NC}"
-fi
+# Wait a bit for Nestperts to start
+sleep 2
 
 echo -e "\n${BLUE}================================${NC}"
 echo -e "${GREEN}✓ NestScope is running!${NC}"
 echo -e "${BLUE}================================${NC}"
-echo -e "\n${GREEN}Public Tools:${NC}"
-echo -e "  ${GREEN}Frontend:${NC}    http://localhost:8501  ${YELLOW}← OPEN THIS${NC}"
-echo -e "  ${GREEN}Backend:${NC}     http://localhost:8000"
-echo -e "  ${GREEN}API Docs:${NC}    http://localhost:8000/docs"
-echo -e "\n${GREEN}Expert Tools (OAuth Required):${NC}"
-echo -e "  ${GREEN}Nestperts:${NC}   http://localhost:5000"
+echo -e "\n${GREEN}FastAPI Server:${NC}  http://localhost:8000"
+echo -e "${GREEN}Streamlit App:${NC}   http://localhost:8501"
+echo -e "${GREEN}Nestperts V2:${NC}    http://localhost:5000"
+echo -e "${GREEN}API Docs:${NC}        http://localhost:8000/docs"
 echo -e "\n${YELLOW}Logs:${NC}"
-echo -e "  Backend:   tail -f logs/server.log"
-echo -e "  Frontend:  tail -f logs/webapp.log"
+echo -e "  Server:    tail -f logs/server.log"
+echo -e "  Streamlit: tail -f logs/streamlit.log"
 echo -e "  Nestperts: tail -f logs/nestperts.log"
-echo -e "\n${YELLOW}Troubleshooting:${NC}"
-echo -e "  If Nestperts (port 5000) won't load:"
-echo -e "    1. Check: tail -f logs/nestperts.log"
-echo -e "    2. Test:  curl http://localhost:5000/health"
-echo -e "    3. Manual: cd labeller && python app.py"
 echo -e "\n${YELLOW}Press Ctrl+C to stop all servers${NC}\n"
 
 # Wait for both processes

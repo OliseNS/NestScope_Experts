@@ -1425,55 +1425,6 @@
     let currentStation = null;
     let zonesData = [];
     const API_BASE = "{{ api_base_url }}";
-    let backendAvailable = false;
-
-    // Check if backend is available
-    async function checkBackend() {
-        try {
-            const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 second timeout
-
-            const response = await fetch(`${API_BASE}/health`, {
-                method: 'GET',
-                signal: controller.signal
-            });
-
-            clearTimeout(timeoutId);
-            backendAvailable = response.ok;
-            return backendAvailable;
-        } catch (error) {
-            console.error('Backend unavailable:', error);
-            backendAvailable = false;
-            return false;
-        }
-    }
-
-    // Show backend error
-    function showBackendError() {
-        document.getElementById('loading-state').innerHTML = `
-            <div style="text-align: center; padding: 3rem;">
-                <div style="margin-bottom: 1rem; color: var(--db-warning); opacity: 0.5;">
-                    <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
-                </div>
-                <h2 style="color: var(--text-primary); margin-bottom: 1rem;">Backend Connection Failed</h2>
-                <p style="color: var(--text-secondary); margin-bottom: 1.5rem;">
-                    Cannot connect to FastAPI backend at ${API_BASE}<br>
-                    Make sure the backend is running on port 8000
-                </p>
-                <button onclick="location.reload()" style="
-                    background: #7BABAE;
-                    color: white;
-                    border: none;
-                    padding: 0.75rem 1.5rem;
-                    border-radius: 8px;
-                    cursor: pointer;
-                    font-size: 1rem;
-                ">
-                    Retry Connection
-                </button>
-            </div>
-        `;
-    }
 
     const GULF_STATIONS = [
         {name: "Grand Isle, LA", id: "8761724", lat: 29.2633, lon: -89.9567},
@@ -1724,20 +1675,8 @@
     // Load cached colony data
     async function loadCachedData() {
         try {
-            // Check backend availability first
-            const isAvailable = await checkBackend();
-            if (!isAvailable) {
-                showBackendError();
-                return;
-            }
-
             console.log('Fetching from:', `${API_BASE}/api/flood/cached`);
-            const response = await fetch(`${API_BASE}/api/flood/cached`, {
-                method: 'GET',
-                headers: {
-                    'Content-Type': 'application/json'
-                }
-            });
+            const response = await fetch(`${API_BASE}/api/flood/cached`);
 
             if (!response.ok) {
                 throw new Error(`HTTP ${response.status}: ${response.statusText}`);
@@ -1781,7 +1720,18 @@
 
         } catch (error) {
             console.error('Error loading data:', error);
-            showBackendError();
+            document.getElementById('loading-state').style.display = 'none';
+            document.getElementById('main-content').innerHTML = `
+                <div style="padding: 2rem; text-align: center; color: #FF4B4B;">
+                    <h3>Failed to Load Data</h3>
+                    <p>${error.message}</p>
+                    <p style="font-size: 0.9rem; color: #94A3B8;">Check console for details</p>
+                    <button onclick="location.reload()" style="margin-top: 1rem; padding: 0.5rem 1rem; background: #00D9FF; border: none; border-radius: 6px; color: #0F172A; cursor: pointer;">
+                        Retry
+                    </button>
+                </div>
+            `;
+            document.getElementById('main-content').style.display = 'block';
         }
     }
 
