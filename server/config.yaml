@@ -8,11 +8,19 @@ model:
   sql_max_tokens: 3000  # Allow longer queries for multi-statement operations
 
 agentic:
-  max_attempts: 1  # Fast path: only retry on actual failure
-  validation_temperature: 0.2 # Faster validation
-  analysis_temperature: 0.5 # Fast analysis
-  enable_validation: false  # Skip pre-execution validation for speed
-  enable_result_validation: false  # Skip result validation for speed
+  # 5-Phase Agentic SQL Pipeline Settings
+  max_attempts: 3  # Self-correction: retry up to 3 times on errors
+
+  # Phase 2: Chain-of-Thought Reasoning
+  enable_reasoning: true  # Explicit reasoning before SQL generation (slower but more accurate)
+
+  # Phase 4: Result Evaluation
+  enable_result_validation: false  # Optional result quality check (adds LLM call, usually not needed)
+
+  # Performance Modes:
+  # Fast Mode:    enable_reasoning: false, enable_result_validation: false (2 LLM calls)
+  # Accurate Mode: enable_reasoning: true, enable_result_validation: false (3 LLM calls)
+  # Full Pipeline: enable_reasoning: true, enable_result_validation: true (4 LLM calls)
 
 database:
   default_path: data/bird_data_complete.db

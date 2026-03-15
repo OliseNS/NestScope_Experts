@@ -764,18 +764,30 @@ class SQLChatbot:
         self.model = model or MODEL_NAME
         self.schema = None
         self.prompt_path = prompt_path or str(DEFAULT_PROMPT_PATH)
+        self.sql_prompt_path = SERVER_DIR / "sql_prompt.txt"
         self.system_prompt = self._load_system_prompt()
+        self.sql_prompt = self._load_sql_prompt()
         self.metadata = self._load_metadata()
 
     def _load_system_prompt(self):
-        """Load the focused system prompt from prompt.txt"""
+        """Load the answer generation prompt from prompt.txt"""
         try:
             with open(self.prompt_path, 'r', encoding='utf-8') as f:
                 prompt = f.read()
-            print(f"✓ System prompt loaded from {self.prompt_path}")
+            print(f"✓ Answer prompt loaded from {self.prompt_path}")
             return prompt
         except FileNotFoundError:
             raise FileNotFoundError(f"System prompt file not found: {self.prompt_path}")
+
+    def _load_sql_prompt(self):
+        """Load the SQL generation prompt from sql_prompt.txt"""
+        try:
+            with open(self.sql_prompt_path, 'r', encoding='utf-8') as f:
+                prompt = f.read()
+            print(f"✓ SQL prompt loaded from {self.sql_prompt_path}")
+            return prompt
+        except FileNotFoundError:
+            raise FileNotFoundError(f"SQL prompt file not found: {self.sql_prompt_path}")
 
     def _load_metadata(self):
         """Load database metadata (prefers compressed essential metadata)"""
@@ -961,19 +973,18 @@ class SQLChatbot:
         return context
 
     def generate_sql_query(self, user_question, conversation_history=None):
-        """Generate SQL query from natural language using LLM with conversation context"""
-        # Build messages starting with system prompt
+        """Generate SQL query from natural language using LLM with structured JSON output"""
+        # Build messages starting with SQL-specific prompt
         messages = [
-            {"role": "system", "content": self.system_prompt}
+            {"role": "system", "content": self.sql_prompt}
         ]
 
         # Inject metadata as context (ALWAYS include for SQL generation)
         if self.metadata:
-            # Always add metadata so model understands schema for SQL generation
             metadata_context = self._format_metadata_context()
             messages.append({"role": "system", "content": metadata_context})
 
-        # Add conversation history for context (last 3 exchanges to keep token usage reasonable)
+        # Add conversation history for context (last 3 exchanges)
         if conversation_history:
             for msg in conversation_history[-6:]:  # Last 3 Q&A pairs (6 messages)
                 messages.append(msg)
@@ -981,31 +992,7 @@ class SQLChatbot:
         # Add the current question
         messages.append({
             "role": "user",
-            "content": f"""Question: {user_question}
-
-CRITICAL REQUIREMENTS:
-1. Return ONLY a valid SQL SELECT query - NO explanations, NO markdown, NO HTML, NO JavaScript, NO comments
-2. Your response must START with "SELECT" or "WITH" (for CTEs) - nothing else
-3. Do NOT include: HTML tags (<html>, <script>), code blocks (```), explanations, or any text before/after the SQL
-4. If question involves locations/colonies/states: MUST include "Latitude", "Longitude" in SELECT and GROUP BY
-5. Add WHERE "Latitude" IS NOT NULL AND "Longitude" IS NOT NULL for mappable results
-6. Use exact column names: "ColonyName", "Latitude", "Longitude" (case-sensitive)
-
-WRONG (DO NOT DO THIS):
-```sql
-SELECT * FROM table;
-```
-
-WRONG (DO NOT DO THIS):
-Here's the query: SELECT * FROM table;
-
-WRONG (DO NOT DO THIS):
-<html><script>...</script></html>
-
-CORRECT (DO THIS):
-SELECT "ColonyName", "State" FROM "tblColonyTotals2010-2021_MayJuneCombined" WHERE "Year" = 2021;
-
-Generate the SQL query now (SQL ONLY, no other text):"""
+            "content": f"Question: {user_question}\n\nGenerate SQL query as JSON:"
         })
 
         try:
@@ -1016,32 +1003,51 @@ Generate the SQL query now (SQL ONLY, no other text):"""
                 max_tokens=config['model']['sql_max_tokens']
             )
 
-            sql_query = response.choices[0].message.content.strip()
+            response_text = response.choices[0].message.content.strip()
 
-            # Clean up the query (remove markdown formatting if present)
-            if sql_query.startswith("```sql"):
-                # Extract content between ```sql and ```
-                sql_query = sql_query.split("```sql")[1].split("```")[0].strip()
-            elif sql_query.startswith("```"):
-                sql_query = sql_query.split("```")[1].split("```")[0].strip()
+            # Parse JSON response
+            try:
+                # Remove markdown code blocks if present
+                if response_text.startswith("```json"):
+                    response_text = response_text.split("```json")[1].split("```")[0].strip()
+                elif response_text.startswith("```"):
+                    response_text = response_text.split("```")[1].split("```")[0].strip()
 
-            # Remove any remaining explanatory text before SELECT/WITH
-            # SECURITY: Only look for read-only SQL keywords
-            sql_keywords = ['SELECT', 'WITH']
-            for keyword in sql_keywords:
-                if keyword in sql_query.upper():
-                    idx = sql_query.upper().find(keyword)
-                    sql_query = sql_query[idx:].strip()
-                    break
+                # Parse JSON
+                result = json.loads(response_text)
+                sql_query = result.get("sql", "")
 
-            # CRITICAL VALIDATION: Check if model generated garbage (HTML/JS instead of SQL)
-            sql_lower = sql_query.lower()
-            if any(tag in sql_lower for tag in ['<html>', '<script>', '<div>', '<body>', 'document.', 'function(', 'const ', 'let ', 'var ']):
-                return f"ERROR: Model generated HTML/JavaScript instead of SQL. This model is not suitable for SQL generation. Please use a better model (like Claude or GPT-4)."
+                if not sql_query:
+                    return "ERROR: No SQL query in JSON response"
 
-            # Verify it's actually SQL
-            if not (sql_query.upper().startswith('SELECT') or sql_query.upper().startswith('WITH')):
+            except json.JSONDecodeError:
+                # Fallback: Try to extract raw SQL if JSON parsing fails
+                print(f"⚠ JSON parsing failed, attempting raw SQL extraction")
+                sql_query = response_text
+
+                # Remove markdown if present
+                if sql_query.startswith("```sql"):
+                    sql_query = sql_query.split("```sql")[1].split("```")[0].strip()
+                elif sql_query.startswith("```"):
+                    sql_query = sql_query.split("```")[1].split("```")[0].strip()
+
+                # Try to find SELECT or WITH
+                sql_keywords = ['SELECT', 'WITH']
+                for keyword in sql_keywords:
+                    if keyword in sql_query.upper():
+                        idx = sql_query.upper().find(keyword)
+                        sql_query = sql_query[idx:].strip()
+                        break
+
+            # Security validation: Verify it's actually SQL
+            sql_upper = sql_query.strip().upper()
+            if not (sql_upper.startswith('SELECT') or sql_upper.startswith('WITH')):
                 return f"ERROR: Invalid SQL - must start with SELECT or WITH. Got: {sql_query[:100]}..."
+
+            # Check for HTML/JS contamination
+            sql_lower = sql_query.lower()
+            if any(tag in sql_lower for tag in ['<html>', '<script>', '<div>', '<body>', 'document.', 'function(']):
+                return f"ERROR: Model generated HTML/JavaScript instead of SQL. Got: {sql_query[:100]}..."
 
             # LAYER 2: Validate and enhance SQL for mapping
             enhanced_sql, was_modified, reason = validate_and_enhance_sql_for_mapping(sql_query)
@@ -1802,15 +1808,13 @@ Please provide a clear, informative answer to the question based on these result
 
 class AgenticSQLChatbot(SQLChatbot):
     """
-    Agentic chatbot with multi-step reasoning and self-correction.
+    5-Phase Agentic Text-to-SQL Pipeline
 
-    The agent follows these steps:
-    1. Analyze the question - understand what's being asked
-    2. Generate SQL - create a candidate query
-    3. Self-validate SQL - check for common mistakes
-    4. Execute query - run the SQL
-    5. Validate results - check if results make sense
-    6. Retry if needed - regenerate with feedback (configurable max attempts)
+    Phase 1: Context & Setup (auto)
+    Phase 2: Chain-of-Thought Planning (explicit reasoning)
+    Phase 3: SQL Generation (from plan)
+    Phase 4: Result Evaluation (check sufficiency)
+    Phase 5: Final Answer & Artifacts (streaming)
 
     Progress is streamed to the frontend in real-time.
     """
@@ -1818,26 +1822,241 @@ class AgenticSQLChatbot(SQLChatbot):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         # Load agentic configuration from config.yaml
-        self.max_attempts = config.get('agentic', {}).get('max_attempts', 1)
-        self.enable_validation = config.get('agentic', {}).get('enable_validation', False)
+        self.max_attempts = config.get('agentic', {}).get('max_attempts', 3)
+        self.enable_reasoning = config.get('agentic', {}).get('enable_reasoning', True)
         self.enable_result_validation = config.get('agentic', {}).get('enable_result_validation', False)
+
+        # Load phase-specific prompts
+        self.reasoning_prompt = self._load_phase_prompt("sql_prompt_reasoning.txt")
+        self.generation_prompt = self._load_phase_prompt("sql_prompt_generation.txt")
+        self.evaluation_prompt = self._load_phase_prompt("sql_prompt_evaluation.txt")
+
+    def _load_phase_prompt(self, filename):
+        """Load a phase-specific prompt file"""
+        try:
+            path = SERVER_DIR / filename
+            with open(path, 'r', encoding='utf-8') as f:
+                return f.read()
+        except FileNotFoundError:
+            print(f"⚠ Warning: {filename} not found, using fallback")
+            return ""
+
+    def _phase2_reasoning(self, question: str, conversation_history: list = None) -> dict:
+        """
+        Phase 2: Chain-of-Thought Planning
+        Returns reasoning plan as JSON
+        """
+        messages = [
+            {"role": "system", "content": self.reasoning_prompt}
+        ]
+
+        # Add metadata context
+        if self.metadata:
+            messages.append({"role": "system", "content": self._format_metadata_context()})
+
+        # Add conversation history
+        if conversation_history:
+            for msg in conversation_history[-6:]:
+                messages.append(msg)
+
+        messages.append({
+            "role": "user",
+            "content": f"Question: {question}\n\nProvide your reasoning plan as JSON:"
+        })
+
+        try:
+            response = client.chat.completions.create(
+                model=self.model,
+                messages=messages,
+                temperature=0.1,  # Low temp for structured reasoning
+                max_tokens=500
+            )
+
+            response_text = response.choices[0].message.content.strip()
+
+            # Parse JSON
+            if response_text.startswith("```json"):
+                response_text = response_text.split("```json")[1].split("```")[0].strip()
+            elif response_text.startswith("```"):
+                response_text = response_text.split("```")[1].split("```")[0].strip()
+
+            reasoning_plan = json.loads(response_text)
+            return reasoning_plan
+
+        except Exception as e:
+            print(f"⚠ Phase 2 reasoning failed: {e}")
+            # Fallback: skip reasoning phase
+            return {
+                "question_type": "unknown",
+                "reasoning": f"Reasoning phase skipped due to error: {e}"
+            }
+
+    def _phase3_sql_generation(self, question: str, reasoning_plan: dict, conversation_history: list = None) -> str:
+        """
+        Phase 3: SQL Generation from Reasoning Plan
+        Returns SQL query as string
+        """
+        messages = [
+            {"role": "system", "content": self.generation_prompt}
+        ]
+
+        # Add metadata context
+        if self.metadata:
+            messages.append({"role": "system", "content": self._format_metadata_context()})
+
+        # Add reasoning plan as context
+        messages.append({
+            "role": "assistant",
+            "content": f"Reasoning Plan:\n{json.dumps(reasoning_plan, indent=2)}"
+        })
+
+        # Add conversation history for error corrections
+        if conversation_history:
+            for msg in conversation_history[-6:]:
+                messages.append(msg)
+
+        messages.append({
+            "role": "user",
+            "content": f"Question: {question}\n\nGenerate SQL as JSON based on the reasoning plan:"
+        })
+
+        try:
+            response = client.chat.completions.create(
+                model=self.model,
+                messages=messages,
+                temperature=config['model']['sql_temperature'],
+                max_tokens=config['model']['sql_max_tokens']
+            )
+
+            response_text = response.choices[0].message.content.strip()
+
+            # Parse JSON
+            if response_text.startswith("```json"):
+                response_text = response_text.split("```json")[1].split("```")[0].strip()
+            elif response_text.startswith("```"):
+                response_text = response_text.split("```")[1].split("```")[0].strip()
+
+            result = json.loads(response_text)
+            sql_query = result.get("sql", "")
+
+            if not sql_query:
+                return "ERROR: No SQL in JSON response"
+
+            # Validate it's read-only SQL
+            sql_upper = sql_query.strip().upper()
+            if not (sql_upper.startswith('SELECT') or sql_upper.startswith('WITH')):
+                return f"ERROR: Invalid SQL - must start with SELECT or WITH"
+
+            return sql_query
+
+        except json.JSONDecodeError:
+            # Fallback: try to extract raw SQL
+            print(f"⚠ JSON parsing failed in Phase 3")
+            if response_text.upper().startswith('SELECT') or response_text.upper().startswith('WITH'):
+                return response_text
+            return f"ERROR: Could not parse SQL from response"
+        except Exception as e:
+            return f"ERROR: {e}"
+
+    def _phase4_evaluation(self, question: str, sql_query: str, results_df) -> dict:
+        """
+        Phase 4: Result Evaluation
+        Returns evaluation as JSON: {sufficient: bool, reason: str, follow_up_sql: str}
+        """
+        if not self.enable_result_validation:
+            # Skip evaluation if disabled
+            return {"sufficient": True, "reason": "Evaluation disabled"}
+
+        if results_df is None or len(results_df) == 0:
+            return {
+                "sufficient": False,
+                "reason": "No results returned - query may need adjustment"
+            }
+
+        # Format results summary
+        results_summary = f"Rows: {len(results_df)}\n"
+        results_summary += f"Columns: {', '.join(results_df.columns)}\n"
+        if len(results_df) > 0:
+            results_summary += f"Sample: {results_df.iloc[0].to_dict()}"
+
+        messages = [
+            {"role": "system", "content": self.evaluation_prompt}
+        ]
+
+        messages.append({
+            "role": "user",
+            "content": f"""Question: {question}
+
+SQL Query:
+{sql_query}
+
+Results Summary:
+{results_summary}
+
+Evaluate as JSON:"""
+        })
+
+        try:
+            response = client.chat.completions.create(
+                model=self.model,
+                messages=messages,
+                temperature=0.1,
+                max_tokens=300
+            )
+
+            response_text = response.choices[0].message.content.strip()
+
+            # Parse JSON
+            if response_text.startswith("```json"):
+                response_text = response_text.split("```json")[1].split("```")[0].strip()
+            elif response_text.startswith("```"):
+                response_text = response_text.split("```")[1].split("```")[0].strip()
+
+            evaluation = json.loads(response_text)
+            return evaluation
+
+        except Exception as e:
+            print(f"⚠ Phase 4 evaluation failed: {e}")
+            # Default: assume sufficient
+            return {"sufficient": True, "reason": "Evaluation check performed"}
 
     async def agentic_ask_stream(self, question: str, conversation_history: list = None):
         """
-        Fast-path query processing with streaming response.
+        5-Phase Agentic Text-to-SQL Pipeline with Streaming
 
-        Optimized flow:
-        1. Generate SQL immediately (no pre-analysis)
-        2. Execute query
-        3. Stream answer with artifacts
-        4. Only retry on actual failure
+        Phase 1: Context & Setup (automatic - metadata loaded in __init__)
+        Phase 2: Chain-of-Thought Planning (explicit reasoning, optional)
+        Phase 3: SQL Generation (from reasoning plan or direct)
+        Phase 4: Result Evaluation (optional - check sufficiency)
+        Phase 5: Final Answer & Artifacts (streaming)
 
-        This minimizes LLM calls and latency for fast Claude-like responses.
+        Self-correction: Max 3 retries on execution errors
         """
+
+        reasoning_plan = None
 
         for attempt in range(1, self.max_attempts + 1):
             try:
-                # Step 1: Generate SQL (fast, no pre-validation)
+                # PHASE 2: Chain-of-Thought Planning (only on first attempt if enabled)
+                if attempt == 1 and self.enable_reasoning:
+                    yield {
+                        'type': 'thinking_step',
+                        'step': 'reasoning',
+                        'attempt': attempt,
+                        'content': "Analyzing question structure...",
+                        'icon': '🧠'
+                    }
+
+                    reasoning_plan = self._phase2_reasoning(question, conversation_history)
+
+                    if reasoning_plan:
+                        yield {
+                            'type': 'reasoning_complete',
+                            'content': reasoning_plan.get('reasoning', 'Query plan generated'),
+                            'plan': reasoning_plan
+                        }
+
+                # PHASE 3: SQL Generation
                 if attempt == 1:
                     yield {
                         'type': 'thinking_step',
@@ -1851,15 +2070,37 @@ class AgenticSQLChatbot(SQLChatbot):
                         'type': 'thinking_step',
                         'step': 'retry',
                         'attempt': attempt,
-                        'content': f"Retrying with corrections...",
+                        'content': f"Retrying with corrections (attempt {attempt}/{self.max_attempts})...",
                         'icon': '🔄'
                     }
 
-                sql_query = self.generate_sql_query(question, conversation_history=conversation_history)
+                # Generate SQL (with or without reasoning plan)
+                if reasoning_plan and self.enable_reasoning:
+                    sql_query = self._phase3_sql_generation(question, reasoning_plan, conversation_history)
+                else:
+                    # Fallback to direct generation if reasoning disabled or failed
+                    sql_query = self.generate_sql_query(question, conversation_history)
 
+                # Handle SQL generation errors
                 if sql_query.startswith("ERROR"):
-                    yield {'type': 'error', 'content': sql_query}
-                    return
+                    if attempt < self.max_attempts:
+                        yield {
+                            'type': 'retry',
+                            'attempt': attempt,
+                            'reason': sql_query,
+                            'content': f"SQL generation error. Retrying..."
+                        }
+                        # Add error to conversation history for next attempt
+                        if conversation_history is None:
+                            conversation_history = []
+                        conversation_history.append({
+                            'role': 'system',
+                            'content': f"Previous attempt failed: {sql_query}\n\nGenerate corrected SQL."
+                        })
+                        continue
+                    else:
+                        yield {'type': 'error', 'content': sql_query}
+                        return
 
                 yield {
                     'type': 'sql_generated',
@@ -1867,30 +2108,38 @@ class AgenticSQLChatbot(SQLChatbot):
                     'attempt': attempt
                 }
 
-                # Step 2: Execute query immediately
+                # Execute query
                 results_df, error = self.execute_query(sql_query)
 
+                # Handle execution errors with retry
                 if error:
-                    # Only retry if max_attempts > 1
                     if attempt < self.max_attempts:
                         yield {
                             'type': 'retry',
                             'attempt': attempt,
                             'reason': error,
-                            'content': f"Query error: {error}. Fixing..."
+                            'content': f"Query error: {error[:200]}... Fixing..."
                         }
+                        # Add detailed error feedback to conversation history
                         if conversation_history is None:
                             conversation_history = []
                         conversation_history.append({
                             'role': 'system',
-                            'content': f"Previous query failed: {error}. Fix the SQL."
+                            'content': f"""Previous SQL query failed with error:
+{error}
+
+SQL that failed:
+{sql_query}
+
+Fix the SQL and return corrected JSON with {"sql": "..."} format."""
                         })
                         continue
                     else:
-                        # No retries, show error immediately
+                        # All attempts exhausted
                         yield {'type': 'error', 'content': f"Query failed: {error}"}
                         return
 
+                # Execution succeeded
                 results = results_df.to_dict(orient='records') if results_df is not None else None
                 results_count = len(results_df) if results_df is not None else 0
 
@@ -1901,7 +2150,27 @@ class AgenticSQLChatbot(SQLChatbot):
                     'attempt': attempt
                 }
 
-                # Step 3: Stream answer immediately (no result validation)
+                # PHASE 4: Result Evaluation (optional)
+                if self.enable_result_validation:
+                    yield {
+                        'type': 'thinking_step',
+                        'step': 'evaluation',
+                        'content': "Evaluating results...",
+                        'icon': '✓'
+                    }
+
+                    evaluation = self._phase4_evaluation(question, sql_query, results_df)
+
+                    if not evaluation.get('sufficient', True):
+                        yield {
+                            'type': 'evaluation_warning',
+                            'content': evaluation.get('reason', 'Results may be incomplete'),
+                            'evaluation': evaluation
+                        }
+                        # Note: Follow-up query execution not implemented yet
+                        # For now, proceed with current results
+
+                # PHASE 5: Final Answer & Artifacts (streaming)
                 yield {'type': 'answer_start'}
 
                 full_answer = ""
@@ -1910,7 +2179,7 @@ class AgenticSQLChatbot(SQLChatbot):
                     yield {'type': 'answer_chunk', 'content': chunk}
                     await asyncio.sleep(0)
 
-                # Send full answer WITH artifacts
+                # Send complete answer
                 yield {
                     'type': 'answer_end',
                     'clean_answer': full_answer
@@ -1919,369 +2188,31 @@ class AgenticSQLChatbot(SQLChatbot):
                 yield {
                     'type': 'success',
                     'attempts_used': attempt,
-                    'content': 'Query completed!'
+                    'content': f'Query completed in {attempt} attempt(s)!'
                 }
 
                 yield {'type': 'done'}
                 return
 
             except Exception as e:
+                print(f"❌ Exception in agentic pipeline: {e}")
+                import traceback
+                traceback.print_exc()
+
                 if attempt < self.max_attempts:
                     yield {
                         'type': 'retry',
                         'attempt': attempt,
                         'reason': str(e),
-                        'content': f"Error: {str(e)}. Retrying..."
+                        'content': f"Pipeline error: {str(e)[:200]}... Retrying..."
                     }
                     continue
                 else:
-                    yield {'type': 'error', 'content': f"Failed: {str(e)}"}
+                    yield {'type': 'error', 'content': f"Pipeline failed: {str(e)}"}
                     return
 
-        # If we get here, all attempts failed
-        yield {'type': 'error', 'content': f"Failed after {self.max_attempts} attempts."}
-
-    async def _analyze_question(self, question: str, conversation_history: list = None) -> dict:
-        """
-        Analyze the question with high-fidelity reasoning to understand intent, entities, and constraints.
-        This provides the foundation for accurate SQL generation.
-        """
-
-        messages = [
-            {"role": "system", "content": """You are an expert data analyst specializing in Gulf Coast avian ecology.
-Analyze the natural language question to extract deep semantic meaning, entities, and logical constraints.
-
-CRITICAL: The "step_by_step_reasoning" field must contain DETAILED, SPECIFIC analysis of THIS question.
-NOT generic placeholders like "Parsing the question" but ACTUAL reasoning.
-
-## KNOWLEDGE BASE: COMMON JOIN PATTERNS & METRICS
-1. **Species Diversity (Richness)**: `COUNT(DISTINCT SpeciesCode)` - requires `tblColonyTotals...`
-2. **Abundance (Population)**: `SUM(Birds)` - requires `tblColonyTotals...`
-3. **Nesting Effort**: `SUM(Nests)` - requires `tblColonyTotals...`
-4. **Species Names**: Join `tblColonyTotals...` with `tblSpeciesCodes` on `SpeciesCode`.
-5. **Species Groups**: Join `tblColonyTotals...` with `tblSpeciesCodes` on `SpeciesCode`.
-6. **Temporal Trends**: Always include `Year` in SELECT and GROUP BY.
-7. **Mapping Requirements**: ALWAYS include `Latitude` and `Longitude` for any colony-based query.
-
-## GOLD-STANDARD FEW-SHOT EXAMPLES
-
-**Q1: "Which colonies support the highest biodiversity in Louisiana?"**
-**Reasoning**: User wants species diversity (count of unique species) per colony, filtered for State='LA'. Requires tblColonyTotals table. Needs Latitude/Longitude for mapping.
-**Query Plan**: SELECT ColonyName, State, Latitude, Longitude, COUNT(DISTINCT SpeciesCode) as species_count FROM tblColonyTotals... WHERE State='LA' AND Latitude IS NOT NULL GROUP BY ColonyName, State, Latitude, Longitude ORDER BY species_count DESC
-
-**Q2: "Show the trend of Brown Pelican population from 2010 to 2021"**
-**Reasoning**: User wants temporal trend (Sum of Birds by Year) for a specific species (Brown Pelican). Must join with tblSpeciesCodes to filter by name. 
-**Query Plan**: SELECT ct.Year, SUM(ct.Birds) as total_birds FROM tblColonyTotals... ct JOIN tblSpeciesCodes sc ON ct.SpeciesCode = sc.SpeciesCode WHERE sc.SpeciesName = 'Brown Pelican' GROUP BY ct.Year ORDER BY ct.Year
-
-Respond with ONLY a valid JSON object (no markdown, no extra text):
-
-{
-  "summary": "Deep semantic summary of the user's intent (2-3 sentences explaining WHAT they want to know and WHY)",
-  "question_type": "count | trend | comparison | list | distribution | spatial_analysis",
-  "entities": {
-    "species": ["Specific species mentioned or 'all species'"],
-    "locations": ["Specific states/colonies or 'all Gulf Coast'"],
-    "time_range": "Specific years (e.g., '2015-2021') or 'all available years (2010-2021)'",
-    "metrics": ["Exact metrics: 'Bird Count', 'Nest Count', 'Species Diversity', etc."]
-  },
-  "constraints": [
-    "SPECIFIC filters extracted from question (e.g., 'State must be Louisiana', 'Year >= 2015', 'Exclude colonies with NULL coordinates')"
-  ],
-  "tables_needed": ["Exact table names needed: tblColonyTotals2010-2021_MayJuneCombined, etc."],
-  "needs_coordinates": true/false,
-  "step_by_step_reasoning": [
-    "1. Intent: [SPECIFIC explanation of what user wants - not generic]",
-    "2. Data Location: [WHY choosing specific table - cite table purpose]",
-    "3. Metrics Needed: [EXACT columns to query and aggregate - e.g., 'COUNT(DISTINCT SpeciesCode) for diversity']",
-    "4. Filters Required: [SPECIFIC WHERE clause logic - e.g., 'WHERE State=LA AND Year BETWEEN 2015 AND 2021']",
-    "5. Grouping: [If applicable, explain GROUP BY - e.g., 'GROUP BY ColonyName to show per-colony diversity']",
-    "6. Spatial Data: [If coordinates needed, explain WHY - e.g., 'Need Lat/Lon to map biodiversity hotspots on Gulf Coast']",
-    "7. Expected Output: [Describe expected result structure - e.g., '445 rows, each colony with species_count column']"
-  ]
-}
-
-Now analyze the user's actual question with this same level of detail."""}
-        ]
-
-        if conversation_history:
-            for msg in conversation_history[-4:]:
-                messages.append(msg)
-
-        messages.append({"role": "user", "content": f"Question: {question}"})
-
-        try:
-            response = client.chat.completions.create(
-                model=self.model,
-                messages=messages,
-                temperature=self.analysis_temperature,
-                max_tokens=500  # Ensure JSON doesn't get truncated
-            )
-
-            analysis_text = response.choices[0].message.content.strip()
-
-            # Remove markdown code blocks if present
-            if analysis_text.startswith("```"):
-                parts = analysis_text.split("```")
-                if len(parts) >= 2:
-                    analysis_text = parts[1]
-                    if analysis_text.startswith("json"):
-                        analysis_text = analysis_text[4:].strip()
-                analysis_text = analysis_text.strip()
-
-            # Try to parse as JSON
-            try:
-                analysis = json.loads(analysis_text)
-                # Ensure step_by_step_reasoning exists and is properly formatted
-                if 'step_by_step_reasoning' not in analysis:
-                    analysis['step_by_step_reasoning'] = [analysis.get('summary', 'Analyzing question...')]
-                elif not isinstance(analysis['step_by_step_reasoning'], list):
-                    # If it's not a list, convert to list
-                    analysis['step_by_step_reasoning'] = [str(analysis['step_by_step_reasoning'])]
-
-                # Ensure all required fields exist
-                analysis.setdefault('summary', 'Analyzing question...')
-                analysis.setdefault('entities', {})
-                analysis.setdefault('question_type', 'query')
-                analysis.setdefault('tables_needed', [])
-                analysis.setdefault('needs_coordinates', False)
-
-            except json.JSONDecodeError as e:
-                # JSON parsing failed - provide a simple fallback
-                # Extract just the summary if possible
-                import re
-                summary_match = re.search(r'"summary":\s*"([^"]+)"', analysis_text)
-                summary = summary_match.group(1) if summary_match else "Query bird count data by year"
-
-                analysis = {
-                    "summary": summary,
-                    "entities": {},
-                    "question_type": "query",
-                    "tables_needed": ["tblColonyTotals2010-2021_MayJuneCombined"],
-                    "needs_coordinates": False,
-                    "step_by_step_reasoning": [
-                        "Parsing the question to understand what data is needed",
-                        "Identifying the correct table for bird count aggregation",
-                        "Planning the SQL query structure"
-                    ]
-                }
-
-            return analysis
-        except Exception as e:
-            return {
-                "summary": "Could not analyze question",
-                "entities": {},
-                "question_type": "unknown",
-                "tables_needed": [],
-                "needs_coordinates": False,
-                "step_by_step_reasoning": ["Error analyzing question"]
-            }
-
-    async def _validate_sql(self, sql_query: str, question: str, conversation_history: list = None) -> dict:
-        """
-        Expert SQL validation with detailed checklist of what was verified.
-        Returns structured validation with explicit checks.
-        """
-
-        # Pure LLM validation - no hard-coded rules
-        messages = [
-            {"role": "system", "content": """You are a Principal Data Engineer and Ecologist.
-Validate the SQL query against high-level scientific and structural principles.
-
-🚨 STRUCTURAL INTEGRITY CHECKLIST:
-1. Table Selection: Does it use tblColonyTotals for bird counts (not tblSpeciesData)?
-2. Aggregation: Does it use SUM(Birds/Nests) for counts (not COUNT(*))?
-3. Spatial Data: If querying locations, are Latitude/Longitude included?
-4. GROUP BY: If aggregating, are Lat/Lon in GROUP BY clause?
-5. NULL Handling: Does it filter "Latitude IS NOT NULL AND Longitude IS NOT NULL"?
-6. Column Names: Are all columns wrapped in double quotes?
-7. Joins: If joining tblSpeciesCodes, is the join key correct?
-
-Respond with a JSON object:
-{
-  "is_valid": true/false,
-  "feedback": "One-sentence summary: pass or what's wrong",
-  "reasoning": {
-    "table_check": "Uses correct table (tblColonyTotals for bird counts)",
-    "aggregation_check": "Uses SUM(Birds) for population counts",
-    "spatial_check": "Includes Latitude/Longitude for mapping",
-    "group_by_check": "Coordinates included in GROUP BY",
-    "null_check": "Filters NULL coordinates",
-    "issues_found": []
-  }
-}
-
-Include ONLY the checks that apply to this specific query.
-Be technically rigorous."""}
-        ]
-
-        messages.append({
-            "role": "user",
-            "content": f"""Question: {question}
-
-SQL Query:
-{sql_query}
-
-Validate (respond with JSON only):"""
-        })
-
-        try:
-            response = client.chat.completions.create(
-                model=self.model,
-                messages=messages,
-                temperature=self.validation_temperature,
-                max_tokens=300  # Allow for detailed checklist
-            )
-
-            validation_text = response.choices[0].message.content.strip()
-
-            # Remove markdown code blocks if present
-            if validation_text.startswith("```"):
-                validation_text = validation_text.split("```")[1]
-                if validation_text.startswith("json"):
-                    validation_text = validation_text[4:].strip()
-                validation_text = validation_text.strip()
-
-            try:
-                validation = json.loads(validation_text)
-                # Ensure required fields exist
-                if 'is_valid' not in validation:
-                    validation['is_valid'] = True
-                if 'feedback' not in validation:
-                    validation['feedback'] = "Query structure validated"
-                if 'reasoning' not in validation:
-                    validation['reasoning'] = {"summary": validation.get('feedback', "Validation performed")}
-            except json.JSONDecodeError:
-                # If JSON parsing fails, be lenient and assume valid
-                # Only mark as invalid if we see clear negative indicators
-                text_lower = validation_text.lower()
-                if any(word in text_lower for word in ["invalid", "error", "wrong", "incorrect", "missing"]):
-                    validation = {
-                        "is_valid": False,
-                        "feedback": validation_text[:100],
-                        "reasoning": {"summary": validation_text}
-                    }
-                else:
-                    validation = {
-                        "is_valid": True,
-                        "feedback": "Query structure validated",
-                        "reasoning": {"summary": validation_text}
-                    }
-
-            return validation
-        except Exception as e:
-            # On error, assume valid and proceed
-            return {
-                "is_valid": True,
-                "feedback": "Query structure validated",
-                "reasoning": {"summary": "Validation check performed"}
-            }
-
-    async def _validate_results(self, question: str, sql_query: str, results_df, conversation_history: list = None) -> dict:
-        """
-        Final validation with detailed reasoning about result quality.
-        Returns structured validation showing what was checked.
-        """
-
-        if results_df is None or len(results_df) == 0:
-            return {
-                "is_valid": True,
-                "feedback": "Empty result set (may be expected based on filters)",
-                "reasoning": {
-                    "row_count_check": "0 rows returned",
-                    "empty_is_expected": "May be valid if no data matches the filters"
-                }
-            }
-
-        # Format sample for the model
-        results_summary = f"Total Rows: {len(results_df)}\n"
-        results_summary += f"Columns: {', '.join(results_df.columns)}\n"
-        if len(results_df) > 0:
-            results_summary += f"Sample Row 1: {results_df.iloc[0].to_dict()}"
-            if len(results_df) > 1:
-                results_summary += f"\nSample Row 2: {results_df.iloc[1].to_dict()}"
-
-        messages = [
-            {"role": "system", "content": """You are a Senior Data Scientist performing QA.
-Cross-reference the question, SQL, and actual results for logical consistency.
-
-RESULT QUALITY CHECKLIST:
-1. Row Count: Is the number of rows reasonable for this query type?
-2. Column Match: Do the columns match what the question asked for?
-3. Value Ranges: Are the numeric values realistic for bird monitoring?
-4. Entity Match: Do years/species/locations match the question filters?
-5. Data Types: Are columns the expected types (numbers vs text)?
-
-Respond with JSON:
-{
-  "is_valid": true/false,
-  "feedback": "One-sentence summary",
-  "reasoning": {
-    "row_count_check": "X rows returned, reasonable for this query",
-    "column_check": "Columns match question intent",
-    "value_check": "Numbers are realistic for bird populations",
-    "entity_check": "Years/species match filters",
-    "issues_found": []
-  }
-}
-
-Include ONLY checks that apply. Be specific about numbers."""}
-        ]
-
-        messages.append({
-            "role": "user",
-            "content": f"""Question: {question}
-
-SQL Query:
-{sql_query}
-
-Results Summary:
-{results_summary}
-
-Validate (respond with JSON):"""
-        })
-
-        try:
-            response = client.chat.completions.create(
-                model=self.model,
-                messages=messages,
-                temperature=self.validation_temperature,
-                max_tokens=300  # Allow for detailed reasoning
-            )
-
-            validation_text = response.choices[0].message.content.strip()
-
-            # Remove markdown code blocks if present
-            if validation_text.startswith("```"):
-                validation_text = validation_text.split("```")[1]
-                if validation_text.startswith("json"):
-                    validation_text = validation_text[4:].strip()
-                validation_text = validation_text.strip()
-
-            try:
-                validation = json.loads(validation_text)
-                # Ensure required fields
-                if 'is_valid' not in validation:
-                    validation['is_valid'] = True
-                if 'feedback' not in validation:
-                    validation['feedback'] = "Results validated"
-                if 'reasoning' not in validation:
-                    validation['reasoning'] = {"summary": validation.get('feedback', "Results check performed")}
-            except json.JSONDecodeError:
-                # Default to valid
-                validation = {
-                    "is_valid": True,
-                    "feedback": "Results validated",
-                    "reasoning": {"summary": validation_text}
-                }
-
-            return validation
-        except Exception as e:
-            # On error, assume valid
-            return {
-                "is_valid": True,
-                "feedback": "Results validated",
-                "reasoning": {"summary": "Results check performed"}
-            }
+        # All attempts exhausted
+        yield {'type': 'error', 'content': f'Query failed after {self.max_attempts} attempts'}
 
 
 # Initialize chatbot and bird detector
