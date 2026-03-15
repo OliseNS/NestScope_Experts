@@ -24,6 +24,8 @@ import base64
 import httpx
 import yaml
 import logging
+import numpy as np
+from scipy.stats import gumbel_r
 from server.cv_tools.inference import BirdDetector, get_example_images
 from server.db_version import DatabaseVersionControl
 from server.db_change_tracker import ChangeTracker
@@ -4313,6 +4315,175 @@ async def get_risk_summary():
         return summary
     except Exception as e:
         logger.error(f"Error in get_risk_summary: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ============================================================================
+# RETURN PERIOD ANALYSIS HELPERS
+# ============================================================================
+
+async def _fetch_noaa_annual_maxima(station_id: str, n_years: int = 20) -> list:
+    """
+    Fetch yearly peak water levels from NOAA CO-OPS API.
+    Uses the high_low product (HH = higher-high tide marks) which supports
+    a full year per request — one request per year, all fired in parallel.
+    Returns a list of annual maximum water levels (meters, MHHW datum).
+    """
+    current_year = datetime.now().year
+    start_year = current_year - n_years
+    annual_maxima = []
+
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        tasks = []
+        for year in range(start_year, current_year):
+            url = (
+                f"https://api.tidesandcurrents.noaa.gov/api/prod/datagetter"
+                f"?product=high_low"
+                f"&application=NestScope"
+                f"&begin_date={year}0101"
+                f"&end_date={year}1231"
+                f"&datum=MHHW"
+                f"&station={station_id}"
+                f"&time_zone=lst_ldt"
+                f"&units=metric"
+                f"&format=json"
+            )
+            tasks.append(client.get(url))
+
+        responses = await asyncio.gather(*tasks, return_exceptions=True)
+
+    years = list(range(start_year, current_year))
+    for year, resp in zip(years, responses):
+        if isinstance(resp, Exception):
+            continue
+        try:
+            data = resp.json()
+            if "error" in data:
+                continue
+            # Only use HH (Higher High) marks for annual maxima
+            values = [
+                float(d["v"]) for d in data.get("data", [])
+                if d.get("v") is not None and d.get("ty", "") in ("HH", "H ")
+            ]
+            if values:
+                annual_maxima.append((year, max(values)))
+        except Exception:
+            continue
+
+    return annual_maxima
+
+
+def _gumbel_return_levels(annual_maxima_with_years: list) -> dict:
+    """
+    Fit Gumbel (Type I EVD) distribution to annual maxima.
+    Accepts list of (year, max_value) tuples.
+    Returns water levels for 5/10/20/50/100-year return periods,
+    last_exceeded year per period, and Gumbel CDF parameters.
+    """
+    if len(annual_maxima_with_years) < 5:
+        raise ValueError(f"Need >= 5 years of data, got {len(annual_maxima_with_years)}")
+
+    # Sort by year so sparkline is chronological
+    annual_maxima_with_years = sorted(annual_maxima_with_years, key=lambda x: x[0])
+    years  = [y for y, _ in annual_maxima_with_years]
+    values = [v for _, v in annual_maxima_with_years]
+
+    data = np.array(values)
+    loc, scale = gumbel_r.fit(data)
+
+    periods = {"5yr": 5, "10yr": 10, "20yr": 20, "50yr": 50, "100yr": 100}
+    levels = {}
+    last_exceeded = {}
+    for label, T in periods.items():
+        level = gumbel_r.ppf(1.0 - (1.0 / T), loc=loc, scale=scale)
+        levels[label] = round(float(level), 3)
+        # Most recent year where annual max exceeded this threshold
+        exceeded_years = [y for y, v in zip(years, values) if v >= float(level)]
+        last_exceeded[label] = max(exceeded_years) if exceeded_years else None
+
+    # Goodness-of-fit r²
+    n = len(data)
+    sorted_data = np.sort(data)
+    plotting_positions = [(i - 0.44) / (n + 0.12) for i in range(1, n + 1)]
+    theoretical = gumbel_r.ppf(plotting_positions, loc=loc, scale=scale)
+    r2 = round(float(np.corrcoef(sorted_data, theoretical)[0, 1] ** 2), 4)
+
+    return {
+        "return_levels": levels,
+        "last_exceeded": last_exceeded,
+        "fit": {
+            "distribution": "Gumbel (Type I EVD)",
+            "loc": round(float(loc), 4),
+            "scale": round(float(scale), 4),
+            "n_years": len(values),
+            "r_squared": r2,
+            "annual_maxima": [round(v, 3) for v in values],
+            "years": years,
+        }
+    }
+
+
+@app.get("/api/flood/return_periods/{station_id}")
+async def get_return_period_levels(station_id: str, n_years: int = 20):
+    """
+    Return period water levels for a NOAA tide gauge station.
+    Fits Gumbel distribution to 20 years of NOAA annual peak water levels.
+    Returns 5/10/20/50/100-year levels in meters above MHHW.
+    """
+    STATION_NAMES = {
+        # Texas
+        "8779770": "South Padre Island, TX",
+        "8775296": "Corpus Christi, TX",
+        "8774770": "Rockport, TX",
+        "8772447": "Freeport, TX",
+        "8771450": "Galveston Pier 21, TX",
+        "8770822": "Texas Point, Sabine Pass, TX",
+        # Louisiana
+        "8762075": "Port Fourchon, LA",
+        "8761724": "Grand Isle, LA",
+        "8761927": "New Canal, LA",
+        "8761305": "Shell Beach, LA",
+        "8764311": "Eugene Island, LA",
+        # Mississippi / Alabama
+        "8747766": "Waveland, MS",
+        "8741533": "Pascagoula, MS",
+        "8735180": "Dauphin Island, AL",
+        # Florida
+        "8729840": "Pensacola, FL",
+        "8729108": "Panama City, FL",
+        "8728690": "Apalachicola, FL",
+        "8727520": "Cedar Key, FL",
+        "8725110": "Naples, FL",
+        "8724580": "Key West, FL",
+    }
+
+    n_years = min(n_years, 30)
+
+    try:
+        annual_maxima = await _fetch_noaa_annual_maxima(station_id, n_years)
+
+        if len(annual_maxima) < 5:
+            raise HTTPException(
+                status_code=422,
+                detail=f"Only {len(annual_maxima)} years of data from NOAA for station {station_id}."
+            )
+
+        result = _gumbel_return_levels(annual_maxima)
+
+        return {
+            "station_id": station_id,
+            "station_name": STATION_NAMES.get(station_id, station_id),
+            "datum": "MHHW",
+            "units": "meters",
+            **result,
+        }
+
+    except HTTPException:
+        raise
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    except Exception as e:
+        logger.error(f"Return period calculation failed for {station_id}: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
