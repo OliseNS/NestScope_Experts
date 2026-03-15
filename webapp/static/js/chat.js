@@ -742,177 +742,423 @@ class NestChat {
             return;
         }
 
+        // Count figures and tables for proper numbering
+        let figureNum = 1;
+        let tableNum = 1;
+
+        const today = new Date();
+        const dateString = today.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+        const yearString = today.getFullYear();
+
         let html = `<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>NestChat Conversation - ${new Date().toLocaleDateString()}</title>
+    <title>NestChat Research Analysis - ${new Date().toLocaleDateString()}</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1"></script>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <style>
+        /* ============================================
+           RESEARCH ARTICLE STYLING
+           Professional publication-quality formatting
+           ============================================ */
+
         * {
             margin: 0;
             padding: 0;
             box-sizing: border-box;
         }
+
+        @page {
+            size: letter;
+            margin: 1in;
+        }
+
         body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
-            background: white;
+            font-family: 'Georgia', 'Palatino', 'Times New Roman', serif;
+            background: #ffffff;
             color: #1a1a1a;
-            line-height: 1.7;
-            padding: 40px 20px;
+            line-height: 1.8;
+            font-size: 12pt;
+            padding: 0;
+            margin: 0;
         }
-        .container {
-            max-width: 800px;
+
+        .document {
+            max-width: 8.5in;
             margin: 0 auto;
+            background: white;
+            padding: 1in;
+            min-height: 100vh;
         }
-        .header {
+
+        /* ===== TITLE PAGE ===== */
+        .title-page {
             text-align: center;
-            padding-bottom: 32px;
-            margin-bottom: 48px;
-            border-bottom: 1px solid #e0e0e0;
+            padding: 2in 0 1in 0;
+            margin-bottom: 1in;
+            border-bottom: 3px double #333;
+            page-break-after: always;
         }
-        .header h1 {
-            font-size: 2rem;
-            font-weight: 600;
-            margin-bottom: 8px;
+
+        .title-page h1 {
+            font-size: 20pt;
+            font-weight: bold;
+            margin-bottom: 0.5in;
             color: #1a1a1a;
-        }
-        .header .meta {
-            font-size: 0.9rem;
-            color: #666;
-        }
-        .message {
-            margin-bottom: 40px;
-        }
-        .message-author {
-            font-weight: 600;
-            font-size: 0.875rem;
-            color: #666;
+            line-height: 1.3;
             text-transform: uppercase;
-            letter-spacing: 0.5px;
-            margin-bottom: 8px;
+            letter-spacing: 1px;
         }
-        .message-content {
-            color: #1a1a1a;
-            font-size: 1rem;
+
+        .title-page .subtitle {
+            font-size: 14pt;
+            font-style: italic;
+            color: #555;
+            margin-bottom: 0.75in;
         }
-        .message-content p {
-            margin-bottom: 16px;
-        }
-        .message-content h1,
-        .message-content h2,
-        .message-content h3 {
-            color: #1a1a1a;
-            margin: 24px 0 16px 0;
+
+        .title-page .authors {
+            font-size: 11pt;
+            margin-bottom: 0.25in;
             font-weight: 600;
         }
-        .message-content h1 { font-size: 1.5rem; }
-        .message-content h2 { font-size: 1.25rem; }
-        .message-content h3 { font-size: 1.1rem; }
-        .message-content code {
+
+        .title-page .affiliation {
+            font-size: 10pt;
+            color: #666;
+            margin-bottom: 0.5in;
+            font-style: italic;
+        }
+
+        .title-page .date {
+            font-size: 11pt;
+            color: #333;
+            margin-top: 0.5in;
+        }
+
+        /* ===== ABSTRACT ===== */
+        .abstract {
+            margin: 1.5em 0 2em 0;
+            padding: 1.5em;
+            background: #f9f9f9;
+            border-left: 4px solid #7BABAE;
+        }
+
+        .abstract-title {
+            font-size: 12pt;
+            font-weight: bold;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 0.75em;
+            color: #1a1a1a;
+        }
+
+        .abstract-content {
+            font-size: 10.5pt;
+            text-align: justify;
+            line-height: 1.6;
+        }
+
+        /* ===== SECTIONS ===== */
+        .section {
+            margin: 2em 0;
+        }
+
+        .section-number {
+            font-weight: bold;
+            color: #7BABAE;
+        }
+
+        h2 {
+            font-size: 14pt;
+            font-weight: bold;
+            margin: 1.5em 0 0.75em 0;
+            color: #1a1a1a;
+            border-bottom: 2px solid #e0e0e0;
+            padding-bottom: 0.25em;
+        }
+
+        h3 {
+            font-size: 12pt;
+            font-weight: bold;
+            margin: 1.25em 0 0.5em 0;
+            color: #333;
+        }
+
+        /* ===== QUESTION/ANSWER PAIRS ===== */
+        .qa-pair {
+            margin: 2em 0;
+            page-break-inside: avoid;
+        }
+
+        .question {
+            font-weight: bold;
+            font-size: 11pt;
+            color: #1a1a1a;
+            margin-bottom: 0.75em;
+            padding: 0.75em 1em;
+            background: #f5f5f5;
+            border-left: 4px solid #7BABAE;
+            font-style: italic;
+        }
+
+        .question::before {
+            content: "QUERY: ";
+            font-weight: bold;
+            color: #7BABAE;
+            font-style: normal;
+            letter-spacing: 0.5px;
+        }
+
+        .answer {
+            margin-left: 1em;
+            text-align: justify;
+            font-size: 11pt;
+            line-height: 1.7;
+        }
+
+        .answer p {
+            margin-bottom: 1em;
+        }
+
+        .answer ul, .answer ol {
+            margin: 1em 0 1em 2em;
+        }
+
+        .answer li {
+            margin-bottom: 0.5em;
+        }
+
+        .answer code {
+            font-family: 'Courier New', monospace;
             background: #f5f5f5;
             padding: 2px 6px;
             border-radius: 3px;
-            font-family: 'Monaco', 'Consolas', monospace;
-            font-size: 0.9em;
+            font-size: 10pt;
         }
-        .message-content ul,
-        .message-content ol {
-            margin-left: 24px;
-            margin-bottom: 16px;
+
+        .answer strong {
+            font-weight: 600;
+            color: #1a1a1a;
         }
-        .message-content li {
-            margin-bottom: 8px;
+
+        /* ===== FIGURES & TABLES ===== */
+        .figure-container,
+        .table-container {
+            margin: 2em 0;
+            page-break-inside: avoid;
+            text-align: center;
         }
+
+        .figure-caption,
+        .table-caption {
+            font-size: 10pt;
+            margin-top: 0.75em;
+            text-align: center;
+            color: #333;
+        }
+
+        .figure-caption strong,
+        .table-caption strong {
+            font-weight: bold;
+            color: #1a1a1a;
+        }
+
         .data-table {
             width: 100%;
-            margin: 24px 0;
+            margin: 1em auto;
             border-collapse: collapse;
-            font-size: 0.9rem;
+            font-size: 9pt;
+            max-width: 100%;
+            background: white;
         }
+
         .data-table th {
-            background: #f5f5f5;
-            padding: 12px;
+            background: #f8f8f8;
+            padding: 10px 12px;
             text-align: left;
             font-weight: 600;
-            border-bottom: 2px solid #ddd;
+            border-top: 2px solid #333;
+            border-bottom: 1px solid #333;
+            color: #1a1a1a;
         }
+
         .data-table td {
-            padding: 10px 12px;
-            border-bottom: 1px solid #eee;
+            padding: 8px 12px;
+            border-bottom: 1px solid #ddd;
+            color: #333;
         }
-        .artifact-content {
-            margin: 24px 0;
+
+        .data-table tbody tr:hover {
+            background: #f9f9f9;
         }
-        .footer {
+
+        .artifact-iframe {
+            width: 100%;
+            border: 1px solid #ddd;
+            margin: 1em 0;
+            background: white;
+        }
+
+        /* ===== FOOTER ===== */
+        .document-footer {
+            margin-top: 3in;
+            padding-top: 1em;
+            border-top: 2px solid #333;
             text-align: center;
-            padding-top: 40px;
-            margin-top: 60px;
-            border-top: 1px solid #e0e0e0;
+            font-size: 9pt;
             color: #666;
-            font-size: 0.875rem;
+        }
+
+        .document-footer .logo {
+            font-weight: bold;
+            font-size: 11pt;
+            color: #7BABAE;
+            margin-bottom: 0.5em;
+        }
+
+        /* ===== PRINT STYLES ===== */
+        @media print {
+            body {
+                font-size: 11pt;
+            }
+
+            .document {
+                padding: 0;
+                max-width: 100%;
+            }
+
+            .qa-pair,
+            .figure-container,
+            .table-container {
+                page-break-inside: avoid;
+            }
+
+            h2 {
+                page-break-after: avoid;
+            }
         }
     </style>
 </head>
 <body>
-    <div class="container">
-        <div class="header">
-            <h1>NestChat Conversation</h1>
-            <div class="meta">${new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}</div>
+    <div class="document">
+
+        <!-- TITLE PAGE -->
+        <div class="title-page">
+            <h1>NestChat Research Analysis</h1>
+            <div class="subtitle">AI-Powered Avian Intelligence Report</div>
+            <div class="authors">Generated by NestScope Intelligence System</div>
+            <div class="affiliation">Gulf Coast Avian Monitoring Platform<br>Data Period: 2010-2021</div>
+            <div class="date">${dateString}</div>
         </div>
+
+        <!-- ABSTRACT -->
+        <div class="abstract">
+            <div class="abstract-title">Abstract</div>
+            <div class="abstract-content">
+                This report presents an AI-assisted analysis of Gulf Coast avian data spanning 2010-2021,
+                covering 592 colonial waterbird nesting sites across five states (Texas, Louisiana, Mississippi,
+                Alabama, and Florida). The analysis was conducted using NestChat, an intelligent query system
+                powered by natural language processing and automated SQL generation. This document contains
+                ${messages.length / 2} query-response pairs, including data visualizations and statistical summaries
+                generated through conversational interaction with the NestScope database.
+            </div>
+        </div>
+
+        <!-- MAIN CONTENT -->
+        <h2><span class="section-number">1.</span> Analysis & Results</h2>
         `;
 
-        messages.forEach(msg => {
+        // Generate Q&A pairs
+        let questionNum = 1;
+        for (let i = 0; i < messages.length; i++) {
+            const msg = messages[i];
             const isUser = msg.classList.contains('user');
-            const author = isUser ? 'You' : 'NestChat';
-            const contentDiv = msg.querySelector('.message-content');
-            const content = contentDiv ? contentDiv.innerHTML : '';
 
-            html += `
-            <div class="message">
-                <div class="message-author">${author}</div>
-                <div class="message-content">
-                    ${content}
+            if (isUser) {
+                const contentDiv = msg.querySelector('.message-content');
+                const question = contentDiv ? contentDiv.textContent.trim() : '';
+
+                html += `
+        <div class="qa-pair">
+            <div class="question">${this.escapeHtml(question)}</div>`;
+
+                // Get the next message (assistant response)
+                if (i + 1 < messages.length) {
+                    i++; // Move to assistant message
+                    const assistantMsg = messages[i];
+                    const answerDiv = assistantMsg.querySelector('.message-content');
+                    const answer = answerDiv ? answerDiv.innerHTML : '';
+
+                    html += `
+            <div class="answer">
+                ${answer}
+            </div>`;
+
+                    // Include data tables with captions
+                    const tables = assistantMsg.querySelectorAll('.data-table');
+                    tables.forEach((table) => {
+                        html += `
+            <div class="table-container">
+                ${table.outerHTML}
+                <div class="table-caption">
+                    <strong>Table ${tableNum}.</strong> Query results showing data extracted from the NestScope database.
                 </div>
-            `;
+            </div>`;
+                        tableNum++;
+                    });
 
-            // Include data tables
-            const tables = msg.querySelectorAll('.data-table');
-            tables.forEach((table) => {
-                html += `<div class="artifact-content">${table.outerHTML}</div>`;
-            });
+                    // Include artifacts (charts) with captions
+                    const artifacts = assistantMsg.querySelectorAll('.artifact-iframe');
+                    artifacts.forEach((iframe) => {
+                        const artifactHTML = iframe.srcdoc;
+                        html += `
+            <div class="figure-container">
+                <div style="max-width: 100%; margin: 0 auto;">
+                    ${artifactHTML}
+                </div>
+                <div class="figure-caption">
+                    <strong>Figure ${figureNum}.</strong> Data visualization generated from query results.
+                </div>
+            </div>`;
+                        figureNum++;
+                    });
+                }
 
-            // Include artifacts (iframes)
-            const artifacts = msg.querySelectorAll('.artifact-iframe');
-            artifacts.forEach((iframe) => {
-                const artifactHTML = iframe.srcdoc;
-                html += `<div class="artifact-content">${artifactHTML}</div>`;
-            });
+                html += `
+        </div>`;
+                questionNum++;
+            }
+        }
 
-            html += `</div>`;
-        });
-
+        // FOOTER
         html += `
-        <div class="footer">
-            NestScope - AI-Powered Gulf Coast Avian Intelligence
+        <div class="document-footer">
+            <div class="logo">NestScope</div>
+            <div>AI-Powered Gulf Coast Avian Intelligence Platform</div>
+            <div>Report Generated: ${dateString}</div>
+            <div style="margin-top: 1em; font-size: 8pt; color: #999;">
+                This report was automatically generated by NestChat using Claude AI and the NestScope database.<br>
+                For more information, visit the NestScope project documentation.
+            </div>
         </div>
+
     </div>
 </body>
-</html>
-        `;
+</html>`;
 
         const blob = new Blob([html], { type: 'text/html' });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = `nestchat-${new Date().toISOString().split('T')[0]}.html`;
+        a.download = `nestchat-research-${new Date().toISOString().split('T')[0]}.html`;
         a.click();
         URL.revokeObjectURL(url);
 
-        showToast('Conversation downloaded! Open the HTML file in any browser.', 'success');
+        showToast('Research report downloaded! Open in browser or print to PDF.', 'success');
     }
 
     setInputState(enabled) {
