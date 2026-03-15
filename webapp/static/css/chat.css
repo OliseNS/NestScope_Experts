@@ -76,7 +76,7 @@
     gap: 0.875rem;
     padding: 1rem 1.25rem;
     background: var(--surface-base);
-    border: 1px solid var(--surface-border);
+    border: 2px solid rgba(123, 171, 174, 0.3);
     border-radius: 12px;
     color: var(--text-primary);
     font-size: 0.95rem;
@@ -91,6 +91,7 @@
     background: var(--surface-hover);
     border-color: #7BABAE;
     transform: translateX(4px);
+    box-shadow: 0 4px 12px rgba(123, 171, 174, 0.15);
 }
 
 .example-prompt svg {
@@ -713,22 +714,28 @@
 .artifact-container {
     margin: 1.25rem 0;
     border: 1px solid var(--surface-border);
-    border-radius: 10px;
+    border-radius: 12px;
     overflow: hidden;
     background: var(--surface-base);
     position: relative;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
-    animation: artifactFadeIn 0.4s ease-out;
+    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
+    animation: artifactFadeIn 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+    transition: box-shadow 0.3s ease, transform 0.3s ease;
+}
+
+.artifact-container:hover {
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+    transform: translateY(-2px);
 }
 
 @keyframes artifactFadeIn {
     from {
         opacity: 0;
-        transform: translateY(10px);
+        transform: translateY(15px) scale(0.98);
     }
     to {
         opacity: 1;
-        transform: translateY(0);
+        transform: translateY(0) scale(1);
     }
 }
 
@@ -737,7 +744,117 @@
     min-height: 400px;
     border: none;
     display: block;
-    background: white;
+    background: var(--bg-primary);
+    transition: background 0.3s ease;
+}
+
+/* Artifact skeleton loading state */
+.artifact-container.loading {
+    min-height: 300px;
+    padding: 24px;
+}
+
+.artifact-skeleton {
+    animation: skeletonPulse 1.5s ease-in-out infinite;
+}
+
+.skeleton-header {
+    width: 40%;
+    height: 20px;
+    background: var(--surface-border);
+    border-radius: 6px;
+    margin-bottom: 20px;
+}
+
+.skeleton-body {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.skeleton-bar {
+    height: 24px;
+    background: var(--surface-border);
+    border-radius: 6px;
+}
+
+.skeleton-bar:nth-child(1) { width: 80%; }
+.skeleton-bar:nth-child(2) { width: 95%; }
+.skeleton-bar:nth-child(3) { width: 70%; }
+.skeleton-bar:nth-child(4) { width: 85%; }
+
+@keyframes skeletonPulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+}
+
+/* Artifact header */
+.artifact-header {
+    display: none;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 16px;
+    background: var(--bg-secondary);
+    border-bottom: 1px solid var(--surface-border);
+}
+
+.artifact-title {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.artifact-fullscreen-btn {
+    padding: 6px 8px;
+    background: transparent;
+    color: var(--text-secondary);
+    border: 1px solid var(--surface-border);
+    border-radius: 6px;
+    font-size: 12px;
+    cursor: pointer;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.artifact-fullscreen-btn:hover {
+    background: var(--surface-hover);
+    color: var(--text-primary);
+    border-color: var(--brand-primary);
+}
+
+.artifact-fullscreen-btn svg {
+    width: 16px;
+    height: 16px;
+}
+
+/* Fullscreen mode */
+.artifact-container.fullscreen {
+    position: fixed;
+    top: 60px;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 1000;
+    margin: 0;
+    border-radius: 0;
+    max-width: 100%;
+    animation: none;
+}
+
+.artifact-container.fullscreen .artifact-iframe {
+    height: calc(100vh - 120px) !important;
+}
+
+.artifact-container.fullscreen .artifact-header {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    background: var(--bg-primary);
+    border-bottom: 2px solid var(--surface-border);
 }
 
 /* Custom Leaflet popup styling */
@@ -780,20 +897,27 @@
     max-height: 200px;
     padding: 0.75rem 1rem;
     background: var(--surface-base);
-    border: 1px solid var(--surface-border);
+    border: 2px solid #7BABAE;
     border-radius: 12px;
     color: var(--text-primary);
     font-size: 0.95rem;
     font-family: inherit;
     resize: none;
-    transition: border-color 0.15s ease;
+    transition: all 0.2s ease;
     line-height: 1.5;
+    opacity: 0.6;
+}
+
+.chat-input:hover {
+    opacity: 0.8;
+    border-color: #6AA6B7;
 }
 
 .chat-input:focus {
     outline: none;
+    opacity: 1;
     border-color: #7BABAE;
-    box-shadow: 0 0 0 3px rgba(123, 171, 174, 0.1);
+    box-shadow: 0 0 0 3px rgba(123, 171, 174, 0.15);
 }
 
 .chat-input::placeholder {

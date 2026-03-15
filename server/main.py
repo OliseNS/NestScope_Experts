@@ -768,6 +768,7 @@ class SQLChatbot:
         self.system_prompt = self._load_system_prompt()
         self.sql_prompt = self._load_sql_prompt()
         self.metadata = self._load_metadata()
+        self.full_metadata = self._load_full_metadata()
 
     def _load_system_prompt(self):
         """Load the answer generation prompt from prompt.txt"""
@@ -799,6 +800,8 @@ class SQLChatbot:
         # Priority: essential > extended > fallback
         for path, tier in [(essential_path, "essential"), (extended_path, "extended"), (fallback_path, "fallback")]:
             try:
+                if not os.path.exists(path):
+                    continue
                 with open(path, 'r', encoding='utf-8') as f:
                     metadata = json.load(f)
 
@@ -808,15 +811,67 @@ class SQLChatbot:
 
                 print(f"✓ Metadata loaded: {tier.upper()} tier from {path.name} (~{token_estimate:,} tokens)")
                 return metadata
-            except FileNotFoundError:
+            except (FileNotFoundError, json.JSONDecodeError):
                 continue
 
         print(f"⚠ Warning: No metadata found. Run: python scripts/compress_metadata.py")
         return None
 
+    def _load_full_metadata(self):
+        """Load full database metadata for admin tools"""
+        full_path = SERVER_DIR.parent / "data" / "database_metadata_enhanced.json"
+        try:
+            if os.path.exists(full_path):
+                with open(full_path, 'r', encoding='utf-8') as f:
+                    return json.load(f)
+        except Exception as e:
+            print(f"⚠️ Failed to load full metadata: {e}")
+        return None
+
+    def _format_nestdb_metadata_context(self):
+        """Format metadata specifically for NestDB admin interface using full schema"""
+        metadata = self.full_metadata or self.metadata
+        if not metadata:
+            return "No database metadata available. You are operating on an unknown SQLite database."
+
+        context = "# DATABASE SCHEMA (FULL ADMIN ACCESS)\n\n"
+        context += "The following tables and columns exist in the database. Use this information to generate accurate queries.\n\n"
+
+        tables = metadata.get('tables', {})
+        for table_name, table_info in tables.items():
+            context += f"## Table: {table_name}\n"
+            rows = table_info.get('row_count', 'unknown')
+            context += f"Estimated Rows: {rows}\n"
+
+            # Format columns with types and constraints
+            columns = table_info.get('columns', [])
+            if columns:
+                context += "Columns:\n"
+                for col in columns:
+                    if isinstance(col, dict):
+                        name = col.get('name')
+                        type_ = col.get('type', 'TEXT')
+                        pk = " (PRIMARY KEY)" if col.get('pk') else ""
+                        notnull = " (NOT NULL)" if col.get('notnull') else ""
+                        context += f"  - {name} {type_}{pk}{notnull}\n"
+                    else:
+                        context += f"  - {col}\n"
+            
+            # Add samples if available to show data format
+            samples = table_info.get('samples', []) or table_info.get('sample_data', [])
+            if samples:
+                context += "Sample Data (first 2 rows):\n"
+                for i, sample in enumerate(samples[:2]):
+                    context += f"  Row {i+1}: {json.dumps(sample)}\n"
+            
+            context += "\n"
+
+        return context
+
     def refresh_metadata(self):
         """Reload metadata from disk"""
         self.metadata = self._load_metadata()
+        self.full_metadata = self._load_full_metadata()
         self.schema = None # Force schema regeneration
         print("🔄 Chatbot metadata context refreshed")
 
@@ -2542,51 +2597,45 @@ async def nestdb_generate_query(request: QuestionRequest):
         if request.model:
             chatbot.model = request.model
 
-        # Build messages for SQL generation (similar to generate_sql_query but without coordinate requirements)
+        # Build focused system prompt for NestDB (replaces the conversational prompt.txt)
+        nestdb_system_prompt = """You are the NestDB SQL Expert. Your role is to generate precise SQLite queries for database administrators.
+
+CORE RULES:
+1. Return ONLY the SQL query/queries - no explanations, no markdown, no comments.
+2. You have FULL permissions: SELECT, INSERT, UPDATE, DELETE, CREATE, ALTER, DROP, etc.
+3. This is an admin interface - generate the most efficient and correct SQL based on the schema provided.
+4. Use double quotes for all table and column names to avoid conflicts with reserved words.
+5. For SQLite, use proper syntax (e.g., AUTOINCREMENT, not AUTO_INCREMENT).
+6. **MULTI-STATEMENT SUPPORT**: You can generate multiple SQL statements separated by semicolons.
+7. If asked to "create a table and add data", you MUST generate both the CREATE TABLE and the INSERT statements.
+8. If the user refers to a table that doesn't exist, and the intent is to create it, generate the CREATE TABLE statement first.
+"""
+
         messages = [
-            {"role": "system", "content": chatbot.system_prompt}
+            {"role": "system", "content": nestdb_system_prompt}
         ]
 
-        # Inject metadata as context (only once at the start)
-        if chatbot.metadata and not request.conversation_history:
-            metadata_context = chatbot._format_metadata_context()
-            messages.append({"role": "system", "content": metadata_context})
+        # Inject FULL metadata context specifically for NestDB
+        metadata_context = chatbot._format_nestdb_metadata_context()
+        messages.append({"role": "system", "content": metadata_context})
 
         # Add conversation history (last 3 exchanges)
         if request.conversation_history:
             for msg in request.conversation_history[-6:]:
                 messages.append(msg)
 
-        # Add the current question with NestDB-specific instructions
+        # Add the current question
         messages.append({
             "role": "user",
-            "content": f"""Question: {request.question}
-
-INSTRUCTIONS FOR NESTDB ADMIN INTERFACE:
-1. Return ONLY the SQL query/queries - no explanations, no markdown, no comments
-2. You can generate ANY valid SQL operation: SELECT, INSERT, UPDATE, DELETE, CREATE, ALTER, DROP, etc.
-3. This is an admin interface, so write operations are allowed
-4. Use exact column names from the schema (case-sensitive)
-5. For SQLite, use proper syntax (e.g., AUTOINCREMENT, not AUTO_INCREMENT)
-6. **IMPORTANT**: You can generate MULTIPLE SQL statements separated by semicolons
-   - If the user asks to "create a table and insert data", generate BOTH statements:
-     CREATE TABLE ...; INSERT INTO ...;
-   - Always complete multi-step operations in a single response
-   - Each statement should end with a semicolon
-7. Be smart and helpful - understand the user's intent fully
-   - "Create a table and add data" = CREATE TABLE + INSERT statements
-   - "Set up a test table" = CREATE TABLE + INSERT sample data
-   - Think through what the user actually needs
-
-Generate the complete SQL query/queries now:"""
+            "content": f"Question: {request.question}\n\nGenerate SQL query/queries:"
         })
 
         try:
             response = client.chat.completions.create(
                 model=chatbot.model,
                 messages=messages,
-                temperature=config['model']['sql_temperature'],
-                max_tokens=config['model']['sql_max_tokens']
+                temperature=0.1,  # Low temperature for precision
+                max_tokens=config['model'].get('sql_max_tokens', 2000)
             )
 
             sql_query = response.choices[0].message.content.strip()
@@ -2597,22 +2646,18 @@ Generate the complete SQL query/queries now:"""
             elif sql_query.startswith("```"):
                 sql_query = sql_query.split("```")[1].split("```")[0].strip()
 
-            # Remove any remaining explanatory text before SQL keywords
-            sql_keywords = ['SELECT', 'WITH', 'INSERT', 'UPDATE', 'DELETE', 'CREATE', 'ALTER', 'DROP', 'PRAGMA']
-            for keyword in sql_keywords:
-                if keyword in sql_query.upper():
-                    idx = sql_query.upper().find(keyword)
-                    sql_query = sql_query[idx:].strip()
-                    break
+            # Remove any leading/trailing whitespace
+            sql_query = sql_query.strip()
 
             # Detect if this is a write operation
-            query_upper = sql_query.strip().upper()
+            query_upper = sql_query.upper()
             write_keywords = ['INSERT', 'UPDATE', 'DELETE', 'DROP', 'CREATE', 'ALTER', 'TRUNCATE', 'REPLACE']
             is_write_operation = any(kw in query_upper for kw in write_keywords)
 
             return {
                 "sql_query": sql_query,
-                "is_write_operation": is_write_operation
+                "is_write_operation": is_write_operation,
+                "model_used": chatbot.model
             }
 
         except Exception as e:

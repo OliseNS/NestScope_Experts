@@ -8,6 +8,7 @@ class NestChat {
         this.messages = [];
         this.currentEventSource = null;
         this.conversationHistory = [];
+        this.artifactIframes = [];
 
         this.chatMessages = document.getElementById('chat-messages');
         this.chatInput = document.getElementById('chat-input');
@@ -17,6 +18,11 @@ class NestChat {
 
         this.setupEventListeners();
         this.autoResizeTextarea();
+
+        // Listen for theme changes to update artifacts
+        window.addEventListener('themechange', () => {
+            this.updateArtifactThemes();
+        });
     }
 
     setupEventListeners() {
@@ -430,23 +436,61 @@ class NestChat {
 
     renderArtifact(messageDiv, artifact) {
         /**
-         * Render an HTML artifact in an isolated iframe.
+         * Render an HTML artifact in an isolated iframe with theme-aware styling.
          */
         const artifactContainer = document.createElement('div');
-        artifactContainer.className = 'artifact-container';
+        artifactContainer.className = 'artifact-container loading';
         artifactContainer.id = artifact.id;
+
+        // Create skeleton loader
+        const skeleton = document.createElement('div');
+        skeleton.className = 'artifact-skeleton';
+        skeleton.innerHTML = `
+            <div class="skeleton-header"></div>
+            <div class="skeleton-body">
+                <div class="skeleton-bar"></div>
+                <div class="skeleton-bar"></div>
+                <div class="skeleton-bar"></div>
+                <div class="skeleton-bar"></div>
+            </div>
+        `;
+        artifactContainer.appendChild(skeleton);
+
+        // Create header with fullscreen button
+        const header = document.createElement('div');
+        header.className = 'artifact-header';
+        header.style.display = 'none'; // Hidden until loaded
+        header.innerHTML = `
+            <div class="artifact-title">Visualization</div>
+            <button class="artifact-fullscreen-btn" title="Fullscreen">
+                <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"/>
+                </svg>
+            </button>
+        `;
 
         // Create iframe for isolated rendering
         const iframe = document.createElement('iframe');
         iframe.className = 'artifact-iframe';
         iframe.sandbox = 'allow-scripts allow-same-origin';
-        iframe.srcdoc = artifact.html;
+        iframe.style.display = 'none'; // Hidden until loaded
 
+        // Inject theme-aware styles into artifact HTML
+        const themedHTML = this.injectThemeStyles(artifact.html);
+        iframe.srcdoc = themedHTML;
+
+        artifactContainer.appendChild(header);
         artifactContainer.appendChild(iframe);
         messageDiv.appendChild(artifactContainer);
 
         // Auto-adjust iframe height after load
         iframe.addEventListener('load', () => {
+            // Remove loading state
+            artifactContainer.classList.remove('loading');
+            skeleton.remove();
+            header.style.display = 'flex';
+            iframe.style.display = 'block';
+
             try {
                 const iframeDoc = iframe.contentDocument || iframe.contentWindow.document;
                 const height = iframeDoc.body.scrollHeight;
@@ -454,6 +498,139 @@ class NestChat {
             } catch (e) {
                 // Cross-origin restrictions - use default height
                 iframe.style.height = '500px';
+            }
+        });
+
+        // Add fullscreen functionality
+        const fullscreenBtn = header.querySelector('.artifact-fullscreen-btn');
+        fullscreenBtn.addEventListener('click', () => {
+            this.toggleArtifactFullscreen(artifactContainer, iframe);
+        });
+
+        // Store iframe reference for theme updates
+        if (!this.artifactIframes) this.artifactIframes = [];
+        this.artifactIframes.push(iframe);
+    }
+
+    toggleArtifactFullscreen(container, iframe) {
+        if (container.classList.contains('fullscreen')) {
+            // Exit fullscreen
+            container.classList.remove('fullscreen');
+            iframe.style.height = Math.min(iframe.contentDocument.body.scrollHeight + 20, 600) + 'px';
+
+            // Update button icon
+            const btn = container.querySelector('.artifact-fullscreen-btn');
+            btn.innerHTML = `
+                <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"/>
+                </svg>
+            `;
+        } else {
+            // Enter fullscreen
+            container.classList.add('fullscreen');
+            iframe.style.height = 'calc(100vh - 120px)';
+
+            // Update button icon to close
+            const btn = container.querySelector('.artifact-fullscreen-btn');
+            btn.innerHTML = `
+                <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                </svg>
+            `;
+        }
+    }
+
+    injectThemeStyles(html) {
+        /**
+         * Inject theme CSS variables into artifact HTML so colors match UI theme.
+         */
+        const theme = document.documentElement.getAttribute('data-theme') || 'light';
+
+        // Get current theme colors
+        const styles = getComputedStyle(document.documentElement);
+        const bgPrimary = styles.getPropertyValue('--bg-primary').trim();
+        const bgSecondary = styles.getPropertyValue('--bg-secondary').trim();
+        const textPrimary = styles.getPropertyValue('--text-primary').trim();
+        const textSecondary = styles.getPropertyValue('--text-secondary').trim();
+        const brandPrimary = styles.getPropertyValue('--brand-primary').trim();
+        const accentCoastal = styles.getPropertyValue('--accent-coastal').trim();
+        const accentOcean = styles.getPropertyValue('--accent-ocean').trim();
+        const surfaceBase = styles.getPropertyValue('--surface-base').trim();
+        const surfaceBorder = styles.getPropertyValue('--surface-border').trim();
+
+        // Theme-aware style injection
+        const themeStyles = `
+            <style>
+                :root {
+                    --theme-bg-primary: ${bgPrimary};
+                    --theme-bg-secondary: ${bgSecondary};
+                    --theme-text-primary: ${textPrimary};
+                    --theme-text-secondary: ${textSecondary};
+                    --theme-brand: ${brandPrimary};
+                    --theme-coastal: ${accentCoastal};
+                    --theme-ocean: ${accentOcean};
+                    --theme-surface: ${surfaceBase};
+                    --theme-border: ${surfaceBorder};
+                }
+                body {
+                    background: var(--theme-bg-primary, #fdfbf7) !important;
+                    color: var(--theme-text-primary, #2a2520) !important;
+                }
+                h1, h2, h3, h4, h5, h6 {
+                    color: var(--theme-text-primary, #2a2520) !important;
+                }
+                .card, .dashboard-card {
+                    background: var(--theme-surface, #ffffff) !important;
+                    border-color: var(--theme-border, rgba(101, 87, 68, 0.15)) !important;
+                    color: var(--theme-text-primary, #2a2520) !important;
+                }
+                .metric-value {
+                    color: var(--theme-text-primary, #2a2520) !important;
+                }
+                .metric-label {
+                    color: var(--theme-text-secondary, #5c5247) !important;
+                }
+            </style>
+        `;
+
+        // Insert theme styles after <head> tag
+        if (html.includes('<head>')) {
+            return html.replace('<head>', '<head>' + themeStyles);
+        } else if (html.includes('<html>')) {
+            return html.replace('<html>', '<html><head>' + themeStyles + '</head>');
+        } else {
+            // No html/head tags - wrap entire content
+            return `<!DOCTYPE html><html><head>${themeStyles}</head><body>${html}</body></html>`;
+        }
+    }
+
+    updateArtifactThemes() {
+        /**
+         * Update all artifact iframes when theme changes.
+         */
+        if (!this.artifactIframes) return;
+
+        this.artifactIframes.forEach(iframe => {
+            try {
+                const iframeDoc = iframe.contentDocument || iframe.contentWindow.document;
+                const theme = document.documentElement.getAttribute('data-theme') || 'light';
+
+                // Get current theme colors
+                const styles = getComputedStyle(document.documentElement);
+
+                // Update CSS variables in iframe
+                const root = iframeDoc.documentElement;
+                root.style.setProperty('--theme-bg-primary', styles.getPropertyValue('--bg-primary'));
+                root.style.setProperty('--theme-bg-secondary', styles.getPropertyValue('--bg-secondary'));
+                root.style.setProperty('--theme-text-primary', styles.getPropertyValue('--text-primary'));
+                root.style.setProperty('--theme-text-secondary', styles.getPropertyValue('--text-secondary'));
+                root.style.setProperty('--theme-brand', styles.getPropertyValue('--brand-primary'));
+                root.style.setProperty('--theme-coastal', styles.getPropertyValue('--accent-coastal'));
+                root.style.setProperty('--theme-ocean', styles.getPropertyValue('--accent-ocean'));
+                root.style.setProperty('--theme-surface', styles.getPropertyValue('--surface-base'));
+                root.style.setProperty('--theme-border', styles.getPropertyValue('--surface-border'));
+            } catch (e) {
+                console.warn('Could not update artifact theme:', e);
             }
         });
     }
@@ -596,8 +773,9 @@ class NestChat {
 
                 // Add coordinates at the bottom
                 popupHTML += `
-                    <div style="margin-top: 8px; padding-top: 8px; border-top: 1px solid #ddd; font-size: 0.75em; color: #888;">
-                        📍 ${lat.toFixed(4)}, ${lon.toFixed(4)}
+                    <div style="margin-top: 8px; padding-top: 8px; border-top: 1px solid #ddd; font-size: 0.75em; color: #888; display: flex; align-items: center; gap: 4px;">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="12" r="3"/></svg>
+                        ${lat.toFixed(4)}, ${lon.toFixed(4)}
                     </div>
                 `;
 

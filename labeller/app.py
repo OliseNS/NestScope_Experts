@@ -2129,6 +2129,55 @@ def save_annotations():
                     line = f"{class_id} {x_center} {y_center} {width} {height}"
                 f.write(line + '\n')
 
+        # Update data.yaml with new species (if any)
+        species_in_boxes = set()
+        for box in boxes:
+            species = box.get('species')
+            if species:  # Only add non-empty species
+                species_in_boxes.add(species)
+
+        if species_in_boxes:
+            # Load current data.yaml
+            data_yaml = load_data_yaml(project_folder)
+            if not data_yaml:
+                # Create default data.yaml if it doesn't exist
+                data_yaml = {
+                    'path': '.',
+                    'train': 'images',
+                    'val': 'images',
+                    'test': 'images',
+                    'names': {0: 'Bird'}
+                }
+
+            # Get existing class names (convert keys to int if they're strings)
+            names = data_yaml.get('names', {})
+            # Normalize to {int: str} format
+            names_normalized = {}
+            for k, v in names.items():
+                names_normalized[int(k)] = v
+
+            # Find species codes that exist in names values
+            existing_species = set(names_normalized.values())
+
+            # Find new species to add
+            new_species = species_in_boxes - existing_species
+
+            if new_species:
+                # Get next available class ID
+                max_class_id = max(names_normalized.keys()) if names_normalized else -1
+                next_class_id = max_class_id + 1
+
+                # Add new species
+                for species_code in sorted(new_species):  # Sort for consistency
+                    names_normalized[next_class_id] = species_code
+                    print(f"Added new species to data.yaml: {next_class_id} -> {species_code}")
+                    next_class_id += 1
+
+                # Update data.yaml
+                data_yaml['names'] = names_normalized
+                save_data_yaml(project_folder, data_yaml)
+                print(f"Updated data.yaml with {len(new_species)} new species")
+
         # Update user progress
         state = load_project_state(project_folder)
 
@@ -2161,6 +2210,39 @@ def save_annotations():
         invalidate_project_cache(project_folder)
 
         return jsonify({'success': True})
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/get_project_classes', methods=['POST'])
+@api_annotator_required
+def get_project_classes():
+    """Get updated class list from project's data.yaml"""
+    try:
+        data = request.json
+        project_folder = data.get('project_id')
+
+        if not project_folder:
+            return jsonify({'error': 'Missing project_id'}), 400
+
+        # Load data.yaml
+        data_yaml = load_data_yaml(project_folder)
+        if not data_yaml:
+            return jsonify({'classes': []})
+
+        # Get class names
+        names = data_yaml.get('names', {})
+
+        # Convert to list format expected by frontend
+        class_list = []
+        for class_id, class_name in names.items():
+            class_list.append({
+                'id': int(class_id),
+                'code': class_name,
+                'name': class_name  # Use code as name for now
+            })
+
+        return jsonify({'classes': class_list})
 
     except Exception as e:
         return jsonify({'error': str(e)}), 500
@@ -2478,13 +2560,10 @@ def get_wikipedia_images_func(species_name, max_images=5, offset=0):
 @api_annotator_required
 def sam_segment():
     """
-    Smart bird detection using YOLO detector (much faster than SAM)
+    Segment birds using MobileSAM with point prompts
 
-    Instead of using MobileSAM, we use the existing ONNX YOLO detector
-    to find birds near the clicked location. This is:
-    - 10x faster (ONNX vs PyTorch)
-    - More accurate for birds
-    - Already uses GPU if available
+    Uses the MobileSAM model (models/mobile_sam.pt) to generate precise
+    bounding boxes from user click points.
     """
     try:
         data = request.json
@@ -2502,102 +2581,110 @@ def sam_segment():
         if not os.path.exists(image_path):
             return jsonify({'error': f'Image not found: {image_name}'}), 404
 
-        # Load bird detector with ONNX
-        detector = get_bird_detector()
-        if detector is None:
-            return jsonify({'error': 'Bird detector not available'}), 500
+        # Load MobileSAM model
+        from ultralytics import SAM
+        model_path = os.path.join(PROJECT_ROOT, 'models', 'mobile_sam.pt')
 
-        # Read image
+        if not os.path.exists(model_path):
+            return jsonify({'error': f'MobileSAM model not found at {model_path}'}), 500
+
+        # Initialize SAM model (cached globally for efficiency)
+        if not hasattr(sam_segment, 'sam_model'):
+            print(f"Loading MobileSAM from {model_path}...")
+            sam_segment.sam_model = SAM(model_path)
+            print("MobileSAM loaded successfully")
+
+        model = sam_segment.sam_model
+
+        # Read image to get dimensions
         import cv2
         img = cv2.imread(image_path)
         height, width = img.shape[:2]
 
-        # Convert normalized click to pixel coordinates
-        click_x = int(points[0][0] * width)
-        click_y = int(points[0][1] * height)
+        # Convert normalized coords to pixel coords
+        pixel_points = []
+        for point in points:
+            pixel_x = int(point[0] * width)
+            pixel_y = int(point[1] * height)
+            pixel_points.append([pixel_x, pixel_y])
 
-        # Create a crop around the click point (400x400 pixels)
-        crop_size = 400
-        x1 = max(0, click_x - crop_size // 2)
-        y1 = max(0, click_y - crop_size // 2)
-        x2 = min(width, x1 + crop_size)
-        y2 = min(height, y1 + crop_size)
+        # Run SAM prediction with point prompts
+        # Points format: [[x1, y1], [x2, y2], ...] in pixel coordinates
+        # Labels: 1 for foreground points
+        results = model.predict(
+            image_path,
+            points=pixel_points,
+            labels=[1] * len(pixel_points),  # All points are foreground
+            verbose=False
+        )
 
-        # Adjust if crop goes out of bounds
-        if x2 - x1 < crop_size:
-            x1 = max(0, x2 - crop_size)
-        if y2 - y1 < crop_size:
-            y1 = max(0, y2 - crop_size)
+        # Extract bounding boxes from masks
+        boxes = []
+        if results and len(results) > 0:
+            result = results[0]  # First result
 
-        # Extract crop
-        crop = img[y1:y2, x1:x2]
+            # Check if we have masks
+            if hasattr(result, 'masks') and result.masks is not None:
+                masks = result.masks.data.cpu().numpy()  # Shape: (N, H, W)
 
-        # Save crop temporarily for YOLO detection
-        import tempfile
-        with tempfile.NamedTemporaryFile(suffix='.jpg', delete=False) as tmp_file:
-            tmp_path = tmp_file.name
-            cv2.imwrite(tmp_path, crop)
+                for mask in masks:
+                    # Find bounding box from mask
+                    # mask is a 2D boolean/float array
+                    rows = np.any(mask > 0.5, axis=1)
+                    cols = np.any(mask > 0.5, axis=0)
 
-        try:
-            # Run YOLO detection on crop with low confidence threshold
-            result = detector.predict(
-                tmp_path,
-                conf_threshold=0.15,  # Lower threshold to catch more birds
-                use_sliding_window=False,  # Crop is already small
-                verbose=False
-            )
+                    if not np.any(rows) or not np.any(cols):
+                        continue  # Empty mask
 
-            # Convert crop-relative detections to full image coordinates
-            boxes = []
-            for det in result['detections']:
-                bbox = det['bbox']  # [x1, y1, x2, y2] in crop coordinates
+                    y1, y2 = np.where(rows)[0][[0, -1]]
+                    x1, x2 = np.where(cols)[0][[0, -1]]
 
-                # Convert to full image coordinates
-                full_x1 = (bbox[0] + x1) / width
-                full_y1 = (bbox[1] + y1) / height
-                full_x2 = (bbox[2] + x1) / width
-                full_y2 = (bbox[3] + y1) / height
+                    # Validate mask size (filter out masks that are too large or too small)
+                    mask_width = x2 - x1
+                    mask_height = y2 - y1
+                    mask_area = mask_width * mask_height
+                    image_area = width * height
 
-                # Convert to YOLO format (center + size)
-                x_center = (full_x1 + full_x2) / 2
-                y_center = (full_y1 + full_y2) / 2
-                box_width = full_x2 - full_x1
-                box_height = full_y2 - full_y1
+                    # Skip masks that are >30% of image (probably wrong) or <50 pixels
+                    if mask_area > 0.3 * image_area or mask_area < 50:
+                        continue
 
-                # Only include boxes near the click point (within 150 pixels)
-                box_center_x = x_center * width
-                box_center_y = y_center * height
-                distance = ((box_center_x - click_x)**2 + (box_center_y - click_y)**2)**0.5
+                    # Add 5% padding to the bounding box
+                    padding_x = int(mask_width * 0.05)
+                    padding_y = int(mask_height * 0.05)
 
-                if distance < 150:  # 150 pixel radius
+                    x1 = max(0, x1 - padding_x)
+                    y1 = max(0, y1 - padding_y)
+                    x2 = min(width, x2 + padding_x)
+                    y2 = min(height, y2 + padding_y)
+
+                    # Convert to normalized YOLO format
+                    x_center = (x1 + x2) / 2 / width
+                    y_center = (y1 + y2) / 2 / height
+                    box_width = (x2 - x1) / width
+                    box_height = (y2 - y1) / height
+
                     boxes.append({
-                        'x_center': x_center,
-                        'y_center': y_center,
-                        'width': box_width,
-                        'height': box_height,
-                        'confidence': det.get('confidence', 0.0)
+                        'x_center': float(x_center),
+                        'y_center': float(y_center),
+                        'width': float(box_width),
+                        'height': float(box_height),
+                        'confidence': 1.0  # SAM doesn't provide confidence
                     })
 
-            # Sort by distance to click (closest first)
-            if boxes:
-                boxes.sort(key=lambda b: ((b['x_center']*width - click_x)**2 +
-                                         (b['y_center']*height - click_y)**2))
+        if not boxes:
+            return jsonify({'error': 'No bird detected at this location. Try clicking directly on a bird.'}), 404
 
-            return jsonify({
-                'success': True,
-                'boxes': boxes[:3],  # Return max 3 closest birds
-                'count': len(boxes[:3])
-            })
-
-        finally:
-            # Clean up temp file
-            if os.path.exists(tmp_path):
-                os.remove(tmp_path)
+        return jsonify({
+            'success': True,
+            'boxes': boxes[:3],  # Return max 3 boxes (in case of overlapping masks)
+            'count': len(boxes[:3])
+        })
 
     except Exception as e:
         import traceback
-        print(f"Bird detection error: {traceback.format_exc()}")
-        return jsonify({'error': str(e)}), 500
+        print(f"SAM segmentation error: {traceback.format_exc()}")
+        return jsonify({'error': f'Segmentation failed: {str(e)}'}), 500
 
 @app.route('/api/classify_crop', methods=['POST'])
 @api_annotator_required

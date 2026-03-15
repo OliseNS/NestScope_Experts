@@ -353,13 +353,17 @@
 }
 
 .db-table td.saving::after {
-    content: "💾";
+    content: "";
     position: absolute;
     right: 8px;
     top: 50%;
     transform: translateY(-50%);
-    font-size: 14px;
-    animation: pulse 1s ease-in-out infinite;
+    width: 16px;
+    height: 16px;
+    border: 2px solid var(--db-accent);
+    border-top-color: transparent;
+    border-radius: 50%;
+    animation: spin 0.6s linear infinite;
 }
 
 @keyframes pulse {
@@ -398,6 +402,177 @@
 
 .db-edit-mode-banner.active {
     display: block;
+}
+
+/* ============================================================================
+   EXCEL-LIKE TABLE REDESIGN - Clean, minimal, icon-based
+   ============================================================================ */
+
+/* Empty rows and columns - subtle padding areas */
+.db-table tr.empty-row {
+    background: transparent;
+    opacity: 0.4;
+    transition: all 0.2s ease;
+}
+
+.db-table tr.empty-row:hover {
+    opacity: 0.7;
+    background: rgba(62, 207, 142, 0.03);
+}
+
+.db-table tr.empty-row td {
+    cursor: pointer;
+    border-bottom: 1px dashed var(--surface-border);
+    padding: var(--space-2);
+    text-align: center;
+    color: var(--text-tertiary);
+    font-size: var(--text-xs);
+}
+
+.db-table th.empty-column {
+    background: transparent;
+    opacity: 0.4;
+    cursor: pointer;
+    min-width: 120px;
+    transition: all 0.2s ease;
+    border-bottom: 2px dashed var(--surface-border);
+}
+
+.db-table th.empty-column:hover {
+    opacity: 0.7;
+    background: rgba(62, 207, 142, 0.05);
+}
+
+.db-table td.empty-column-cell {
+    border-bottom: 1px dashed var(--surface-border);
+    opacity: 0.3;
+}
+
+/* Row number cell with hover actions */
+.db-table td:first-child {
+    position: relative;
+}
+
+.db-table tbody tr:hover td:first-child .row-delete-icon {
+    opacity: 1;
+    pointer-events: all;
+}
+
+.row-delete-icon {
+    position: absolute;
+    right: 4px;
+    top: 50%;
+    transform: translateY(-50%);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s ease;
+    cursor: pointer;
+    color: var(--db-danger);
+    padding: 2px;
+    width: 16px;
+    height: 16px;
+}
+
+.row-delete-icon:hover {
+    color: #ff4444;
+}
+
+.row-delete-icon svg {
+    width: 100%;
+    height: 100%;
+}
+
+/* Column header with hover actions */
+.db-table th {
+    position: relative;
+}
+
+.db-table th:hover .column-delete-icon {
+    opacity: 1;
+    pointer-events: all;
+}
+
+.column-delete-icon {
+    position: absolute;
+    right: 4px;
+    top: 50%;
+    transform: translateY(-50%);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s ease;
+    cursor: pointer;
+    color: var(--db-danger);
+    padding: 2px;
+    width: 16px;
+    height: 16px;
+}
+
+.column-delete-icon:hover {
+    color: #ff4444;
+}
+
+.column-delete-icon svg {
+    width: 100%;
+    height: 100%;
+}
+
+/* New column input (appears when clicking empty column) */
+.new-column-input {
+    background: var(--bg-primary);
+    border: 2px solid var(--db-accent);
+    color: var(--text-primary);
+    padding: 8px 12px;
+    border-radius: 6px;
+    font-size: var(--text-sm);
+    font-weight: 600;
+    width: 100%;
+    outline: none;
+}
+
+.new-column-input::placeholder {
+    color: var(--text-tertiary);
+    opacity: 0.7;
+}
+
+/* Inline row actions (save/cancel) */
+.inline-row-actions {
+    display: flex;
+    gap: 4px;
+    align-items: center;
+    justify-content: center;
+}
+
+.inline-action-btn {
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 6px;
+    border-radius: 4px;
+    transition: all 0.2s ease;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.inline-action-btn.save {
+    color: var(--db-accent);
+}
+
+.inline-action-btn.save:hover {
+    background: rgba(62, 207, 142, 0.15);
+}
+
+.inline-action-btn.cancel {
+    color: var(--db-danger);
+}
+
+.inline-action-btn.cancel:hover {
+    background: rgba(240, 68, 56, 0.15);
+}
+
+.inline-action-btn svg {
+    width: 18px;
+    height: 18px;
 }
 
 /* SQL EDITOR */
@@ -754,7 +929,11 @@
         <div class="db-sidebar-header">
             <h2 class="db-sidebar-title">Tables</h2>
             <div class="db-search">
-                <span class="db-search-icon">🔍</span>
+                <span class="db-search-icon">
+                    <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+                    </svg>
+                </span>
                 <input
                     type="text"
                     id="tableSearch"
@@ -789,23 +968,38 @@
         <!-- TABS -->
         <div class="db-tabs">
             <div class="db-tab active" onclick="switchTab('data', event)">
-                📊 Data
+                <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24" style="display: inline-block; vertical-align: middle; margin-right: 6px;">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h18M3 14h18m-9-4v8m-7 0h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"/>
+                </svg>
+                Data
             </div>
             <div class="db-tab" onclick="switchTab('sql', event)">
-                ⚡ SQL Editor
+                <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24" style="display: inline-block; vertical-align: middle; margin-right: 6px;">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"/>
+                </svg>
+                SQL Editor
             </div>
             <div class="db-tab" onclick="switchTab('schema', event)">
-                📋 Schema
+                <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24" style="display: inline-block; vertical-align: middle; margin-right: 6px;">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                </svg>
+                Schema
             </div>
             <div class="db-tab" onclick="switchTab('versions', event)">
-                🕐 Versions
+                <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24" style="display: inline-block; vertical-align: middle; margin-right: 6px;">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                </svg>
+                Versions
             </div>
         </div>
 
         <!-- TAB: DATA VIEW -->
         <div class="db-tab-content active" id="tabData">
             <div id="editModeInfo" class="db-edit-mode-banner">
-                ✏️ Click any cell to edit (press Enter to save, Esc to cancel)
+                <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24" style="display: inline-block; vertical-align: middle; margin-right: 6px;">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
+                </svg>
+                Click any cell to edit (press Enter to save, Esc to cancel)
             </div>
             <div class="db-table-container" id="dataViewport">
                 <div class="db-empty">
@@ -883,22 +1077,29 @@
                 <!-- AI Context Refresh Section -->
                 <div class="db-ai-assist" style="margin-top: var(--space-4); background: rgba(247, 144, 9, 0.05); border: 1px solid var(--db-warning);">
                     <div class="db-ai-title">
-                        <span>🛠️</span>
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="color: var(--db-warning);"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>
                         Trigger Database Explorer
                     </div>
                     <div style="font-size: var(--text-sm); color: var(--text-secondary); margin-bottom: var(--space-3);">
                         Optimize AI accuracy by allowing the agent to explore the latest database schema and content.
-                        <strong style="color: var(--db-warning);">⚠️ Resource-intensive operation</strong> - use only when database structure has changed.
+                        <strong style="color: var(--db-warning); display: inline-flex; align-items: center; gap: 4px;">
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                            Resource-intensive operation
+                        </strong> - use only when database structure has changed.
                     </div>
-                    <button class="db-btn db-btn-secondary" onclick="triggerDatabaseExplorer()" id="btnExploreDB">
-                        <span>🕵️</span> Trigger Database Explorer Agent
+                    <button class="db-btn db-btn-secondary" onclick="triggerDatabaseExplorer()" id="btnExploreDB" style="display: flex; align-items: center; gap: 8px;">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                        Trigger Database Explorer Agent
                     </button>
                     <div id="explorerStatus" style="margin-top: var(--space-3); display: none;"></div>
                 </div>
 
                 <!-- Query Output Results -->
                 <div style="margin-top: var(--space-6);">
-                    <h3 style="margin: 0 0 var(--space-3) 0; font-size: 14px; font-weight: 700; color: var(--text-primary);">📊 Query Output</h3>
+                    <h3 style="margin: 0 0 var(--space-3) 0; font-size: 14px; font-weight: 700; color: var(--text-primary); display: flex; align-items: center; gap: 6px;">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--brand-primary);"><path d="M12 20v-6a2 2 0 0 0-2-2H8a2 2 0 0 0-2 2v6"/><rect width="20" height="14" x="2" y="3" rx="2"/></svg>
+                        Query Output
+                    </h3>
                     <div class="db-sql-results" id="sqlResults">
                         <div style="color: var(--text-tertiary); text-align: center; padding: var(--space-8);">
                             Write a SQL query and click "Execute Query"
@@ -978,14 +1179,17 @@
 <div class="db-modal-overlay" id="confirmModal">
     <div class="db-modal">
         <div class="db-modal-header">
-            <div class="db-modal-icon">⚠️</div>
+            <div class="db-modal-icon">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="color: var(--db-warning);"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+            </div>
             <h3 class="db-modal-title">Confirm Query Execution</h3>
         </div>
         <div class="db-modal-content">
             <label class="db-modal-label">Generated SQL Query:</label>
             <div class="db-modal-code" id="modalSQLPreview"></div>
-            <div class="db-modal-warning">
-                ⚠️ This query will be executed on the database. Please review it carefully before proceeding.
+            <div class="db-modal-warning" style="display: flex; align-items: center; gap: 8px;">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0;"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                This query will be executed on the database. Please review it carefully before proceeding.
             </div>
         </div>
         <div class="db-modal-actions">
@@ -1057,12 +1261,15 @@ function showBackendWarning() {
         box-shadow: 0 2px 8px rgba(0,0,0,0.2);
     `;
     banner.innerHTML = `
-        <strong>⚠️ Backend Connection Failed</strong> -
-        Cannot connect to ${API_BASE_URL}.
-        Make sure the FastAPI backend is running.
-        <button onclick="location.reload()" style="margin-left: 1rem; background: rgba(255,255,255,0.2); border: 1px solid white; color: white; padding: 0.25rem 0.75rem; border-radius: 4px; cursor: pointer;">
-            Retry
-        </button>
+        <div style="display: flex; align-items: center; justify-content: center; gap: 8px;">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+            <strong>Backend Connection Failed</strong> -
+            Cannot connect to ${API_BASE_URL}.
+            Make sure the FastAPI backend is running.
+            <button onclick="location.reload()" style="margin-left: 1rem; background: rgba(255,255,255,0.2); border: 1px solid white; color: white; padding: 0.25rem 0.75rem; border-radius: 4px; cursor: pointer;">
+                Retry
+            </button>
+        </div>
     `;
 
     // Remove existing banner if present
@@ -1158,7 +1365,11 @@ function renderTableList(tables) {
     const container = document.getElementById('tableList');
     container.innerHTML = tables.map(table => `
         <div class="db-table-item" onclick="selectTable('${table}')" data-table="${table}">
-            <span class="db-table-icon">📊</span>
+            <span class="db-table-icon">
+                <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h18M3 14h18m-9-4v8m-7 0h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"/>
+                </svg>
+            </span>
             <span>${table}</span>
         </div>
     `).join('');
@@ -1227,11 +1438,18 @@ function renderTableData() {
 
         viewport.innerHTML = `
             <div class="db-empty">
-                <div class="db-empty-icon">📭</div>
+                <div class="db-empty-icon">
+                    <svg width="64" height="64" fill="none" stroke="currentColor" viewBox="0 0 24 24" style="opacity: 0.3;">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2"/>
+                    </svg>
+                </div>
                 <h3 class="db-empty-title">Table is Empty</h3>
                 <p class="db-empty-text">Click below to add your first row</p>
                 <button class="db-btn db-btn-primary" onclick="addNewRowInline()" style="margin-top: 16px;">
-                    <span>+</span> Add First Row
+                    <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24" style="display: inline-block; vertical-align: middle; margin-right: 4px;">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+                    </svg>
+                    Add First Row
                 </button>
             </div>
         `;
@@ -1250,13 +1468,17 @@ function renderTableData() {
                     ${columns.map(col => `
                         <th>
                             ${col}
-                            ${col === 'rowid' ? '' : '<button onclick="deleteColumn(\''+col+'\')" style="margin-left:8px;background:none;border:none;color:var(--db-danger);cursor:pointer;font-size:10px;" title="Delete column">✕</button>'}
+                            ${col === 'rowid' ? '' : `
+                                <span class="column-delete-icon" onclick="deleteColumn('${col}')" title="Delete column">
+                                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                                    </svg>
+                                </span>
+                            `}
                         </th>
                     `).join('')}
-                    <th style="width: 60px;">
-                        <button onclick="showAddColumnDialog()" style="background: var(--db-accent); border: none; color: white; cursor: pointer; padding: 4px 12px; border-radius: 4px; font-weight: 600; font-size: 14px;" title="Add new column">
-                            + Column
-                        </button>
+                    <th class="empty-column" onclick="startAddColumn(this)" title="Click to add new column">
+                        + New Column
                     </th>
                 </tr>
             </thead>
@@ -1267,7 +1489,11 @@ function renderTableData() {
                         <tr data-row-idx="${idx}">
                             <td>
                                 ${rowNum}
-                                <button onclick="deleteRow(${idx})" style="margin-left:8px;background:none;border:none;color:var(--db-danger);cursor:pointer;font-size:10px;" title="Delete row">✕</button>
+                                <span class="row-delete-icon" onclick="deleteRow(${idx})" title="Delete row">
+                                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                                    </svg>
+                                </span>
                             </td>
                             ${columns.map((col, colIdx) => {
                                 const value = row[col];
@@ -1284,18 +1510,18 @@ function renderTableData() {
 
                                 return `<td class="${cellClass}" data-col="${col}" data-value="${value || ''}" onclick="editCell(this)">${displayValue}</td>`;
                             }).join('')}
-                            <td></td>
+                            <td class="empty-column-cell"></td>
                         </tr>
                     `;
                 }).join('')}
-                <!-- Add New Row Button Row -->
-                <tr id="addRowButton" style="background: var(--bg-tertiary);">
-                    <td colspan="${columns.length + 2}" style="text-align: center; padding: 12px;">
-                        <button onclick="addNewRowInline()" class="db-btn db-btn-primary" style="width: 100%;">
-                            <span>+</span> Add New Row
-                        </button>
-                    </td>
-                </tr>
+                <!-- Empty padding rows for Excel-like data entry -->
+                ${Array.from({length: 3}, (_, i) => `
+                    <tr class="empty-row" onclick="addNewRowInline()">
+                        <td>${(currentPage - 1) * pageSize + tableData.length + i + 1}</td>
+                        ${columns.map(() => '<td></td>').join('')}
+                        <td class="empty-column-cell"></td>
+                    </tr>
+                `).join('')}
             </tbody>
         </table>
     `;
@@ -1423,8 +1649,8 @@ async function saveCell(cell, newValue) {
 
             // Show success message with commit hash
             const commitMsg = result.version_commit
-                ? `✓ Changes saved and committed: ${result.version_commit}`
-                : '✓ Changes saved successfully';
+                ? `Changes saved and committed: ${result.version_commit}`
+                : 'Changes saved successfully';
             showToast(commitMsg, 'success');
         } else {
             // Revert on error
@@ -1535,7 +1761,7 @@ function renderSchema() {
                         <td>${idx + 1}</td>
                         <td style="font-weight: 600; color: var(--text-primary);">${col.name}</td>
                         <td><span class="db-cell-number">${col.type}</span></td>
-                        <td>${col.pk ? '🔑' : '-'}</td>
+                        <td>${col.pk ? '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="color: var(--db-accent);"><path d="m15.5 7.5 2.3 2.3a1 1 0 0 0 1.4 0l2.1-2.1a1 1 0 0 0 0-1.4L19 4a1 1 0 0 0-1.4 0l-2.1 2.1a1 1 0 0 0 0 1.4ZM7 21l.4-4.5 10.1-10.1M7 21l4.5-.4L21.6 10.5M7 21l-3-3"/><path d="m14 7 3 3"/></svg>' : '-'}</td>
                         <td>${col.notnull ? '✓' : '-'}</td>
                         <td>${col.default_value || '-'}</td>
                     </tr>
@@ -1586,7 +1812,7 @@ async function executeSQL() {
                 const columns = Object.keys(results[0]);
                 resultsDiv.innerHTML = `
                     <div style="margin-bottom: var(--space-3); color: var(--db-accent); font-weight: 600;">
-                        ✓ Query successful: ${results.length} row(s)
+                        Query successful: ${results.length} row(s)
                     </div>
                     <table class="db-table">
                         <thead>
@@ -1663,15 +1889,15 @@ async function generateQuery() {
             const modalIcon = document.querySelector('.db-modal-icon');
 
             if (data.is_write_operation) {
-                modalTitle.textContent = '⚠️ Write Operation Detected';
-                modalIcon.textContent = '🔴';
+                modalTitle.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="color: var(--db-warning); vertical-align: middle; margin-right: 4px;"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg> Write Operation Detected';
+                modalIcon.innerHTML = `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="color: var(--error);"><circle cx="12" cy="12" r="10"/><line x1="12" x2="12" y1="8" y2="12"/><line x1="12" x2="12.01" y1="16" y2="16"/></svg>`;
 
                 // Check if multi-statement query
                 const statementCount = data.sql_query.split(';').filter(s => s.trim()).length;
                 const isMultiStatement = statementCount > 1;
 
                 warningEl.innerHTML = `
-                    <strong>⚠️ WARNING: This is a WRITE operation!</strong><br>
+                    <strong><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="color: var(--db-warning); vertical-align: middle; margin-right: 4px;"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg> WARNING: This is a WRITE operation!</strong><br>
                     ${isMultiStatement ? `<strong>Multi-statement query (${statementCount} statements)</strong> will be executed together.<br>` : ''}
                     This query will modify your database (INSERT, UPDATE, DELETE, DROP, CREATE, ALTER, etc.)<br>
                     <strong>Review carefully before executing.</strong>
@@ -1683,7 +1909,7 @@ async function generateQuery() {
                 modalTitle.textContent = 'Query Generated';
                 modalIcon.textContent = '✓';
                 warningEl.innerHTML = `
-                    ✓ This is a read-only SELECT query. Safe to execute.
+                    This is a read-only SELECT query. Safe to execute.
                 `;
                 warningEl.style.background = 'rgba(62, 207, 142, 0.1)';
                 warningEl.style.color = 'var(--text-primary)';
@@ -1693,7 +1919,7 @@ async function generateQuery() {
             // Show confirmation modal
             document.getElementById('confirmModal').classList.add('active');
 
-            showToast('✓ Query generated and placed in editor!', 'success');
+            showToast('Query generated and placed in editor!', 'success');
         } else {
             showToast('Failed to generate query: ' + (data.error || 'Unknown error'), 'error');
         }
@@ -1766,7 +1992,7 @@ async function triggerDatabaseExplorer() {
             statusDiv.innerHTML = `
                 <div style="background: rgba(62, 207, 142, 0.1); border: 1px solid var(--db-accent); border-radius: 8px; padding: 16px;">
                     <div style="color: var(--db-accent); font-weight: 600; margin-bottom: 8px;">
-                        ✓ ${data.message}
+                        ${data.message}
                     </div>
                     ${data.insights && data.insights.length > 0 ? `
                         <div style="color: var(--text-secondary); font-size: var(--text-sm); margin-top: 12px;">
@@ -1778,7 +2004,7 @@ async function triggerDatabaseExplorer() {
                     ` : ''}
                 </div>
             `;
-            showToast('✓ Database exploration complete!', 'success');
+            showToast('Database exploration complete!', 'success');
         } else {
             statusDiv.innerHTML = `
                 <div style="background: rgba(240, 68, 56, 0.1); border: 1px solid var(--db-danger); border-radius: 8px; padding: 16px;">
@@ -1802,7 +2028,7 @@ async function triggerDatabaseExplorer() {
     } finally {
         // Re-enable button
         btn.disabled = false;
-        btn.innerHTML = '<span>🕵️</span> Trigger Database Explorer Agent';
+        btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display: inline-block; vertical-align: middle; margin-right: 8px;"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg> Trigger Database Explorer Agent';
     }
 }
 
@@ -1965,8 +2191,8 @@ async function submitInsertRow() {
 
             // Show success message with commit hash
             const commitMsg = result.version_commit
-                ? `✓ Row inserted and committed: ${result.version_commit}`
-                : '✓ Row inserted successfully';
+                ? `Row inserted and committed: ${result.version_commit}`
+                : 'Row inserted successfully';
             showToast(commitMsg, 'success');
 
             // Refresh the table to show new row
@@ -2012,7 +2238,9 @@ async function loadVersionHistory() {
             if (data.commits.length === 0) {
                 container.innerHTML = `
                     <div style="text-align: center; padding: 40px; color: var(--text-tertiary);">
-                        <div style="font-size: 48px; margin-bottom: 16px; opacity: 0.3;">📭</div>
+                        <svg width="48" height="48" fill="none" stroke="currentColor" viewBox="0 0 24 24" style="opacity: 0.3; margin: 0 auto 16px;">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                        </svg>
                         <div>No changes found</div>
                     </div>
                 `;
@@ -2184,7 +2412,7 @@ function toggleChanges(idx) {
 
 
 function confirmRollback(hash, hashShort) {
-    if (confirm(`⚠️ WARNING: This will rollback the database to commit ${hashShort}.\n\nAll changes after this commit will be undone.\nA safety snapshot will be created.\n\nAre you sure?`)) {
+    if (confirm(`<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="color: var(--db-warning); vertical-align: middle; margin-right: 4px;"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg> WARNING: This will rollback the database to commit ${hashShort}.\n\nAll changes after this commit will be undone.\nA safety snapshot will be created.\n\nAre you sure?`)) {
         rollbackToVersion(hash, hashShort);
     }
 }
@@ -2208,7 +2436,7 @@ async function rollbackToVersion(hash, hashShort) {
         const data = await response.json();
 
         if (data.success) {
-            showToast(`✓ Rollback successful! Snapshot saved: ${data.snapshot_path}`, 'success');
+            showToast(`Rollback successful! Snapshot saved: ${data.snapshot_path}`, 'success');
             await loadVersionHistory();
             await loadVersionStats();
 
@@ -2268,9 +2496,8 @@ async function addNewRowInline() {
     // Get columns (excluding rowid for display)
     const columns = tableSchema.filter(c => c.name !== 'rowid').map(c => c.name);
 
-    // Remove "Add Row" button row
-    const addRowBtn = document.getElementById('addRowButton');
-    if (addRowBtn) addRowBtn.remove();
+    // Remove any empty rows
+    document.querySelectorAll('.empty-row').forEach(row => row.remove());
 
     // Add editable row at the bottom
     const tbody = document.querySelector('.db-table tbody');
@@ -2298,12 +2525,18 @@ async function addNewRowInline() {
             `;
         }).join('')}
         <td style="text-align: center;">
-            <button onclick="saveNewRow()" style="background: var(--db-accent); border: none; color: white; padding: 6px 12px; border-radius: 4px; cursor: pointer; margin-right: 4px;" title="Save row (Enter)">
-                ✓
-            </button>
-            <button onclick="cancelNewRow()" style="background: var(--db-danger); border: none; color: white; padding: 6px 12px; border-radius: 4px; cursor: pointer;" title="Cancel (Esc)">
-                ✕
-            </button>
+            <div class="inline-row-actions">
+                <button onclick="saveNewRow()" class="inline-action-btn save" title="Save row (Enter)">
+                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+                    </svg>
+                </button>
+                <button onclick="cancelNewRow()" class="inline-action-btn cancel" title="Cancel (Esc)">
+                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                    </svg>
+                </button>
+            </div>
         </td>
     `;
 
@@ -2408,8 +2641,8 @@ async function saveNewRow() {
 
         if (result.success) {
             const commitMsg = result.version_commit
-                ? `✓ Row inserted and committed: ${result.version_commit}`
-                : '✓ Row inserted successfully';
+                ? `Row inserted and committed: ${result.version_commit}`
+                : 'Row inserted successfully';
 
             showToast(commitMsg, 'success');
 
@@ -2432,47 +2665,72 @@ function cancelNewRow() {
         newRow.remove();
     }
     newRowData = null;
-
-    // Re-add "Add Row" button
-    const tbody = document.querySelector('.db-table tbody');
-    if (tbody) {
-        const columns = Object.keys(tableData[0]);
-        const addRowBtn = document.createElement('tr');
-        addRowBtn.id = 'addRowButton';
-        addRowBtn.style.background = 'var(--bg-tertiary)';
-        addRowBtn.innerHTML = `
-            <td colspan="${columns.length + 2}" style="text-align: center; padding: 12px;">
-                <button onclick="addNewRowInline()" class="db-btn db-btn-primary" style="width: 100%;">
-                    <span>+</span> Add New Row
-                </button>
-            </td>
-        `;
-        tbody.appendChild(addRowBtn);
-    }
-
     showToast('Cancelled', 'info');
 }
 
-// Column Management
-async function showAddColumnDialog() {
-    const columnName = prompt('Enter new column name:');
-    if (!columnName || columnName.trim() === '') {
-        showToast('Column name cannot be empty', 'warning');
+// Column Management - Inline Excel-like
+function startAddColumn(headerCell) {
+    if (!currentTable) {
+        showToast('Please select a table first', 'warning');
         return;
     }
 
-    // Validate column name
-    if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(columnName)) {
-        showToast('Invalid column name. Use letters, numbers, and underscores only (must start with letter or underscore)', 'error');
+    // Check if already adding a column
+    if (document.querySelector('.new-column-input')) {
+        showToast('Finish adding the current column first', 'warning');
         return;
     }
 
-    const columnType = prompt('Enter column type (TEXT, INTEGER, REAL, BLOB):', 'TEXT');
-    if (!columnType) return;
+    // Replace header content with input
+    const originalText = headerCell.textContent;
+    headerCell.innerHTML = `
+        <input
+            type="text"
+            class="new-column-input"
+            placeholder="Column name..."
+            onkeydown="handleColumnNameKeydown(event, this)"
+            onblur="cancelAddColumn(this, '${originalText}')"
+        />
+    `;
 
-    const allowNull = confirm('Allow NULL values?');
+    // Focus the input
+    const input = headerCell.querySelector('input');
+    if (input) input.focus();
 
-    await addColumn(columnName, columnType, allowNull);
+    showToast('Enter column name and press Enter (TEXT type, NULL allowed)', 'info');
+}
+
+function handleColumnNameKeydown(event, input) {
+    if (event.key === 'Enter') {
+        event.preventDefault();
+        const columnName = input.value.trim();
+
+        if (!columnName) {
+            showToast('Column name cannot be empty', 'warning');
+            return;
+        }
+
+        // Validate column name
+        if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(columnName)) {
+            showToast('Invalid column name. Use letters, numbers, underscores (start with letter/underscore)', 'error');
+            return;
+        }
+
+        // Default to TEXT type, allow NULL
+        addColumn(columnName, 'TEXT', true);
+    } else if (event.key === 'Escape') {
+        event.preventDefault();
+        cancelAddColumn(input, '+ New Column');
+    }
+}
+
+function cancelAddColumn(input, originalText) {
+    const headerCell = input.closest('th');
+    if (headerCell) {
+        headerCell.innerHTML = originalText;
+        headerCell.classList.add('empty-column');
+        headerCell.onclick = function() { startAddColumn(this); };
+    }
 }
 
 async function addColumn(columnName, columnType, allowNull = true) {
@@ -2498,7 +2756,7 @@ async function addColumn(columnName, columnType, allowNull = true) {
         const result = await response.json();
 
         if (result.success) {
-            showToast(`✓ Column "${columnName}" added successfully`, 'success');
+            showToast(`Column "${columnName}" added successfully`, 'success');
             await loadTableData();
             await loadTableSchema();
         } else {
@@ -2567,7 +2825,7 @@ async function deleteRow(rowIdx) {
         const result = await response.json();
 
         if (result.success) {
-            showToast('✓ Row deleted successfully', 'success');
+            showToast('Row deleted successfully', 'success');
             await loadTableData();
         } else {
             showToast('Error: ' + (result.error || 'Failed to delete row'), 'error');
