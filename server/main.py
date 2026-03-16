@@ -4871,8 +4871,6 @@ async def list_edge_scans(limit: int = 20):
 #       → When complete, frontend calls GET /eval/results
 # ============================================================================
 
-import threading
-
 # Global state for tracking the current eval run.
 # This is a simple in-memory dict — fine for a single-server setup.
 # If you scale to multiple servers, you'd use Redis or a database instead.
