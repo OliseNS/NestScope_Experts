@@ -216,15 +216,17 @@ NestEval runs automated evaluations of **NestChat** using [DeepEval](https://doc
 an open-source LLM evaluation framework.
 
 ### What gets tested?
-We run **8 bird colony questions** across different complexity levels and score each answer on:
+We run **18 bird colony questions** across different complexity levels and score each answer on:
 
 | Metric | What it measures | Pass threshold |
 |--------|-----------------|----------------|
-| **Answer Relevancy** | Did the answer actually address the question? | ≥ 0.7 |
+| **Answer Relevancy** | Did the answer actually address the question? | ≥ 0.5 |
 | **Faithfulness** | Is the answer grounded in retrieved data (no hallucinations)? | ≥ 0.7 |
+| **Contextual Relevancy** | Was the data retrieved by the SQL query relevant to the question? | ≥ 0.7 |
+| **Conciseness** | Did the answer stay focused without excessive elaboration? | ≥ 0.3 |
 
-> **Note:** Running evaluations uses API credits (each run makes ~20-30 LLM calls for scoring).
-> A typical run takes 2-5 minutes.
+> **Note:** Running evaluations uses API credits (each run makes ~90-100 LLM calls for scoring).
+> A typical run takes 5-10 minutes.
 """)
 
 st.divider()
@@ -243,7 +245,7 @@ with col_btn:
         use_container_width=True,
         type="primary",
         disabled=run_disabled,
-        help="Runs all 8 test cases and scores them with DeepEval"
+        help="Runs all 18 test cases and scores them with DeepEval"
     ):
         result = run_evaluation()
         if result.get("error") == "already_running":

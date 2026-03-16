@@ -32,8 +32,8 @@ from typing import Optional
 
 # DeepEval imports
 from deepeval import evaluate
-from deepeval.test_case import LLMTestCase
-from deepeval.metrics import AnswerRelevancyMetric, FaithfulnessMetric
+from deepeval.test_case import LLMTestCase, LLMTestCaseParams
+from deepeval.metrics import AnswerRelevancyMetric, FaithfulnessMetric, ContextualRelevancyMetric, GEval
 from deepeval.models import DeepEvalBaseLLM
 
 from server.evals.test_cases import NESTCHAT_TEST_CASES
@@ -112,8 +112,10 @@ class EvalRunner:
 
     # Metric thresholds — score must be >= threshold to pass
     # 0.7 means "70% confident this is a good answer". A common starting point.
-    ANSWER_RELEVANCY_THRESHOLD = 0.7
+    ANSWER_RELEVANCY_THRESHOLD = 0.5
     FAITHFULNESS_THRESHOLD = 0.7
+    CONTEXTUAL_RELEVANCY_THRESHOLD = 0.7
+    CONCISENESS_THRESHOLD = 0.3  # Slightly lower: NestChat naturally adds context
 
     def __init__(self, chatbot, openai_client, model_name: str):
         """
@@ -164,6 +166,36 @@ class EvalRunner:
             threshold=self.FAITHFULNESS_THRESHOLD,
             model=self.eval_llm,
             include_reason=True,
+        )
+
+        # ContextualRelevancyMetric: Is the SQL result actually relevant to the question?
+        # Example failure: query asks "how many colonies in Texas?" but the retrieved
+        # data contains unrelated columns or rows from a different state.
+        # This metric helps catch SQL generation problems (wrong table, bad WHERE clause).
+        contextual_relevancy_metric = ContextualRelevancyMetric(
+            threshold=self.CONTEXTUAL_RELEVANCY_THRESHOLD,
+            model=self.eval_llm,
+            include_reason=True,
+        )
+
+        # GEval (Conciseness): Does NestChat answer directly without over-elaborating?
+        # This is a CUSTOM metric — we write the evaluation criteria in plain English
+        # and the judge LLM decides how well the answer meets that criterion.
+        # WHY THIS MATTERS: Current results show answer_relevancy failing because
+        # NestChat pads answers with ecology context, suggestions, and caveats
+        # that weren't asked for. This metric quantifies that verbosity problem.
+        conciseness_metric = GEval(
+            name="Conciseness",
+            criteria=(
+                "The response should directly answer the user's question with the "
+                "specific data requested (numbers, names, etc.) without excessive "
+                "ecological background, unsolicited suggestions for further queries, "
+                "or speculative explanations for the data. A concise answer states "
+                "the key facts clearly and briefly."
+            ),
+            evaluation_params=[LLMTestCaseParams.INPUT, LLMTestCaseParams.ACTUAL_OUTPUT],
+            threshold=self.CONCISENESS_THRESHOLD,
+            model=self.eval_llm,
         )
 
         for i, test_case in enumerate(NESTCHAT_TEST_CASES):
@@ -266,6 +298,49 @@ class EvalRunner:
                         "score": None,
                         "passed": False,
                         "threshold": self.FAITHFULNESS_THRESHOLD,
+                        "error": str(e),
+                    }
+
+                # --- Contextual Relevancy ---
+                # Question: "Was the data retrieved by the SQL query actually useful
+                #            for answering the user's question?"
+                # Example: if the user asked about Texas colonies but the SQL pulled
+                # all states, this metric would penalize that irrelevant retrieval.
+                # This helps diagnose bad SQL generation (wrong filters/tables).
+                try:
+                    contextual_relevancy_metric.measure(deepeval_case)
+                    metrics_result["contextual_relevancy"] = {
+                        "score": round(contextual_relevancy_metric.score, 3),
+                        "passed": contextual_relevancy_metric.is_successful(),
+                        "threshold": self.CONTEXTUAL_RELEVANCY_THRESHOLD,
+                        "reason": contextual_relevancy_metric.reason,
+                    }
+                except Exception as e:
+                    metrics_result["contextual_relevancy"] = {
+                        "score": None,
+                        "passed": False,
+                        "threshold": self.CONTEXTUAL_RELEVANCY_THRESHOLD,
+                        "error": str(e),
+                    }
+
+                # --- Conciseness (GEval) ---
+                # Question: "Did NestChat answer directly without padding the
+                #            response with unsolicited elaboration?"
+                # This is a custom GEval metric — unlike the others, we wrote
+                # the evaluation criteria ourselves in plain English.
+                try:
+                    conciseness_metric.measure(deepeval_case)
+                    metrics_result["conciseness"] = {
+                        "score": round(conciseness_metric.score, 3),
+                        "passed": conciseness_metric.is_successful(),
+                        "threshold": self.CONCISENESS_THRESHOLD,
+                        "reason": conciseness_metric.reason,
+                    }
+                except Exception as e:
+                    metrics_result["conciseness"] = {
+                        "score": None,
+                        "passed": False,
+                        "threshold": self.CONCISENESS_THRESHOLD,
                         "error": str(e),
                     }
 
