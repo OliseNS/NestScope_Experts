@@ -1,0 +1,353 @@
+{% extends "base.html" %}
+
+{% block title %}NestVision - AI Bird Detection{% endblock %}
+
+{% block extra_css %}
+<!-- No extra CSS needed -->
+{% endblock %}
+
+{% block content %}
+<div style="max-width: 1400px; margin: 0 auto; padding: 2rem;">
+    <!-- Mobile Warning Banner -->
+    <div id="mobile-warning" style="display: none; background: linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%); color: white; padding: 1.5rem; border-radius: 12px; margin-bottom: 2rem;">
+        <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 1rem;">
+            <div style="flex: 1; min-width: 250px;">
+                <h3 style="margin: 0 0 0.5rem 0; font-size: 1.125rem; font-weight: 600;">⚠️ Performance Notice</h3>
+                <p style="margin: 0; font-size: 0.875rem; opacity: 0.95;">NestVision runs AI models in your browser. For best results, use a desktop with good CPU.</p>
+            </div>
+            <div style="display: flex; gap: 0.75rem;">
+                <button onclick="window.location.href='/chat'" style="background: white; color: #f59e0b; border: none; padding: 0.75rem 1.5rem; border-radius: 6px; font-weight: 600; cursor: pointer;">
+                    Try NestChat Instead
+                </button>
+                <button onclick="this.parentElement.parentElement.parentElement.style.display='none'" style="background: transparent; color: white; border: 2px solid white; padding: 0.75rem 1.5rem; border-radius: 6px; font-weight: 600; cursor: pointer;">
+                    Continue Anyway
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Header -->
+    <div style="text-align: center; margin-bottom: 3rem;">
+        <h1 style="font-size: 2.5rem; font-weight: 700; margin-bottom: 1rem; color: var(--text-primary);">
+            NestVision: Client-Side Bird Detection
+        </h1>
+        <p style="font-size: 1.125rem; color: var(--text-secondary);">
+            AI-powered bird detection running entirely in your browser
+        </p>
+        <p style="font-size: 0.875rem; color: var(--text-tertiary); margin-top: 0.5rem;">
+            🔒 Complete privacy - no data sent to server • Models loaded once
+        </p>
+    </div>
+
+    <!-- Model Loading Status -->
+    <div id="model-status" style="background: var(--surface-base); border: 1px solid var(--surface-border); border-radius: 12px; padding: 1.5rem; margin-bottom: 2rem;">
+        <div style="display: flex; align-items: center; gap: 1rem;">
+            <div id="model-spinner" style="width: 24px; height: 24px; border: 3px solid var(--surface-border); border-top-color: #7BABAE; border-radius: 50%; animation: spin 1s linear infinite;"></div>
+            <div style="flex: 1;">
+                <div style="font-weight: 600; color: var(--text-primary);">Loading AI Models...</div>
+                <div id="model-status-text" style="font-size: 0.875rem; color: var(--text-secondary); margin-top: 0.25rem;">
+                    Downloading detection and classification models (~16MB)
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Upload Section -->
+    <div id="upload-section" style="display: none;">
+        <div style="background: var(--surface-base); border: 1px solid var(--surface-border); border-radius: 12px; padding: 2rem; margin-bottom: 2rem;">
+            <h3 style="margin: 0 0 1.5rem 0; font-size: 1.25rem; color: var(--text-primary);">Select Image</h3>
+
+            <!-- File Upload -->
+            <div id="drop-zone" style="border: 2px dashed var(--surface-border); border-radius: 8px; padding: 3rem; text-align: center; cursor: pointer; transition: all 0.2s ease; margin-bottom: 2rem;">
+                <input type="file" id="file-input" accept="image/*" style="display: none;">
+                <div style="font-size: 3rem; margin-bottom: 1rem; color: #7BABAE;">📸</div>
+                <p style="color: var(--text-primary); font-size: 1.125rem; margin-bottom: 0.5rem;">
+                    Click to upload or drag and drop
+                </p>
+                <p style="color: var(--text-tertiary); font-size: 0.875rem;">
+                    JPG, PNG, or WEBP (max 100MB)
+                </p>
+            </div>
+
+            <!-- Advanced Settings -->
+            <details style="margin-top: 2rem;">
+                <summary style="cursor: pointer; padding: 0.75rem; background: var(--bg-tertiary); border-radius: 6px; font-weight: 500; color: var(--text-primary);">
+                    Advanced Settings
+                </summary>
+                <div style="padding: 1.5rem 0;">
+                    <label style="display: block; color: var(--text-secondary); font-size: 0.875rem; margin-bottom: 0.5rem;">
+                        Detection Confidence: <span id="conf-value">25%</span>
+                    </label>
+                    <input type="range" id="conf-threshold" min="10" max="90" value="25" step="5"
+                           style="width: 100%; accent-color: #7BABAE;">
+                    <p style="font-size: 0.875rem; color: var(--text-tertiary); margin-top: 0.5rem;">
+                        Lower values detect more birds but may include false positives
+                    </p>
+                </div>
+            </details>
+        </div>
+    </div>
+
+    <!-- Loading Indicator -->
+    <div id="loading-indicator" style="display: none; text-align: center; padding: 3rem; background: var(--surface-base); border: 1px solid var(--surface-border); border-radius: 12px;">
+        <div style="display: inline-block; width: 50px; height: 50px; border: 5px solid var(--surface-border); border-top-color: #7BABAE; border-radius: 50%; animation: spin 1s linear infinite;"></div>
+        <p style="color: var(--text-secondary); margin-top: 1rem; font-size: 1.125rem;" id="loading-text">
+            Running AI detection... This may take a few seconds.
+        </p>
+    </div>
+
+    <!-- Results Section -->
+    <div id="results-section" style="display: none;">
+        <div style="background: var(--surface-base); border: 1px solid var(--surface-border); border-radius: 12px; padding: 2rem;">
+            <h3 style="margin: 0 0 1.5rem 0; font-size: 1.25rem; color: var(--text-primary);">Detection Results</h3>
+
+            <!-- Annotated Image -->
+            <div style="margin-bottom: 2rem; border-radius: 8px; overflow: hidden; background: var(--bg-tertiary); display: flex; justify-content: center;">
+                <img id="result-image" style="max-width: 100%; height: auto; display: none; border-radius: 8px;">
+            </div>
+
+            <!-- Stats Grid -->
+            <div id="result-stats" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-bottom: 2rem;">
+            </div>
+
+            <!-- Message -->
+            <div id="result-message" style="padding: 1rem; background: var(--bg-tertiary); border-radius: 8px; margin-bottom: 2rem; text-align: center;">
+            </div>
+
+            <!-- Species Breakdown -->
+            <div id="species-breakdown" style="margin-bottom: 2rem;">
+            </div>
+
+            <!-- Actions -->
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem;">
+                <button id="download-result-btn" style="background: var(--bg-tertiary); border: 1px solid var(--surface-border); color: var(--text-primary); padding: 1rem; border-radius: 8px; cursor: pointer; font-weight: 500;">
+                    Download Annotated Image
+                </button>
+                <button id="detect-another-btn" style="background: #7BABAE; border: none; color: white; padding: 1rem; border-radius: 8px; cursor: pointer; font-weight: 500;">
+                    Detect Another Image
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+    @keyframes spin {
+        to { transform: rotate(360deg); }
+    }
+    #drop-zone:hover {
+        border-color: #7BABAE;
+        background: var(--surface-hover);
+    }
+    details summary:hover {
+        background: var(--surface-hover);
+    }
+    button:hover {
+        transform: translateY(-2px);
+    }
+</style>
+
+<!-- ONNX Runtime Web for client-side inference -->
+<script src="https://cdn.jsdelivr.net/npm/onnxruntime-web@1.16.0/dist/ort.min.js"></script>
+<script src="/static/js/onnx-inference.js"></script>
+
+<script>
+    // Initialize detector
+    let detector = null;
+    let currentResult = null;
+
+    // Elements
+    const modelStatus = document.getElementById('model-status');
+    const modelStatusText = document.getElementById('model-status-text');
+    const modelSpinner = document.getElementById('model-spinner');
+    const uploadSection = document.getElementById('upload-section');
+    const dropZone = document.getElementById('drop-zone');
+    const fileInput = document.getElementById('file-input');
+    const confThreshold = document.getElementById('conf-threshold');
+    const confValue = document.getElementById('conf-value');
+    const loadingIndicator = document.getElementById('loading-indicator');
+    const loadingText = document.getElementById('loading-text');
+    const resultsSection = document.getElementById('results-section');
+    const mobileWarning = document.getElementById('mobile-warning');
+
+    // Show mobile warning on small screens
+    if (window.innerWidth < 768) {
+        mobileWarning.style.display = 'block';
+    }
+
+    // Load models on page load
+    async function initializeModels() {
+        try {
+            modelStatusText.textContent = 'Initializing ONNX Runtime...';
+            detector = new BirdDetector();
+
+            modelStatusText.textContent = 'Loading detection model... (9.6MB)';
+            await detector.loadModels();
+
+            modelStatusText.textContent = '✓ Models ready! You can now detect birds.';
+            modelSpinner.style.display = 'none';
+
+            // Show upload section after 1 second
+            setTimeout(() => {
+                modelStatus.style.display = 'none';
+                uploadSection.style.display = 'block';
+            }, 1000);
+
+        } catch (error) {
+            console.error('Model loading failed:', error);
+            modelStatusText.innerHTML = `<span style="color: #ef4444;">❌ Failed to load models: ${error.message}</span><br><span style="font-size: 0.75rem;">Try refreshing the page or check your internet connection.</span>`;
+            modelSpinner.style.display = 'none';
+        }
+    }
+
+    // Start loading models
+    initializeModels();
+
+    // File upload handlers
+    dropZone.addEventListener('click', () => fileInput.click());
+
+    dropZone.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        dropZone.style.borderColor = '#7BABAE';
+        dropZone.style.background = 'var(--surface-hover)';
+    });
+
+    dropZone.addEventListener('dragleave', () => {
+        dropZone.style.borderColor = 'var(--surface-border)';
+        dropZone.style.background = 'transparent';
+    });
+
+    dropZone.addEventListener('drop', (e) => {
+        e.preventDefault();
+        dropZone.style.borderColor = 'var(--surface-border)';
+        dropZone.style.background = 'transparent';
+
+        const files = e.dataTransfer.files;
+        if (files.length > 0) {
+            processImage(files[0]);
+        }
+    });
+
+    fileInput.addEventListener('change', (e) => {
+        if (e.target.files.length > 0) {
+            processImage(e.target.files[0]);
+        }
+    });
+
+    confThreshold.addEventListener('input', (e) => {
+        confValue.textContent = e.target.value + '%';
+    });
+
+    // Process image with client-side inference
+    async function processImage(file) {
+        if (!detector || !detector.isReady) {
+            alert('Models are still loading. Please wait...');
+            return;
+        }
+
+        uploadSection.style.display = 'none';
+        loadingIndicator.style.display = 'block';
+        resultsSection.style.display = 'none';
+
+        try {
+            // Load image
+            loadingText.textContent = 'Loading image...';
+            const img = new Image();
+            const url = URL.createObjectURL(file);
+
+            await new Promise((resolve, reject) => {
+                img.onload = resolve;
+                img.onerror = reject;
+                img.src = url;
+            });
+
+            // Run inference
+            loadingText.textContent = 'Running AI detection... (this may take 5-15 seconds)';
+            const confValue = parseInt(confThreshold.value) / 100;
+            currentResult = await detector.infer(img, confValue);
+
+            URL.revokeObjectURL(url);
+
+            // Display results
+            displayResults(currentResult);
+
+        } catch (error) {
+            console.error('Processing error:', error);
+            alert('Error processing image: ' + error.message);
+            uploadSection.style.display = 'block';
+        } finally {
+            loadingIndicator.style.display = 'none';
+        }
+    }
+
+    // Display results
+    function displayResults(result) {
+        resultsSection.style.display = 'block';
+
+        // Show annotated image
+        const resultImage = document.getElementById('result-image');
+        resultImage.src = 'data:image/jpeg;base64,' + result.annotated_image_base64;
+        resultImage.style.display = 'block';
+
+        // Show stats
+        const statsContainer = document.getElementById('result-stats');
+        statsContainer.innerHTML = `
+            <div style="background: var(--bg-tertiary); padding: 1.5rem; border-radius: 8px; text-align: center;">
+                <div style="font-size: 2rem; font-weight: 700; color: #7BABAE;">${result.bird_count}</div>
+                <div style="font-size: 0.875rem; color: var(--text-tertiary); margin-top: 0.5rem;">Birds Detected</div>
+            </div>
+            <div style="background: var(--bg-tertiary); padding: 1.5rem; border-radius: 8px; text-align: center;">
+                <div style="font-size: 2rem; font-weight: 700; color: #7BABAE;">${confThreshold.value}%</div>
+                <div style="font-size: 0.875rem; color: var(--text-tertiary); margin-top: 0.5rem;">Confidence</div>
+            </div>
+            <div style="background: var(--bg-tertiary); padding: 1.5rem; border-radius: 8px; text-align: center;">
+                <div style="font-size: 2rem; font-weight: 700; color: #7BABAE;">${result.inference_time.toFixed(2)}s</div>
+                <div style="font-size: 0.875rem; color: var(--text-tertiary); margin-top: 0.5rem;">Processing Time</div>
+            </div>
+        `;
+
+        // Show message
+        const messageContainer = document.getElementById('result-message');
+        messageContainer.innerHTML = `<p style="color: var(--text-primary); margin: 0; font-size: 1.125rem;">${result.message}</p>`;
+
+        // Show species breakdown
+        if (result.species_summary && Object.keys(result.species_summary).length > 0) {
+            const speciesContainer = document.getElementById('species-breakdown');
+            let speciesHTML = '<h4 style="margin: 0 0 1rem 0; font-size: 1rem; color: var(--text-primary);">Species Groups Detected</h4>';
+            speciesHTML += '<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 1rem;">';
+
+            for (const [species, count] of Object.entries(result.species_summary)) {
+                speciesHTML += `
+                    <div style="background: var(--bg-tertiary); padding: 1rem; border-radius: 8px; text-align: center;">
+                        <div style="font-size: 1.5rem; font-weight: 700; color: #7BABAE;">${count}</div>
+                        <div style="font-size: 0.75rem; color: var(--text-secondary); margin-top: 0.25rem;">${species.replace(/_/g, ' ')}</div>
+                    </div>
+                `;
+            }
+
+            speciesHTML += '</div>';
+            speciesContainer.innerHTML = speciesHTML;
+        }
+
+        // Scroll to results
+        resultsSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+
+    // Download button
+    document.getElementById('download-result-btn').addEventListener('click', () => {
+        if (!currentResult) return;
+
+        const link = document.createElement('a');
+        link.href = 'data:image/jpeg;base64,' + currentResult.annotated_image_base64;
+        link.download = `nestvision_detection_${Date.now()}.jpg`;
+        link.click();
+    });
+
+    // Detect another button
+    document.getElementById('detect-another-btn').addEventListener('click', () => {
+        resultsSection.style.display = 'none';
+        uploadSection.style.display = 'block';
+        fileInput.value = '';
+    });
+</script>
+{% endblock %}

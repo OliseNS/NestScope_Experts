@@ -1,0 +1,47 @@
+# NestScope Server Configuration
+
+model:
+  name: anthropic/claude-sonnet-4.6 # Research-grade accuracy with 1M token context
+  temperature: 0.7
+  max_tokens: 4000  # Large enough for complete artifacts with full HTML/JS
+  sql_temperature: 0.1
+  sql_max_tokens: 3000  # Allow longer queries for multi-statement operations
+
+agentic:
+  # 5-Phase Agentic SQL Pipeline Settings
+  max_attempts: 3  # Self-correction: retry up to 3 times on errors
+
+  # Phase 2: Chain-of-Thought Reasoning
+  enable_reasoning: true  # Explicit reasoning before SQL generation (slower but more accurate)
+
+  # Phase 4: Result Evaluation
+  enable_result_validation: false  # Optional result quality check (adds LLM call, usually not needed)
+
+  # Performance Modes:
+  # Fast Mode:    enable_reasoning: false, enable_result_validation: false (2 LLM calls)
+  # Accurate Mode: enable_reasoning: true, enable_result_validation: false (3 LLM calls)
+  # Full Pipeline: enable_reasoning: true, enable_result_validation: true (4 LLM calls)
+
+database:
+  default_path: data/bird_data_complete.db
+
+cv:
+  # Detection model (NestVision uses Swift)
+  # Swift: Fast, accurate model optimized for speed (9.7MB)
+  model: models/swift.onnx
+  default_confidence: 0.25
+  image_size: 1024
+
+  # Species Classification (7 groups: Pelican, Tern, Gull, Shorebird, Cormorant, Heron, Wader)
+  # Swift classifier is used for all classification tasks
+  classifier: models/classifier_swift.onnx
+  classifier_species: 7  # Species groups
+  classifier_confidence_threshold: 0.01  # Very low - always show best prediction
+api:
+  host: 0.0.0.0
+  port: 8000
+  cors_origins:
+    - "*"
+
+logging:
+  level: INFO
