@@ -28,14 +28,11 @@ database:
 cv:
   # Detection model (NestVision uses Swift)
   # Swift: Fast, accurate model optimized for speed (9.7MB)
-  model: models/swift.onnx
+  model: models/swift_UQ_int8.onnx
   default_confidence: 0.25
   image_size: 1024
 
-  # Species Classification (7 groups: Pelican, Tern, Gull, Shorebird, Cormorant, Heron, Wader)
-  # Swift classifier is used for all classification tasks
   classifier: models/classifier_swift.onnx
-  classifier_species: 7  # Species groups
   classifier_confidence_threshold: 0.01  # Very low - always show best prediction
 api:
   host: 0.0.0.0

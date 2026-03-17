@@ -25,7 +25,7 @@ Ask questions in natural language:
 
 **How it works:**
 1. You type a question
-2. Claude LLM converts it to SQL
+2. Gemini converts it to SQL
 3. Query runs on SQLite database
 4. Claude writes a natural language answer
 5. Charts and maps appear automatically
@@ -45,7 +45,7 @@ Upload images and count birds automatically:
 
 ### 👨‍🔬 Nestperts - Expert Annotation Platform
 Label bird images for training data:
-- **MobileSAM segmentation**: Click birds to generate boxes
+- **Swift AI segmentation**: Click birds to generate boxes
 - **Species labeling**: Assign species to each detection
 - **Multi-expert workflow**: Track who labeled what
 - **YOLO format export**: Ready for model training
@@ -190,7 +190,7 @@ nexus/
 │   └── README.md               # 📖 Backend documentation
 │
 ├── labeller/                    # 👨‍🔬 Nestperts annotation platform
-│   ├── app.py                  # Flask web server with MobileSAM
+│   ├── app.py                  # Flask web server with Swift AI
 │   ├── templates/              # HTML templates for UI
 │   ├── nestvision/             # YOLO dataset (images, labels, classes)
 │   └── README.md               # 📖 Labeller documentation
@@ -203,7 +203,7 @@ nexus/
 │
 ├── models/                      # 🤖 AI models
 │   ├── seconditer.onnx         # Bird detection model (YOLO)
-│   └── mobile_sam.pt           # Segmentation model (MobileSAM)
+│   └── mobile_sam.pt           # Segmentation model (Swift AI)
 │
 ├── data/                        # 📊 SQLite database
 │   └── bird_data_complete.db   # All bird observation data (2010-2021)
@@ -226,7 +226,7 @@ nexus/
 ├── requirements.txt             # 📦 Python dependencies
 ├── run_app.sh                   # 🚀 Launch script (starts all services)
 ├── README.md                    # 📖 This file!
-└── CLAUDE.md                    # 🤖 Instructions for Claude Code
+└── gemini.md                    # 🤖 Instructions for Gemini CLI
 
 ```
 
@@ -274,7 +274,7 @@ nexus/
 │  └─────────────────┘              └───────────────────┘    │
 │           ↓                                  │               │
 │  ┌─────────────────┐                        │               │
-│  │  Claude LLM     │←───────────────────────┘               │
+│  │  Gemini     │←───────────────────────┘               │
 │  │  (OpenRouter)   │                                        │
 │  └─────────────────┘                                        │
 └─────────────────────────────────────────────────────────────┘
@@ -283,7 +283,7 @@ nexus/
 ┌─────────────────────────────────────────────────────────────┐
 │                   NESTPERTS (Flask)                          │
 │  • Expert annotation interface                              │
-│  • MobileSAM segmentation                                   │
+│  • Swift AI segmentation                                   │
 │  • Species labeling                                         │
 └────────────────────────┬────────────────────────────────────┘
                          │
@@ -300,7 +300,7 @@ nexus/
 
 1. **User types question** in NestChat (frontend)
 2. **Frontend sends POST request** to `/ask` endpoint (backend)
-3. **Backend calls Claude LLM** with question + database schema
+3. **Backend calls Gemini** with question + database schema
 4. **Claude generates SQL**: `SELECT DISTINCT ColonyName FROM observations WHERE State = 'TX'`
 5. **Backend executes SQL** on SQLite database
 6. **Database returns results**: ["Smith Island", "Galveston Bay", ...]
@@ -351,7 +351,7 @@ nexus/
 | **YOLOv8** | Object detection model | State-of-the-art, fast, accurate |
 | **ONNX** | Model format | Deploy PyTorch models without PyTorch |
 | **SAHI** | Slicing algorithm | Detect small objects in large images |
-| **MobileSAM** | Segmentation model | Interactive segmentation from points |
+| **Swift AI** | Segmentation model | Interactive segmentation from points |
 | **OpenCV** | Computer vision library | Image processing, drawing boxes |
 
 ### Training Technologies
@@ -372,7 +372,7 @@ nexus/
 
 ### Segmentation Model
 - **File**: `models/mobile_sam.pt`
-- **Type**: MobileSAM (PyTorch)
+- **Type**: Swift AI (PyTorch)
 - **Purpose**: Interactive segmentation in labeller
 
 ### Detection Model (Legacy)
@@ -580,9 +580,9 @@ python -c "import onnxruntime; print('ONNX Runtime:', onnxruntime.__version__)"
 ## Project Roadmap
 
 ### Current Status
-- ✅ Text-to-SQL with Claude LLM
+- ✅ Text-to-SQL with Gemini
 - ✅ Bird detection with YOLOv8
-- ✅ Annotation platform with MobileSAM
+- ✅ Annotation platform with Swift AI
 - ✅ Training pipeline
 - ✅ Comprehensive documentation
 
@@ -620,8 +620,8 @@ python -c "import onnxruntime; print('ONNX Runtime:', onnxruntime.__version__)"
 
 - **Gulf Coast bird data**: NOAA, USFWS, and state wildlife agencies
 - **YOLOv8**: Ultralytics team
-- **MobileSAM**: ChaoningZhang et al.
-- **Claude LLM**: Anthropic
+- **Swift AI**: ChaoningZhang et al.
+- **Gemini**: Anthropic
 - **Open source community**: All the amazing libraries we use!
 
 ## License

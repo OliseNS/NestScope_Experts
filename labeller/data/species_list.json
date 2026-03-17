@@ -1,79 +1,261 @@
 {
   "real_species": [
-    {"code": "AMAV", "name": "American Avocet"},
-    {"code": "AMOY", "name": "American Oystercatcher"},
-    {"code": "ANHI", "name": "Anhinga"},
-    {"code": "AWPE", "name": "American White Pelican"},
-    {"code": "BCNH", "name": "Black-crowned Night Heron"},
-    {"code": "BLSK", "name": "Black Skimmer"},
-    {"code": "BLTE", "name": "Black Tern"},
-    {"code": "BNST", "name": "Black-necked Stilt"},
-    {"code": "BRNO", "name": "Brown Noddy"},
-    {"code": "BRPE", "name": "Brown Pelican"},
-    {"code": "CAEG", "name": "Cattle Egret"},
-    {"code": "CATE", "name": "Caspian Tern"},
-    {"code": "COTE", "name": "Common Tern"},
-    {"code": "CRCA", "name": "Crested Caracara"},
-    {"code": "DCCO", "name": "Double-crested Cormorant"},
-    {"code": "FOTE", "name": "Forster's Tern"},
-    {"code": "GBHE", "name": "Great Blue Heron"},
-    {"code": "GBTE", "name": "Gull-billed Tern"},
-    {"code": "GREG", "name": "Great Egret"},
-    {"code": "HERG", "name": "Herring Gull"},
-    {"code": "LAGU", "name": "Laughing Gull"},
-    {"code": "LBHE", "name": "Little Blue Heron"},
-    {"code": "LETE", "name": "Least Tern"},
-    {"code": "MAFR", "name": "Magnificent Frigatebird"},
-    {"code": "NECO", "name": "Neotropic Cormorant"},
-    {"code": "OSPR", "name": "Osprey"},
-    {"code": "REEG", "name": "Reddish Egret"},
-    {"code": "ROSP", "name": "Roseate Spoonbill"},
-    {"code": "ROST", "name": "Roseate Tern"},
-    {"code": "ROYT", "name": "Royal Tern"},
-    {"code": "RUTU", "name": "Ruddy Turnstone"},
-    {"code": "SATE", "name": "Sandwich Tern"},
-    {"code": "SNEG", "name": "Snowy Egret"},
-    {"code": "SOTE", "name": "Sooty Tern"},
-    {"code": "TRHE", "name": "Tricolored Heron"},
-    {"code": "WFIB", "name": "White-faced Ibis"},
-    {"code": "WHIB", "name": "White Ibis"},
-    {"code": "WOST", "name": "Wood Stork"},
-    {"code": "YCNH", "name": "Yellow-crowned Night Heron"}
+    {
+      "code": "adelie_penguin",
+      "name": "Adelie Penguin"
+    },
+    {
+      "code": "african_darter",
+      "name": "African Darter"
+    },
+    {
+      "code": "african_openbill",
+      "name": "African Openbill"
+    },
+    {
+      "code": "african_spoonbill",
+      "name": "African Spoonbill"
+    },
+    {
+      "code": "american_white_pelican",
+      "name": "American White Pelican"
+    },
+    {
+      "code": "antarctic_shag",
+      "name": "Antarctic Shag"
+    },
+    {
+      "code": "australasian_swamphen",
+      "name": "Australasian Swamphen"
+    },
+    {
+      "code": "australian_pelican",
+      "name": "Australian Pelican"
+    },
+    {
+      "code": "australian_pied_cormorant",
+      "name": "Australian Pied Cormorant"
+    },
+    {
+      "code": "australian_white_ibis",
+      "name": "Australian White Ibis"
+    },
+    {
+      "code": "australian_wood_duck",
+      "name": "Australian Wood Duck"
+    },
+    {
+      "code": "bar_tailed_godwit",
+      "name": "Bar Tailed Godwit"
+    },
+    {
+      "code": "bird",
+      "name": "Bird"
+    },
+    {
+      "code": "black_browed_albatross",
+      "name": "Black Browed Albatross"
+    },
+    {
+      "code": "black_headed_gull",
+      "name": "Black Headed Gull"
+    },
+    {
+      "code": "black_necked_swan",
+      "name": "Black Necked Swan"
+    },
+    {
+      "code": "black_swan",
+      "name": "Black Swan"
+    },
+    {
+      "code": "chilean_flamingo",
+      "name": "Chilean Flamingo"
+    },
+    {
+      "code": "chinstrap_penguin",
+      "name": "Chinstrap Penguin"
+    },
+    {
+      "code": "common_tern",
+      "name": "Common Tern"
+    },
+    {
+      "code": "dalmatian_pelican",
+      "name": "Dalmatian Pelican"
+    },
+    {
+      "code": "eurasian_coot",
+      "name": "Eurasian Coot"
+    },
+    {
+      "code": "eurasian_whimbrel",
+      "name": "Eurasian Whimbrel"
+    },
+    {
+      "code": "european_herring_gull",
+      "name": "European Herring Gull"
+    },
+    {
+      "code": "franklins_gull",
+      "name": "Franklins Gull"
+    },
+    {
+      "code": "gentoo_penguin",
+      "name": "Gentoo Penguin"
+    },
+    {
+      "code": "great_cormorant",
+      "name": "Great Cormorant"
+    },
+    {
+      "code": "great_egret",
+      "name": "Great Egret"
+    },
+    {
+      "code": "great_knot",
+      "name": "Great Knot"
+    },
+    {
+      "code": "great_white_pelican",
+      "name": "Great White Pelican"
+    },
+    {
+      "code": "grey_heron",
+      "name": "Grey Heron"
+    },
+    {
+      "code": "grey_teal",
+      "name": "Grey Teal"
+    },
+    {
+      "code": "gull_billed_tern",
+      "name": "Gull Billed Tern"
+    },
+    {
+      "code": "hardhead",
+      "name": "Hardhead"
+    },
+    {
+      "code": "intermediate_egret",
+      "name": "Intermediate Egret"
+    },
+    {
+      "code": "lesser_black_backed_gull",
+      "name": "Lesser Black Backed Gull"
+    },
+    {
+      "code": "little_black_cormorant",
+      "name": "Little Black Cormorant"
+    },
+    {
+      "code": "little_corella",
+      "name": "Little Corella"
+    },
+    {
+      "code": "little_grebe",
+      "name": "Little Grebe"
+    },
+    {
+      "code": "magpie_goose",
+      "name": "Magpie Goose"
+    },
+    {
+      "code": "magpie_lark",
+      "name": "Magpie Lark"
+    },
+    {
+      "code": "mallard",
+      "name": "Mallard"
+    },
+    {
+      "code": "masked_lapwing",
+      "name": "Masked Lapwing"
+    },
+    {
+      "code": "mediterranean_gull",
+      "name": "Mediterranean Gull"
+    },
+    {
+      "code": "pacific_black_duck",
+      "name": "Pacific Black Duck"
+    },
+    {
+      "code": "pied_oystercatcher",
+      "name": "Pied Oystercatcher"
+    },
+    {
+      "code": "pied_stilt",
+      "name": "Pied Stilt"
+    },
+    {
+      "code": "pink_eared_duck",
+      "name": "Pink Eared Duck"
+    },
+    {
+      "code": "pygmy_cormorant",
+      "name": "Pygmy Cormorant"
+    },
+    {
+      "code": "rainbow_bee_eater",
+      "name": "Rainbow Bee Eater"
+    },
+    {
+      "code": "reed_cormorant",
+      "name": "Reed Cormorant"
+    },
+    {
+      "code": "royal_spoonbill",
+      "name": "Royal Spoonbill"
+    },
+    {
+      "code": "silver_gull",
+      "name": "Silver Gull"
+    },
+    {
+      "code": "southern_giant_petrel",
+      "name": "Southern Giant Petrel"
+    },
+    {
+      "code": "southern_rockhopper_penguin",
+      "name": "Southern Rockhopper Penguin"
+    },
+    {
+      "code": "straw_necked_ibis",
+      "name": "Straw Necked Ibis"
+    },
+    {
+      "code": "welcome_swallow",
+      "name": "Welcome Swallow"
+    },
+    {
+      "code": "western_cattle_egret",
+      "name": "Western Cattle Egret"
+    },
+    {
+      "code": "western_grebe",
+      "name": "Western Grebe"
+    },
+    {
+      "code": "whiskered_tern",
+      "name": "Whiskered Tern"
+    },
+    {
+      "code": "white_faced_heron",
+      "name": "White Faced Heron"
+    },
+    {
+      "code": "white_necked_heron",
+      "name": "White Necked Heron"
+    },
+    {
+      "code": "white_stork",
+      "name": "White Stork"
+    },
+    {
+      "code": "yellow_billed_stork",
+      "name": "Yellow Billed Stork"
+    }
   ],
-  "combo_codes": [
-    {"code": "ALL", "name": "All breeding species occurring at this colony"},
-    {"code": "CARO", "name": "Caspian/Royal Tern (combo)"},
-    {"code": "FOCO", "name": "Forster's/Common Tern (combo)"},
-    {"code": "ROSA", "name": "Royal or Sandwich Tern (combo)"},
-    {"code": "SONO", "name": "Sooty Tern or Brown Noddy (combo)"},
-    {"code": "TRSN", "name": "Tricolored Heron or Snowy Egret (combo)"},
-    {"code": "UNCO", "name": "Neotropic or Double-crested Cormorant (combo)"},
-    {"code": "USTE", "name": "Forster's and/or Gull-billed Tern (combo)"}
-  ],
-  "unknown_codes": [
-    {"code": "DAIB", "name": "Glossy/White-faced Ibis (dark - uncertain)"},
-    {"code": "SDHE", "name": "Small Dark Heron/Egret (uncertain)"},
-    {"code": "ULGU", "name": "Unknown Large Gull"},
-    {"code": "ULTE", "name": "Unknown Large Tern"},
-    {"code": "UNCR", "name": "Crow sp. (unknown)"},
-    {"code": "UNDU", "name": "Unknown Duck"},
-    {"code": "UNEG", "name": "Unknown Egret"},
-    {"code": "UNGT", "name": "Unknown Gull or Tern"},
-    {"code": "UNGU", "name": "Unknown Gull"},
-    {"code": "UNHG", "name": "Unknown Heron or Egret"},
-    {"code": "UNIB", "name": "Unidentified Ibis"},
-    {"code": "UNNH", "name": "Unidentified Night Heron"},
-    {"code": "UNRA", "name": "Unknown Rail"},
-    {"code": "UNSB", "name": "Unknown Shorebird"},
-    {"code": "UNTE", "name": "Unknown Tern sp."},
-    {"code": "UNWA", "name": "Unknown Waterbird"},
-    {"code": "UNWW", "name": "Unknown White Wader"},
-    {"code": "WADE", "name": "Wader sp. (unknown)"},
-    {"code": "WHEG", "name": "Great/Snowy Egret (uncertain)"}
-  ],
-  "morph_variants": [
-    {"code": "REEG DM", "name": "Reddish Egret Dark Morph", "parent": "REEG"},
-    {"code": "REEG WM", "name": "Reddish Egret White Morph", "parent": "REEG"}
-  ],
-  "note": "This database focuses on the 39 real, identifiable species for classification purposes."
+  "note": "64 species from swift_cls_UQ model"
 }
