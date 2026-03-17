@@ -1,6 +1,7 @@
 #!/bin/bash
 
-# NestScope - Run FastAPI backend + Flask webapp + Nestperts
+# NestScope Admin Tools - Complete Startup Script
+# Starts Backend API + Nestperts Expert Platform
 
 # Colors for output
 GREEN='\033[0;32m'
@@ -51,7 +52,7 @@ if [ -z "$PYTHON_VERSION" ]; then
 fi
 
 echo -e "${BLUE}================================${NC}"
-echo -e "${BLUE}   NestScope Startup Script     ${NC}"
+echo -e "${BLUE}   NestScope Admin Tools        ${NC}"
 echo -e "${BLUE}================================${NC}\n"
 
 if [ ! -z "$VIRTUAL_ENV" ]; then
@@ -59,7 +60,6 @@ if [ ! -z "$VIRTUAL_ENV" ]; then
 elif [ -d ".venv" ]; then
     echo -e "${YELLOW}⚠ Warning: Virtual environment exists but is not activated${NC}"
     echo -e "${YELLOW}  Activate it with: source .venv/bin/activate${NC}"
-    echo -e "${YELLOW}  Or use: ./activate_and_run.sh${NC}"
     echo ""
     read -p "Continue anyway? (y/N) " -n 1 -r
     echo
@@ -121,11 +121,8 @@ cleanup() {
     if [ ! -z "$SERVER_PID" ]; then
         kill $SERVER_PID 2>/dev/null || true
     fi
-    if [ ! -z "$CLIENT_PID" ]; then
-        kill $CLIENT_PID 2>/dev/null || true
-    fi
-    if [ ! -z "$LABELLER_PID" ]; then
-        kill $LABELLER_PID 2>/dev/null || true
+    if [ ! -z "$NESTPERTS_PID" ]; then
+        kill $NESTPERTS_PID 2>/dev/null || true
     fi
     echo -e "${GREEN}Servers stopped${NC}"
     exit 0
@@ -136,17 +133,16 @@ trap cleanup INT TERM
 
 # Get absolute paths to directories (before starting services)
 PROJECT_ROOT="$(pwd)"
-WEBAPP_DIR="$PROJECT_ROOT/webapp"
 LABELLER_DIR="$PROJECT_ROOT/labeller"
 LOGS_DIR="$PROJECT_ROOT/logs"
 
 # Start FastAPI server in background
-echo -e "${GREEN}Starting FastAPI server on http://localhost:8000${NC}"
+echo -e "${GREEN}Starting Backend API on http://localhost:8000${NC}"
 $PYTHON_CMD -m uvicorn server.main:app --host 0.0.0.0 --port 8000 --reload > "$LOGS_DIR/server.log" 2>&1 &
 SERVER_PID=$!
 
 # Wait for server to start with retry logic
-echo -e "${YELLOW}Waiting for server to start...${NC}"
+echo -e "${YELLOW}Waiting for backend to start...${NC}"
 MAX_RETRIES=10
 RETRY_COUNT=0
 SERVER_READY=false
@@ -154,7 +150,7 @@ SERVER_READY=false
 while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
     sleep 2
     if curl -s http://localhost:8000/health > /dev/null 2>&1; then
-        echo -e "${GREEN}✓ Server health check passed${NC}"
+        echo -e "${GREEN}✓ Backend health check passed${NC}"
         SERVER_READY=true
         break
     fi
@@ -163,21 +159,13 @@ while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
 done
 
 if [ "$SERVER_READY" = false ]; then
-    echo -e "${RED}⚠ Server health check failed after $MAX_RETRIES attempts${NC}"
+    echo -e "${RED}⚠ Backend health check failed after $MAX_RETRIES attempts${NC}"
     echo -e "${YELLOW}Check logs: tail -f logs/server.log${NC}"
     echo -e "${YELLOW}Continuing anyway...${NC}"
 fi
 
-# Start Flask webapp in background
-echo -e "${GREEN}Starting Flask webapp on http://localhost:8501${NC}"
-(cd "$WEBAPP_DIR" && $PYTHON_CMD app.py) > "$LOGS_DIR/webapp.log" 2>&1 &
-CLIENT_PID=$!
-
-# Wait a bit for Flask to start
-sleep 2
-
-# Start Nestperts V2 Flask app in background
-echo -e "${GREEN}Starting Nestperts V2 app on http://localhost:5000${NC}"
+# Start Nestperts Flask app in background
+echo -e "${GREEN}Starting Nestperts on http://localhost:5000${NC}"
 
 # Make sure port 5000 is free
 if lsof -Pi :5000 -sTCP:LISTEN -t >/dev/null 2>&1 ; then
@@ -186,17 +174,43 @@ if lsof -Pi :5000 -sTCP:LISTEN -t >/dev/null 2>&1 ; then
     sleep 1
 fi
 
-# Start with explicit environment and error logging
+# Check if waitress is installed, install if missing
+if ! $PYTHON_CMD -c "import waitress" &> /dev/null; then
+    echo -e "${YELLOW}Installing waitress for production server...${NC}"
+    $PYTHON_CMD -m pip install -q waitress 2>&1
+fi
+
+# Start with Waitress (production server with no upload limits)
 # Run from the labeller directory itself (so relative imports work)
-(cd "$LABELLER_DIR" && FLASK_ENV=development $PYTHON_CMD app.py) > "$LOGS_DIR/nestperts.log" 2>&1 &
-LABELLER_PID=$!
+(cd "$LABELLER_DIR" && $PYTHON_CMD -c "
+import sys
+sys.path.insert(0, '.')
+from waitress import serve
+from app import app
+
+# Ensure unlimited uploads
+app.config['MAX_CONTENT_LENGTH'] = None
+
+# Configure waitress for large uploads and long-running requests
+serve(
+    app,
+    host='0.0.0.0',
+    port=5000,
+    threads=4,
+    channel_timeout=7200,  # 2 hour timeout for long extractions
+    recv_bytes=1048576,    # 1MB receive buffer
+    send_bytes=1048576,    # 1MB send buffer
+    max_request_body_size=107374182400  # 100GB limit
+)
+") > "$LOGS_DIR/nestperts.log" 2>&1 &
+NESTPERTS_PID=$!
 
 # Give it time to start
 sleep 3
 
 # Check if process is still running
-if ps -p $LABELLER_PID > /dev/null 2>&1; then
-    echo -e "${GREEN}✓ Nestperts process started (PID: $LABELLER_PID)${NC}"
+if ps -p $NESTPERTS_PID > /dev/null 2>&1; then
+    echo -e "${GREEN}✓ Nestperts process started (PID: $NESTPERTS_PID)${NC}"
 
     # Wait a bit more for server to be ready
     sleep 2
@@ -216,17 +230,18 @@ else
 fi
 
 echo -e "\n${BLUE}================================${NC}"
-echo -e "${GREEN}✓ NestScope is running!${NC}"
+echo -e "${GREEN}✓ NestScope Admin Tools Running!${NC}"
 echo -e "${BLUE}================================${NC}"
-echo -e "\n${GREEN}Public Tools:${NC}"
-echo -e "  ${GREEN}Frontend:${NC}    http://localhost:8501  ${YELLOW}← OPEN THIS${NC}"
-echo -e "  ${GREEN}Backend:${NC}     http://localhost:8000"
-echo -e "  ${GREEN}API Docs:${NC}    http://localhost:8000/docs"
-echo -e "\n${GREEN}Expert Tools (OAuth Required):${NC}"
-echo -e "  ${GREEN}Nestperts:${NC}   http://localhost:5000"
+echo -e "\n${GREEN}Services:${NC}"
+echo -e "  ${GREEN}Backend API:${NC}   http://localhost:8000"
+echo -e "  ${GREEN}API Docs:${NC}      http://localhost:8000/docs"
+echo -e "  ${GREEN}Nestperts:${NC}     http://localhost:5000  ${YELLOW}← OPEN THIS${NC}"
+echo -e "\n${GREEN}What you can do:${NC}"
+echo -e "  ${GREEN}•${NC} Use Nestperts to annotate bird images and train species models"
+echo -e "  ${GREEN}•${NC} Use Backend API for database administration (NestDB)"
+echo -e "  ${GREEN}•${NC} Access flood intelligence and coastal analysis tools"
 echo -e "\n${YELLOW}Logs:${NC}"
 echo -e "  Backend:   tail -f logs/server.log"
-echo -e "  Frontend:  tail -f logs/webapp.log"
 echo -e "  Nestperts: tail -f logs/nestperts.log"
 echo -e "\n${YELLOW}Troubleshooting:${NC}"
 echo -e "  If Nestperts (port 5000) won't load:"
@@ -237,4 +252,3 @@ echo -e "\n${YELLOW}Press Ctrl+C to stop all servers${NC}\n"
 
 # Wait for both processes
 wait
-

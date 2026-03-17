@@ -225,7 +225,7 @@
                 <li>Ask questions in plain English and get instant visualizations</li>
                 <li>Upload colony images for automatic bird detection and species classification</li>
                 <li>View and edit database records with full version control</li>
-                <li>Create expert-labeled datasets for model training with MobileSAM</li>
+                <li>Create expert-labeled datasets for model training with Swift AI</li>
                 <li>Export data and images for external analysis in multiple formats</li>
             </ul>
         </div>
@@ -559,7 +559,7 @@
     <div id="nestperts" class="help-tab-content">
         <div class="help-section">
             <h3>Nestperts - Expert Species Training Platform</h3>
-            <p>Create expert-labeled datasets for training species classification models. Uses MobileSAM for interactive segmentation and supports multi-expert workflows.</p>
+            <p>Create expert-labeled datasets for training species classification models. Uses Swift AI for interactive segmentation and supports multi-expert workflows.</p>
 
             <h4>What is Nestperts?</h4>
             <ul>
@@ -582,10 +582,9 @@
                 <li><strong>Review Existing Detections:</strong> Check if all birds are detected</li>
                 <li><strong>Add Missing Birds:</strong>
                     <ul>
-                        <li>Press <kbd class="shortcut-key">A</kbd> for SAM mode</li>
+                        <li>Press <kbd class="shortcut-key">S</kbd> for AI Tool</li>
                         <li>Click on center of undetected bird</li>
-                        <li>MobileSAM generates segmentation mask</li>
-                        <li>Bounding box automatically created</li>
+                        <li>AI Tool detects the bird and creates a box</li>
                         <li>Assign species from dropdown</li>
                     </ul>
                 </li>
@@ -613,12 +612,12 @@
         </div>
 
         <div class="help-section">
-            <h3>MobileSAM Segmentation</h3>
+            <h3>Swift AI Segmentation</h3>
 
             <h4>How It Works</h4>
             <ol>
                 <li>You click on a bird</li>
-                <li>MobileSAM processes the image around that point</li>
+                <li>Swift AI processes the image around that point</li>
                 <li>Generates a segmentation mask</li>
                 <li>Bounding box calculated from mask</li>
                 <li>5% padding added for better coverage</li>
@@ -649,7 +648,8 @@
             <h4>Annotation Tools</h4>
             <ul>
                 <li><kbd class="shortcut-key">D</kbd> Draw box (manual mode)</li>
-                <li><kbd class="shortcut-key">A</kbd> AI segment (SAM mode)</li>
+                <li><kbd class="shortcut-key">S</kbd> AI Tool (prompts for auto-detection)</li>
+                <li><kbd class="shortcut-key">A</kbd> Auto-detect all birds</li>
                 <li><kbd class="shortcut-key">Delete</kbd> Delete selected box</li>
                 <li><kbd class="shortcut-key">Ctrl+Z</kbd> Undo last action</li>
             </ul>
@@ -734,7 +734,7 @@
                 <li>Check logs for validation errors</li>
             </ul>
 
-            <h4>MobileSAM Segmentation Fails</h4>
+            <h4>Swift AI Segmentation Fails</h4>
             <p><strong>Solutions:</strong></p>
             <ul>
                 <li>Verify <code>models/mobile_sam.pt</code> exists</li>
@@ -799,7 +799,7 @@
                 <li><strong>Detection (Apex):</strong> <code>models/apex.onnx</code> (37 MB) - High accuracy</li>
                 <li><strong>Classifier (Swift):</strong> <code>models/classifier_swift.onnx</code> (6 MB) - 7-class species groups</li>
                 <li><strong>Classifier (Apex):</strong> <code>models/classifier_apex.onnx</code> (21 MB) - 7-class species groups</li>
-                <li><strong>Segmentation:</strong> <code>models/mobile_sam.pt</code> (39 MB) - MobileSAM for Nestperts</li>
+                <li><strong>Segmentation:</strong> <code>models/mobile_sam.pt</code> (39 MB) - Swift AI for Nestperts</li>
             </ul>
 
             <h4>API Endpoints (FastAPI - Port 8000)</h4>
@@ -826,7 +826,7 @@
             <ul>
                 <li><code>server/config.yaml</code> - Team-wide configuration (version controlled)</li>
                 <li><code>.env</code> - Local secrets (NOT version controlled)</li>
-                <li><code>CLAUDE.md</code> - Project documentation for Claude Code</li>
+                <li><code>gemini.md</code> - Project documentation for Gemini CLI</li>
             </ul>
         </div>
 

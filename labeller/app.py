@@ -28,10 +28,32 @@ from dotenv import load_dotenv
 # Load environment variables
 load_dotenv()
 
+import yaml
+
 # Add project root to path
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
+
+# Load server configuration from YAML
+def load_server_config():
+    """Load configuration from server/config.yaml"""
+    config_path = os.path.join(PROJECT_ROOT, 'server', 'config.yaml')
+    try:
+        with open(config_path, 'r') as f:
+            return yaml.safe_load(f)
+    except Exception as e:
+        print(f"⚠️  Warning: Could not load server/config.yaml: {e}")
+        # Return sensible defaults
+        return {
+            'cv': {
+                'model': 'models/swift.onnx',
+                'classifier': 'models/classifier_swift.onnx',
+                'default_confidence': 0.25
+            }
+        }
+
+server_config = load_server_config()
 
 # Import authentication module
 from labeller.auth import (
@@ -1018,7 +1040,7 @@ def test_image():
 @app.route('/project/<project_folder>/editor/<username>')
 @app.route('/project/<project_folder>/editor/<username>/<int:image_index>')
 @login_required
-def editor(project_folder, username, image_index=0):
+def editor(project_folder, username, image_index=None):
     """Expert annotation editor for a specific user in a project"""
     metadata = get_project(project_folder)
     if not metadata:
@@ -1049,6 +1071,19 @@ def editor(project_folder, username, image_index=0):
         display_name = user_data.get('name', username)
         return f"No images for user '{display_name}'. Please assign images first.", 404
 
+    # If no image_index provided, find first incomplete image
+    if image_index is None:
+        if assigned_images:
+            # assigned_images contains images NOT yet completed
+            first_incomplete = assigned_images[0]
+            try:
+                image_index = all_user_images.index(first_incomplete)
+            except ValueError:
+                image_index = 0
+        else:
+            # All completed or none assigned, go to first image
+            image_index = 0
+
     # Validate image index
     if image_index < 0 or image_index >= len(all_user_images):
         image_index = 0
@@ -1063,9 +1098,23 @@ def editor(project_folder, username, image_index=0):
     if not os.path.exists(image_path):
         return f"Image not found: {image_name}", 404
 
-    # Load classes from project's data.yaml first
+    # Load all potential species for search from database
+    all_real_species = []
+    try:
+        service = get_species_service()
+        all_real_species = service.get_all_species()
+    except Exception as e:
+        print(f"Error loading species from database: {e}")
+        # Fallback to species_list.json
+        species_file = os.path.join(APP_DIR, 'data', 'species_list.json')
+        if os.path.exists(species_file):
+            with open(species_file, 'r') as f:
+                data = json.load(f)
+                all_real_species = data.get('real_species', [])
+
+    # Load classes from project's data.yaml
     data_yaml_path = os.path.join(project_path, 'data.yaml')
-    class_list = []
+    project_classes = []
     class_names = {}  # Map class_id to class_name
 
     if os.path.exists(data_yaml_path):
@@ -1076,31 +1125,25 @@ def editor(project_folder, username, image_index=0):
 
             # Handle both dict and list formats
             if isinstance(names, dict):
-                # Dict format: {0: 'bird', 1: 'car'}
                 class_names = names
                 for class_id, class_name in names.items():
-                    class_list.append({
-                        'code': class_name,
-                        'name': class_name
-                    })
+                    project_classes.append({'code': class_name, 'name': class_name})
             elif isinstance(names, list):
-                # List format: ['bird', 'car']
                 class_names = {i: name for i, name in enumerate(names)}
                 for i, class_name in enumerate(names):
-                    class_list.append({
-                        'code': class_name,
-                        'name': class_name
-                    })
-            else:
-                # Unexpected format, fallback to empty
-                class_names = {}
-    else:
-        # Fallback to species_list.json if data.yaml doesn't exist
-        species_file = os.path.join(APP_DIR, 'data', 'species_list.json')
-        if os.path.exists(species_file):
-            with open(species_file, 'r') as f:
-                data = json.load(f)
-                class_list = data.get('real_species', [])
+                    project_classes.append({'code': class_name, 'name': class_name})
+
+    # class_list for editor: project classes first, then others for searchability
+    class_list = project_classes.copy()
+    seen_codes = {c.get('code') for c in project_classes if c.get('code')}
+    for s in all_real_species:
+        if s.get('code') not in seen_codes:
+            class_list.append(s)
+            seen_codes.add(s.get('code'))
+
+    # If no data.yaml or it was empty, use all_real_species
+    if not class_list:
+        class_list = all_real_species
 
     # Load existing labels (if any)
     label_file = os.path.splitext(image_name)[0] + '.txt'
@@ -1113,15 +1156,16 @@ def editor(project_folder, username, image_index=0):
                 parts = line.strip().split()
                 if len(parts) >= 5:
                     class_id = int(parts[0])
-                    # Use class name from data.yaml instead of species code from column 6
-                    class_name = class_names.get(class_id, None)
+                    # Prefer species from 6th column if it exists
+                    species = parts[5] if len(parts) >= 6 else class_names.get(class_id, "bird")
+                    
                     boxes.append({
                         'class_id': class_id,
                         'x_center': float(parts[1]),
                         'y_center': float(parts[2]),
                         'width': float(parts[3]),
                         'height': float(parts[4]),
-                        'species': class_name  # Use class name from data.yaml
+                        'species': species
                     })
 
     # Simple questions structure (can be expanded later)
@@ -1730,11 +1774,21 @@ def assign_task():
             available = unassigned
             selection_type = "unassigned images only"
 
+        # Calculate statistics for better feedback
+        total_images = len(all_images)
+        total_assigned = len(assigned_images)
+        total_unassigned = total_images - total_assigned
+        user_already_has = len(user_current)
+
         if not available:
             if allow_reassign:
-                return jsonify({'error': f'All images already assigned to {user_name}'}), 400
+                return jsonify({
+                    'error': f'All {total_images} images already assigned to {user_name}'
+                }), 400
             else:
-                return jsonify({'error': 'No unassigned images available. Enable "Allow Reassignment" to assign already-assigned images.'}), 400
+                return jsonify({
+                    'error': f'No unassigned images available. {total_assigned}/{total_images} images are already assigned to other users. Enable "Allow Reassignment" to assign already-assigned images.'
+                }), 400
 
         # Random selection
         num_to_assign = min(num_images, len(available))
@@ -1775,8 +1829,11 @@ def assign_task():
             'success': True,
             'assigned': len(new_assignments),
             'total_assigned': len(state['users'][user_email]['assigned']),
+            'total_images': total_images,
+            'total_unassigned': total_unassigned,
+            'available': len(available),
             'selection_type': selection_type,
-            'message': f'Assigned {len(new_assignments)} new image(s) to {user_name} ({selection_type})'
+            'message': f'Assigned {len(new_assignments)} new image(s) to {user_name}. Total: {len(state["users"][user_email]["assigned"])}/{total_images} images. Unassigned remaining: {total_unassigned - len(new_assignments)}'
         })
 
     except Exception as e:
@@ -2153,8 +2210,12 @@ def save_annotations():
             names = data_yaml.get('names', {})
             # Normalize to {int: str} format
             names_normalized = {}
-            for k, v in names.items():
-                names_normalized[int(k)] = v
+            if isinstance(names, dict):
+                for k, v in names.items():
+                    names_normalized[int(k)] = v
+            elif isinstance(names, list):
+                for i, v in enumerate(names):
+                    names_normalized[i] = v
 
             # Find species codes that exist in names values
             existing_species = set(names_normalized.values())
@@ -2175,8 +2236,9 @@ def save_annotations():
 
                 # Update data.yaml
                 data_yaml['names'] = names_normalized
+                data_yaml['nc'] = len(names_normalized)
                 save_data_yaml(project_folder, data_yaml)
-                print(f"Updated data.yaml with {len(new_species)} new species")
+                print(f"Updated data.yaml with {len(new_species)} new species. New nc: {data_yaml['nc']}")
 
         # Update user progress
         state = load_project_state(project_folder)
@@ -2235,12 +2297,20 @@ def get_project_classes():
 
         # Convert to list format expected by frontend
         class_list = []
-        for class_id, class_name in names.items():
-            class_list.append({
-                'id': int(class_id),
-                'code': class_name,
-                'name': class_name  # Use code as name for now
-            })
+        if isinstance(names, dict):
+            for class_id, class_name in names.items():
+                class_list.append({
+                    'id': int(class_id),
+                    'code': class_name,
+                    'name': class_name
+                })
+        elif isinstance(names, list):
+            for i, class_name in enumerate(names):
+                class_list.append({
+                    'id': i,
+                    'code': class_name,
+                    'name': class_name
+                })
 
         return jsonify({'classes': class_list})
 
@@ -2509,18 +2579,40 @@ _bird_detector = None
 _species_service = None
 _user_service = None
 
+def get_cv_config():
+    """Get CV configuration with latest server/config.yaml values"""
+    # Reload config to pick up any manual changes to server/config.yaml
+    config = load_server_config()
+    return config.get('cv', {})
+
+# Track loaded model paths to detect changes
+_loaded_classifier_path = None
+
 def get_bird_detector():
     """Lazy load BirdDetector with classifier"""
-    global _bird_detector
-    if _bird_detector is None:
+    global _bird_detector, _loaded_classifier_path
+    
+    cv_config = get_cv_config()
+    rel_cls_path = cv_config.get('classifier', 'models/classifier_swift.onnx')
+    model_path = os.path.join(PROJECT_ROOT, rel_cls_path)
+    
+    # Reload if not loaded or if the configured path has changed
+    if _bird_detector is None or _loaded_classifier_path != model_path:
         try:
-            import sys
-            sys.path.insert(0, PROJECT_ROOT)
-            from server.cv_tools.inference import BirdDetector
-            _bird_detector = BirdDetector()
-            print("BirdDetector with classifier loaded")
+            from labeller.onnx_classifier import get_bird_detector as _get_detector
+            
+            # Optional: custom classes file from config
+            classes_path = None
+            if 'classifier_classes' in cv_config:
+                classes_path = os.path.join(PROJECT_ROOT, cv_config['classifier_classes'])
+            
+            _bird_detector = _get_detector(model_path=model_path, classes_file=classes_path)
+            _loaded_classifier_path = model_path
+            print(f"✓ BirdDetector with classifier loaded from: {model_path}")
         except Exception as e:
-            print(f" Could not load BirdDetector: {e}")
+            print(f"✗ Could not load BirdDetector: {e}")
+            import traceback
+            traceback.print_exc()
     return _bird_detector
 
 def get_species_service():
@@ -2556,23 +2648,25 @@ def get_wikipedia_images_func(species_name, max_images=5, offset=0):
         print(f" Could not load Wikipedia images: {e}")
         return []
 
-@app.route('/api/sam_segment', methods=['POST'])
+@app.route('/api/detect_all_birds', methods=['POST'])
 @api_annotator_required
-def sam_segment():
+def detect_all_birds():
     """
-    Segment birds using MobileSAM with point prompts
+    Detect all birds in an image using swift.onnx detector.
 
-    Uses the MobileSAM model (models/mobile_sam.pt) to generate precise
-    bounding boxes from user click points.
+    This is much faster than SAM clicking:
+    - Finds ALL birds in one pass (~100-200ms)
+    - Returns YOLO format bounding boxes
+    - 85-90% accuracy
     """
     try:
         data = request.json
         image_name = data.get('image_name')
-        points = data.get('points', [])  # [[x, y]] in normalized coords
         project_folder = data.get('project_id', 'nestvision')
+        conf_threshold = data.get('confidence', 0.25)  # Configurable confidence
 
-        if not image_name or not points:
-            return jsonify({'error': 'Missing image_name or points'}), 400
+        if not image_name:
+            return jsonify({'error': 'Missing image_name'}), 400
 
         # Get image path
         images_dir = os.path.join(PROJECTS_DIR, project_folder, 'images')
@@ -2581,110 +2675,261 @@ def sam_segment():
         if not os.path.exists(image_path):
             return jsonify({'error': f'Image not found: {image_name}'}), 404
 
-        # Load MobileSAM model
-        from ultralytics import SAM
-        model_path = os.path.join(PROJECT_ROOT, 'models', 'mobile_sam.pt')
+        # Load model path from config
+        cv_config = get_cv_config()
+        rel_model_path = cv_config.get('model', 'models/swift.onnx')
+        model_path = os.path.join(PROJECT_ROOT, rel_model_path)
 
-        if not os.path.exists(model_path):
-            return jsonify({'error': f'MobileSAM model not found at {model_path}'}), 500
+        # Initialize swift detector (cached)
+        if not hasattr(detect_all_birds, 'detector') or getattr(detect_all_birds, 'path', None) != model_path:
+            import onnxruntime as ort
 
-        # Initialize SAM model (cached globally for efficiency)
-        if not hasattr(sam_segment, 'sam_model'):
-            print(f"Loading MobileSAM from {model_path}...")
-            sam_segment.sam_model = SAM(model_path)
-            print("MobileSAM loaded successfully")
+            print(f"Loading detector from: {model_path}")
+            if not os.path.exists(model_path):
+                return jsonify({'error': f'Model not found at {model_path}'}), 500
 
-        model = sam_segment.sam_model
+            providers = ['CPUExecutionProvider']
+            if 'CUDAExecutionProvider' in ort.get_available_providers():
+                providers.insert(0, 'CUDAExecutionProvider')
+                print("  Using GPU")
+            else:
+                print("  Using CPU")
 
-        # Read image to get dimensions
+            detect_all_birds.detector = ort.InferenceSession(model_path, providers=providers)
+            detect_all_birds.path = model_path
+            print("✓ Detector loaded")
+        detector = detect_all_birds.detector
+
+        # Read and preprocess image
         import cv2
         img = cv2.imread(image_path)
-        height, width = img.shape[:2]
+        if img is None:
+            return jsonify({'error': 'Failed to read image'}), 500
 
-        # Convert normalized coords to pixel coords
-        pixel_points = []
-        for point in points:
-            pixel_x = int(point[0] * width)
-            pixel_y = int(point[1] * height)
-            pixel_points.append([pixel_x, pixel_y])
+        orig_height, orig_width = img.shape[:2]
 
-        # Run SAM prediction with point prompts
-        # Points format: [[x1, y1], [x2, y2], ...] in pixel coordinates
-        # Labels: 1 for foreground points
-        results = model.predict(
-            image_path,
-            points=pixel_points,
-            labels=[1] * len(pixel_points),  # All points are foreground
-            verbose=False
-        )
+        # USE SAHI for large images (> 1024x1024)
+        if orig_height > 1024 or orig_width > 1024:
+            try:
+                from sahi import AutoDetectionModel
+                from sahi.predict import get_sliced_prediction
+                from sahi.models.ultralytics import UltralyticsDetectionModel
 
-        # Extract bounding boxes from masks
-        boxes = []
-        if results and len(results) > 0:
-            result = results[0]  # First result
+                print(f"Detector: Using SAHI for large image ({orig_width}x{orig_height})")
+                
+                # Initialize SAHI model (cached)
+                cv_config = get_cv_config()
+                rel_model_path = cv_config.get('model', 'models/swift.onnx')
+                model_path = os.path.join(PROJECT_ROOT, rel_model_path)
+                
+                if not hasattr(detect_all_birds, 'sahi_model') or getattr(detect_all_birds, 'sahi_path', None) != model_path:
+                    
+                    detect_all_birds.sahi_model = UltralyticsDetectionModel(
+                        model_path=model_path,
+                        confidence_threshold=conf_threshold,
+                        device='cpu' # Use CPU for now as default providers in app are CPU
+                    )
+                    detect_all_birds.sahi_path = model_path
+                    print("✓ SAHI Model loaded")
+                
+                sahi_model = detect_all_birds.sahi_model
+                sahi_model.model.conf = conf_threshold # Update confidence
 
-            # Check if we have masks
-            if hasattr(result, 'masks') and result.masks is not None:
-                masks = result.masks.data.cpu().numpy()  # Shape: (N, H, W)
+                # Run sliced inference
+                result = get_sliced_prediction(
+                    image_path,
+                    sahi_model,
+                    slice_height=1024,
+                    slice_width=1024,
+                    overlap_height_ratio=0.2,
+                    overlap_width_ratio=0.2
+                )
 
-                for mask in masks:
-                    # Find bounding box from mask
-                    # mask is a 2D boolean/float array
-                    rows = np.any(mask > 0.5, axis=1)
-                    cols = np.any(mask > 0.5, axis=0)
-
-                    if not np.any(rows) or not np.any(cols):
-                        continue  # Empty mask
-
-                    y1, y2 = np.where(rows)[0][[0, -1]]
-                    x1, x2 = np.where(cols)[0][[0, -1]]
-
-                    # Validate mask size (filter out masks that are too large or too small)
-                    mask_width = x2 - x1
-                    mask_height = y2 - y1
-                    mask_area = mask_width * mask_height
-                    image_area = width * height
-
-                    # Skip masks that are >30% of image (probably wrong) or <50 pixels
-                    if mask_area > 0.3 * image_area or mask_area < 50:
-                        continue
-
-                    # Add 5% padding to the bounding box
-                    padding_x = int(mask_width * 0.05)
-                    padding_y = int(mask_height * 0.05)
-
-                    x1 = max(0, x1 - padding_x)
-                    y1 = max(0, y1 - padding_y)
-                    x2 = min(width, x2 + padding_x)
-                    y2 = min(height, y2 + padding_y)
-
+                results = []
+                for object_prediction in result.object_prediction_list:
+                    bbox = object_prediction.bbox.to_xyxy() # [x1, y1, x2, y2]
+                    score = object_prediction.score.value
+                    category_id = object_prediction.category.id
+                    
                     # Convert to normalized YOLO format
-                    x_center = (x1 + x2) / 2 / width
-                    y_center = (y1 + y2) / 2 / height
-                    box_width = (x2 - x1) / width
-                    box_height = (y2 - y1) / height
+                    x1, y1, x2, y2 = bbox
+                    x_center = ((x1 + x2) / 2) / orig_width
+                    y_center = ((y1 + y2) / 2) / orig_height
+                    width = (x2 - x1) / orig_width
+                    height = (y2 - y1) / orig_height
 
-                    boxes.append({
+                    results.append({
                         'x_center': float(x_center),
                         'y_center': float(y_center),
-                        'width': float(box_width),
-                        'height': float(box_height),
-                        'confidence': 1.0  # SAM doesn't provide confidence
+                        'width': float(width),
+                        'height': float(height),
+                        'confidence': float(score),
+                        'class_id': int(category_id)
                     })
 
-        if not boxes:
-            return jsonify({'error': 'No bird detected at this location. Try clicking directly on a bird.'}), 404
+                print(f"Detector (SAHI): Found {len(results)} birds")
+                return jsonify({
+                    'success': True,
+                    'boxes': results,
+                    'count': len(results),
+                    'mode': 'sahi'
+                })
+            except ImportError:
+                print("⚠️ SAHI not installed, falling back to standard detection")
+            except Exception as e:
+                print(f"⚠️ SAHI error: {e}, falling back to standard detection")
+
+        # Standard detector (for small images or fallback)
+        # Dynamically determine target_size from ONNX model input shape
+        input_shape = detector.get_inputs()[0].shape
+        if isinstance(input_shape[2], int):
+            target_size = input_shape[2]
+        else:
+            target_size = 1024
+
+        print(f"  Model input size: {target_size}x{target_size}")
+
+        scale = target_size / max(orig_height, orig_width)
+        new_w = int(orig_width * scale)
+        new_h = int(orig_height * scale)
+
+        resized = cv2.resize(img, (new_w, new_h), interpolation=cv2.INTER_LINEAR)
+
+        # Pad to square
+        padded = np.ones((target_size, target_size, 3), dtype=np.uint8) * 114
+        padded[:new_h, :new_w] = resized
+
+        # Convert BGR to RGB (YOLO expects RGB)
+        rgb = cv2.cvtColor(padded, cv2.COLOR_BGR2RGB)
+
+        # Normalize and transpose
+        input_tensor = rgb.astype(np.float32) / 255.0
+        input_tensor = np.transpose(input_tensor, (2, 0, 1))
+        input_tensor = np.expand_dims(input_tensor, axis=0)
+
+        # Run detection
+        print(f"Detector: Running on {image_name} (confidence={conf_threshold})...")
+        input_name = detector.get_inputs()[0].name
+        outputs = detector.run(None, {input_name: input_tensor})
+
+        # Post-process outputs
+        # Support both YOLOv8 (1, nc+4, 8400) and YOLO26n End-to-End (1, 300, 6)
+        output = outputs[0][0]
+        
+        if output.shape[0] == 300 and output.shape[1] == 6:
+            # YOLO26n End-to-End format: [x1, y1, x2, y2, conf, class]
+            print("  Detected YOLO26n End-to-End format")
+            detections = output
+            confidences = detections[:, 4]
+            mask = confidences > conf_threshold
+            filtered = detections[mask]
+            
+            if len(filtered) == 0:
+                return jsonify({'success': True, 'boxes': [], 'count': 0})
+                
+            # Extract boxes (already in corner format)
+            final_boxes = filtered[:, :4]
+            final_scores = filtered[:, 4]
+        else:
+            # Traditional YOLO format: [x, y, w, h, conf, class]
+            # Transpose to (8400, 6)
+            detections = output.T
+            confidences = detections[:, 4]
+            mask = confidences > conf_threshold
+            filtered = detections[mask]
+
+            if len(filtered) == 0:
+                print(f"Detector: No birds found (tried {len(detections)} candidates)")
+                return jsonify({
+                    'success': True,
+                    'boxes': [],
+                    'count': 0
+                })
+
+            # Extract boxes and scores
+            boxes_xywh = filtered[:, :4]
+            scores = filtered[:, 4]
+
+            # Convert to corner format for NMS
+            boxes_xyxy = boxes_xywh.copy()
+            boxes_xyxy[:, 0] -= boxes_xyxy[:, 2] / 2  # x1
+            boxes_xyxy[:, 1] -= boxes_xyxy[:, 3] / 2  # y1
+            boxes_xyxy[:, 2] += boxes_xyxy[:, 0]      # x2
+            boxes_xyxy[:, 3] += boxes_xyxy[:, 1]      # y2
+
+            # NMS
+            def nms(boxes, scores, iou_threshold=0.45):
+                x1, y1, x2, y2 = boxes[:, 0], boxes[:, 1], boxes[:, 2], boxes[:, 3]
+                areas = (x2 - x1) * (y2 - y1)
+                order = scores.argsort()[::-1]
+                keep = []
+                while order.size > 0:
+                    i = order[0]
+                    keep.append(i)
+                    xx1 = np.maximum(x1[i], x1[order[1:]])
+                    yy1 = np.maximum(y1[i], y1[order[1:]])
+                    xx2 = np.minimum(x2[i], x2[order[1:]])
+                    yy2 = np.minimum(y2[i], y2[order[1:]])
+                    w = np.maximum(0.0, xx2 - xx1)
+                    h = np.maximum(0.0, yy2 - yy1)
+                    inter = w * h
+                    iou = inter / (areas[i] + areas[order[1:]] - inter)
+                    inds = np.where(iou <= iou_threshold)[0]
+                    order = order[inds + 1]
+                return keep
+
+            indices = nms(boxes_xyxy, scores)
+            final_boxes = boxes_xyxy[indices]
+            final_scores = scores[indices]
+
+        # Scale back to original image and convert to YOLO format
+        final_boxes /= scale
+        
+        # Extract class IDs if available
+        if output.shape[0] == 300 and output.shape[1] == 6:
+            final_class_ids = filtered[:, 5].astype(int)
+        else:
+            final_class_ids = filtered[indices, 5].astype(int)
+            
+        results = []
+
+        for i, (box, score) in enumerate(zip(final_boxes, final_scores)):
+            x1, y1, x2, y2 = box
+            class_id = int(final_class_ids[i])
+
+            # Clamp to image bounds
+            x1 = max(0, min(x1, orig_width))
+            y1 = max(0, min(y1, orig_height))
+            x2 = max(0, min(x2, orig_width))
+            y2 = max(0, min(y2, orig_height))
+
+            # Convert to normalized YOLO format
+            x_center = ((x1 + x2) / 2) / orig_width
+            y_center = ((y1 + y2) / 2) / orig_height
+            width = (x2 - x1) / orig_width
+            height = (y2 - y1) / orig_height
+
+            results.append({
+                'x_center': float(x_center),
+                'y_center': float(y_center),
+                'width': float(width),
+                'height': float(height),
+                'confidence': float(score),
+                'class_id': class_id
+            })
+
+        print(f"Detector: Found {len(results)} birds")
 
         return jsonify({
             'success': True,
-            'boxes': boxes[:3],  # Return max 3 boxes (in case of overlapping masks)
-            'count': len(boxes[:3])
+            'boxes': results,
+            'count': len(results)
         })
 
     except Exception as e:
         import traceback
-        print(f"SAM segmentation error: {traceback.format_exc()}")
-        return jsonify({'error': f'Segmentation failed: {str(e)}'}), 500
+        print(f"Detection error: {traceback.format_exc()}")
+        return jsonify({'error': f'Detection failed: {str(e)}'}), 500
 
 @app.route('/api/classify_crop', methods=['POST'])
 @api_annotator_required
@@ -2740,10 +2985,19 @@ def classify_crop():
         # Classify (get top-5)
         result = detector.classify_crop(crop, top_k=5)
 
+        # Convert result format to API format
+        predictions = []
+        for pred in result.get('top_predictions', []):
+            predictions.append({
+                'species_code': pred['code'],
+                'species_name': pred['full_name'],
+                'confidence': pred['confidence']
+            })
+
         # Return predictions
         return jsonify({
             'success': True,
-            'predictions': result.get('top_predictions', [])
+            'predictions': predictions
         })
 
     except Exception as e:
@@ -2818,12 +3072,23 @@ def classify_all_birds():
             # Classify (get top prediction)
             result = detector.classify_crop(crop, top_k=1)
 
+            # Extract top prediction (it's a list of dicts now)
+            if result.get('top_predictions') and len(result['top_predictions']) > 0:
+                pred = result['top_predictions'][0]
+                species_code = pred['code']
+                species_name = pred['full_name']
+                confidence = pred['confidence']
+            else:
+                species_code = 'UNKNOWN'
+                species_name = 'Unknown'
+                confidence = 0.0
+
             # Add classification result to box
             classified_boxes.append({
                 **box,
-                'species': result['species_code'],
-                'species_name': result['species_name'],
-                'confidence': result['confidence']
+                'species': species_code,
+                'species_name': species_name,
+                'confidence': confidence
             })
 
         # Return classified boxes

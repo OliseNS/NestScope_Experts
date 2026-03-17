@@ -19,12 +19,10 @@ from pathlib import Path
 from dotenv import load_dotenv
 import json
 import asyncio
-import cv2
 import base64
 import httpx
 import yaml
 import logging
-from server.cv_tools.inference import BirdDetector, get_example_images
 from server.db_version import DatabaseVersionControl
 from server.db_change_tracker import ChangeTracker
 from server.flood_tools.flood_database import FloodDatabase
@@ -167,16 +165,6 @@ class StatsResponse(BaseModel):
     states: List[str]
     observations_by_year: Dict[str, int]
 
-class CVInferenceResponse(BaseModel):
-    bird_count: int
-    detections: List[Dict[str, Any]]
-    species_summary: Dict[str, int] = {}  # {group_name: count}
-    annotated_image_base64: str
-    message: str
-    inference_time: float
-
-class ExampleImagesResponse(BaseModel):
-    examples: List[str]
 
 class CustomSQLRequest(BaseModel):
     sql_query: str
@@ -2270,31 +2258,26 @@ Fix the SQL and return corrected JSON with {"sql": "..."} format."""
         yield {'type': 'error', 'content': f'Query failed after {self.max_attempts} attempts'}
 
 
-# Initialize chatbot and bird detector
+# Initialize chatbot
 chatbot = SQLChatbot()
 agentic_chatbot = AgenticSQLChatbot()
-try:
-    bird_detector = BirdDetector()
-    print("Bird detector initialized successfully!")
-except Exception as e:
-    print(f"Warning: Bird detector initialization failed: {e}")
-    bird_detector = None
 
 # API Endpoints
 @app.get("/")
 async def root():
     """Root endpoint"""
     return {
-        "message": "Bird Colony SQL Chatbot API",
-        "version": "1.0.0",
+        "message": "NestScope Admin API",
+        "version": "2.0.0",
+        "description": "Admin tools for Nestperts, NestDB, and Flood Intelligence",
         "endpoints": {
-            "/ask": "POST - Ask a question in natural language",
-            "/ask/stream": "POST - Ask with streaming response",
-            "/ask/agentic/stream": "POST - Ask with agentic self-correction (recommended for accuracy)",
+            "/health": "GET - Health check",
+            "/config": "GET - Get server configuration",
             "/schema": "GET - Get database schema",
             "/stats": "GET - Get database statistics",
-            "/health": "GET - Health check",
-            "/config": "GET - Get server configuration"
+            "/db/*": "Database admin endpoints (NestDB)",
+            "/nestdb/*": "SQL query generation for admins",
+            "/query/*": "Custom query execution endpoints"
         }
     }
 
@@ -2460,124 +2443,7 @@ async def get_stats():
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.post("/ask", response_model=QueryResponse)
-async def ask_question(request: QuestionRequest):
-    """
-    Ask a question in natural language.
-    The API will:
-    1. Convert the question to SQL
-    2. Execute the query
-    3. Return results and a natural language answer
-    """
-    try:
-        # Update model if provided, otherwise use default from env
-        if request.model:
-            chatbot.model = request.model
 
-        # Step 1: Generate SQL query with conversation context
-        sql_query = chatbot.generate_sql_query(request.question, conversation_history=request.conversation_history)
-
-        if sql_query.startswith("ERROR"):
-            return QueryResponse(
-                sql_query=sql_query,
-                results=None,
-                results_count=0,
-                answer="",
-                error=sql_query
-            )
-
-        # Step 2: Execute query
-        results_df, error = chatbot.execute_query(sql_query)
-
-        # Convert dataframe to list of dicts (will be None if error occurred)
-        results = results_df.to_dict(orient='records') if results_df is not None else None
-        results_count = len(results_df) if results_df is not None else 0
-
-        # Step 3: Generate natural language answer with conversation context (handles both success and error cases)
-        answer = chatbot.generate_answer(request.question, sql_query, results_df, query_error=error, conversation_history=request.conversation_history)
-
-        # Parse visualization directives (with automatic fallback detection)
-        viz_directives = parse_visualization_directives(answer, results_df)
-
-        return QueryResponse(
-            sql_query=sql_query,
-            results=results,
-            results_count=results_count,
-            answer=viz_directives['clean_answer'],
-            error=error,  # Still include error for debugging, but answer will explain it
-            show_chart=viz_directives['show_chart'],
-            chart_type=viz_directives['chart_type'],
-            show_map=viz_directives['show_map']
-        )
-
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-@app.post("/ask/stream")
-async def ask_question_stream(request: QuestionRequest):
-    """
-    Ask a question in natural language with streaming response.
-    Returns a stream of Server-Sent Events (SSE)
-    """
-    async def event_generator():
-        try:
-            # Update model if provided, otherwise use default from env
-            if request.model:
-                chatbot.model = request.model
-
-            # Step 1: Generate SQL query with conversation context
-            sql_query = chatbot.generate_sql_query(request.question, conversation_history=request.conversation_history)
-
-            if sql_query.startswith("ERROR"):
-                yield f"data: {json.dumps({'type': 'error', 'content': sql_query})}\n\n"
-                return
-
-            # Step 2: Execute query
-            results_df, error = chatbot.execute_query(sql_query)
-
-            # Convert dataframe to list of dicts (will be None if error occurred)
-            results = results_df.to_dict(orient='records') if results_df is not None else None
-            results_count = len(results_df) if results_df is not None else 0
-
-            # Send SQL query and results (or error info)
-            yield f"data: {json.dumps({'type': 'sql_query', 'content': sql_query})}\n\n"
-            yield f"data: {json.dumps({'type': 'results', 'content': results, 'count': results_count})}\n\n"
-
-            if error:
-                yield f"data: {json.dumps({'type': 'query_error', 'content': error})}\n\n"
-
-            # Step 3: Stream the answer with conversation context (handles both success and error cases)
-            yield f"data: {json.dumps({'type': 'answer_start'})}\n\n"
-
-            full_answer = ""
-            for chunk in chatbot.generate_answer_stream(request.question, sql_query, results_df, query_error=error, conversation_history=request.conversation_history):
-                full_answer += chunk
-                yield f"data: {json.dumps({'type': 'answer_chunk', 'content': chunk})}\n\n"
-                await asyncio.sleep(0)  # Allow other tasks to run
-
-            # Parse visualization directives and get clean answer
-            viz_directives = parse_visualization_directives(full_answer, results_df)
-
-            # Send clean answer (without visualization directives)
-            yield f"data: {json.dumps({'type': 'answer_end', 'clean_answer': viz_directives['clean_answer']})}\n\n"
-
-            # Send visualization directives separately
-            yield f"data: {json.dumps({'type': 'visualization', 'show_chart': viz_directives['show_chart'], 'chart_type': viz_directives['chart_type'], 'show_map': viz_directives['show_map']})}\n\n"
-
-            yield f"data: {json.dumps({'type': 'done'})}\n\n"
-
-        except Exception as e:
-            yield f"data: {json.dumps({'type': 'error', 'content': str(e)})}\n\n"
-
-    return StreamingResponse(
-        event_generator(),
-        media_type="text/event-stream",
-        headers={
-            "Cache-Control": "no-cache",
-            "Connection": "keep-alive",
-            "X-Accel-Buffering": "no"
-        }
-    )
 
 @app.post("/nestdb/generate_query")
 async def nestdb_generate_query(request: QuestionRequest):
@@ -2670,345 +2536,21 @@ CORE RULES:
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.post("/ask/agentic/stream")
-async def ask_question_agentic_stream(request: QuestionRequest):
-    """
-    Ask a question with agentic self-correction and real-time progress updates.
-
-    This endpoint uses multi-step reasoning:
-    1. Analyze question
-    2. Generate SQL
-    3. Self-validate SQL
-    4. Execute query
-    5. Validate results
-    6. Retry if needed (max 3 attempts)
-
-    Returns a stream of Server-Sent Events (SSE) with progress updates.
-    """
-    async def event_generator():
-        try:
-            # Update model if provided
-            if request.model:
-                agentic_chatbot.model = request.model
-
-            # Stream agentic reasoning process
-            async for event in agentic_chatbot.agentic_ask_stream(
-                request.question,
-                conversation_history=request.conversation_history
-            ):
-                yield f"data: {json.dumps(event)}\n\n"
-                await asyncio.sleep(0)  # Allow other tasks to run
-
-        except Exception as e:
-            yield f"data: {json.dumps({'type': 'error', 'content': str(e)})}\n\n"
-
-    return StreamingResponse(
-        event_generator(),
-        media_type="text/event-stream",
-        headers={
-            "Cache-Control": "no-cache",
-            "Connection": "keep-alive",
-            "X-Accel-Buffering": "no"
-        }
-    )
-
-@app.get("/cv/examples", response_model=ExampleImagesResponse)
-async def get_cv_examples():
-    """Get list of example images for computer vision"""
-    try:
-        examples = get_example_images()
-        return {"examples": examples}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-@app.post("/cv/inference", response_model=CVInferenceResponse)
-async def run_cv_inference(
-    file: UploadFile = File(...),
-    conf_threshold: float = 0.25
-):
-    """
-    Run bird detection inference on an uploaded image with Swift model and SAHI
-
-    Args:
-        file: Uploaded image file
-        conf_threshold: Confidence threshold for detections (default: 0.25)
-
-    Returns:
-        CVInferenceResponse: Detection results with annotated image
-    """
-    if bird_detector is None:
-        raise HTTPException(
-            status_code=503,
-            detail="Computer vision model is not available"
-        )
-
-    try:
-        # Read image bytes
-        image_bytes = await file.read()
-
-        # Run inference
-        results = bird_detector.predict_from_bytes(image_bytes, conf_threshold)
-
-        # Convert annotated image to base64
-        _, buffer = cv2.imencode('.jpg', results['annotated_image'])
-        image_base64 = base64.b64encode(buffer).decode('utf-8')
-
-        # Create response message
-        bird_count = results['bird_count']
-        inference_time = results.get('inference_time', 0.0)
-
-        if bird_count == 0:
-            message = "No birds detected in the image. Try adjusting the confidence threshold or using a different image."
-        elif bird_count == 1:
-            message = f"Detected 1 bird in the image!"
-        else:
-            message = f"Detected {bird_count} birds in the image!"
-
-        return {
-            "bird_count": bird_count,
-            "detections": results['detections'],
-            "species_summary": results.get('species_summary', {}),
-            "annotated_image_base64": image_base64,
-            "message": message,
-            "inference_time": inference_time
-        }
-
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Inference failed: {str(e)}")
-
-@app.get("/cv/example/{filename}")
-async def get_example_image(filename: str):
-    """
-    Get an example image by filename
-
-    Args:
-        filename: Name of the example image file
-
-    Returns:
-        Image file
-    """
-    try:
-        from pathlib import Path
-        images_dir = Path(__file__).parent / "cv_tools" / "images"
-        image_path = images_dir / filename
-
-        if not image_path.exists():
-            raise HTTPException(status_code=404, detail="Image not found")
-
-        # Read and return image
-        with open(image_path, "rb") as f:
-            image_bytes = f.read()
-
-        # Determine content type
-        content_type = "image/jpeg"
-        if filename.lower().endswith('.png'):
-            content_type = "image/png"
-        elif filename.lower().endswith('.webp'):
-            content_type = "image/webp"
-
-        return Response(content=image_bytes, media_type=content_type)
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-# ============================================================================
-# STAC DATA ENDPOINTS
-# Proxy endpoints for The Water Institute's avian STAC catalog.
-# All S3 data is cached 1 hour in stac_client to keep responses fast.
-# ============================================================================
-
-from server.stac_tools.stac_client import (
-    get_colony_list, get_species_totals, get_colony_species_breakdown,
-    get_colony_dots, build_mosaic_url, COLONIES, SPECIES_INFO
-)
-
-@app.get("/stac/summary")
-async def stac_summary():
-    """
-    Returns complete STAC summary: colony metadata + species totals.
-    Used by the NestMap page to populate the colony map and species charts.
-    """
-    try:
-        return {
-            "colonies": get_colony_list(),
-            "species_totals": get_species_totals(),
-            "species_info": SPECIES_INFO,
-        }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.get("/stac/colonies")
-async def stac_colonies():
-    """Returns list of all colonies with coordinates and species counts."""
-    try:
-        return {"colonies": get_colony_list()}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.get("/stac/species/{colony_id}/{year}")
-async def stac_species_breakdown(colony_id: str, year: str):
-    """
-    Returns species breakdown for a specific colony-year.
-    Each item: {code, name, color, total_birds, total_nests}
-    """
-    try:
-        breakdown = get_colony_species_breakdown(colony_id, year)
-        return {"colony_id": colony_id, "year": year, "species": breakdown}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.get("/stac/dots/{colony_id}/{year}/{species_code}")
-async def stac_dots(colony_id: str, year: str, species_code: str, dot_type: str = "Bird"):
-    """
-    Proxy for species dot GeoJSON from S3. Cached 1 hour.
-    Returns a GeoJSON FeatureCollection with expert-annotated bird locations.
-    """
-    try:
-        geojson = get_colony_dots(colony_id, year, species_code, dot_type)
-        return geojson
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.get("/stac/mosaic_preview/{colony_id}/{year}")
-async def stac_mosaic_preview(colony_id: str, year: str):
-    """
-    Returns a 512x512 JPEG preview of a COG mosaic via windowed read.
-    Requires rasterio. Returns base64-encoded JPEG.
-    """
-    try:
-        import io
-        import numpy as np
-        import base64 as b64
-        from PIL import Image as PILImage
-
-        cog_url = build_mosaic_url(colony_id, year)
-        if not cog_url:
-            raise HTTPException(status_code=404, detail=f"No mosaic for {colony_id}/{year}")
-
-        try:
-            import rasterio
-            import rasterio.windows
-        except ImportError:
-            raise HTTPException(status_code=501, detail="rasterio not installed. Run: pip install rasterio")
-
-        with rasterio.Env(GDAL_HTTP_UNSAFESSL="YES", GDAL_DISABLE_READDIR_ON_OPEN="EMPTY_DIR",
-                          GDAL_HTTP_MERGE_CONSECUTIVE_RANGES="YES"):
-            with rasterio.open(cog_url) as src:
-                w, h = src.width, src.height
-                cx, cy = w // 2, h // 2
-                half = min(256, cx, cy)
-                window = rasterio.windows.Window(cx - half, cy - half, half * 2, half * 2)
-                # Read RGB bands (bands 1,2,3)
-                num_bands = src.count
-                bands_to_read = list(range(1, min(4, num_bands + 1)))
-                data = src.read(bands_to_read, window=window, boundless=True, fill_value=0)
-
-        # data shape: (bands, H, W) — take first 3 bands
-        if data.shape[0] >= 3:
-            rgb = np.transpose(data[:3], (1, 2, 0))
-        elif data.shape[0] == 1:
-            rgb = np.repeat(np.transpose(data, (1, 2, 0)), 3, axis=2)
-        else:
-            rgb = np.transpose(data, (1, 2, 0))
-
-        img_pil = PILImage.fromarray(rgb.astype(np.uint8))
-        # Resize to 512x512 for consistent display
-        img_pil = img_pil.resize((512, 512), PILImage.LANCZOS)
-        buf = io.BytesIO()
-        img_pil.save(buf, format="JPEG", quality=80)
-        preview_b64 = b64.b64encode(buf.getvalue()).decode()
-
-        return {
-            "colony_id": colony_id,
-            "year": year,
-            "mosaic_url": cog_url,
-            "preview_base64": preview_b64,
-        }
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Mosaic preview failed: {str(e)}")
 
 
-@app.post("/cv/inference/mosaic")
-async def cv_inference_on_mosaic(
-    colony_id: str,
-    year: str,
-    conf: float = 0.25
-):
-    """
-    Run NestVision bird detection on a 1024x1024 center tile of a COG mosaic.
-    Useful for running inference directly on Water Institute survey mosaics.
-    """
-    if bird_detector is None:
-        raise HTTPException(status_code=503, detail="CV model not loaded")
 
-    try:
-        import io
-        import tempfile
-        import numpy as np
 
-        cog_url = build_mosaic_url(colony_id, year)
-        if not cog_url:
-            raise HTTPException(status_code=404, detail=f"No mosaic for {colony_id}/{year}")
 
-        try:
-            import rasterio
-            import rasterio.windows
-        except ImportError:
-            raise HTTPException(status_code=501, detail="rasterio not installed")
 
-        with rasterio.Env(GDAL_HTTP_UNSAFESSL="YES", GDAL_DISABLE_READDIR_ON_OPEN="EMPTY_DIR"):
-            with rasterio.open(cog_url) as src:
-                w, h = src.width, src.height
-                cx, cy = w // 2, h // 2
-                half = 512  # 1024x1024 tile
-                window = rasterio.windows.Window(
-                    max(0, cx - half), max(0, cy - half),
-                    min(half * 2, w), min(half * 2, h)
-                )
-                num_bands = src.count
-                bands = list(range(1, min(4, num_bands + 1)))
-                data = src.read(bands, window=window, boundless=True, fill_value=0)
 
-        if data.shape[0] >= 3:
-            rgb = np.transpose(data[:3], (1, 2, 0)).astype(np.uint8)
-        elif data.shape[0] == 1:
-            rgb = np.repeat(np.transpose(data, (1, 2, 0)), 3, axis=2).astype(np.uint8)
-        else:
-            rgb = np.transpose(data, (1, 2, 0)).astype(np.uint8)
-
-        # Convert RGB → BGR for OpenCV/BirdDetector
-        bgr = cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR)
-        img_bytes = cv2.imencode('.jpg', bgr)[1].tobytes()
-
-        results = bird_detector.predict_from_bytes(img_bytes, conf_threshold=conf)
-
-        annotated_bgr = results['annotated_image']
-        _, buffer = cv2.imencode('.jpg', annotated_bgr, [cv2.IMWRITE_JPEG_QUALITY, 85])
-        image_base64 = base64.b64encode(buffer).decode('utf-8')
-
-        bird_count = results['bird_count']
-        return {
-            "colony_id": colony_id,
-            "year": year,
-            "bird_count": bird_count,
-            "detections": results['detections'],
-            "species_summary": results.get('species_summary', {}),
-            "annotated_image_base64": image_base64,
-            "message": f"Detected {bird_count} bird{'s' if bird_count != 1 else ''} in {colony_id} {year} mosaic tile",
-            "inference_time": results.get('inference_time', 0.0),
-        }
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Mosaic inference failed: {str(e)}")
 
 
 @app.post("/query/execute", response_model=CustomSQLResponse)

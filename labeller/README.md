@@ -45,7 +45,7 @@ python app.py
 
 ### 🔬 Nestperts (Main Route `/`)
 - Project-based annotation workflow
-- MobileSAM segmentation
+- Swift AI segmentation
 - Multi-expert collaboration
 - Species labeling
 - YOLO/COCO/GeoJSON export

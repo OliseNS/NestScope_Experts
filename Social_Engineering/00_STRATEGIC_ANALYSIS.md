@@ -504,7 +504,7 @@ This technology can transform not just avian monitoring, but any aerial survey w
 **Nestperts Integration (Jessica's Suggestion)**
 - [ ] Demo active learning workflow
 - [ ] Show expert correction → model improvement loop
-- [ ] Document annotation efficiency (time to label with MobileSAM)
+- [ ] Document annotation efficiency (time to label with Swift AI)
 - [ ] Create comparison: manual dotting vs. AI + expert correction
 
 **Presentation Polish (Jessica's Suggestion)**
@@ -631,7 +631,7 @@ And we heard you on presentation polish—we've redesigned our deck, created pro
 - ONNX model optimization for edge deployment
 - TensorRT quantization for Jetson Nano
 - SAHI (Slicing Aided Hyper Inference) for small object detection
-- Active learning pipeline with MobileSAM segmentation
+- Active learning pipeline with Swift AI segmentation
 - GIS format compatibility (Shapefile, GeoJSON, GeoPackage)
 
 ### For Business-Minded Judges

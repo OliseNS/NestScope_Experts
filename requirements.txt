@@ -32,7 +32,7 @@ streamlit-folium
 # ============================================================================
 # Database and data manipulation
 pandas
-numpy
+numpy<2
 
 # SQLite (included in Python standard library, no package needed)
 # For database migrations and schema analysis

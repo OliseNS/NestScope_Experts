@@ -188,12 +188,12 @@ A three-tier processing infrastructure combining:
 #### Component 3: Nestperts (Expert Annotation Platform)
 
 **Architecture:** Flask web app
-**Segmentation:** MobileSAM (Ultralytics)
+**Segmentation:** Swift AI (Ultralytics)
 **Format:** YOLO labels (normalized coordinates)
 **Workflow:** Expert review → species assignment → training data creation
 
 **Features:**
-- Point-click segmentation (MobileSAM)
+- Point-click segmentation (Swift AI)
 - Species classification interface
 - Bounding box correction tools
 - Multi-expert annotation workflow

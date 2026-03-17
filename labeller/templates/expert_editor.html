@@ -1247,16 +1247,47 @@
             to { transform: rotate(360deg); }
         }
 
+        /* Delete Button Style */
+        .btn-delete {
+            background: none;
+            border: 1px solid rgba(239, 68, 68, 0.4);
+            color: #ef4444;
+            padding: 0.4rem 0.8rem;
+            border-radius: 8px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 0.4rem;
+            margin-left: 1rem;
+        }
+
+        .btn-delete:hover {
+            background: rgba(239, 68, 68, 0.1);
+            border-color: #ef4444;
+            transform: translateY(-1px);
+        }
+
+        .btn-delete:active {
+            transform: translateY(0);
+        }
+
     </style>
 </head>
 <body>
     <!-- Top Bar -->
     <div class="top-bar">
         <div class="top-bar-left">
-            <button class="back-btn" onclick="window.location.href='{{ back_url }}'" title="Back to Dashboard">
+            <button class="back-btn" onclick="goHome()" title="Back to Dashboard">
                 ←
             </button>
             <h1 class="image-title">{{ image_name }}</h1>
+            <button class="btn-delete" onclick="deleteImage()" title="Delete Image">
+                <i data-lucide="trash-2" style="width: 14px; height: 14px;"></i>
+                Delete
+            </button>
         </div>
         <div class="progress-indicator">
             <div class="nav-controls">
@@ -1288,7 +1319,7 @@
                 <span class="tool-icon-float" data-lucide="square"></span>
                 <span class="tool-shortcut-float">D</span>
             </button>
-            <button class="tool-btn-float" id="tool-ai" onclick="selectTool('ai')" title="Segment (S)">
+            <button class="tool-btn-float" id="tool-ai" onclick="selectTool('ai')" title="AI Tool (S)">
                 <span class="tool-icon-float" data-lucide="sparkles"></span>
                 <span class="tool-shortcut-float">S</span>
             </button>
@@ -1339,6 +1370,11 @@
                         <span>Class Assignment</span>
                     </div>
                     <div style="display: flex; gap: 0.5rem; align-items: center;">
+                        <button id="delete-all-btn" class="btn-primary" onclick="deleteAllBoxes()"
+                                style="padding: 0.5rem; background: #ef4444; border: none; border-radius: 6px; cursor: pointer; display: flex; align-items: center; justify-content: center;"
+                                title="Delete all bounding boxes from this image">
+                            <i data-lucide="trash-2" style="width: 14px; height: 14px;"></i>
+                        </button>
                         <button id="identify-all-btn" class="btn-primary" onclick="identifyAllBirds()"
                                 style="padding: 0.5rem 1rem; font-size: 0.875rem; background: var(--success); border: none; border-radius: 6px; cursor: pointer; display: flex; align-items: center; gap: 0.5rem; font-weight: 600;"
                                 title="Automatically identify all birds in this image">
@@ -1348,15 +1384,15 @@
                         <button class="panel-close" onclick="closeClassification()"><i data-lucide="x"></i></button>
                     </div>
                 </div>
+                <div class="panel-footer" style="border-top: none; border-bottom: 1px solid rgba(83, 124, 138, 0.2);">
+                    <div class="search-input-wrapper">
+                        <i data-lucide="search" class="search-icon"></i>
+                        <input type="text" id="global-species-search" placeholder="Search species or codes..." oninput="handleGlobalSearch(this.value)">
+                    </div>
+                </div>
                 <div class="panel-content">
                     <div id="classification-content">
                         <!-- Dynamic content: Search or AI results -->
-                    </div>
-                </div>
-                <div class="panel-footer">
-                    <div class="search-input-wrapper">
-                        <i data-lucide="search" class="search-icon"></i>
-                        <input type="text" id="global-species-search" placeholder="Search classes..." oninput="handleGlobalSearch(this.value)">
                     </div>
                 </div>
             </div>
@@ -1370,9 +1406,6 @@
 
         <!-- Bottom Class Bar -->
         <div class="bottom-class-bar" id="bottom-class-bar">
-            <button class="add-class-btn-float" onclick="showAddClassDialog()" title="Add New Class">
-                <i data-lucide="plus" style="width: 20px; height: 20px;"></i>
-            </button>
             <div id="class-pills-container">
                 <!-- Class pills will be injected here -->
             </div>
@@ -1421,6 +1454,8 @@ let currentQuestion = 0;
 let speciesCandidates = [];
 let speciesImages = {};  // Cache for species images
 let hasUnsavedChanges = false;  // Track if there are unsaved changes
+let undoStack = []; // Stack for undo functionality (Ctrl+Z)
+const MAX_UNDO_STEPS = 50;
 
 // Redesign State
 let selectedSpecies = null; // Currently selected species for new boxes
@@ -1714,12 +1749,15 @@ function handleCanvasMouseDown(e) {
             updateBoxCount();
             redrawCanvas();
         } else {
-            // SAM click-to-detect
-            handleSAMClick(coords.x, coords.y);
+            // AI click-to-detect
+            handleAIClick(coords.x, coords.y);
         }
     } else if (currentTool === 'edit') {
         // Edit mode: can move/resize boxes
         if (clickedBox) {
+            // Save state before starting to move/resize so we can undo it
+            saveStateToUndoStack();
+
             // Select the box (opens species ID and updates preview)
             selectBox(clickedBox.id);
 
@@ -2081,51 +2119,11 @@ function findBoxAtPoint(x, y) {
     return null;
 }
 
-// Handle SAM click
-async function handleSAMClick(x, y) {
-    showToast('Running segmentation...');
-
-    // Show preview at clicked location
-    updatePreview(x, y, 'Segmenting...');
-
-    try {
-        const response = await fetch('/api/sam_segment', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                project_id: PROJECT_ID,
-                image_name: IMAGE_NAME,
-                points: [[x, y]]
-            })
-        });
-
-        const result = await response.json();
-
-        if (result.error) {
-            showToast('Segmentation failed: ' + result.error, 'error');
-            return;
-        }
-
-        if (result.boxes && result.boxes.length > 0) {
-            result.boxes.forEach(box => {
-                addBox(box.x_center, box.y_center, box.width, box.height);
-            });
-            showToast(`Segmented ${result.boxes.length} bird(s)`, 'success');
-
-            // Update preview to show first detected box
-            if (result.boxes.length > 0) {
-                const firstBox = boxes[boxes.length - 1];  // Last added box
-                const centerX = firstBox.x_center * canvas.width;
-                const centerY = firstBox.y_center * canvas.height;
-                updatePreview(centerX, centerY, 'Segmented!');
-            }
-        } else {
-            showToast('No birds detected at this location', 'warning');
-        }
-    } catch (error) {
-        console.error('SAM error:', error);
-        showToast('Segmentation error: ' + error.message, 'error');
-    }
+// Handle AI detection click (now triggers full image scan)
+async function handleAIClick(x, y) {
+    // If user clicked, just run the full detection
+    // This makes it a non-point-based system as requested
+    detectAllBirds(0.3);
 }
 
 // Redraw canvas with boxes
@@ -2259,7 +2257,7 @@ function selectTool(tool) {
     // Display tool name (special case for 'ai' -> 'Segment')
     const toolNames = {
         'draw': 'Draw',
-        'ai': 'Segment',
+        'ai': 'AI Tool',
         'edit': 'Edit',
         'pan': 'Hand'
     };
@@ -2293,8 +2291,12 @@ function selectTool(tool) {
 
 // Add a new bounding box
 function addBox(xCenter, yCenter, width, height) {
+    // Save current state to undo stack before making changes
+    saveStateToUndoStack();
+
     const box = {
         id: Date.now() + Math.random(),  // Unique ID
+        class_id: 0,  // Default to bird class (0)
         x_center: xCenter,
         y_center: yCenter,
         width: width,
@@ -2862,6 +2864,9 @@ async function identifyAllBirds() {
         return;
     }
 
+    // Save state before batch classification
+    saveStateToUndoStack();
+
     // Show loading state
     const btn = document.getElementById('identify-all-btn');
     const originalHTML = btn.innerHTML;
@@ -2934,6 +2939,92 @@ async function identifyAllBirds() {
         btn.disabled = false;
         btn.innerHTML = originalHTML;
         if (typeof lucide !== 'undefined') lucide.createIcons();
+    }
+}
+
+// Auto-detect all birds in the image using swift.onnx
+async function detectAllBirds(confidence = 0.25) {
+    // Save state before detection (so user can undo if it's messy)
+    saveStateToUndoStack();
+
+    showToast('Detecting all birds...');
+
+    // Show loading state on button if it exists
+    const btn = document.getElementById('detect-all-btn');
+    const originalHTML = btn ? btn.innerHTML : '';
+    if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<div style="width: 14px; height: 14px; border: 2px solid rgba(255,255,255,0.3); border-top-color: white; border-radius: 50%; animation: spin 0.8s linear infinite;"></div><span>Detecting...</span>';
+    }
+
+    try {
+        const response = await fetch('/api/detect_all_birds', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                project_id: PROJECT_ID,
+                image_name: IMAGE_NAME,
+                confidence: confidence
+            })
+        });
+
+        const result = await response.json();
+        if (result.error) throw new Error(result.error);
+
+        if (result.boxes && result.boxes.length > 0) {
+            let addedCount = 0;
+            result.boxes.forEach(newBox => {
+                // Check if this bird is already "seen" (has a box nearby)
+                const alreadySeen = boxes.some(existing => {
+                    // Check if click/center is inside existing box OR if centers are very close
+                    const dx = Math.abs(existing.x_center - newBox.x_center);
+                    const dy = Math.abs(existing.y_center - newBox.y_center);
+                    
+                    // If centers are within 3% of each other, consider it seen
+                    if (dx < 0.03 && dy < 0.03) return true;
+                    
+                    // Also check if new center is inside existing box
+                    const ex1 = existing.x_center - existing.width/2;
+                    const ex2 = existing.x_center + existing.width/2;
+                    const ey1 = existing.y_center - existing.height/2;
+                    const ey2 = existing.y_center + existing.height/2;
+                    
+                    if (newBox.x_center >= ex1 && newBox.x_center <= ex2 && 
+                        newBox.y_center >= ey1 && newBox.y_center <= ey2) return true;
+                        
+                    return false;
+                });
+
+                if (!alreadySeen) {
+                    // Force species to "bird" for auto-detections
+                    const prevSpecies = selectedSpecies;
+                    selectedSpecies = "bird";
+                    addBox(newBox.x_center, newBox.y_center, newBox.width, newBox.height);
+                    selectedSpecies = prevSpecies;
+                    addedCount++;
+                }
+            });
+
+            if (addedCount > 0) {
+                showToast(`AI detected ${addedCount} new bird(s)`, 'success');
+                markUnsaved();
+                redrawCanvas();
+            } else {
+                showToast('No new birds found', 'info');
+            }
+        } else {
+            showToast('No birds detected in image', 'warning');
+        }
+
+    } catch (error) {
+        console.error('Auto-detection error:', error);
+        showToast('Detection failed: ' + error.message, 'error');
+    } finally {
+        if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = originalHTML;
+            if (typeof lucide !== 'undefined') lucide.createIcons();
+        }
     }
 }
 
@@ -4167,6 +4258,84 @@ function markUnsaved() {
     updateNavigationState();
 }
 
+// History/Undo management
+function saveStateToUndoStack() {
+    // Save a deep copy of current boxes
+    const state = JSON.parse(JSON.stringify(boxes));
+    undoStack.push(state);
+    
+    // Limit stack size
+    if (undoStack.length > MAX_UNDO_STEPS) {
+        undoStack.shift();
+    }
+    console.log(`State saved to undo stack. Size: ${undoStack.length}`);
+}
+
+function undoAction() {
+    if (undoStack.length === 0) {
+        showToast('Nothing to undo', 'info');
+        return;
+    }
+    
+    // Get last state
+    const previousBoxes = undoStack.pop();
+    
+    // Apply state
+    boxes = previousBoxes;
+    
+    // Mark as unsaved since we reverted to a potentially unsaved state 
+    // (or just mark unsaved because current session is modified)
+    markUnsaved();
+    
+    updateBoxCount();
+    redrawCanvas();
+    updateOverlay();
+    
+    showToast(`Undo: ${boxes.length} birds remaining`, 'success');
+}
+
+function goHome() {
+    if (hasUnsavedChanges) {
+        if (confirm('You have unsaved changes. Are you sure you want to leave?')) {
+            window.location.href = '{{ back_url }}';
+        }
+    } else {
+        window.location.href = '{{ back_url }}';
+    }
+}
+
+async function deleteImage() {
+    if (!confirm(`Are you sure you want to PERMANENTLY delete image "${IMAGE_NAME}"? This cannot be undone.`)) {
+        return;
+    }
+
+    try {
+        const response = await fetch('/api/delete_image', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                project_id: PROJECT_ID,
+                username: USERNAME,
+                image_name: IMAGE_NAME
+            })
+        });
+
+        const result = await response.json();
+
+        if (result.success) {
+            alert('Image deleted successfully.');
+            window.location.href = '{{ back_url }}';
+        } else {
+            alert('Error deleting image: ' + (result.error || 'Unknown error'));
+        }
+    } catch (e) {
+        console.error('Delete error:', e);
+        alert('Failed to connect to server for deletion.');
+    }
+}
+
 // Zoom button controls (zoom towards center of viewport)
 function zoomIn() {
     const centerX = canvas.width / 2;
@@ -4206,6 +4375,22 @@ function zoomOut() {
     redrawCanvas();
 }
 
+// AI Detection Modal Control
+function showAIDetectionModal() {
+    const modal = document.getElementById('aiDetectionModal');
+    modal.style.display = 'flex';
+}
+
+function closeAIDetectionModal(confirmed) {
+    const modal = document.getElementById('aiDetectionModal');
+    modal.style.display = 'none';
+    
+    if (confirmed) {
+        detectAllBirds(0.25);
+    }
+    selectTool('ai');
+}
+
 // Keyboard shortcuts
 document.addEventListener('keydown', (e) => {
     // Don't trigger shortcuts when typing in input fields
@@ -4213,10 +4398,19 @@ document.addEventListener('keydown', (e) => {
 
     // Tool shortcuts
     if (e.key === 'd' && !e.shiftKey && !e.ctrlKey) selectTool('draw');
-    if (e.key === 's' && !e.shiftKey && !e.ctrlKey) selectTool('ai');
+    if (e.key === 's' && !e.shiftKey && !e.ctrlKey) {
+        showAIDetectionModal();
+    }
     if (e.key === 'e' && !e.shiftKey && !e.ctrlKey) selectTool('edit');
     if (e.key === 'h' && !e.shiftKey && !e.ctrlKey) selectTool('pan');
     if (e.key === 'r' && !e.shiftKey && !e.ctrlKey) resetZoom();
+    if (e.key === 'a' && !e.shiftKey && !e.ctrlKey) detectAllBirds(0.3);
+
+    // Undo: Ctrl+Z
+    if (e.key === 'z' && (e.ctrlKey || e.metaKey)) {
+        e.preventDefault();
+        undoAction();
+    }
 
     // Save and continue: Shift+Enter
     if (e.key === 'Enter' && e.shiftKey && !e.ctrlKey) {
@@ -4260,10 +4454,42 @@ document.addEventListener('keydown', (e) => {
     }
 });
 
+// Delete all annotations from current image
+function deleteAllBoxes() {
+    if (boxes.length === 0) {
+        showToast('No birds to delete', 'info');
+        return;
+    }
+
+    if (!confirm(`Are you sure you want to delete ALL ${boxes.length} bounding boxes on this image? This cannot be undone.`)) {
+        return;
+    }
+
+    // Save state before deleting
+    saveStateToUndoStack();
+
+    const count = boxes.length;
+    boxes = [];
+    selectedBoxId = null;
+    hoveredBoxId = null;
+
+    markUnsaved();
+    updateBoxCount();
+    redrawCanvas();
+    updateOverlay();
+    clearPreview();
+    closeClassification();
+
+    showToast(`Deleted ${count} bird(s)`, 'success');
+}
+
 // Quick delete (instant, no confirmation)
 function deleteBoxQuick(boxId) {
     const box = boxes.find(b => b.id === boxId);
     if (!box) return;
+
+    // Save state before deleting
+    saveStateToUndoStack();
 
     const boxIndex = boxes.indexOf(box) + 1;
 
@@ -4371,6 +4597,27 @@ document.addEventListener('DOMContentLoaded', () => {
                     onmouseout="this.style.background='#dc2626'"
                 >
                     Delete Image
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- AI Detection Confirmation Modal -->
+    <div id="aiDetectionModal" class="modal-overlay" style="display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.7); backdrop-filter: blur(4px); z-index: 2000; align-items: center; justify-content: center;">
+        <div class="modal-content" style="background: var(--surface); border: 1px solid rgba(83, 124, 138, 0.3); border-radius: 16px; width: 90%; max-width: 450px; padding: 2rem; box-shadow: 0 20px 50px rgba(0,0,0,0.5); text-align: center;">
+            <div style="width: 64px; height: 64px; background: rgba(83, 124, 138, 0.1); border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 1.5rem;">
+                <i data-lucide="sparkles" style="width: 32px; height: 32px; color: var(--orange-primary);"></i>
+            </div>
+            <h2 style="font-size: 1.5rem; margin-bottom: 1rem; font-family: var(--font-serif);">AI Detection Scan</h2>
+            <p style="color: var(--text-secondary); line-height: 1.6; margin-bottom: 2rem;">
+                Do you want to run bird detection on the whole image? This will automatically find and box birds at 0.3 confidence.
+            </p>
+            <div style="display: grid; grid-template-columns: 1fr 1.5fr; gap: 1rem;">
+                <button onclick="closeAIDetectionModal(false)" style="padding: 0.75rem; border-radius: 10px; border: 1px solid rgba(83, 124, 138, 0.3); background: var(--surface-light); color: var(--text-primary); font-weight: 600; cursor: pointer; transition: all 0.2s;">
+                    Cancel
+                </button>
+                <button onclick="closeAIDetectionModal(true)" style="padding: 0.75rem; border-radius: 10px; border: none; background: var(--orange-primary); color: white; font-weight: 600; cursor: pointer; transition: all 0.2s; box-shadow: 0 4px 12px rgba(83, 124, 138, 0.3);">
+                    Run Full Scan
                 </button>
             </div>
         </div>

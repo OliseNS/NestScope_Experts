@@ -190,7 +190,7 @@ function updateCursor() {
     } else if (appState.tool === 'draw') {
         canvas.style.cursor = 'crosshair';
     } else if (appState.tool === 'sam') {
-        canvas.style.cursor = 'pointer'; // Always pointer in SAM mode (non-blocking)
+        canvas.style.cursor = 'pointer'; // Always pointer in AI tool (non-blocking)
     } else if (appState.tool === 'edit') {
         canvas.style.cursor = 'default';
     }

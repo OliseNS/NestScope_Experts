@@ -1,0 +1,18 @@
+names:
+  0: bird
+  1: AMAV
+  2: AWPE
+  3: BCNH
+  4: BLTE
+  5: BRNO
+  6: CATE
+  7: GREG
+  8: LAGU
+  9: HERG
+  10: CRCA
+  11: CAEG
+  12: LETE
+  13: LBHE
+nc: 1
+path: .
+train: images
