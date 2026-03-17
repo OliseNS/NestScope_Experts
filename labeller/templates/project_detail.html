@@ -650,9 +650,33 @@
         loadAssignmentStats();
     });
 
-    async function loadAllUsers() {
+    async function loadAllUsers(retries = 2) {
+        for (let i = 0; i <= retries; i++) {
+            try {
+                await _loadAllUsersInternal();
+                if (allUsers && allUsers.length > 0) return;
+                
+                // If no users, might be transient error
+                if (i < retries) {
+                    console.log(`Retrying users load (${i+1}/${retries})...`);
+                    await new Promise(resolve => setTimeout(resolve, 1000));
+                }
+            } catch (error) {
+                if (i === retries) {
+                    console.error('Final users load failure:', error);
+                    showToast('Failed to load users', 'error');
+                } else {
+                    await new Promise(resolve => setTimeout(resolve, 1000));
+                }
+            }
+        }
+    }
+
+    async function _loadAllUsersInternal() {
         try {
             const response = await fetch('/api/users');
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+            
             const data = await response.json();
             allUsers = data.users || [];
 
@@ -702,8 +726,8 @@
                 }
             }
         } catch (error) {
-            console.error('Error loading users:', error);
-            showToast('Failed to load users', 'error');
+            console.error('Error in _loadAllUsersInternal:', error);
+            throw error;
         }
     }
 

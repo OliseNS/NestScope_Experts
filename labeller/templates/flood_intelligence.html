@@ -2059,8 +2059,27 @@
         }
     }
 
-    // Fetch NOAA API
-    async function fetchNOAA(stationId, product, hours, isFuture) {
+    // Fetch NOAA API with retry logic
+    async function fetchNOAA(stationId, product, hours, isFuture, retries = 2) {
+        for (let i = 0; i <= retries; i++) {
+            try {
+                const result = await _fetchNOAAInternal(stationId, product, hours, isFuture);
+                if (result) return result;
+                
+                // If result is null, it was an error or empty
+                if (i < retries) {
+                    console.log(`Retrying NOAA ${product} for station ${stationId} (${i+1}/${retries})...`);
+                    await new Promise(resolve => setTimeout(resolve, 1000));
+                }
+            } catch (error) {
+                if (i === retries) throw error;
+                await new Promise(resolve => setTimeout(resolve, 1000));
+            }
+        }
+        return null;
+    }
+
+    async function _fetchNOAAInternal(stationId, product, hours, isFuture) {
         const now = new Date();
         let begin, end;
 
@@ -2080,7 +2099,8 @@
             const d = String(date.getDate()).padStart(2, '0');
             const h = String(date.getHours()).padStart(2, '0');
             const min = String(date.getMinutes()).padStart(2, '0');
-            return `${y}${m}${d} ${h}:${min}`;
+            // NOAA API: yyyyMMdd HH:mm (space required, colon removed for compatibility)
+            return `${y}${m}${d} ${h}${min}`;
         };
 
         const url = `https://api.tidesandcurrents.noaa.gov/api/prod/datagetter?` +
@@ -2121,7 +2141,7 @@
                 }))
             };
         } catch (error) {
-            console.error('NOAA API error:', error);
+            console.error('NOAA API internal error:', error);
             return null;
         }
     }
