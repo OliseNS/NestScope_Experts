@@ -1319,7 +1319,7 @@
                 <span class="tool-icon-float" data-lucide="square"></span>
                 <span class="tool-shortcut-float">D</span>
             </button>
-            <button class="tool-btn-float" id="tool-ai" onclick="selectTool('ai')" title="AI Tool (S)">
+            <button class="tool-btn-float" id="tool-ai" onclick="selectTool('ai')" title="Swift Tool (S)">
                 <span class="tool-icon-float" data-lucide="sparkles"></span>
                 <span class="tool-shortcut-float">S</span>
             </button>
@@ -1377,9 +1377,9 @@
                         </button>
                         <button id="identify-all-btn" class="btn-primary" onclick="identifyAllBirds()"
                                 style="padding: 0.5rem 1rem; font-size: 0.875rem; background: var(--success); border: none; border-radius: 6px; cursor: pointer; display: flex; align-items: center; gap: 0.5rem; font-weight: 600;"
-                                title="Automatically identify all birds in this image">
+                                title="Automatically identify all birds using SwiftID">
                             <i data-lucide="zap" style="width: 14px; height: 14px;"></i>
-                            <span>Identify All</span>
+                            <span>SwiftID All</span>
                         </button>
                         <button class="panel-close" onclick="closeClassification()"><i data-lucide="x"></i></button>
                     </div>
@@ -2257,7 +2257,7 @@ function selectTool(tool) {
     // Display tool name (special case for 'ai' -> 'Segment')
     const toolNames = {
         'draw': 'Draw',
-        'ai': 'AI Tool',
+        'ai': 'Swift Tool',
         'edit': 'Edit',
         'pan': 'Hand'
     };
@@ -2723,7 +2723,7 @@ function renderAIResults(predictions) {
 
     container.innerHTML = `
         <div style="font-size: 0.75rem; color: var(--orange-primary); font-weight: 700; margin-bottom: 15px; text-transform: uppercase; display: flex; justify-content: space-between; align-items: center;">
-            <span>AI Predictions for Bird #${boxNumber}</span>
+            <span>SwiftID Results for Bird #${boxNumber}</span>
             <span style="background: rgba(83, 124, 138, 0.2); padding: 2px 8px; border-radius: 4px;">Top ${predictions.length}</span>
         </div>
         <div style="display: flex; flex-direction: column; gap: 12px;">
@@ -2825,7 +2825,7 @@ async function runAIClassification() {
     content.innerHTML = `
         <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 20px; color: var(--text-muted);">
             <div style="width: 24px; height: 24px; border: 2px solid rgba(255,255,255,0.1); border-top-color: var(--orange-primary); border-radius: 50%; animation: spin 0.8s linear infinite;"></div>
-            <div style="margin-top: 10px; font-size: 0.75rem;">AI analyzing bird...</div>
+            <div style="margin-top: 10px; font-size: 0.75rem;">SwiftID identifying bird...</div>
         </div>
     `;
 
@@ -2947,7 +2947,7 @@ async function detectAllBirds(confidence = 0.25) {
     // Save state before detection (so user can undo if it's messy)
     saveStateToUndoStack();
 
-    showToast('Detecting all birds...');
+    showToast('Swift scanning image...');
 
     // Show loading state on button if it exists
     const btn = document.getElementById('detect-all-btn');
@@ -3006,11 +3006,11 @@ async function detectAllBirds(confidence = 0.25) {
             });
 
             if (addedCount > 0) {
-                showToast(`AI detected ${addedCount} new bird(s)`, 'success');
+                showToast(`Swift found ${addedCount} bird(s)`, 'success');
                 markUnsaved();
                 redrawCanvas();
             } else {
-                showToast('No new birds found', 'info');
+                showToast('Swift found no new birds', 'info');
             }
         } else {
             showToast('No birds detected in image', 'warning');
@@ -3084,7 +3084,7 @@ async function showAIPredictions(predictions, boxNumber) {
                     <canvas id="bird-crop-canvas-ai" style="max-width: 100%; max-height: 100%;"></canvas>
                 </div>
                 <div style="padding: 0.75rem; text-align: center;">
-                    <div style="font-size: 0.875rem; color: var(--text-muted);">AI Classification Results</div>
+                    <div style="font-size: 0.875rem; color: var(--text-muted);">SwiftID Classification Results</div>
                     <div style="font-size: 1.125rem; font-weight: 700; color: #667eea;">Bird #${boxNumber}</div>
                 </div>
             </div>
@@ -3398,7 +3398,7 @@ function showIdentificationChoice() {
             </div>
 
             <button class="btn-secondary" style="margin-top: 1rem; width: 100%;" onclick="runAIClassification()">
-                ✨ Use AI Instead
+                ✨ Use SwiftID Instead
             </button>
         </div>
     `;

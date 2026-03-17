@@ -2608,9 +2608,9 @@ def get_bird_detector():
             
             _bird_detector = _get_detector(model_path=model_path, classes_file=classes_path)
             _loaded_classifier_path = model_path
-            print(f"✓ BirdDetector with classifier loaded from: {model_path}")
+            print(f"✓ SwiftID classifier loaded from: {model_path}")
         except Exception as e:
-            print(f"✗ Could not load BirdDetector: {e}")
+            print(f"✗ Could not load SwiftID: {e}")
             import traceback
             traceback.print_exc()
     return _bird_detector
@@ -2684,7 +2684,7 @@ def detect_all_birds():
         if not hasattr(detect_all_birds, 'detector') or getattr(detect_all_birds, 'path', None) != model_path:
             import onnxruntime as ort
 
-            print(f"Loading detector from: {model_path}")
+            print(f"Loading Swift detector from: {model_path}")
             if not os.path.exists(model_path):
                 return jsonify({'error': f'Model not found at {model_path}'}), 500
 
@@ -2697,7 +2697,7 @@ def detect_all_birds():
 
             detect_all_birds.detector = ort.InferenceSession(model_path, providers=providers)
             detect_all_birds.path = model_path
-            print("✓ Detector loaded")
+            print("✓ Swift detector loaded")
         detector = detect_all_birds.detector
 
         # Read and preprocess image
@@ -2730,7 +2730,7 @@ def detect_all_birds():
                         device='cpu' # Use CPU for now as default providers in app are CPU
                     )
                     detect_all_birds.sahi_path = model_path
-                    print("✓ SAHI Model loaded")
+                    print("✓ Swift SAHI Model loaded")
                 
                 sahi_model = detect_all_birds.sahi_model
                 sahi_model.model.conf = conf_threshold # Update confidence
@@ -2767,7 +2767,7 @@ def detect_all_birds():
                         'class_id': int(category_id)
                     })
 
-                print(f"Detector (SAHI): Found {len(results)} birds")
+                print(f"Swift (SAHI): Found {len(results)} birds")
                 return jsonify({
                     'success': True,
                     'boxes': results,

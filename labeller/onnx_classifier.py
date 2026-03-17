@@ -49,7 +49,7 @@ class ONNXClassifier:
         if not os.path.exists(model_path):
             raise FileNotFoundError(f"Classifier model not found at: {model_path}")
 
-        print(f"Loading classifier from: {model_path}")
+        print(f"Loading SwiftID from: {model_path}")
 
         # Initialize ONNX Runtime session
         providers = ['CPUExecutionProvider']
@@ -83,7 +83,7 @@ class ONNXClassifier:
         print(f"  Number of classes: {self.num_classes}")
         print(f"  Class names: {len(self.class_names)} loaded")
         print(f"  Species mapping: {len(self.species_map)} names loaded from database")
-        print("✓ Classifier loaded successfully")
+        print("✓ SwiftID loaded successfully")
 
     def _load_species_mapping(self) -> Dict[str, str]:
         """Load mapping from species code to full name from SQLite database."""
