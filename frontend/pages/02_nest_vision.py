@@ -8,25 +8,22 @@ import requests
 import base64
 from io import BytesIO
 from PIL import Image
+import plotly.express as px
 
 # Import from modular structure
 from services import run_cv_inference, get_example_images, fetch_example_image, API_BASE_URL
-from utils import extract_crops_from_detections, load_species_list
-from styles import get_custom_css
-from components import render_sidebar_header
+from utils import load_species_list
+from components import init_page, render_header, render_sidebar
 
 # ============================================================================
 # PAGE CONFIGURATION
 # ============================================================================
 
-st.set_page_config(
-    page_title="NestVision - NestScope",
-    page_icon="🦅",
-    layout="wide"
-)
+# Initialize page with shared layout
+init_page(page_title="NestVision - NestScope", page_icon="🦅", layout="wide")
 
-# Apply custom CSS
-st.markdown(get_custom_css(), unsafe_allow_html=True)
+# Render shared header
+render_header(page_name="NestVision")
 
 # ============================================================================
 # SESSION STATE INITIALIZATION
@@ -41,32 +38,16 @@ if "cv_detection_result" not in st.session_state:
     st.session_state.cv_detection_result = None
 if "cv_last_processed_image" not in st.session_state:
     st.session_state.cv_last_processed_image = None
-if "crop_identifications" not in st.session_state:
-    st.session_state.crop_identifications = {}
+if "cv_conf_threshold" not in st.session_state:
+    st.session_state.cv_conf_threshold = 0.25
 
 # ============================================================================
 # SIDEBAR
 # ============================================================================
 
 with st.sidebar:
-    # Render brand header
-    render_sidebar_header()
-
-    # Settings Section
-    st.markdown("""
-        <div style="
-            font-size: 0.6875rem;
-            font-weight: 600;
-            text-transform: uppercase;
-            letter-spacing: 0.08em;
-            color: #A0A0A0;
-            margin: 1.5rem 0 0.75rem;
-            padding: 0 0.5rem;
-            opacity: 0.7;
-        ">Settings</div>
-    """, unsafe_allow_html=True)
-
-    st.info("💡 **Tip**: Start with Fast Mode for quick previews. Use SAHI Mode for better accuracy with small or distant birds.")
+    # Render shared navigation, tools, and status
+    render_sidebar(active_page="nestvision")
 
 # ============================================================================
 # PAGE HEADER
@@ -76,97 +57,34 @@ st.markdown("""
     <div class="title-card">
         <h3>🦅 NestVision: Bird Detection & Counting</h3>
         <p>
-            Powered by AI computer vision, NestVision automatically detects and counts birds in your images.
-            Upload a photo or try our example images to see the model in action.
+            Upload an image or select an example to automatically detect and count birds using AI.
+            Species classification shows the model's best prediction for each bird.
         </p>
     </div>
 """, unsafe_allow_html=True)
 
 # ============================================================================
-# MODEL INFORMATION
+# 1. IMAGE SELECTION (Primary Action)
 # ============================================================================
 
-with st.expander("ℹ️ About the Model", expanded=False):
-    st.markdown("""
-    ### Current Model
-    **YOLOv26m-based** bird detection trained on avian monitoring data
+st.markdown("## 📤 Select Image")
 
-    ### Important Notes
-    - 🔧 This model is currently in **development** and may not be highly accurate
-    - 📊 The team is actively **annotating more training data** to improve performance
-    - 🚀 A more **robust model** is being developed with improved accuracy
-
-    ### Processing Modes
-    - **⚡ Fast Mode**: Quick inference using downsampling for large images. Best for real-time previews.
-    - **🎯 SAHI Mode**: Uses [SAHI](https://github.com/obss/sahi) (Slicing Aided Hyper Inference) for intelligent image slicing with optimal overlap. More accurate for detecting small or distant birds, but slower.
-
-    ### Future Enhancements
-    - 🐦 **Bird species classification** using ImageNet-based models
-    - 🎯 Identification of **specific bird species**, not just detection and counting
-    - 📈 **Combined detection + classification** will provide complete bird analysis
-
-    ### Technical Details
-    - **Input image size**: 1024x1024 pixels
-    - **Confidence threshold**: Adjustable (default 0.25)
-    - **Model architecture**: YOLO-based object detection (ONNX format)
-    - **Smart slicing**: SAHI with 20% overlap for accurate mode
-    - **Model file**: `server/seconditer.onnx`
-    """)
-
-st.markdown("---")
-
-# ============================================================================
-# IMAGE UPLOAD SECTION
-# ============================================================================
-
-st.markdown("### 📤 Upload Your Image")
+# Upload section
 uploaded_file = st.file_uploader(
-    "Choose an image file containing birds",
+    "Upload your own image",
     type=['jpg', 'jpeg', 'png', 'bmp', 'tiff', 'webp'],
-    help="Upload an image for bird detection and counting",
+    help="Choose an image containing birds for automatic detection",
     key="bird_image_uploader"
 )
 
-# ============================================================================
-# DETECTION SETTINGS
-# ============================================================================
+st.markdown("### Or Choose Example Image")
 
-st.markdown("### ⚙️ Detection Settings")
-conf_threshold = st.slider(
-    "Confidence Threshold",
-    min_value=0.1,
-    max_value=0.9,
-    value=0.25,
-    step=0.05,
-    help="Lower values detect more birds but may include false positives. Higher values are more selective."
-)
-
-# Processing mode selection
-st.markdown("**Processing Mode**")
-fast_mode = st.radio(
-    "Choose detection mode:",
-    options=[True, False],
-    format_func=lambda x: "⚡ Fast Mode (Recommended)" if x else "🎯 SAHI Mode (Accurate)",
-    index=0,
-    help="Fast Mode: Quick inference with downsampling, best for previews.\nSAHI Mode: Smart slicing with optimal overlap, more accurate for detecting small objects but slower.",
-    label_visibility="collapsed"
-)
-
-st.markdown("---")
-
-# ============================================================================
-# EXAMPLE IMAGES GALLERY
-# ============================================================================
-
-col1, col2 = st.columns([4, 1])
-with col1:
-    st.markdown("### 🖼️ Example Images Gallery")
-with col2:
-    if st.button("🔄 Refresh", help="Reload example images from server"):
+# Example images gallery
+col_refresh_1, col_refresh_2 = st.columns([5, 1])
+with col_refresh_2:
+    if st.button("🔄 Refresh", help="Reload example images"):
         get_example_images.clear()
         st.rerun()
-
-st.caption("Click on an image below to use it for detection")
 
 example_images = get_example_images()
 
@@ -191,7 +109,7 @@ if example_images:
 
                             # Button to select this image
                             if st.button(
-                                f"Detect Birds",
+                                f"Use This Image",
                                 key=f"use_example_{img_idx}",
                                 use_container_width=True,
                                 type="primary"
@@ -207,20 +125,45 @@ if example_images:
                         st.error(f"Error loading {example_name}")
 else:
     st.info("""
-    **No example images available yet.**
+    **No example images available.**
 
-    To add example images:
-    1. Place bird images in `server/cv_tools/images/`
-    2. Supported formats: JPG, PNG, BMP, TIFF, WEBP
-    3. Images will automatically appear in this gallery
+    To add examples, place bird images in `server/cv_tools/images/`
 
-    For now, upload your own image to get started!
+    For now, upload your own image above!
     """)
 
-st.markdown("---")
+# ============================================================================
+# 2. DETECTION SETTINGS (Advanced - Collapsed by Default)
+# ============================================================================
+
+with st.expander("⚙️ Advanced Settings", expanded=False):
+    st.markdown("### Detection Configuration")
+
+    st.markdown("**Detection Confidence**")
+    conf_threshold = st.slider(
+        "Minimum confidence threshold",
+        min_value=0.1,
+        max_value=0.9,
+        value=st.session_state.cv_conf_threshold,
+        step=0.05,
+        help="Lower values detect more birds but may include false positives",
+        key="conf_slider"
+    )
+    st.session_state.cv_conf_threshold = conf_threshold
+
+    st.markdown("---")
+    st.markdown("""
+    **About the Models:**
+    - **Detection**: Swift YOLO26 trained on Gulf Coast avian data
+    - **Classification**: Swift classifier for 7 species groups
+    - **SAHI Processing**: Automatically slices large images for better accuracy
+    - **Confidence Thresholds**:
+        - Detection: Adjustable (default 25%)
+        - Classification: Shows best guess for species group
+    """)
 
 # ============================================================================
-# IMAGE PROCESSING & DETECTION
+# 3. DETECTION & RESULTS
 # ============================================================================
 
 # Determine which image to process
@@ -245,252 +188,301 @@ elif st.session_state.selected_example_image is not None:
         st.session_state.cv_last_processed_image = image_name
         st.session_state.cv_detection_result = None
 
-# ============================================================================
-# DETECTION RESULTS DISPLAY
-# ============================================================================
-
+# Process image if selected
 if image_to_process:
-    st.markdown("### 🔍 Detection Analysis")
+    st.markdown("---")
+    st.markdown("## 🔍 Detection Results")
 
-    # Auto-run detection on new image selection or upload
+    # Auto-run detection on new image
     if auto_run_detection:
-        with st.spinner("🔄 Running AI detection..."):
+        with st.spinner("🔄 Running AI detection... This may take a few seconds."):
             # Create a file-like object
             image_file = BytesIO(image_to_process)
             image_file.name = image_name
 
-            # Run inference
-            result = run_cv_inference(image_file, conf_threshold, fast_mode)
+            # Run inference with current settings (Swift mode)
+            result = run_cv_inference(
+                image_file,
+                st.session_state.cv_conf_threshold
+            )
 
             # Store result in session state
             st.session_state.cv_detection_result = result
 
-    # Get result from session state (whether just computed or previously cached)
+    # Get result from session state
     result = st.session_state.cv_detection_result
 
     if result and "error" not in result:
-        # Display original and annotated images side by side
-        col1, col2 = st.columns(2)
-
-        with col1:
-            st.markdown("#### Original Image")
-            original_img = Image.open(BytesIO(image_to_process))
-            st.image(original_img, use_container_width=True)
-
-        with col2:
-            st.markdown("#### Detected Birds")
-            annotated_base64 = result.get("annotated_image_base64", "")
-            if annotated_base64:
-                annotated_bytes = base64.b64decode(annotated_base64)
-                annotated_img = Image.open(BytesIO(annotated_bytes))
-                st.image(annotated_img, use_container_width=True)
-
-        # Display results
+        # Get detection data
         bird_count = result.get("bird_count", 0)
-        message = result.get("message", "")
+        species_summary = result.get("species_summary", {})
+        display_summary = {k: v for k, v in species_summary.items() if k != "UNKNOWN"} or species_summary
+        annotated_base64 = result.get("annotated_image_base64", "")
         inference_time = result.get("inference_time", 0.0)
 
-        st.markdown("---")
-        st.markdown("#### 📊 Results")
-
-        # Show count with appropriate styling
-        if bird_count == 0:
-            st.warning(message)
-            st.info("💡 **Tip**: Try lowering the confidence threshold or use a different image with more visible birds.")
-        else:
-            st.success(message)
-
-        # Display metrics in columns
-        metric_cols = st.columns(4)
-        with metric_cols[0]:
-            st.metric("🐦 Birds Detected", bird_count)
-        with metric_cols[1]:
-            original_img = Image.open(BytesIO(image_to_process))
-            st.metric("📐 Image Size", f"{original_img.width}×{original_img.height}")
-        with metric_cols[2]:
-            st.metric("🎯 Confidence", f"{conf_threshold:.0%}")
-        with metric_cols[3]:
-            st.metric("⚡ Inference Time", f"{inference_time:.2f}s")
+        # Build species code to name mapping
+        detections = result.get("detections", [])
+        species_names = {}
+        for det in detections:
+            code = det.get("species_code", "")
+            name = det.get("species_name", "")
+            if code and code not in species_names:
+                species_names[code] = name
 
         # ====================================================================
-        # DOWNLOAD AND CORRECTION WORKFLOW
+        # DISPLAY: Annotated Image with Watermark
         # ====================================================================
 
         if annotated_base64:
-            col1, col2 = st.columns(2)
-            with col1:
+            from PIL import ImageDraw, ImageFont
+
+            annotated_bytes = base64.b64decode(annotated_base64)
+            annotated_img = Image.open(BytesIO(annotated_bytes))
+
+            # Add watermark to bottom-right corner
+            draw = ImageDraw.Draw(annotated_img)
+
+            # Try to load a nice font for watermark
+            try:
+                watermark_font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 48)
+            except:
+                try:
+                    watermark_font = ImageFont.truetype("arial.ttf", 48)
+                except:
+                    watermark_font = ImageFont.load_default()
+
+            # Watermark text
+            watermark_text = "NestVision"
+
+            # Get text size for positioning
+            bbox = draw.textbbox((0, 0), watermark_text, font=watermark_font)
+            text_width = bbox[2] - bbox[0]
+            text_height = bbox[3] - bbox[1]
+
+            # Position at bottom-right with padding
+            padding = 20
+            x = annotated_img.width - text_width - padding
+            y = annotated_img.height - text_height - padding
+
+            # Draw semi-transparent background rectangle
+            bg_padding = 10
+            draw.rectangle(
+                [x - bg_padding, y - bg_padding, x + text_width + bg_padding, y + text_height + bg_padding],
+                fill=(0, 0, 0, 180)
+            )
+
+            # Draw watermark text (orange brand color)
+            draw.text((x, y), watermark_text, fill=(217, 119, 87), font=watermark_font)
+
+            # Display the watermarked image
+            st.image(annotated_img, use_container_width=True)
+
+        # ====================================================================
+        # DISPLAY: Summary Metrics
+        # ====================================================================
+
+        st.markdown("### 📊 Summary")
+
+        metric_cols = st.columns(3)
+        with metric_cols[0]:
+            st.metric("🐦 Total Birds", bird_count)
+        with metric_cols[1]:
+            st.metric("🎯 Confidence", f"{st.session_state.cv_conf_threshold:.0%}")
+        with metric_cols[2]:
+            st.metric("⏱️ Time", f"{inference_time:.2f}s")
+
+        # Show message
+        if bird_count == 0:
+            st.warning("No birds detected. Try lowering the confidence threshold or using a different image.")
+        else:
+            st.success(result.get("message", f"Detected {bird_count} birds"))
+
+        # ====================================================================
+        # DISPLAY: Species Breakdown
+        # ====================================================================
+
+        if display_summary and bird_count > 0:
+            st.markdown("---")
+            st.markdown("### 🦜 Species Breakdown (Best Predictions)")
+
+            # Metric tiles per species (top 5)
+            top_species = sorted(display_summary.items(), key=lambda x: -x[1])[:5]
+            species_cols = st.columns(len(top_species))
+
+            for i, (species_code, count) in enumerate(top_species):
+                with species_cols[i]:
+                    species_name = species_names.get(species_code, species_code)
+                    st.metric(
+                        label=species_code,
+                        value=count,
+                        help=species_name
+                    )
+
+            # Horizontal bar chart
+            if len(display_summary) > 1:
+                # Build labels with species codes and names
+                chart_labels = []
+                for code in display_summary.keys():
+                    name = species_names.get(code, code)
+                    if name and name != code:
+                        chart_labels.append(f"{code} - {name}")
+                    else:
+                        chart_labels.append(code)
+
+                fig = px.bar(
+                    x=list(display_summary.values()),
+                    y=chart_labels,
+                    orientation="h",
+                    color_discrete_sequence=["#D97757"],
+                    labels={"x": "Count", "y": "Species"},
+                    template="plotly_dark",
+                )
+                fig.update_layout(
+                    paper_bgcolor="#1A1A1A",
+                    plot_bgcolor="#2D2D2D",
+                    showlegend=False,
+                    height=max(150, len(display_summary) * 40),
+                    margin=dict(l=10, r=10, t=10, b=10),
+                    yaxis=dict(categoryorder="total ascending")
+                )
+                st.plotly_chart(fig, use_container_width=True)
+
+        # ====================================================================
+        # DISPLAY: Action Buttons
+        # ====================================================================
+
+        st.markdown("---")
+        st.markdown("### 💾 Export & Training")
+
+        col1, col2 = st.columns(2)
+
+        with col1:
+            if annotated_base64:
                 st.download_button(
                     label="📥 Download Annotated Image",
                     data=annotated_bytes,
-                    file_name=f"nestvision_detected_{image_name}",
+                    file_name=f"nestvision_{image_name}",
                     mime="image/jpeg",
                     use_container_width=True,
                     type="secondary"
                 )
-            with col2:
-                if st.button("🔧 Correct AI", use_container_width=True, type="primary"):
-                    # Send image and detections to labeller
-                    with st.spinner("Uploading to labeller..."):
-                        correction_data = {
-                            "image_base64": base64.b64encode(image_to_process).decode('utf-8'),
-                            "detections": result.get("detections", [])
-                        }
 
-                        try:
-                            correction_response = requests.post(
-                                "http://localhost:5000/api/correction/upload",
-                                json=correction_data,
-                                timeout=30
-                            )
+        with col2:
+            if st.button("🧑‍🔬 Train with Experts", use_container_width=True, type="primary", help="Send to Nestperts for expert annotation"):
+                # Send image and detections to Nestperts
+                with st.spinner("Uploading to Nestperts..."):
+                    correction_data = {
+                        "image_base64": base64.b64encode(image_to_process).decode('utf-8'),
+                        "detections": result.get("detections", [])
+                    }
 
-                            if correction_response.status_code == 200:
-                                correction_result = correction_response.json()
-                                correction_url = f"http://localhost:5000{correction_result['correction_url']}"
-                                image_filename = correction_result.get('image_filename', '')
+                    try:
+                        correction_response = requests.post(
+                            "http://localhost:5000/api/correction/upload",
+                            json=correction_data,
+                            timeout=30
+                        )
 
-                                # Auto-open labeller in new tab using JavaScript
-                                st.success(f"✅ Uploaded as {image_filename}! Opening labeller...")
+                        if correction_response.status_code == 200:
+                            correction_result = correction_response.json()
+                            correction_url = f"http://localhost:5000{correction_result['correction_url']}"
+                            image_filename = correction_result.get('image_filename', '')
 
-                                # JavaScript to open in new window
-                                js_code = f"""
-                                <script>
-                                    window.open('{correction_url}', '_blank');
-                                </script>
-                                """
-                                st.components.v1.html(js_code, height=0)
-
-                                # Also provide a fallback link
-                                st.markdown(f"**If the page didn't open automatically:** [Click here to open labeller]({correction_url})")
-                                st.info("💡 Your image has been added to the 'Corrections' user in the labeller. Use all the labelling tools to fix the detections!")
-                            else:
-                                st.error(f"Failed to upload: {correction_response.status_code}")
-                        except Exception as e:
-                            st.error(f"Error: Make sure the labeller app is running on port 5000")
-                            st.code(f"python labeller/app.py --data nestvision")
+                            st.success(f"✅ Uploaded as {image_filename}!")
+                            st.info(f"💡 **Next Step:** Open Nestperts to refine detections and identify species.\n\n[Open Nestperts →]({correction_url})")
+                        else:
+                            st.error(f"Failed to upload: {correction_response.status_code}")
+                            st.info("Make sure Nestperts is running: `python labeller/app.py --data labeller/nestvision`")
+                    except Exception as e:
+                        st.error(f"Connection error: {str(e)}")
+                        st.info("Make sure Nestperts is running on port 5000:\n\n`python labeller/app.py --data labeller/nestvision`")
 
         # ====================================================================
-        # DETECTION DETAILS
+        # DISPLAY: Expandable Details
         # ====================================================================
+
+        with st.expander("📷 View Original Image", expanded=False):
+            original_img = Image.open(BytesIO(image_to_process))
+            st.image(original_img, use_container_width=True)
+
+            # Image info
+            st.caption(f"**Size:** {original_img.width}×{original_img.height} pixels")
+            st.caption(f"**Format:** {original_img.format}")
 
         if bird_count > 0:
-            with st.expander("🔍 View Detailed Detection Data", expanded=False):
+            with st.expander("🔍 Detection Details", expanded=False):
                 detections = result.get("detections", [])
                 if detections:
-                    st.markdown(f"**Total Detections:** {len(detections)}")
-                    st.markdown("**Detection Details:**")
-
-                    # Create a formatted table
+                    # Create formatted table
                     detection_data = []
                     for i, det in enumerate(detections, 1):
-                        bbox = det.get('bbox', [])
+                        species_code = det.get('species_code', '')
+                        species_name = det.get('species_name', '')
+                        det_conf = det.get('confidence', 0)
+                        cls_conf = det.get('species_confidence', 0.0)
+
                         detection_data.append({
-                            "Detection #": i,
-                            "Confidence": f"{det.get('confidence', 0):.2%}",
-                            "Bounding Box": f"[{bbox[0]:.0f}, {bbox[1]:.0f}, {bbox[2]:.0f}, {bbox[3]:.0f}]",
-                            "Class ID": det.get('class_id', 0)
+                            "#": i,
+                            "Species": f"{species_code}" if species_code != 'UNKNOWN' else "—",
+                            "Common Name": species_name if species_name != 'Unknown' else "—",
+                            "Detection": f"{det_conf:.0%}",
+                            "Classification": f"{cls_conf:.0%}" if cls_conf else "—",
                         })
 
-                    st.dataframe(pd.DataFrame(detection_data), use_container_width=True)
+                    df = pd.DataFrame(detection_data)
+                    st.dataframe(df, use_container_width=True, hide_index=True)
 
-                    # Raw JSON data
-                    with st.expander("📄 Raw JSON Data"):
+                    # Raw JSON
+                    with st.expander("📄 Raw JSON"):
                         st.json({
                             "total_detections": len(detections),
                             "detections": detections
                         })
 
-        # ====================================================================
-        # SPECIES IDENTIFICATION SECTION
-        # ====================================================================
+        with st.expander("ℹ️ About NestVision", expanded=False):
+            st.markdown("""
+            ### Detection Model
+            - **Swift YOLO26**: Fast, accurate bird detection trained on Gulf Coast avian data
+            - Optimized for speed and precision
+            - Input resolution: 1024×1024 pixels
 
-        if bird_count > 0:
-            st.markdown("---")
-            st.markdown("### 🐦 Species Identification Training")
-            st.caption("Help improve species recognition by identifying birds in these crops")
+            ### Species Classification
+            - **7 color-coded species groups**: Pelican, Tern, Gull, Shorebird, Cormorant, Heron, Wader
+            - **Best prediction shown**: Model's top guess for each bird
+            - Use **Nestperts** to verify and refine species identifications
+            - Species shown as **4-letter codes** (e.g., BRPE = Brown Pelican)
 
-            # Extract random crops
-            detections = result.get("detections", [])
-            crops = extract_crops_from_detections(image_to_process, detections, num_crops=5)
+            ### Understanding Confidence
+            - **Detection confidence (70-80%)**: How sure the model is there's a bird
+            - **Classification confidence**: Which species group is most likely
+            - Higher confidence = more certain identification
 
-            if crops:
-                # Load species list
-                species_list = load_species_list()
-                species_options = ["Not a bird"] + [f"{code} - {name}" for code, name in species_list]
+            ### SAHI Processing
+            - Automatically slices large images into overlapping tiles
+            - 20% overlap ensures no birds are missed at tile boundaries
+            - Intelligent merging removes duplicate detections
 
-                # Display crops in a grid
-                num_cols = min(5, len(crops))
-                cols = st.columns(num_cols)
-
-                for idx, (crop_bytes, det) in enumerate(crops):
-                    with cols[idx % num_cols]:
-                        # Display crop
-                        crop_img = Image.open(BytesIO(crop_bytes))
-                        st.image(crop_img, use_container_width=True, caption=f"Detection #{idx+1}")
-
-                        # Species selector
-                        crop_key = f"crop_{id(image_name)}_{idx}"
-                        selected_species = st.selectbox(
-                            "Species",
-                            options=species_options,
-                            key=f"species_select_{crop_key}",
-                            label_visibility="collapsed"
-                        )
-
-                        # Save button
-                        if st.button("💾 Save", key=f"save_crop_{crop_key}", use_container_width=True):
-                            if selected_species == "Not a bird":
-                                st.warning("Please select a species")
-                            else:
-                                # Extract species code
-                                species_code = selected_species.split(" - ")[0]
-                                species_name = selected_species.split(" - ")[-1]
-
-                                # Send to backend
-                                with st.spinner("Saving crop..."):
-                                    try:
-                                        crop_data = {
-                                            "crop_base64": base64.b64encode(crop_bytes).decode('utf-8'),
-                                            "species_code": species_code,
-                                            "species_name": species_name
-                                        }
-
-                                        crop_response = requests.post(
-                                            "http://localhost:5000/api/crop/save",
-                                            json=crop_data,
-                                            timeout=30
-                                        )
-
-                                        if crop_response.status_code == 200:
-                                            st.success(f"✅ Saved as {species_code}!")
-                                            st.session_state.crop_identifications[crop_key] = species_code
-                                        else:
-                                            st.error("Failed to save crop")
-                                    except Exception as e:
-                                        st.error("Error: Make sure labeller app is running")
-                                        st.code("python labeller/app.py")
-
-                st.markdown("---")
-                st.info("""
-                **Why identify species?**
-
-                These identified crops will be used to train a species classification model.
-                The more accurate identifications we collect, the better the model becomes!
-
-                Crops are saved to: `nestvision/crops/`
-                """)
+            ### Technical Details
+            - **Detection Model**: Swift YOLO26 (1024×1024 input)
+            - **Classification Model**: Swift ResNet-based (224×224 input)
+            - **NMS Threshold**: 50% IoU
+            - **Training Data**: Gulf Coast avian monitoring 2010-2021
+            """)
 
     elif result and "error" in result:
-        st.error(f"❌ Inference failed: {result['error']}")
+        st.error(f"❌ Detection failed: {result['error']}")
+        st.info("Try a different image or adjust the settings.")
+
 else:
-    # Show instructions when no image is selected
+    # No image selected - show instructions
+    st.markdown("---")
     st.info("""
     ### 👆 Get Started
 
-    **To detect birds in an image:**
-    1. **Upload** your own image using the file uploader above, or
-    2. **Select** an example image from the gallery above
-    3. Adjust the **confidence threshold** if needed
-    4. Click **"Run Bird Detection"** to analyze the image
+    **To detect and count birds:**
+    1. **Upload** your own image, or
+    2. **Select** an example image from the gallery
+    3. Detection will run automatically!
 
-    The AI will identify and count all birds in your image!
+    **Optional:** Adjust detection settings in the "Advanced Settings" panel above.
     """)

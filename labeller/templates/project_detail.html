@@ -1,0 +1,998 @@
+{% extends "base.html" %}
+
+{% block title %}{{ project.name }} - Nestperts{% endblock %}
+
+{% block extra_css %}
+<style>
+    .project-detail-container {
+        max-width: 1600px;
+        margin: 0 auto;
+        padding: var(--space-8);
+    }
+
+    .project-header {
+        margin-bottom: var(--space-8);
+        padding-bottom: var(--space-6);
+        border-bottom: 2px solid var(--surface-border);
+    }
+
+    .project-header-top {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        margin-bottom: var(--space-4);
+    }
+
+    .project-title-section h1 {
+        font-size: var(--text-4xl);
+        margin-bottom: var(--space-2);
+    }
+
+    .project-description {
+        color: var(--text-secondary);
+        font-size: var(--text-lg);
+        line-height: 1.7;
+    }
+
+    .project-actions {
+        display: flex;
+        gap: var(--space-3);
+    }
+
+    .project-stats {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: var(--space-4);
+        margin-bottom: var(--space-8);
+    }
+
+    .project-content {
+        display: grid;
+        grid-template-columns: 2fr 1fr;
+        gap: var(--space-8);
+    }
+
+    .project-main {
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-6);
+    }
+
+    .project-sidebar {
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-6);
+    }
+
+    .section-card {
+        background: var(--surface-base);
+        border: 1px solid var(--surface-border);
+        border-radius: var(--radius-lg);
+        padding: var(--space-6);
+    }
+
+    .section-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: var(--space-4);
+    }
+
+    .section-title {
+        font-size: var(--text-xl);
+        font-family: var(--font-display);
+        margin: 0;
+    }
+
+    .user-list {
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-3);
+    }
+
+    .user-item {
+        display: flex;
+        align-items: center;
+        gap: var(--space-3);
+        padding: var(--space-3);
+        background: var(--bg-secondary);
+        border-radius: var(--radius-md);
+        transition: all var(--transition-fast);
+        cursor: pointer;
+    }
+
+    .user-item:hover {
+        background: var(--surface-hover);
+        transform: translateX(4px);
+    }
+
+    .user-avatar {
+        width: 48px;
+        height: 48px;
+        border-radius: var(--radius-full);
+        background: var(--brand-primary);
+        color: white;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: 700;
+        font-size: var(--text-lg);
+    }
+
+    .user-info {
+        flex: 1;
+    }
+
+    .user-name {
+        font-weight: 600;
+        color: var(--text-primary);
+        margin-bottom: var(--space-1);
+    }
+
+    .user-progress {
+        font-size: var(--text-sm);
+        color: var(--text-tertiary);
+    }
+
+    .user-stats {
+        text-align: right;
+    }
+
+    .user-count {
+        font-weight: 700;
+        color: var(--brand-primary);
+        font-size: var(--text-lg);
+    }
+
+    .user-label {
+        font-size: var(--text-xs);
+        color: var(--text-tertiary);
+    }
+
+    .image-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+        gap: var(--space-4);
+    }
+
+    .image-card {
+        aspect-ratio: 4/3;
+        border-radius: var(--radius-md);
+        overflow: hidden;
+        position: relative;
+        cursor: pointer;
+        transition: all var(--transition-base);
+    }
+
+    .image-card:hover {
+        transform: translateY(-4px);
+        box-shadow: var(--shadow-lg);
+    }
+
+    .image-card img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+    }
+
+    .image-card-overlay {
+        position: absolute;
+        inset: 0;
+        background: linear-gradient(to top, rgba(0,0,0,0.7), transparent);
+        display: flex;
+        flex-direction: column;
+        justify-content: flex-end;
+        padding: var(--space-3);
+        color: white;
+    }
+
+    .image-card-name {
+        font-size: var(--text-sm);
+        font-weight: 600;
+        margin-bottom: var(--space-1);
+    }
+
+    .image-card-status {
+        font-size: var(--text-xs);
+        display: flex;
+        align-items: center;
+        gap: var(--space-1);
+    }
+
+    .status-indicator {
+        width: 8px;
+        height: 8px;
+        border-radius: var(--radius-full);
+    }
+
+    .status-complete {
+        background: var(--success);
+    }
+
+    .status-pending {
+        background: var(--warning);
+    }
+
+    @media (max-width: 1024px) {
+        .project-content {
+            grid-template-columns: 1fr;
+        }
+
+        .project-sidebar {
+            order: -1;
+        }
+    }
+
+    /* Custom User Dropdown with Pictures */
+    .custom-dropdown {
+        position: relative;
+        width: 100%;
+    }
+
+    .custom-dropdown-selected {
+        display: flex;
+        align-items: center;
+        gap: var(--space-3);
+        padding: var(--space-3) var(--space-4);
+        background: var(--surface-base);
+        border: 1px solid var(--surface-border);
+        border-radius: var(--radius-md);
+        cursor: pointer;
+        transition: all var(--transition-fast);
+        min-height: 48px;
+    }
+
+    .custom-dropdown-selected:hover {
+        border-color: var(--brand-primary);
+        background: var(--bg-secondary);
+    }
+
+    .custom-dropdown-selected .placeholder {
+        color: var(--text-tertiary);
+    }
+
+    .custom-dropdown-selected.has-selection .placeholder {
+        color: var(--text-primary);
+    }
+
+    .custom-dropdown-selected img {
+        width: 32px;
+        height: 32px;
+        border-radius: var(--radius-full);
+        object-fit: cover;
+        border: 2px solid var(--surface-border);
+    }
+
+    .custom-dropdown-options {
+        position: absolute;
+        top: calc(100% + 4px);
+        left: 0;
+        right: 0;
+        background: var(--surface-base);
+        border: 1px solid var(--surface-border);
+        border-radius: var(--radius-md);
+        box-shadow: var(--shadow-lg);
+        max-height: 300px;
+        overflow-y: auto;
+        z-index: 1000;
+        display: none;
+    }
+
+    .custom-dropdown-options.active {
+        display: block;
+    }
+
+    .custom-dropdown-option {
+        display: flex;
+        align-items: center;
+        gap: var(--space-3);
+        padding: var(--space-3) var(--space-4);
+        cursor: pointer;
+        transition: all var(--transition-fast);
+    }
+
+    .custom-dropdown-option:hover {
+        background: var(--bg-secondary);
+    }
+
+    .custom-dropdown-option img {
+        width: 40px;
+        height: 40px;
+        border-radius: var(--radius-full);
+        object-fit: cover;
+        border: 2px solid var(--surface-border);
+        flex-shrink: 0;
+    }
+
+    .custom-dropdown-option .user-initial {
+        width: 40px;
+        height: 40px;
+        border-radius: var(--radius-full);
+        background: var(--brand-primary);
+        color: white;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: 700;
+        flex-shrink: 0;
+    }
+
+    .custom-dropdown-option-info {
+        flex: 1;
+    }
+
+    .custom-dropdown-option-name {
+        font-weight: 600;
+        color: var(--text-primary);
+        margin-bottom: 2px;
+    }
+
+    .custom-dropdown-option-meta {
+        font-size: var(--text-sm);
+        color: var(--text-tertiary);
+    }
+
+    .btn-icon-danger:hover {
+        background: var(--error) !important;
+        color: white !important;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="project-detail-container">
+    <!-- Project Header -->
+    <div class="project-header animate-fade-in">
+        <div class="project-header-top">
+            <div class="project-title-section">
+                <h1>{{ project.name }}</h1>
+                <p class="project-description">{{ project.description }}</p>
+            </div>
+            <div class="project-actions">
+                <button class="btn btn-secondary" onclick="exportFormat('yolo')">
+                    📤 Export
+                </button>
+                <button class="btn btn-primary" onclick="showAssignTaskModal()">
+                    + Assign Task
+                </button>
+                <button class="btn btn-secondary" onclick="showDeleteProjectModal()" style="background: rgba(220, 38, 38, 0.1); border-color: rgba(220, 38, 38, 0.3); color: #ef4444;">
+                    🗑️ Delete Project
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Project Stats -->
+    <div class="project-stats stagger-children">
+        <div class="stat-card">
+            <div class="stat-value">{{ project.total_images }}</div>
+            <div class="stat-label">Total Images</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value">{{ project.completed_images }}</div>
+            <div class="stat-label">Completed</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value">{{ project.total_annotations }}</div>
+            <div class="stat-label">Annotations</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value">{{ project.progress|int }}%</div>
+            <div class="stat-label">Progress</div>
+            <div class="progress" style="margin-top: var(--space-2);">
+                <div class="progress-bar" style="width: {{ project.progress }}%"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Content -->
+    <div class="project-content">
+        <!-- Main Content Area -->
+        <div class="project-main">
+            <!-- Images -->
+            <div class="section-card">
+                <div class="section-header">
+                    <h3 class="section-title">Images ({{ project.images | length }})</h3>
+                    <button class="btn btn-sm btn-ghost" onclick="toggleImageView()">
+                        Grid View
+                    </button>
+                </div>
+
+                <div class="image-grid" id="imageGrid">
+                    {% for image in project.images[:20] %}
+                    <div class="image-card" onclick="openImageModal('{{ image.name }}', '/project/{{ project.folder }}/image/{{ image.name }}')">
+                        <img src="/project/{{ project.folder }}/image/{{ image.name }}" alt="{{ image.name }}" loading="lazy">
+                        <div class="image-card-overlay">
+                            <div class="image-card-name">{{ image.name[:20] }}...</div>
+                            <div class="image-card-status">
+                                <span class="status-indicator {% if image.completed %}status-complete{% else %}status-pending{% endif %}"></span>
+                                {% if image.completed %}Completed{% else %}Pending{% endif %}
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+
+                {% if project.images | length > 20 %}
+                <div style="text-align: center; margin-top: var(--space-4);">
+                    <button class="btn btn-secondary" onclick="loadMoreImages()">
+                        Load More ({{ project.images | length - 20 }} remaining)
+                    </button>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Sidebar -->
+        <div class="project-sidebar">
+            <!-- Team Members -->
+            <div class="section-card">
+                <div class="section-header">
+                    <h3 class="section-title">Team ({{ project.users | length }})</h3>
+                    <button class="btn btn-sm btn-ghost" onclick="showAssignTaskModal()">
+                        + Add
+                    </button>
+                </div>
+
+                <div class="user-list">
+                    {% if project.users_detail %}
+                        {% for user in project.users_detail %}
+                        <div class="user-item" style="cursor: pointer;" data-user-email="{{ user.email }}">
+                            <div style="display: flex; align-items: center; gap: var(--space-3); flex: 1;" onclick="window.location.href='/project/{{ project.folder }}/editor/{{ user.email }}'">
+                                <!-- Avatar with fallback -->
+                                <div style="position: relative; width: 48px; height: 48px; flex-shrink: 0;">
+                                    {% if user.picture %}
+                                    <img
+                                        src="{{ user.picture }}"
+                                        alt="{{ user.username }}"
+                                        style="width: 48px; height: 48px; border-radius: var(--radius-full); object-fit: cover; border: 2px solid var(--surface-border);"
+                                        onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+                                    <div class="user-avatar" style="display: none;">{{ user.username[0].upper() }}</div>
+                                    {% else %}
+                                    <div class="user-avatar">{{ user.username[0].upper() }}</div>
+                                    {% endif %}
+                                </div>
+                                <div class="user-info">
+                                    <div class="user-name">{{ user.username }}</div>
+                                    <div class="user-progress">
+                                        {{ user.completed }}/{{ user.assigned }} images
+                                    </div>
+                                </div>
+                                <div class="user-stats">
+                                    <div class="user-count">{{ user.annotations }}</div>
+                                    <div class="user-label">annotations</div>
+                                </div>
+                            </div>
+                            <!-- Remove button -->
+                            <button
+                                class="btn-icon-danger"
+                                onclick="event.stopPropagation(); removeUserFromProject('{{ user.email }}', '{{ user.username }}')"
+                                title="Remove user from project"
+                                style="flex-shrink: 0; width: 32px; height: 32px; border-radius: var(--radius-md); border: 1px solid var(--error); color: var(--error); background: transparent; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: all 0.2s;">
+                                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" style="pointer-events: none;">
+                                    <path d="M12 4L4 12M4 4l8 8" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                                </svg>
+                            </button>
+                        </div>
+                        {% endfor %}
+                    {% else %}
+                        <div style="text-align: center; padding: var(--space-6); color: var(--text-tertiary);">
+                            <p style="margin-bottom: var(--space-2);">No team members yet</p>
+                            <button class="btn btn-sm btn-primary" onclick="showAssignTaskModal()">
+                                Assign First Task
+                            </button>
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Export Options -->
+            <div class="section-card">
+                <div class="section-header">
+                    <h3 class="section-title">Quick Actions</h3>
+                </div>
+
+                <div style="display: flex; flex-direction: column; gap: var(--space-2);">
+                    <button class="btn btn-secondary" onclick="exportFormat('yolo')">
+                        Download YOLO Format
+                    </button>
+                    <button class="btn btn-secondary" onclick="exportFormat('coco')">
+                        Download COCO Format
+                    </button>
+                    <button class="btn btn-secondary" onclick="exportFormat('geojson')">
+                        Download GeoJSON
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Delete Project Modal -->
+<div class="modal" id="deleteProjectModal">
+    <div class="modal-content" style="max-width: 500px;">
+        <div class="modal-header">
+            <h2 class="modal-title" style="color: #ef4444;">⚠️ Delete Project</h2>
+            <button class="modal-close" onclick="closeDeleteProjectModal()">&times;</button>
+        </div>
+        <div class="modal-body">
+            <div style="margin-bottom: var(--space-6);">
+                <p style="font-size: var(--text-lg); margin-bottom: var(--space-4);">
+                    Are you sure you want to <strong>permanently delete</strong> this project?
+                </p>
+
+                <div style="background: rgba(220, 38, 38, 0.1); border: 1px solid rgba(220, 38, 38, 0.3); border-radius: var(--radius-md); padding: var(--space-4); margin-bottom: var(--space-4);">
+                    <div style="font-weight: 600; margin-bottom: var(--space-2);">This will delete:</div>
+                    <ul style="margin-left: var(--space-5); color: var(--text-secondary);">
+                        <li>{{ project.total_images }} image(s)</li>
+                        <li>{{ project.total_annotations }} annotation(s)</li>
+                        <li>All user assignments</li>
+                        <li>Project metadata</li>
+                    </ul>
+                </div>
+
+                <p style="color: var(--text-tertiary); font-size: var(--text-sm);">
+                    <strong>This action cannot be undone.</strong> Consider exporting the project before deletion.
+                </p>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="deleteConfirmation">
+                    Type the project name to confirm: <strong>{{ project.name }}</strong>
+                </label>
+                <input
+                    type="text"
+                    id="deleteConfirmation"
+                    class="form-input"
+                    placeholder="Enter project name"
+                    autocomplete="off"
+                >
+            </div>
+
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" onclick="closeDeleteProjectModal()">Cancel</button>
+                <button type="button" class="btn btn-primary" onclick="confirmDeleteProject()" style="background: #ef4444; border-color: #ef4444;">
+                    Delete Project
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Assign Task Modal -->
+<div class="modal" id="assignTaskModal">
+    <div class="modal-content" style="max-width: 600px;">
+        <div class="modal-header">
+            <h2 class="modal-title">Assign Images</h2>
+            <button class="modal-close" onclick="closeAssignTaskModal()">&times;</button>
+        </div>
+        <div class="modal-body">
+            <form id="assignTaskForm" onsubmit="assignTask(event)">
+                <!-- User Selection -->
+                <div class="form-group">
+                    <label class="form-label" for="assignUser">Assign to User</label>
+                    <div id="userSelectContainer" style="position: relative;">
+                        <input type="hidden" id="assignUser" name="assignUser" required>
+                        <!-- Custom dropdown with user pictures -->
+                        <div id="customUserDropdown" class="custom-dropdown">
+                            <div class="custom-dropdown-selected" id="customUserDropdownSelected" onclick="toggleUserDropdown()">
+                                <span class="placeholder">Select user...</span>
+                            </div>
+                            <div class="custom-dropdown-options" id="userDropdownOptions">
+                                <!-- Will be populated dynamically -->
+                            </div>
+                        </div>
+                    </div>
+                    <p class="form-help">Select from authenticated users</p>
+                    <p id="userSelectError" class="form-help" style="color: var(--error); display: none;">Please select a user</p>
+                </div>
+
+                <!-- Assignment Stats -->
+                <div style="background: var(--bg-secondary); border-radius: var(--radius-md); padding: var(--space-4); margin-bottom: var(--space-4);">
+                    <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--space-3); text-align: center;">
+                        <div>
+                            <div style="font-size: var(--text-2xl); font-weight: 700; color: var(--brand-primary);" id="totalImagesCount">{{ project.total_images }}</div>
+                            <div style="font-size: var(--text-xs); color: var(--text-tertiary);">Total</div>
+                        </div>
+                        <div>
+                            <div style="font-size: var(--text-2xl); font-weight: 700; color: var(--warning);" id="assignedImagesCount">-</div>
+                            <div style="font-size: var(--text-xs); color: var(--text-tertiary);">Assigned</div>
+                        </div>
+                        <div>
+                            <div style="font-size: var(--text-2xl); font-weight: 700; color: var(--success);" id="unassignedImagesCount">-</div>
+                            <div style="font-size: var(--text-xs); color: var(--text-tertiary);">Unassigned</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Number of Images -->
+                <div class="form-group">
+                    <label class="form-label" for="numTasks">Number of Images to Assign</label>
+                    <input type="number" id="numTasks" class="form-input" value="10" min="1" required>
+                    <p class="form-help" id="assignHelp">Images will be randomly selected from unassigned pool</p>
+                </div>
+
+                <!-- Assignment Options -->
+                <div class="form-group">
+                    <label class="form-label">Assignment Options</label>
+                    <div style="display: flex; align-items: center; gap: var(--space-2); padding: var(--space-3); background: var(--bg-secondary); border-radius: var(--radius-md);">
+                        <input type="checkbox" id="allowReassign" style="width: auto; cursor: pointer;">
+                        <label for="allowReassign" style="margin: 0; cursor: pointer; font-size: var(--text-sm);">
+                            Allow reassignment (can assign images already assigned to others)
+                        </label>
+                    </div>
+                </div>
+
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" onclick="closeAssignTaskModal()">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Assign Images</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    const projectId = '{{ project.folder }}';
+    let allUsers = [];
+
+    // Load data on page load
+    document.addEventListener('DOMContentLoaded', () => {
+        loadAllUsers();
+        loadAssignmentStats();
+    });
+
+    async function loadAllUsers(retries = 2) {
+        for (let i = 0; i <= retries; i++) {
+            try {
+                await _loadAllUsersInternal();
+                if (allUsers && allUsers.length > 0) return;
+                
+                // If no users, might be transient error
+                if (i < retries) {
+                    console.log(`Retrying users load (${i+1}/${retries})...`);
+                    await new Promise(resolve => setTimeout(resolve, 1000));
+                }
+            } catch (error) {
+                if (i === retries) {
+                    console.error('Final users load failure:', error);
+                    showToast('Failed to load users', 'error');
+                } else {
+                    await new Promise(resolve => setTimeout(resolve, 1000));
+                }
+            }
+        }
+    }
+
+    async function _loadAllUsersInternal() {
+        try {
+            const response = await fetch('/api/users');
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+            
+            const data = await response.json();
+            allUsers = data.users || [];
+
+            // Populate custom dropdown with pictures
+            const dropdownOptions = document.getElementById('userDropdownOptions');
+            if (dropdownOptions) {
+                dropdownOptions.innerHTML = '';
+
+                if (allUsers.length === 0) {
+                    dropdownOptions.innerHTML = `
+                        <div style="padding: var(--space-4); text-align: center; color: var(--text-tertiary);">
+                            No authenticated users available.<br>
+                            Users must sign in with Google OAuth.
+                        </div>
+                    `;
+                } else {
+                    allUsers.forEach(user => {
+                        const option = document.createElement('div');
+                        option.className = 'custom-dropdown-option';
+                        option.dataset.value = user.name;
+                        option.dataset.email = user.email;
+                        option.dataset.picture = user.picture || '';
+
+                        const projectCount = user.project_count || 0;
+
+                        // Create avatar container with fallback
+                        const avatarHTML = user.picture
+                            ? `<div style="position: relative; width: 40px; height: 40px; flex-shrink: 0;">
+                                   <img src="${user.picture}" alt="${user.name}"
+                                        style="width: 40px; height: 40px; border-radius: var(--radius-full); object-fit: cover; border: 2px solid var(--surface-border);"
+                                        onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+                                   <div class="user-initial" style="display: none;">${user.name[0].toUpperCase()}</div>
+                               </div>`
+                            : `<div class="user-initial">${user.name[0].toUpperCase()}</div>`;
+
+                        option.innerHTML = `
+                            ${avatarHTML}
+                            <div class="custom-dropdown-option-info">
+                                <div class="custom-dropdown-option-name">${user.name}</div>
+                                <div class="custom-dropdown-option-meta">${projectCount} projects</div>
+                            </div>
+                        `;
+
+                        option.addEventListener('click', () => selectUser(user.name, user.email, user.picture));
+                        dropdownOptions.appendChild(option);
+                    });
+                }
+            }
+        } catch (error) {
+            console.error('Error in _loadAllUsersInternal:', error);
+            throw error;
+        }
+    }
+
+    function toggleUserDropdown() {
+        const dropdown = document.getElementById('userDropdownOptions');
+        dropdown.classList.toggle('active');
+    }
+
+    function selectUser(name, email, picture) {
+        const selected = document.getElementById('customUserDropdownSelected');
+        const hiddenInput = document.getElementById('assignUser');
+        const errorMsg = document.getElementById('userSelectError');
+
+        // Create avatar with fallback
+        const avatarHTML = picture
+            ? `<div style="position: relative; width: 32px; height: 32px; flex-shrink: 0;">
+                   <img src="${picture}" alt="${name}"
+                        style="width: 32px; height: 32px; border-radius: var(--radius-full); object-fit: cover; border: 2px solid var(--surface-border);"
+                        onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+                   <div class="user-initial" style="display: none; width: 32px; height: 32px; font-size: var(--text-sm);">${name[0].toUpperCase()}</div>
+               </div>`
+            : `<div class="user-initial" style="width: 32px; height: 32px; font-size: var(--text-sm);">${name[0].toUpperCase()}</div>`;
+
+        // Update visual display (show name)
+        selected.classList.add('has-selection');
+        selected.innerHTML = `
+            ${avatarHTML}
+            <span class="placeholder">${name}</span>
+        `;
+
+        // Update hidden input with EMAIL (unique identifier)
+        hiddenInput.value = email;
+
+        // Hide error message if visible
+        if (errorMsg) {
+            errorMsg.style.display = 'none';
+        }
+
+        // Close dropdown
+        document.getElementById('userDropdownOptions').classList.remove('active');
+    }
+
+    // Close dropdown when clicking outside
+    document.addEventListener('click', (e) => {
+        const dropdown = document.getElementById('customUserDropdown');
+        if (dropdown && !dropdown.contains(e.target)) {
+            document.getElementById('userDropdownOptions').classList.remove('active');
+        }
+    });
+
+    async function loadAssignmentStats() {
+        try {
+            const response = await fetch(`/api/projects/${projectId}/images/unassigned`);
+            const data = await response.json();
+
+            document.getElementById('assignedImagesCount').textContent = data.assigned_images || 0;
+            document.getElementById('unassignedImagesCount').textContent = data.unassigned_images || 0;
+
+            // Update help text
+            const helpText = document.getElementById('assignHelp');
+            if (helpText) {
+                if (data.unassigned_images > 0) {
+                    helpText.textContent = `${data.unassigned_images} unassigned images available. Images will be randomly selected.`;
+                    helpText.style.color = 'var(--success)';
+                } else {
+                    helpText.textContent = 'All images are assigned. Enable "Allow Reassignment" to assign more.';
+                    helpText.style.color = 'var(--warning)';
+                }
+            }
+        } catch (error) {
+            console.error('Error loading assignment stats:', error);
+        }
+    }
+
+    function showAssignTaskModal() {
+        document.getElementById('assignTaskModal').classList.add('active');
+
+        // Reset form
+        const hiddenInput = document.getElementById('assignUser');
+        const selected = document.getElementById('customUserDropdownSelected');
+        const errorMsg = document.getElementById('userSelectError');
+
+        if (hiddenInput) hiddenInput.value = '';
+        if (selected) {
+            selected.classList.remove('has-selection');
+            selected.innerHTML = '<span class="placeholder">Select user...</span>';
+        }
+        if (errorMsg) errorMsg.style.display = 'none';
+
+        // Reload users in case new ones signed in
+        loadAllUsers();
+        loadAssignmentStats(); // Refresh stats when opening modal
+    }
+
+    function closeAssignTaskModal() {
+        document.getElementById('assignTaskModal').classList.remove('active');
+    }
+
+    async function assignTask(event) {
+        event.preventDefault();
+
+        const hiddenInput = document.getElementById('assignUser');
+        const userEmail = hiddenInput.value;
+        const errorMsg = document.getElementById('userSelectError');
+
+        // Custom validation
+        if (!userEmail || userEmail === '') {
+            if (errorMsg) {
+                errorMsg.style.display = 'block';
+            }
+            showToast('Please select a user', 'error');
+            return;
+        }
+
+        const numImages = parseInt(document.getElementById('numTasks').value);
+        const allowReassign = document.getElementById('allowReassign').checked;
+
+        try {
+            const response = await fetch('/api/projects/assign-task', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    project_id: projectId,
+                    user_email: userEmail,
+                    num_images: numImages,
+                    allow_reassign: allowReassign
+                })
+            });
+
+            const result = await response.json();
+
+            if (!response.ok) {
+                throw new Error(result.error || 'Failed to assign tasks');
+            }
+
+            // Get user name from allUsers array for display
+            const user = allUsers.find(u => u.email === userEmail);
+            const userName = user ? user.name : userEmail;
+            const message = result.message || `Assigned ${result.assigned} image(s) to ${userName}`;
+            showToast(message, 'success');
+
+            // Close modal and reload after delay
+            setTimeout(() => {
+                closeAssignTaskModal();
+                window.location.reload();
+            }, 1500);
+        } catch (error) {
+            console.error('Error assigning task:', error);
+            showToast('Error: ' + error.message, 'error');
+        }
+    }
+
+    async function removeUserFromProject(userEmail, userName) {
+        if (!confirm(`Remove ${userName} from this project?\n\nThis will unassign all their images but keep any labels they created.`)) {
+            return;
+        }
+
+        try {
+            const response = await fetch(`/api/projects/${projectId}/remove-user`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    user_email: userEmail
+                })
+            });
+
+            const result = await response.json();
+
+            if (!response.ok) {
+                throw new Error(result.error || 'Failed to remove user');
+            }
+
+            showToast(`Removed ${userName} from project`, 'success');
+
+            // Reload page after delay
+            setTimeout(() => {
+                window.location.reload();
+            }, 1000);
+        } catch (error) {
+            console.error('Error removing user:', error);
+            showToast('Error: ' + error.message, 'error');
+        }
+    }
+
+    async function exportFormat(format) {
+        try {
+            showToast(`Preparing ${format.toUpperCase()} export...`, 'info');
+
+            const response = await fetch(`/api/projects/${projectId}/export/${format}`);
+            const blob = await response.blob();
+
+            // Download file
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `${projectId}_${format}.zip`;
+            document.body.appendChild(a);
+            a.click();
+            window.URL.revokeObjectURL(url);
+            document.body.removeChild(a);
+
+            showToast('Export complete!', 'success');
+        } catch (error) {
+            showToast('Export failed: ' + error.message, 'error');
+        }
+    }
+
+    function openImageModal(imageName, imageUrl) {
+        // Open image in a new tab
+        window.open(imageUrl, '_blank');
+    }
+
+    // Delete project functions
+    function showDeleteProjectModal() {
+        document.getElementById('deleteProjectModal').classList.add('active');
+        document.getElementById('deleteConfirmation').value = '';
+        setTimeout(() => document.getElementById('deleteConfirmation').focus(), 100);
+    }
+
+    function closeDeleteProjectModal() {
+        document.getElementById('deleteProjectModal').classList.remove('active');
+        document.getElementById('deleteConfirmation').value = '';
+    }
+
+    async function confirmDeleteProject() {
+        const projectName = '{{ project.name }}';
+        const confirmation = document.getElementById('deleteConfirmation').value.trim();
+
+        // Check if confirmation matches
+        if (confirmation !== projectName) {
+            showToast('Project name does not match. Please type it exactly as shown.', 'error');
+            return;
+        }
+
+        try {
+            showToast('Deleting project...', 'info');
+
+            const response = await fetch(`/api/projects/${projectId}/delete`, {
+                method: 'DELETE'
+            });
+
+            const result = await response.json();
+
+            if (!response.ok) {
+                throw new Error(result.error || 'Failed to delete project');
+            }
+
+            showToast('✓ Project deleted successfully', 'success');
+
+            // Redirect to projects dashboard after short delay
+            setTimeout(() => {
+                window.location.href = '/';
+            }, 1500);
+
+        } catch (error) {
+            console.error('Delete project error:', error);
+            showToast('❌ ' + error.message, 'error');
+        }
+    }
+
+    // Close modals on background click
+    document.querySelectorAll('.modal').forEach(modal => {
+        modal.addEventListener('click', (e) => {
+            if (e.target === modal) {
+                modal.classList.remove('active');
+            }
+        });
+    });
+</script>
+{% endblock %}

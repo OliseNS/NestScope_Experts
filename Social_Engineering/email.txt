@@ -1,0 +1,56 @@
+Gmail	Olisemeka Nmarkwe <olisemekanmarkwe@gmail.com>
+Fwd: DevDays: Additional resources to help with your project
+1 message
+Nikhil Kumar Shah <nikhilkrsha@gmail.com>	Mon, Mar 2, 2026 at 5:01 PM
+To: olisemekanmarkwe@gmail.com
+
+Best regards,
+
+
+Nikhil Shah | W#0788556
+Computer Science Student | Finance Minor
+Southeastern Louisiana University
+https://www.nikhilshah.com.np
+
+
+---------- Forwarded message ---------
+From: NaTisha Natt <natisha@nexusla.org>
+Date: Mon, 2 Mar 2026 at 12:43
+Subject: DevDays: Additional resources to help with your project
+To: <nikhilkrsha@gmail.com>
+
+
+Nexus-DevDays-EmailHeader
+
+Hello Nikhil
+
+ 
+
+Here are few additional resources from The Water Institute to help as you prepare the finals.
+
+ 
+
+Here is a current stac catalog with a subset of the georeferenced data, which is still a work inprogress: 
+
+https://twi-avian-2024.s3.us-east-1.amazonaws.com/public/test_stac/catalog.json
+
+ 
+
+This could be browsed using something like: 
+
+https://radiantearth.github.io/stac-browser/#/external/twi-avian-2024.s3.us-east-1.amazonaws.com/public/test_stac/catalog.json
+
+ 
+
+Also, for those looking for a more curated set of images we have pulled some organized photos, mosaics, and location coordinate files here: 
+
+https://twi-avian-2024.s3.us-east-1.amazonaws.com/public/devDays/index.html#public/devDays/
+
+ 
+
+Best,
+Na’Tisha
+
+Nexus Louisiana, 7117 Florida Boulevard, Baton Rouge, Louisiana 70806, United States, (225) 218-1100
+
+Unsubscribe Manage preferences 

@@ -1,193 +1,218 @@
 """
-Map visualization components
+Plotly-based map visualization - reliable, fast, no iframe issues.
 """
 
 import streamlit as st
 import pandas as pd
-import folium
-from folium.plugins import Fullscreen
-from streamlit_folium import st_folium
+import plotly.express as px
+import plotly.graph_objects as go
 
 
-def render_map(df: pd.DataFrame):
+def render_map(
+    df: pd.DataFrame,
+    key: str = None,
+    height: int = 500,
+    risk_zones: list = None,
+    future_projections: list = None,
+    show_stac_data: bool = False,
+    stac_colonies_list: list = None
+):
     """
-    Render an enhanced Folium map with interactive features.
+    Render an interactive map using Plotly - fast, reliable, native Streamlit.
 
     Args:
-        df: DataFrame containing latitude and longitude columns
+        df: DataFrame with Latitude/Longitude columns
+        key: Unique key for Streamlit
+        height: Map height in pixels
+        risk_zones: Risk zone data for Coastal Risk page
+        future_projections: Future projections for Coastal Risk page
+        show_stac_data: Highlight STAC colonies
+        stac_colonies_list: List of STAC colony names
     """
-    # Find coordinate columns (case-insensitive)
-    # Be specific to avoid matching "ColonyName" (which contains "lon")
+    # Find coordinate columns
     lat_col = None
     lon_col = None
 
-    for col in df.columns:
-        if col == 'Latitude':
-            lat_col = col
-        elif col == 'Longitude':
-            lon_col = col
+    if not df.empty:
+        for col in df.columns:
+            col_lower = str(col).lower()
+            if 'latitude' in col_lower and not lat_col:
+                lat_col = col
+            if 'longitude' in col_lower and not lon_col:
+                lon_col = col
 
-    # Fallback to case-insensitive
-    if lat_col is None:
-        lat_col = next((col for col in df.columns if 'lat' in str(col).lower()), None)
-    if lon_col is None:
-        lon_col = next((col for col in df.columns if 'lon' in str(col).lower() or 'lng' in str(col).lower()), None)
+    # If no coordinates in df, check if we have other data to map
+    has_other_data = risk_zones or future_projections
 
-    if not lat_col or not lon_col:
-        st.info("💡 No geographic coordinates found in results.")
-        with st.expander("ℹ️ How to get map data"):
-            st.markdown("""
-            To see results on a map, try queries like:
-            - "Show all colonies in Louisiana with their locations"
-            - "List bird colonies in Chandeleur Islands"
-            - "Where are the brown pelican colonies in 2021?"
-            - "Map the locations of sandwich tern nests"
-            """)
+    if (not lat_col or not lon_col) and not has_other_data:
+        st.info("💡 **No location coordinates found.** Results don't contain latitude/longitude data.")
         return
 
     try:
-        # Clean and validate coordinates
-        map_df = df.copy()
-        map_df[lat_col] = pd.to_numeric(map_df[lat_col], errors='coerce')
-        map_df[lon_col] = pd.to_numeric(map_df[lon_col], errors='coerce')
+        if risk_zones:
+            # Risk zones for Coastal Risk page
+            risk_df = pd.DataFrame([{
+                'lat': z['latitude'],
+                'lon': z['longitude'],
+                'Colony': z['colony_name'],
+                'Risk Level': z['risk_level'],
+                'Risk Score': z['risk_score'],
+                'Birds': z.get('bird_count', 0)
+            } for z in risk_zones])
 
-        # Remove rows with missing coordinates
-        map_df = map_df.dropna(subset=[lat_col, lon_col])
+            # Standard Red to Green color map
+            color_map = {
+                'CRITICAL': '#FF0000',  # Pure Red
+                'HIGH': '#FF8C00',      # Dark Orange
+                'MODERATE': '#FFD700',  # Gold/Yellow
+                'LOW': '#00FF00'        # Pure Green
+            }
 
-        # Filter to valid coordinate ranges (Gulf of Mexico region)
-        # Latitude: 24-31°N, Longitude: -98 to -80°W
-        valid_mask = (
-            (map_df[lat_col] >= 24) & (map_df[lat_col] <= 31) &
-            (map_df[lon_col] >= -98) & (map_df[lon_col] <= -80)
-        )
-        map_df = map_df[valid_mask]
+            fig = px.scatter_mapbox(
+                risk_df,
+                lat='lat',
+                lon='lon',
+                hover_name='Colony',
+                hover_data={
+                    'lat': False,
+                    'lon': False,
+                    'Risk Level': True,
+                    'Risk Score': ':.1f',
+                    'Birds': ':,'
+                },
+                color='Risk Level',
+                color_discrete_map=color_map,
+                size='Risk Score',
+                size_max=10,  # Small size like typical map markers
+                zoom=7,
+                height=height,
+                mapbox_style="open-street-map"
+            )
+            fig.update_layout(showlegend=True, legend=dict(yanchor="top", y=0.99, xanchor="left", x=0.01, bgcolor="rgba(0,0,0,0.5)"))
 
-        if map_df.empty:
-            st.warning("⚠️ No valid coordinates found in the Gulf region.")
-            st.info("Valid coordinates: Latitude 24-31°N, Longitude -98 to -80°W")
-            with st.expander("🔍 Debug Info"):
-                st.write(f"**Detected columns:**")
-                st.write(f"- Latitude column: `{lat_col}`")
-                st.write(f"- Longitude column: `{lon_col}`")
-                st.write(f"\n**All columns:** {', '.join([f'`{col}`' for col in df.columns])}")
-                st.write(f"\n**Data stats:**")
-                st.write(f"- Original rows: {len(df)}")
-                st.write(f"- After numeric conversion: {len(df.dropna(subset=[lat_col, lon_col]))}")
-                st.write(f"\n**Sample coordinates:**")
-                st.dataframe(df[[lat_col, lon_col]].head())
-            return
+        elif future_projections:
+            proj_df = pd.DataFrame([{
+                'lat': p['latitude'],
+                'lon': p['longitude'],
+                'Colony': p['colony_name'],
+                'Status': p['status']
+            } for p in future_projections])
 
-        # Calculate center and smart zoom
-        avg_lat = map_df[lat_col].mean()
-        avg_lon = map_df[lon_col].mean()
+            fig = px.scatter_mapbox(
+                proj_df,
+                lat='lat',
+                lon='lon',
+                hover_name='Colony',
+                hover_data=['Status'],
+                color='Status',
+                color_discrete_map={'submerged': '#FF0000', 'at_risk': '#FFA500', 'stable': '#00FF00'},
+                zoom=7,
+                height=height,
+                mapbox_style="open-street-map"
+            )
 
-        lat_range = map_df[lat_col].max() - map_df[lat_col].min()
-        lon_range = map_df[lon_col].max() - map_df[lon_col].min()
-        max_range = max(lat_range, lon_range)
-
-        # Smart zoom based on data spread
-        if max_range < 0.1:
-            zoom = 12
-        elif max_range < 0.5:
-            zoom = 10
-        elif max_range < 2:
-            zoom = 8
         else:
-            zoom = 7
+            # Standard dataframe mapping with coordinate validation
+            # Validate that coordinates are numeric and not concatenated strings
+            import numpy as np
 
-        # Create map with light clean theme
-        m = folium.Map(
-            location=[avg_lat, avg_lon],
-            zoom_start=zoom,
-            tiles='CartoDB positron',
-            control_scale=True
+            # Convert to numeric, coercing errors to NaN
+            df_map = df.copy()
+            df_map[lat_col] = pd.to_numeric(df_map[lat_col], errors='coerce')
+            df_map[lon_col] = pd.to_numeric(df_map[lon_col], errors='coerce')
+
+            # Filter out invalid coordinates
+            valid_mask = df_map[lat_col].notna() & df_map[lon_col].notna()
+            valid_mask &= (df_map[lat_col].abs() <= 90)  # Valid latitude range
+            valid_mask &= (df_map[lon_col].abs() <= 180)  # Valid longitude range
+            df_map = df_map[valid_mask]
+
+            if len(df_map) == 0:
+                st.error("❌ **Coordinate validation failed**: All coordinates are invalid or out of range.")
+                st.info("Coordinates must be numeric values (Latitude: -90 to 90, Longitude: -180 to 180)")
+                return
+
+            if len(df_map) < len(df):
+                st.warning(f"⚠️ {len(df) - len(df_map)} rows had invalid coordinates and were filtered out.")
+
+            # Create hover text with colony names if available
+            if 'ColonyName' in df_map.columns:
+                hover_name = 'ColonyName'
+                hover_data = {lat_col: ':.4f', lon_col: ':.4f'}
+            else:
+                hover_name = None
+                hover_data = None
+
+            # Use fixed-size markers (no size scaling like risk zones)
+            fig = px.scatter_mapbox(
+                df_map,
+                lat=lat_col,
+                lon=lon_col,
+                hover_name=hover_name,
+                hover_data=hover_data,
+                zoom=7,
+                height=height,
+                mapbox_style="open-street-map",
+                color_discrete_sequence=['#D97757']
+            )
+
+            # Set small, clean marker size to match Regional Colony Risk Distribution
+            fig.update_traces(
+                marker=dict(
+                    size=8,  # Fixed small size - matches risk zone markers
+                    opacity=0.9
+                )
+            )
+
+        # Ensure interactivity
+        fig.update_layout(
+            margin=dict(l=0, r=0, t=0, b=0),
+            mapbox=dict(zoom=7)
         )
 
-        # Add fullscreen button
-        Fullscreen().add_to(m)
-
-        # Color markers by species if available
-        species_col = next((col for col in df.columns if 'species' in col.lower()), None)
-
-        species_colors = {}
-        unique_species = []
-        if species_col:
-            unique_species = map_df[species_col].unique()
-            color_palette = ['blue', 'red', 'green', 'purple', 'orange', 'darkred',
-                             'beige', 'darkblue', 'darkgreen', 'cadetblue',
-                             'darkpurple', 'pink', 'lightblue', 'lightgreen']
-            for idx, species in enumerate(unique_species):
-                species_colors[species] = color_palette[idx % len(color_palette)]
-
-        # Add markers
-        for idx, row in map_df.iterrows():
-            # Build tooltip with all relevant columns
-            tooltip_lines = []
-            for col in df.columns:
-                if col not in [lat_col, lon_col] and pd.notna(row[col]):
-                    val = row[col]
-                    if isinstance(val, float):
-                        val = f"{val:.2f}" if val < 1000 else f"{val:,.0f}"
-                    tooltip_lines.append(f"<b>{col}:</b> {val}")
-
-            tooltip_text = "<br>".join(tooltip_lines) if tooltip_lines else "No data"
-
-            # Color by species if available
-            marker_color = 'black'
-            if species_col and pd.notna(row[species_col]):
-                marker_color = species_colors.get(row[species_col], 'black')
-
-            folium.Marker(
-                location=[row[lat_col], row[lon_col]],
-                tooltip=folium.Tooltip(tooltip_text, sticky=True),
-                popup=folium.Popup(tooltip_text, max_width=300),
-                icon=folium.Icon(color=marker_color, icon='info-sign', prefix='glyphicon')
-            ).add_to(m)
-
-        # Add legend if multiple species
-        if species_col and len(unique_species) > 1:
-            legend_html = '''
-            <div style="position: fixed; bottom: 50px; right: 50px;
-                        width: 220px; background-color: #FFFFFF;
-                        border: 2px solid #CCCCCC; z-index: 9999;
-                        padding: 12px; border-radius: 10px;
-                        box-shadow: 0 4px 12px rgba(0,0,0,0.2);">
-                <p style="font-weight: 600; margin-bottom: 10px;
-                          border-bottom: 1px solid #CCCCCC; padding-bottom: 8px;
-                          color: #333333; font-family: Inter;">
-                    Species Legend
-                </p>
-            '''
-            for species in list(unique_species)[:10]:
-                color = species_colors[species]
-                legend_html += f'<p style="margin: 5px 0; color: #333333; font-family: Inter; font-size: 14px;"><span style="color: {color}; font-size: 18px;">●</span> {species}</p>'
-
-            if len(unique_species) > 10:
-                legend_html += f'<p style="margin: 5px 0; font-style: italic; color: #666666; font-family: Inter; font-size: 13px;">+ {len(unique_species) - 10} more...</p>'
-
-            legend_html += '</div>'
-            m.get_root().html.add_child(folium.Element(legend_html))
-
-        # Render map
-        st_folium(m, width=None, height=600, returned_objects=[])
-
-        # Show summary statistics
-        if len(map_df) > 1:
-            col1, col2, col3 = st.columns(3)
-            with col1:
-                st.metric("📍 Locations", len(map_df))
-            with col2:
-                if species_col:
-                    st.metric("🦅 Species", len(unique_species))
-                else:
-                    st.metric("🗺️ Zoom", zoom)
-            with col3:
-                st.metric("📐 Area (°)", f"{max_range:.2f}")
+        st.plotly_chart(
+            fig, 
+            use_container_width=True, 
+            key=key,
+            config={
+                'scrollZoom': True,
+                'displayModeBar': True,
+                'modeBarButtonsToAdd': ['toImage'],
+                'displaylogo': False
+            }
+        )
 
     except Exception as e:
-        st.error(f"❌ Error generating map: {str(e)}")
-        with st.expander("🔧 Debug Info"):
-            st.write(f"**Latitude column:** {lat_col}")
-            st.write(f"**Longitude column:** {lon_col}")
-            st.write(f"**DataFrame shape:** {df.shape}")
-            st.write(f"**Error:** {str(e)}")
+        st.error(f"Map error: {e}")
+
+    except Exception as e:
+        print(f"❌ Map error: {e}")
+        import traceback
+        traceback.print_exc()
+        st.error(f"Map error: {e}")
+
+
+def render_simple_map(lat, lon, label=None, height=300, key=None):
+    """Render a single location map - FAST."""
+    fig = px.scatter_mapbox(
+        pd.DataFrame({'lat': [lat], 'lon': [lon], 'name': [label or 'Location']}),
+        lat='lat',
+        lon='lon',
+        hover_name='name',
+        color_discrete_sequence=['#D97757'],
+        zoom=12,
+        height=height
+    )
+
+    fig.update_layout(
+        mapbox_style='open-street-map',
+        margin=dict(l=0, r=0, t=0, b=0),
+        showlegend=False
+    )
+
+    st.plotly_chart(
+        fig,
+        use_container_width=True,
+        config={'displayModeBar': False},
+        key=key
+    )

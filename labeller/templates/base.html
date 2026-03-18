@@ -1,0 +1,894 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Nestperts - Annotation Platform{% endblock %}</title>
+
+    <!-- Modern UI Fonts - Optimized with font-display:swap -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
+    <noscript><link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet"></noscript>
+
+    <!-- Styles -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/theme.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/components.css') }}">
+
+    <!-- Clean Navigation Styles -->
+    <style>
+        * {
+            font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+        }
+
+        .navbar {
+            background: #1a1a1a;
+            backdrop-filter: blur(12px);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+            padding: 0;
+            position: sticky;
+            top: 0;
+            z-index: 1000;
+        }
+
+        .navbar * {
+            max-width: 100%;
+        }
+
+        .navbar img {
+            max-width: 100%;
+            max-height: 100%;
+            object-fit: cover;
+        }
+
+        .navbar-content {
+            max-width: 1600px;
+            margin: 0 auto;
+            display: flex;
+            align-items: center;
+            padding: 0 1.5rem;
+            height: 60px;
+            gap: 1.5rem;
+        }
+
+        /* Brand Section */
+        .navbar-brand {
+            display: flex;
+            align-items: center;
+            gap: 0.625rem;
+            text-decoration: none;
+            font-weight: 600;
+            font-size: 1.125rem;
+            color: #ffffff;
+            letter-spacing: -0.01em;
+            transition: color 0.2s ease;
+            flex-shrink: 0;
+        }
+
+        .navbar-brand:hover {
+            color: #7BABAE;
+        }
+
+        .navbar-brand-logo {
+            height: 50px;
+            width: auto;
+            display: block;
+            flex-shrink: 0;
+        }
+
+        /* Theme-aware logo switching */
+        .logo-light {
+            display: none;
+        }
+
+        .logo-dark {
+            display: block;
+        }
+
+        [data-theme="light"] .logo-light {
+            display: block;
+        }
+
+        [data-theme="light"] .logo-dark {
+            display: none;
+        }
+
+        /* Navigation Items */
+        .navbar-nav {
+            display: flex;
+            align-items: center;
+            gap: 0.25rem;
+            list-style: none;
+            margin: 0;
+            padding: 0;
+        }
+
+        .nav-link {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.5rem 0.875rem;
+            color: rgba(255, 255, 255, 0.7);
+            text-decoration: none;
+            font-size: 0.875rem;
+            font-weight: 500;
+            border-radius: 6px;
+            transition: all 0.15s ease;
+            white-space: nowrap;
+        }
+
+        .nav-link:hover {
+            color: #ffffff;
+            background: rgba(255, 255, 255, 0.06);
+        }
+
+        .nav-link.active {
+            color: #7BABAE;
+            background: rgba(123, 171, 174, 0.1);
+        }
+
+        .nav-link svg {
+            width: 16px;
+            height: 16px;
+            opacity: 0.7;
+        }
+
+        .nav-link.active svg {
+            opacity: 1;
+        }
+
+        .nav-divider {
+            width: 1px;
+            height: 20px;
+            background: rgba(255, 255, 255, 0.1);
+            margin: 0 0.5rem;
+        }
+
+        /* Right Actions */
+        .navbar-actions {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            margin-left: auto;
+            flex-shrink: 0;
+        }
+
+        .nav-link.external {
+            color: rgba(255, 255, 255, 0.6);
+            font-size: 0.8125rem;
+            padding: 0.375rem 0.75rem;
+        }
+
+        .nav-link.external:hover {
+            color: #7BABAE;
+            background: transparent;
+        }
+
+        /* Apple-style Theme Toggle Switch */
+        .theme-toggle {
+            position: relative;
+            width: 51px;
+            height: 31px;
+            cursor: pointer;
+            user-select: none;
+            flex-shrink: 0;
+        }
+
+        .theme-toggle-track {
+            position: absolute;
+            inset: 0;
+            border-radius: 15.5px;
+            background: rgba(120, 120, 128, 0.32);
+            transition: background-color 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .theme-toggle-track.active {
+            background: #7BABAE;
+        }
+
+        .theme-toggle-thumb {
+            position: absolute;
+            top: 50%;
+            left: 2px;
+            transform: translateY(-50%);
+            width: 27px;
+            height: 27px;
+            border-radius: 50%;
+            background: #ffffff;
+            box-shadow: 0 3px 8px rgba(0, 0, 0, 0.15), 0 1px 1px rgba(0, 0, 0, 0.16);
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.875rem;
+        }
+
+        .theme-toggle-track.active .theme-toggle-thumb {
+            transform: translateX(20px) translateY(-50%);
+        }
+
+        .theme-toggle:hover .theme-toggle-track {
+            opacity: 0.9;
+        }
+
+        .theme-toggle:active .theme-toggle-thumb {
+            width: 30px;
+        }
+
+        .theme-toggle:active .theme-toggle-track.active .theme-toggle-thumb {
+            transform: translateX(17px) translateY(-50%);
+        }
+
+        /* User Menu */
+        .user-menu {
+            position: relative;
+        }
+
+        .user-menu-trigger {
+            display: flex;
+            align-items: center;
+            gap: 0.625rem;
+            padding: 0.375rem 0.5rem 0.375rem 0.625rem;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.15s ease;
+            background: rgba(255, 255, 255, 0.04);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+        }
+
+        .user-menu-trigger:hover {
+            background: rgba(255, 255, 255, 0.08);
+            border-color: rgba(255, 255, 255, 0.12);
+        }
+
+        .user-avatar-wrapper {
+            position: relative;
+            width: 28px;
+            height: 28px;
+            flex-shrink: 0;
+            overflow: hidden;
+            border-radius: 50%;
+        }
+
+        .user-avatar {
+            width: 100%;
+            height: 100%;
+            max-width: 28px;
+            max-height: 28px;
+            border-radius: 50%;
+            border: 1.5px solid rgba(123, 171, 174, 0.5);
+            object-fit: cover;
+            display: block;
+        }
+
+        .user-avatar.hidden {
+            display: none;
+        }
+
+        .user-avatar-fallback {
+            width: 28px;
+            height: 28px;
+            border-radius: 50%;
+            border: 1.5px solid rgba(123, 171, 174, 0.5);
+            background: linear-gradient(135deg, #7BABAE 0%, #6AA6B7 100%);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.75rem;
+            font-weight: 600;
+            color: #ffffff;
+            text-transform: uppercase;
+            letter-spacing: 0.02em;
+        }
+
+        .user-avatar-fallback.visible {
+            display: flex;
+        }
+
+        .user-info {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
+            gap: 0.125rem;
+        }
+
+        .user-name {
+            color: #ffffff;
+            font-size: 0.8125rem;
+            font-weight: 500;
+            line-height: 1;
+            max-width: 120px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .user-role-badge {
+            font-size: 0.6875rem;
+            color: rgba(123, 171, 174, 0.9);
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.03em;
+            line-height: 1;
+        }
+
+        .dropdown-icon {
+            width: 14px;
+            height: 14px;
+            stroke: rgba(255, 255, 255, 0.5);
+            transition: transform 0.2s ease;
+            margin-left: 0.125rem;
+        }
+
+        .user-menu.active .dropdown-icon {
+            transform: rotate(180deg);
+        }
+
+        /* Dropdown Menu */
+        .user-dropdown {
+            position: absolute;
+            top: calc(100% + 0.5rem);
+            right: 0;
+            min-width: 220px;
+            background: #232323;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+            box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
+            opacity: 0;
+            visibility: hidden;
+            transform: translateY(-8px);
+            transition: all 0.2s ease;
+            overflow: hidden;
+        }
+
+        .user-menu.active .user-dropdown {
+            opacity: 1;
+            visibility: visible;
+            transform: translateY(0);
+        }
+
+        .dropdown-header {
+            padding: 0.875rem 1rem;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+            background: rgba(255, 255, 255, 0.02);
+        }
+
+        .dropdown-user-name {
+            font-weight: 600;
+            font-size: 0.9375rem;
+            color: #ffffff;
+            margin-bottom: 0.25rem;
+        }
+
+        .dropdown-user-email {
+            font-size: 0.8125rem;
+            color: rgba(255, 255, 255, 0.5);
+        }
+
+        .dropdown-user-role {
+            margin-top: 0.5rem;
+            font-size: 0.6875rem;
+            color: #7BABAE;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .dropdown-menu {
+            padding: 0.5rem;
+        }
+
+        .dropdown-item {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            padding: 0.625rem 0.875rem;
+            color: rgba(255, 255, 255, 0.85);
+            text-decoration: none;
+            border-radius: 6px;
+            transition: all 0.15s ease;
+            font-size: 0.875rem;
+        }
+
+        .dropdown-item:hover {
+            background: rgba(255, 255, 255, 0.08);
+            color: #ffffff;
+        }
+
+        .dropdown-item.danger {
+            color: rgba(252, 129, 129, 0.85);
+        }
+
+        .dropdown-item.danger:hover {
+            background: rgba(252, 129, 129, 0.12);
+            color: #fc8181;
+        }
+
+        .dropdown-item svg {
+            width: 16px;
+            height: 16px;
+            opacity: 0.6;
+        }
+
+        /* Responsive Design */
+        @media (max-width: 1200px) {
+            .navbar-content {
+                padding: 0 1rem;
+                gap: 1rem;
+            }
+
+            .nav-link span {
+                display: none;
+            }
+
+            .nav-link.external span {
+                display: none;
+            }
+
+            .user-info {
+                display: none;
+            }
+
+            .user-menu-trigger {
+                padding: 0.375rem;
+            }
+        }
+
+        @media (max-width: 768px) {
+            .navbar-content {
+                height: auto;
+                min-height: 56px;
+                flex-wrap: wrap;
+                padding: 0.625rem 1rem;
+            }
+
+            .navbar-nav {
+                order: 3;
+                width: 100%;
+                gap: 0.25rem;
+                padding-top: 0.5rem;
+            }
+
+            .navbar-actions {
+                order: 2;
+            }
+
+            .nav-link {
+                padding: 0.5rem 0.625rem;
+                font-size: 0.8125rem;
+            }
+
+            .nav-link.external {
+                display: none;
+            }
+
+            .nav-divider {
+                display: none;
+            }
+
+            .user-dropdown {
+                right: 0;
+                min-width: 200px;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .navbar-brand {
+                font-size: 1rem;
+            }
+
+            .navbar-brand-icon {
+                font-size: 1.25rem;
+            }
+
+            .theme-toggle {
+                width: 34px;
+                height: 34px;
+            }
+
+            .navbar-nav {
+                justify-content: flex-start;
+            }
+
+            .nav-link {
+                flex: 0 0 auto;
+            }
+        }
+
+        /* Attribution Footer - Always Dark */
+        .attribution-footer {
+            position: fixed;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            background: rgba(26, 26, 26, 0.95) !important;
+            backdrop-filter: blur(10px);
+            padding: 10px 20px;
+            border-radius: 50px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+            font-size: 13px;
+            color: rgba(255, 255, 255, 0.7) !important;
+            z-index: 999999;
+            border: 1px solid rgba(255, 255, 255, 0.1) !important;
+        }
+
+        .attribution-text {
+            font-weight: 500;
+            color: rgba(255, 255, 255, 0.6) !important;
+        }
+
+        .attribution-logo {
+            height: 24px;
+            width: auto;
+            vertical-align: middle;
+            filter: brightness(1.2);
+        }
+
+        .attribution-by {
+            color: #7BABAE !important;
+            font-weight: 600;
+            margin-left: 2px;
+        }
+
+        @media (max-width: 768px) {
+            .attribution-footer {
+                bottom: 15px;
+                padding: 8px 16px;
+                font-size: 11px;
+                gap: 8px;
+            }
+
+            .attribution-logo {
+                height: 20px;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .attribution-footer {
+                bottom: 10px;
+                padding: 6px 14px;
+                font-size: 10px;
+            }
+
+            .attribution-logo {
+                height: 18px;
+            }
+        }
+
+        /* ============================================================================
+           LIGHT MODE OVERRIDES - Navbar and User Menu
+           ============================================================================ */
+        [data-theme="light"] .navbar {
+            background: #ffffff;
+            border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+        }
+
+        [data-theme="light"] .navbar-brand {
+            color: #1a1a1a;
+        }
+
+        [data-theme="light"] .navbar-brand:hover {
+            color: #7BABAE;
+        }
+
+        [data-theme="light"] .nav-link {
+            color: rgba(0, 0, 0, 0.7);
+        }
+
+        [data-theme="light"] .nav-link:hover {
+            color: #1a1a1a;
+            background: rgba(0, 0, 0, 0.06);
+        }
+
+        [data-theme="light"] .nav-link.active {
+            color: #7BABAE;
+            background: rgba(123, 171, 174, 0.1);
+        }
+
+        [data-theme="light"] .nav-divider {
+            background: rgba(0, 0, 0, 0.1);
+        }
+
+        [data-theme="light"] .user-menu-trigger {
+            background: rgba(0, 0, 0, 0.04);
+            border: 1px solid rgba(0, 0, 0, 0.08);
+        }
+
+        [data-theme="light"] .user-menu-trigger:hover {
+            background: rgba(0, 0, 0, 0.08);
+            border-color: rgba(0, 0, 0, 0.12);
+        }
+
+        [data-theme="light"] .user-name {
+            color: #1a1a1a;
+        }
+
+        [data-theme="light"] .user-role-badge {
+            color: rgba(123, 171, 174, 0.9);
+        }
+
+        [data-theme="light"] .dropdown-icon {
+            stroke: rgba(0, 0, 0, 0.5);
+        }
+
+        [data-theme="light"] .user-dropdown {
+            background: #ffffff;
+            border: 1px solid rgba(0, 0, 0, 0.1);
+            box-shadow: 0 12px 40px rgba(0, 0, 0, 0.15);
+        }
+
+        [data-theme="light"] .dropdown-header {
+            border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+            background: rgba(0, 0, 0, 0.02);
+        }
+
+        [data-theme="light"] .dropdown-user-name {
+            color: #1a1a1a;
+        }
+
+        [data-theme="light"] .dropdown-user-email {
+            color: rgba(0, 0, 0, 0.5);
+        }
+
+        [data-theme="light"] .dropdown-user-role {
+            color: #7BABAE;
+        }
+
+        [data-theme="light"] .dropdown-item {
+            color: rgba(0, 0, 0, 0.85);
+        }
+
+        [data-theme="light"] .dropdown-item:hover {
+            background: rgba(0, 0, 0, 0.08);
+            color: #1a1a1a;
+        }
+
+        [data-theme="light"] .dropdown-item.danger {
+            color: rgba(252, 129, 129, 0.85);
+        }
+
+        [data-theme="light"] .dropdown-item.danger:hover {
+            background: rgba(252, 129, 129, 0.12);
+            color: #fc8181;
+        }
+    </style>
+
+    {% block extra_css %}{% endblock %}
+
+    <!-- Theme (load immediately to prevent flash) -->
+    <script src="{{ url_for('static', filename='js/theme.js') }}"></script>
+</head>
+<body>
+    <!-- Navigation -->
+    <nav class="navbar">
+        <div class="navbar-content">
+            <!-- Brand -->
+            <a href="/" class="navbar-brand">
+                <img src="{{ url_for('static', filename='img/logo_light.png') }}" alt="NestScope" class="navbar-brand-logo logo-light">
+                <img src="{{ url_for('static', filename='img/logo_dark.png') }}" alt="NestScope" class="navbar-brand-logo logo-dark">
+            </a>
+
+            <!-- Main Navigation -->
+            <ul class="navbar-nav">
+                <li>
+                    <a href="/" class="nav-link {% if active_page == 'projects' %}active{% endif %}">
+                        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/>
+                        </svg>
+                        <span>Projects</span>
+                    </a>
+                </li>
+                <li>
+                    <a href="/users" class="nav-link {% if active_page == 'users' %}active{% endif %}">
+                        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"/>
+                        </svg>
+                        <span>Users</span>
+                    </a>
+                </li>
+                <li>
+                    <a href="/nestdb" class="nav-link {% if active_page == 'nestdb' %}active{% endif %}">
+                        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4"/>
+                        </svg>
+                        <span>NestDB</span>
+                    </a>
+                </li>
+                <li>
+                    <a href="/flood-intelligence" class="nav-link {% if active_page == 'flood_intelligence' %}active{% endif %}">
+                        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999 5.002 5.002 0 10-9.78 2.096A4.001 4.001 0 003 15z"/>
+                        </svg>
+                        <span>Flood Intel</span>
+                    </a>
+                </li>
+                <li>
+                    <a href="/help" class="nav-link {% if active_page == 'help' %}active{% endif %}">
+                        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                        </svg>
+                        <span>Help</span>
+                    </a>
+                </li>
+            </ul>
+
+            <!-- Right Actions -->
+            <div class="navbar-actions">
+                <a href="http://localhost:8501" target="_blank" class="nav-link external" style="border: 1px solid rgba(123, 171, 174, 0.3); background: rgba(123, 171, 174, 0.05); padding: 0.5rem 1rem; border-radius: 6px;">
+                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" style="width: 16px; height: 16px;">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
+                    </svg>
+                    <span>Public Tools</span>
+                </a>
+
+                <div class="nav-divider"></div>
+
+                <div class="theme-toggle" role="button" tabindex="0" aria-label="Toggle theme">
+                    <div class="theme-toggle-track">
+                        <div class="theme-toggle-thumb">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg>
+                        </div>
+                    </div>
+                </div>
+
+                {% if session.user %}
+                <div class="user-menu">
+                    <div class="user-menu-trigger" onclick="toggleUserMenu()">
+                        <div class="user-avatar-wrapper">
+                            <img src="{{ session.user.picture }}"
+                                 alt="{{ session.user.name }}"
+                                 class="user-avatar"
+                                 onerror="handleAvatarError(this)"
+                                 loading="lazy">
+                            <div class="user-avatar-fallback" data-initials="{{ session.user.name[0] if session.user.name else 'U' }}">
+                                {{ session.user.name[0] if session.user.name else 'U' }}
+                            </div>
+                        </div>
+                        <div class="user-info">
+                            <span class="user-name">{{ session.user.name }}</span>
+                            {% if session.user.role %}
+                            <span class="user-role-badge">{{ session.user.role }}</span>
+                            {% endif %}
+                        </div>
+                        <svg class="dropdown-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                        </svg>
+                    </div>
+                    <div class="user-dropdown">
+                        <div class="dropdown-header">
+                            <div class="dropdown-user-name">{{ session.user.name }}</div>
+                            <div class="dropdown-user-email">{{ session.user.email }}</div>
+                            {% if session.user.role %}
+                            <div class="dropdown-user-role">{{ session.user.role }}</div>
+                            {% endif %}
+                        </div>
+                        <div class="dropdown-menu">
+                            {% if session.user.is_admin %}
+                            <a href="/admin" class="dropdown-item">
+                                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/>
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+                                </svg>
+                                Admin Panel
+                            </a>
+                            {% endif %}
+                            <a href="{{ url_for('logout') }}" class="dropdown-item danger">
+                                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/>
+                                </svg>
+                                Logout
+                            </a>
+                        </div>
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </nav>
+
+    <script>
+        function toggleUserMenu() {
+            const menu = document.querySelector('.user-menu');
+            menu.classList.toggle('active');
+        }
+
+        // Handle avatar image load failure
+        function handleAvatarError(img) {
+            console.log('Avatar image failed to load, showing fallback');
+            img.classList.add('hidden');
+            const fallback = img.nextElementSibling;
+            if (fallback && fallback.classList.contains('user-avatar-fallback')) {
+                fallback.classList.add('visible');
+            }
+        }
+
+        // Close dropdown when clicking outside
+        document.addEventListener('click', function(event) {
+            const menu = document.querySelector('.user-menu');
+            if (menu && !menu.contains(event.target)) {
+                menu.classList.remove('active');
+            }
+        });
+
+        // Preload avatar and show fallback if it fails
+        document.addEventListener('DOMContentLoaded', function() {
+            const avatarImg = document.querySelector('.user-avatar');
+            if (avatarImg && !avatarImg.complete) {
+                avatarImg.addEventListener('error', function() {
+                    handleAvatarError(this);
+                });
+            } else if (avatarImg && !avatarImg.naturalWidth) {
+                // Image loaded but has no dimensions (broken)
+                handleAvatarError(avatarImg);
+            }
+        });
+    </script>
+
+    <!-- Main Content -->
+    <main>
+        {% block content %}{% endblock %}
+    </main>
+
+    <!-- Attribution Footer -->
+    <div class="attribution-footer">
+        <span class="attribution-text">Made For</span>
+        <img src="https://thewaterinstitute.org/images/img-logo.png" alt="The Water Institute" class="attribution-logo" loading="lazy">
+        <span class="attribution-by">by Team SONA</span>
+    </div>
+
+    <!-- Toast Notifications Container -->
+    <div id="toast-container" style="position: fixed; top: 80px; right: 20px; z-index: 300;"></div>
+
+    <!-- Common Scripts -->
+    <script>
+        // Utility: Show toast notification
+        function showToast(message, type = 'info') {
+            const container = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+            toast.className = `card shadow-lg animate-slide-in`;
+            toast.style.cssText = `
+                margin-bottom: var(--space-3);
+                padding: var(--space-4);
+                min-width: 300px;
+                border-left: 4px solid var(--${type === 'success' ? 'success' : type === 'error' ? 'error' : 'info'});
+            `;
+            toast.textContent = message;
+
+            container.appendChild(toast);
+
+            setTimeout(() => {
+                toast.style.animation = 'fadeIn var(--transition-base) ease-out reverse';
+                setTimeout(() => toast.remove(), 250);
+            }, 3000);
+        }
+
+        // Utility: Fetch wrapper with error handling
+        async function fetchJSON(url, options = {}) {
+            try {
+                const response = await fetch(url, {
+                    ...options,
+                    headers: {
+                        'Content-Type': 'application/json',
+                        ...options.headers
+                    }
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+
+                return await response.json();
+            } catch (error) {
+                console.error('Fetch error:', error);
+                showToast(error.message, 'error');
+                throw error;
+            }
+        }
+    </script>
+
+    {% block extra_js %}{% endblock %}
+</body>
+</html>

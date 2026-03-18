@@ -57,9 +57,14 @@ docs/**/*.pdf
 docs/**/*.mp4
 docs/**/*.mov
 
-# Root-level models directory - DO NOT COMMIT MODELS
-models/
-models/**/*
+# Root-level models directory
+# NOTE: ONNX models and mobile_sam.pt are tracked for deployment
+# Ignore everything first, then add exceptions below
+models/*
+# But keep these model files
+!models/*.onnx
+!models/mobile_sam.pt
+!models/.gitkeep
 
 # Jupyter Notebooks
 .ipynb_checkpoints/
@@ -70,6 +75,7 @@ models/**/*
 logs/
 tmp/
 temp/
+reports/
 
 # Environment and configuration
 .env
@@ -105,6 +111,15 @@ labeller/nestvision/crops/
 labeller/nestvision/*.csv
 labeller/project_state.json
 
+# Bird clustering outputs (embeddings, crops, visualizations)
+labeller/nestvision/bird_crops/
+**/bird_crops/
+*.npy  # NumPy embeddings
+**/clusters/
+clustering_results.pkl
+clusters_for_labeling.json
+cluster_visualization_*.png
+
 # Model files (all formats) - Global exclusion
 *.pt
 *.pth
@@ -120,6 +135,10 @@ labeller/project_state.json
 *.msgpack
 *.bin
 
+# EXCEPTIONS: Allow production models in models/ directory
+!models/*.pt
+!models/*.onnx
+
 # Large archive files
 *.zip
 *.tar
@@ -127,3 +146,227 @@ labeller/project_state.json
 *.tgz
 *.7z
 *.rar
+
+# ============================================================================
+# IMAGES AND HEAVY FILES (to keep repository size manageable)
+# ============================================================================
+
+# Image files (common formats)
+# Note: Both lowercase and uppercase extensions for cross-platform compatibility
+*.jpg
+*.jpeg
+*.png
+*.gif
+*.bmp
+*.tiff
+*.tif
+*.svg
+*.ico
+*.webp
+*.heic
+*.heif
+*.raw
+*.cr2
+*.nef
+*.orf
+*.sr2
+# Uppercase variants (Linux is case-sensitive)
+*.JPG
+*.JPEG
+*.PNG
+*.GIF
+*.BMP
+*.TIFF
+*.TIF
+*.SVG
+*.ICO
+*.WEBP
+*.HEIC
+*.HEIF
+*.RAW
+*.CR2
+*.NEF
+*.ORF
+*.SR2
+
+# Video files (large and binary)
+*.mp4
+*.avi
+*.mov
+*.mkv
+*.flv
+*.wmv
+*.webm
+*.m4v
+*.mpg
+*.mpeg
+*.3gp
+*.ogv
+# Uppercase variants
+*.MP4
+*.AVI
+*.MOV
+*.MKV
+*.FLV
+*.WMV
+*.WEBM
+*.M4V
+*.MPG
+*.MPEG
+*.3GP
+*.OGV
+
+# Audio files
+*.mp3
+*.wav
+*.flac
+*.aac
+*.ogg
+*.wma
+*.m4a
+*.opus
+
+# Large data files
+*.csv.gz
+*.parquet
+*.feather
+*.arrow
+*.hdf
+*.h5
+*.nc
+*.zarr
+
+# Database files (already covered above, but being explicit)
+*.sqlite
+*.sqlite3
+*.db-shm
+*.db-wal
+
+# EXCEPTION: Allow the main bird data database
+!data/bird_data_complete.db
+
+# Database version control (separate Git repo in data/ directory)
+# CRITICAL: Ignore this to prevent the database Git from being tracked by project Git
+data/.git/
+data/snapshots/
+data/*.sql
+
+# Scientific data formats
+*.mat  # MATLAB
+*.npy  # NumPy (already listed but reinforcing)
+*.npz
+*.fits  # Astronomy
+*.root  # ROOT (particle physics)
+annotated_dataset/*.json
+
+
+# Geospatial data (can be large)
+*.shp
+*.shx
+*.dbf
+*.prj
+*.geojson
+*.kml
+*.kmz
+
+# Document files (can be large with embedded images)
+*.pdf
+*.docx
+*.pptx
+*.xlsx
+
+# Backup and temporary files
+*.bak
+*.backup
+*.old
+*.orig
+*~
+*.swp
+*.swo
+
+# Exception: Keep small reference images in docs if needed
+!docs/reference/*.png
+!docs/reference/*.jpg
+!frontend/assets/logo.png
+!frontend/assets/favicon.ico
+!labeller/static/img/logo_*.png
+
+# ============================================================================
+# NestVision Generated Data (heavy datasets and visualizations)
+# ============================================================================
+NestVision/species_dataset/
+NestVision/species_vis/
+NestVision/refined_dataset/
+NestVision/refined_vis/
+NestVision/cog_training_dataset/
+NestVision/dataset_vis/
+NestVision/coordinate_diagnosis/
+NestVision/__pycache__/
+NestVision/*.pyc
+
+# ============================================================================
+# VisionTrain Reconstruction Pipeline (STAC dataset and downloads)
+# ============================================================================
+# Generated YOLO dataset from STAC expert dots
+VisionTrain/stac_dataset/images/
+VisionTrain/stac_dataset/labels/
+VisionTrain/stac_dataset/mosaics/
+VisionTrain/stac_dataset/*.yaml
+VisionTrain/stac_dataset/*.txt
+
+# Reconstruction pipeline intermediate data
+VisionTrain/reconstruction/data/
+VisionTrain/reconstruction/stac_data/
+VisionTrain/reconstruction/downloads/
+VisionTrain/reconstruction/vis/
+VisionTrain/reconstruction/stac_vis/
+VisionTrain/reconstruction/*.log
+
+# Social Engineering test data (dotted screenshots and visualizations)
+Social_Engineering/data/
+Social_Engineering/vis/
+
+# Keep only the code and documentation
+!VisionTrain/reconstruction/*.py
+!VisionTrain/reconstruction/*.md
+!VisionTrain/stac_dataset/*.md
+!Social_Engineering/*.py
+!Social_Engineering/*.md
+
+# ============================================================================
+# Training Datasets (ultimate, optimized, and visualization outputs)
+# ============================================================================
+# NewDataset directory and all training datasets
+NewDataset/
+ultimate_training_dataset_optimized/
+dataset_visualizations/
+
+# All images and labels directories (global catch-all)
+**/images/
+**/labels/
+**/crops/
+**/dataset_vis/
+**/dataset_visualizations/
+
+# Dataset directories (any name pattern)
+*_dataset/
+*_dataset_*/
+annotated_dataset/
+bird_classification_dataset/
+bird_detection_dataset/
+training_dataset/
+test_dataset/
+validation_dataset/
+val_dataset/
+
+# YOLO dataset configuration files (in dataset directories only)
+*_dataset/*.yaml
+*_dataset/data.yaml
+*_dataset/dataset.yaml
+**/train.cache
+**/val.cache
+**/test.cache
+
+# Export scripts output
+labeller/export_crops.py
+labeller/nestvision/export/

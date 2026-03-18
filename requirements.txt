@@ -1,26 +1,173 @@
-# Core Data Layer
-duckdb>=0.10.0              # Fast analytical database
-pandas>=2.0.0               # Data manipulation and CSV processing
+# NestScope - AI-Powered Gulf Coast Avian Monitoring Platform
+# Main requirements file for the entire project
+# Version pinning is handled by uv.lock - this file specifies dependencies only
+#
+# AUTHENTICATION SETUP:
+# Nestperts uses Google OAuth for authentication. After installing these packages:
+# 1. Get OAuth credentials from Google Cloud Console
+# 2. Add GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, and SECRET_KEY to .env
+# 3. Run: python labeller/setup_auth.py
+# See AUTH_SETUP.md for detailed instructions
 
-# AI/LLM Layer
-openai>=1.0.0               # OpenAI SDK for OpenRouter API access
-onnxruntime>=1.16.0         # ONNX Runtime for fast model inference
+# ============================================================================
+# CORE WEB FRAMEWORKS
+# ============================================================================
+# FastAPI backend with async support
+fastapi
+uvicorn[standard]
 
-# Frontend Layer
-streamlit>=1.28.0           # Web application framework
-plotly>=5.18.0              # Interactive data visualizations
-folium>=0.15.0              # Map visualizations (optional)
-streamlit-folium>=0.15.0    # Streamlit integration for maps (optional)
-Pillow>=10.0.0              # Image processing for computer vision tab
+# Flask for Nestperts labelling app
+Flask
+Werkzeug
 
-# Environment Management
-python-dotenv>=1.0.0        # Environment variable management
+# Flask session management (included with Flask, but listed explicitly)
+# itsdangerous  # Already a Flask dependency for session signing
 
-# Optional: Caching (if time permits)
-# redis>=5.0.0              # Query result caching
+# Streamlit frontend
+streamlit
+streamlit-folium
 
-# Development Tools (Optional)
-pytest>=7.4.0               # Testing framework
-ruff>=0.1.0                 # Fast Python linter
-jupyter>=1.0.0              # Notebook environment for exploration
+# ============================================================================
+# DATABASE & DATA PROCESSING
+# ============================================================================
+# Database and data manipulation
+pandas
+numpy<2
+
+# SQLite (included in Python standard library, no package needed)
+# For database migrations and schema analysis
+pyodbc  # For Access database migrations (optional)
+
+# ============================================================================
+# AI/ML - LANGUAGE MODELS
+# ============================================================================
+# OpenAI SDK (used for OpenRouter API compatibility)
+# Note: Requires httpx<0.27 for compatibility
+openai
+httpx<0.27  # Required for OpenAI SDK compatibility
+
+# ============================================================================
+# COMPUTER VISION - DETECTION & SEGMENTATION
+# ============================================================================
+# YOLO and object detection (includes PyTorch)
+ultralytics
+
+# Computer vision utilities
+opencv-python
+Pillow
+
+# Advanced detection utilities
+supervision
+sahi
+
+# Deep learning framework (required by ultralytics)
+torch
+torchvision
+
+# ONNX Runtime for optimized inference (>=1.17 for IR version 10 support)
+onnxruntime>=1.17.0
+# Use onnxruntime-gpu if you have CUDA GPU support:
+# onnxruntime-gpu>=1.17.0
+
+# ============================================================================
+# MACHINE LEARNING - CLUSTERING & EMBEDDINGS
+# ============================================================================
+# Scikit-learn for clustering (K-means, DBSCAN) and t-SNE
+scikit-learn
+
+# Timm for pre-trained vision models (EfficientNet, ResNet, etc.)
+timm
+
+# ============================================================================
+# VISUALIZATION & UI
+# ============================================================================
+# Plotting and visualization
+plotly
+matplotlib
+
+# Interactive maps
+folium>=0.15.0,<0.16.0
+streamlit-folium>=0.15.0,<0.16.0
+pydeck  # High-performance map visualization with deck.gl
+
+# Progress bars
+tqdm
+
+# ============================================================================
+# AUTHENTICATION & SECURITY
+# ============================================================================
+# OAuth 2.0 client library for Google authentication
+authlib
+
+# Cryptography library for secure token handling (authlib dependency)
+cryptography
+
+# ============================================================================
+# UTILITIES
+# ============================================================================
+# Environment variables
+python-dotenv
+
+# Data validation
+pydantic
+
+# HTTP requests
+requests
+
+# File uploads and multipart forms
 python-multipart
+
+# YAML configuration
+pyyaml
+
+# ============================================================================
+# OPTIONAL: CLOUD & DEPLOYMENT
+# ============================================================================
+# AWS S3 access (for training data downloads)
+boto3
+botocore
+
+# Geospatial: rasterio for Cloud Optimized GeoTIFF (COG) windowed reads
+# Required for NestMap mosaic preview and STAC dataset builder
+# Install: uv pip install rasterio
+rasterio
+
+# ============================================================================
+# OPTIONAL: ADVANCED ML FEATURES
+# ============================================================================
+# UMAP for 2D dimensionality reduction (RECOMMENDED for better clustering viz)
+# If not installed, system automatically falls back to t-SNE
+# Install with: uv pip install umap-learn
+# umap-learn
+
+# Transformers for embedding models (optional - for NestID features)
+# transformers
+# usearch
+
+# ============================================================================
+# DEVELOPMENT & TESTING (uncomment if needed)
+# ============================================================================
+# pytest
+# pytest-asyncio
+# black
+# ruff
+
+# ============================================================================
+# LLM EVALUATION
+# ============================================================================
+# DeepEval: LLM evaluation framework for NestEval dashboard
+# Tests NestChat answer quality with AnswerRelevancyMetric + FaithfulnessMetric
+deepeval
+
+# ============================================================================
+# PLATFORM NOTES
+# ============================================================================
+# - On macOS with M1/M2: Use `pip install --pre torch torchvision` for Apple Silicon
+# - On Windows: Ensure Visual C++ Redistributable is installed for opencv-python
+# - For CUDA GPU support: Install pytorch with CUDA toolkit first
+#   Visit: https://pytorch.org/get-started/locally/
+# - Minimum Python version: 3.9
+# - Recommended Python version: 3.10 or 3.11
+# - Use `uv pip compile requirements.txt` to generate a locked requirements file
+# - Use `uv pip sync requirements.txt` to install exact versions from lock file
+libsql-client

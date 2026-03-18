@@ -1,0 +1,2510 @@
+{% extends "base.html" %}
+{% set active_page = 'nestdb' %}
+
+{% block title %}NestDB - Database Manager{% endblock %}
+
+{% block extra_css %}
+<style>
+/* Supabase-Inspired NestDB Interface */
+:root {
+    --db-sidebar-width: 280px;
+    --db-header-height: 64px;
+    --db-accent: #3ECF8E;
+    --db-accent-hover: #2DB77A;
+    --db-danger: #F04438;
+    --db-warning: #F79009;
+    --db-info: #0BA5EC;
+}
+
+* {
+    box-sizing: border-box;
+}
+
+.db-layout {
+    display: flex;
+    height: calc(100vh - 64px);
+    overflow: hidden;
+    background: var(--bg-primary);
+}
+
+/* LEFT SIDEBAR - Table List */
+.db-sidebar {
+    width: var(--db-sidebar-width);
+    background: var(--bg-secondary);
+    border-right: 1px solid var(--surface-border);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.db-sidebar-header {
+    padding: var(--space-4) var(--space-4);
+    border-bottom: 1px solid var(--surface-border);
+}
+
+.db-sidebar-title {
+    font-size: var(--text-sm);
+    color: var(--text-tertiary);
+    text-transform: uppercase;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    margin: 0 0 var(--space-3) 0;
+}
+
+.db-search {
+    position: relative;
+}
+
+.db-search input {
+    width: 100%;
+    padding: 10px var(--space-3) 10px 36px;
+    background: var(--surface-base);
+    border: 1px solid var(--surface-border);
+    border-radius: 8px;
+    color: var(--text-primary);
+    font-size: 14px;
+    transition: all 0.2s ease;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+    line-height: 1.4;
+    height: 40px;
+}
+
+.db-search input:hover {
+    border-color: var(--text-tertiary);
+    background: var(--bg-primary);
+}
+
+.db-search input:focus {
+    outline: none;
+    border-color: var(--db-accent);
+    background: var(--bg-primary);
+    box-shadow: 0 0 0 3px rgba(62, 207, 142, 0.15);
+}
+
+.db-search input::placeholder {
+    color: var(--text-tertiary);
+    opacity: 0.7;
+}
+
+.db-search-icon {
+    position: absolute;
+    left: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--text-tertiary);
+    pointer-events: none;
+    font-size: 16px;
+    opacity: 0.7;
+}
+
+.db-table-list {
+    flex: 1;
+    overflow-y: auto;
+    padding: var(--space-2) 0;
+}
+
+.db-table-item {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    padding: var(--space-3) var(--space-4);
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: all var(--transition-fast);
+    border-left: 3px solid transparent;
+    font-size: var(--text-sm);
+}
+
+.db-table-item:hover {
+    background: var(--surface-hover);
+    color: var(--text-primary);
+}
+
+.db-table-item.active {
+    background: rgba(62, 207, 142, 0.1);
+    color: var(--db-accent);
+    border-left-color: var(--db-accent);
+    font-weight: 600;
+}
+
+.db-table-icon {
+    font-size: 1rem;
+    opacity: 0.6;
+}
+
+.db-table-item.active .db-table-icon {
+    opacity: 1;
+}
+
+/* MAIN CONTENT */
+.db-main {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+/* TOOLBAR */
+.db-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: var(--space-4) var(--space-6);
+    background: var(--bg-secondary);
+    border-bottom: 1px solid var(--surface-border);
+    gap: var(--space-4);
+}
+
+.db-toolbar-left {
+    display: flex;
+    align-items: center;
+    gap: var(--space-4);
+}
+
+.db-toolbar-title {
+    font-size: var(--text-xl);
+    font-weight: 700;
+    color: var(--text-primary);
+    margin: 0;
+}
+
+.db-toolbar-subtitle {
+    font-size: var(--text-sm);
+    color: var(--text-tertiary);
+    margin-left: var(--space-2);
+}
+
+.db-toolbar-actions {
+    display: flex;
+    gap: var(--space-2);
+}
+
+.db-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 0 20px;
+    height: 44px;
+    font-size: 14px;
+    font-weight: 600;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    border: 1px solid transparent;
+    white-space: nowrap;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+}
+
+.db-btn-primary {
+    background: var(--db-accent);
+    color: white;
+    border-color: var(--db-accent);
+}
+
+.db-btn-primary:hover {
+    background: var(--db-accent-hover);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(62, 207, 142, 0.3);
+}
+
+.db-btn-secondary {
+    background: transparent;
+    color: var(--text-primary);
+    border-color: var(--surface-border);
+}
+
+.db-btn-secondary:hover {
+    background: var(--surface-hover);
+    border-color: var(--text-tertiary);
+}
+
+.db-btn-danger {
+    background: transparent;
+    color: var(--db-danger);
+    border-color: var(--db-danger);
+}
+
+.db-btn-danger:hover {
+    background: rgba(240, 68, 56, 0.1);
+}
+
+.db-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+/* TABS */
+.db-tabs {
+    display: flex;
+    gap: var(--space-1);
+    padding: 0 var(--space-6);
+    background: var(--bg-primary);
+    border-bottom: 1px solid var(--surface-border);
+}
+
+.db-tab {
+    padding: var(--space-3) var(--space-4);
+    font-size: var(--text-sm);
+    font-weight: 600;
+    color: var(--text-tertiary);
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    transition: all var(--transition-fast);
+}
+
+.db-tab:hover {
+    color: var(--text-primary);
+    background: var(--surface-hover);
+}
+
+.db-tab.active {
+    color: var(--db-accent);
+    border-bottom-color: var(--db-accent);
+}
+
+/* TAB CONTENT */
+.db-tab-content {
+    flex: 1;
+    overflow: hidden;
+    display: none;
+}
+
+.db-tab-content.active {
+    display: flex;
+    flex-direction: column;
+}
+
+/* TABLE VIEW */
+.db-table-container {
+    flex: 1;
+    overflow: auto;
+    position: relative;
+}
+
+.db-table {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+    font-size: var(--text-sm);
+}
+
+.db-table thead {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    background: var(--bg-tertiary);
+}
+
+.db-table th {
+    padding: var(--space-3) var(--space-4);
+    text-align: left;
+    font-weight: 700;
+    color: var(--text-primary);
+    border-bottom: 2px solid var(--surface-border);
+    white-space: nowrap;
+    background: var(--bg-tertiary);
+}
+
+.db-table th:first-child {
+    padding-left: var(--space-6);
+}
+
+.db-table td {
+    padding: var(--space-3) var(--space-4);
+    border-bottom: 1px solid var(--surface-border);
+    color: var(--text-secondary);
+    cursor: text;
+    position: relative;
+}
+
+.db-table td:first-child {
+    padding-left: var(--space-6);
+    color: var(--text-tertiary);
+    font-family: 'Courier New', monospace;
+    font-size: var(--text-xs);
+    cursor: default;
+}
+
+.db-table td.editable:hover {
+    background: rgba(62, 207, 142, 0.05);
+    outline: 1px solid rgba(62, 207, 142, 0.2);
+}
+
+.db-table td.editing {
+    padding: 0;
+}
+
+.db-table td.editing input {
+    width: 100%;
+    padding: var(--space-3) var(--space-4);
+    background: var(--bg-primary);
+    border: 2px solid var(--db-accent);
+    color: var(--text-primary);
+    font-size: var(--text-sm);
+    font-family: inherit;
+    outline: none;
+}
+
+.db-table td.saving {
+    background: rgba(62, 207, 142, 0.1);
+    outline: 1px solid var(--db-accent);
+    position: relative;
+}
+
+.db-table td.saving::after {
+    content: "💾";
+    position: absolute;
+    right: 8px;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 14px;
+    animation: pulse 1s ease-in-out infinite;
+}
+
+@keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+}
+
+.db-table tbody tr {
+    transition: background var(--transition-fast);
+}
+
+.db-table tbody tr:hover {
+    background: var(--surface-hover);
+}
+
+.db-cell-null {
+    color: var(--text-disabled);
+    font-style: italic;
+}
+
+.db-cell-number {
+    font-family: 'Courier New', monospace;
+    color: var(--db-info);
+}
+
+/* Edit mode indicator */
+.db-edit-mode-banner {
+    background: linear-gradient(135deg, rgba(62, 207, 142, 0.15), rgba(62, 207, 142, 0.05));
+    border-bottom: 1px solid var(--db-accent);
+    padding: var(--space-2) var(--space-6);
+    font-size: var(--text-xs);
+    color: var(--db-accent);
+    font-weight: 600;
+    display: none;
+}
+
+.db-edit-mode-banner.active {
+    display: block;
+}
+
+/* SQL EDITOR */
+.db-sql-editor {
+    display: flex;
+    flex-direction: column;
+    padding: var(--space-6);
+    gap: var(--space-4);
+    overflow-y: auto;
+    height: calc(100vh - 64px);
+}
+
+.db-sql-textarea {
+    width: 100%;
+    height: 400px;
+    padding: var(--space-4);
+    background: var(--bg-tertiary);
+    border: 1px solid var(--surface-border);
+    border-radius: var(--radius-md);
+    color: var(--text-primary);
+    font-family: 'Courier New', monospace;
+    font-size: var(--text-sm);
+    resize: vertical;
+    line-height: 1.6;
+    transition: all var(--transition-fast);
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+}
+
+.db-sql-textarea:focus {
+    outline: none;
+    border-color: var(--db-accent);
+    box-shadow: 0 0 0 3px rgba(62, 207, 142, 0.1);
+}
+
+.db-sql-textarea::placeholder {
+    color: var(--text-tertiary);
+    opacity: 0.5;
+}
+
+.db-sql-results {
+    min-height: 400px;
+    max-height: 600px;
+    overflow: auto;
+    background: var(--bg-secondary);
+    border: 1px solid var(--surface-border);
+    border-radius: var(--radius-md);
+    padding: var(--space-4);
+}
+
+/* PAGINATION */
+.db-pagination {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: var(--space-4) var(--space-6);
+    background: var(--bg-secondary);
+    border-top: 1px solid var(--surface-border);
+}
+
+.db-pagination-info {
+    font-size: var(--text-sm);
+    color: var(--text-tertiary);
+}
+
+.db-pagination-controls {
+    display: flex;
+    gap: var(--space-2);
+}
+
+/* EMPTY STATE */
+.db-empty {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-4);
+    color: var(--text-tertiary);
+}
+
+.db-empty-icon {
+    font-size: 4rem;
+    opacity: 0.3;
+}
+
+.db-empty-title {
+    font-size: var(--text-xl);
+    font-weight: 700;
+    color: var(--text-secondary);
+}
+
+.db-empty-text {
+    font-size: var(--text-sm);
+    max-width: 400px;
+    text-align: center;
+    line-height: 1.6;
+}
+
+/* LOADING */
+.db-loading {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.db-spinner {
+    width: 48px;
+    height: 48px;
+    border: 4px solid var(--surface-border);
+    border-top-color: var(--db-accent);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
+/* AI ASSIST PANEL */
+.db-ai-assist {
+    background: linear-gradient(135deg, rgba(62, 207, 142, 0.08) 0%, rgba(62, 207, 142, 0.03) 100%);
+    border: 1px solid rgba(62, 207, 142, 0.3);
+    border-radius: 12px;
+    padding: 20px;
+    margin-bottom: 20px;
+}
+
+.db-ai-title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--db-accent);
+    margin-bottom: 12px;
+}
+
+.db-ai-input {
+    display: flex;
+    gap: 10px;
+}
+
+.db-ai-input input {
+    flex: 1;
+    padding: 12px 16px;
+    background: var(--bg-primary);
+    border: 1px solid var(--surface-border);
+    border-radius: 8px;
+    color: var(--text-primary);
+    font-size: 14px;
+    transition: all 0.2s ease;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+    line-height: 1.4;
+    height: 44px;
+}
+
+.db-ai-input input:hover {
+    border-color: var(--db-accent);
+}
+
+.db-ai-input input:focus {
+    outline: none;
+    border-color: var(--db-accent);
+    background: var(--bg-primary);
+    box-shadow: 0 0 0 3px rgba(62, 207, 142, 0.15);
+}
+
+.db-ai-input input::placeholder {
+    color: var(--text-tertiary);
+    opacity: 0.6;
+}
+
+/* Confirmation Modal */
+.db-modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.7);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+}
+
+.db-modal-overlay.active {
+    display: flex;
+}
+
+.db-modal {
+    background: var(--bg-secondary);
+    border: 1px solid var(--surface-border);
+    border-radius: var(--radius-lg);
+    padding: var(--space-6);
+    max-width: 600px;
+    width: 90%;
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5);
+}
+
+.db-modal-header {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    margin-bottom: var(--space-4);
+}
+
+.db-modal-icon {
+    font-size: 2rem;
+}
+
+.db-modal-title {
+    font-size: var(--text-lg);
+    font-weight: 700;
+    color: var(--text-primary);
+    margin: 0;
+}
+
+.db-modal-content {
+    margin-bottom: var(--space-6);
+}
+
+.db-modal-label {
+    font-size: var(--text-sm);
+    color: var(--text-tertiary);
+    font-weight: 600;
+    margin-bottom: var(--space-2);
+    display: block;
+}
+
+.db-modal-code {
+    background: var(--bg-tertiary);
+    border: 1px solid var(--surface-border);
+    border-radius: var(--radius-md);
+    padding: var(--space-4);
+    font-family: 'Courier New', monospace;
+    font-size: var(--text-sm);
+    color: var(--db-info);
+    margin-bottom: var(--space-4);
+    max-height: 200px;
+    overflow-y: auto;
+    white-space: pre-wrap;
+    word-break: break-all;
+}
+
+.db-modal-warning {
+    background: rgba(247, 144, 9, 0.1);
+    border: 1px solid var(--db-warning);
+    border-radius: var(--radius-md);
+    padding: var(--space-3);
+    color: var(--db-warning);
+    font-size: var(--text-sm);
+    margin-bottom: var(--space-4);
+}
+
+.db-modal-actions {
+    display: flex;
+    gap: var(--space-2);
+    justify-content: flex-end;
+}
+
+/* Version History Styling */
+.version-input {
+    padding: 12px 16px;
+    background: var(--bg-primary);
+    border: 1px solid var(--surface-border);
+    border-radius: 8px;
+    color: var(--text-primary);
+    font-size: 14px;
+    height: 44px;
+    transition: all 0.2s ease;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+}
+
+.version-input:hover {
+    border-color: var(--text-tertiary);
+}
+
+.version-input:focus {
+    outline: none;
+    border-color: var(--db-accent);
+    box-shadow: 0 0 0 3px rgba(62, 207, 142, 0.15);
+}
+
+.version-input::placeholder {
+    color: var(--text-tertiary);
+    opacity: 0.6;
+}
+
+#versionHistoryList::-webkit-scrollbar {
+    width: 8px;
+}
+
+#versionHistoryList::-webkit-scrollbar-track {
+    background: var(--bg-secondary);
+}
+
+#versionHistoryList::-webkit-scrollbar-thumb {
+    background: var(--surface-border);
+    border-radius: 4px;
+}
+
+#versionHistoryList::-webkit-scrollbar-thumb:hover {
+    background: var(--text-tertiary);
+}
+
+/* Scrollbar Styling */
+.db-table-container::-webkit-scrollbar,
+.db-table-list::-webkit-scrollbar,
+.db-sql-results::-webkit-scrollbar,
+.db-modal-code::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+
+.db-table-container::-webkit-scrollbar-track,
+.db-table-list::-webkit-scrollbar-track,
+.db-sql-results::-webkit-scrollbar-track,
+.db-modal-code::-webkit-scrollbar-track {
+    background: var(--bg-secondary);
+}
+
+.db-table-container::-webkit-scrollbar-thumb,
+.db-table-list::-webkit-scrollbar-thumb,
+.db-sql-results::-webkit-scrollbar-thumb,
+.db-modal-code::-webkit-scrollbar-thumb {
+    background: var(--surface-border);
+    border-radius: 4px;
+}
+
+.db-table-container::-webkit-scrollbar-thumb:hover,
+.db-table-list::-webkit-scrollbar-thumb:hover,
+.db-sql-results::-webkit-scrollbar-thumb:hover,
+.db-modal-code::-webkit-scrollbar-thumb:hover {
+    background: var(--text-tertiary);
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="db-layout">
+    <!-- Hidden inputs for current user (used by JavaScript) -->
+    {% if session.user %}
+        <input type="hidden" id="currentUserEmail" value="{{ session.user.email }}">
+        <input type="hidden" id="currentUserName" value="{{ session.user.name }}">
+        <input type="hidden" id="currentUserPicture" value="{{ session.user.picture }}">
+    {% endif %}
+
+    <!-- LEFT SIDEBAR - Table List -->
+    <aside class="db-sidebar">
+        <div class="db-sidebar-header">
+            <h2 class="db-sidebar-title">Tables</h2>
+            <div class="db-search">
+                <span class="db-search-icon">🔍</span>
+                <input
+                    type="text"
+                    id="tableSearch"
+                    placeholder="Search tables..."
+                    oninput="filterTables()"
+                />
+            </div>
+        </div>
+        <div class="db-table-list" id="tableList">
+            <!-- Tables will be loaded here -->
+        </div>
+    </aside>
+
+    <!-- MAIN CONTENT -->
+    <main class="db-main">
+        <!-- TOOLBAR -->
+        <div class="db-toolbar">
+            <div class="db-toolbar-left">
+                <h1 class="db-toolbar-title" id="currentTableName">Select a table</h1>
+                <span class="db-toolbar-subtitle" id="rowCount"></span>
+            </div>
+            <div class="db-toolbar-actions">
+                <button class="db-btn db-btn-secondary" onclick="refreshTable()" id="btnRefresh">
+                    <span>↻</span> Refresh
+                </button>
+                <button class="db-btn db-btn-primary" onclick="showInsertRow()" id="btnInsert" disabled>
+                    <span>+</span> Insert Row
+                </button>
+            </div>
+        </div>
+
+        <!-- TABS -->
+        <div class="db-tabs">
+            <div class="db-tab active" onclick="switchTab('data', event)">
+                📊 Data
+            </div>
+            <div class="db-tab" onclick="switchTab('sql', event)">
+                ⚡ SQL Editor
+            </div>
+            <div class="db-tab" onclick="switchTab('schema', event)">
+                📋 Schema
+            </div>
+            <div class="db-tab" onclick="switchTab('versions', event)">
+                🕐 Versions
+            </div>
+        </div>
+
+        <!-- TAB: DATA VIEW -->
+        <div class="db-tab-content active" id="tabData">
+            <div id="editModeInfo" class="db-edit-mode-banner">
+                ✏️ Click any cell to edit (press Enter to save, Esc to cancel)
+            </div>
+            <div class="db-table-container" id="dataViewport">
+                <div class="db-empty">
+                    <div class="db-empty-icon">🗄️</div>
+                    <h3 class="db-empty-title">No Table Selected</h3>
+                    <p class="db-empty-text">
+                        Choose a table from the sidebar to view and manage its data
+                    </p>
+                </div>
+            </div>
+            <div class="db-pagination" id="dataPagination" style="display: none;">
+                <div class="db-pagination-info" id="paginationInfo"></div>
+                <div class="db-pagination-controls">
+                    <button class="db-btn db-btn-secondary" onclick="prevPage()" id="btnPrev" disabled>
+                        ← Prev
+                    </button>
+                    <button class="db-btn db-btn-secondary" onclick="nextPage()" id="btnNext" disabled>
+                        Next →
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- TAB: SQL EDITOR -->
+        <div class="db-tab-content" id="tabSQL">
+            <div class="db-sql-editor">
+                <!-- Query Input Field -->
+                <div style="margin-bottom: var(--space-4);">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--space-2);">
+                        <h3 style="margin: 0; font-size: 14px; font-weight: 700; color: var(--text-primary);">📝 SQL Query Editor</h3>
+                        <span style="font-size: 12px; color: var(--text-tertiary);">Write or paste your SQL query below</span>
+                    </div>
+                    <textarea
+                        class="db-sql-textarea"
+                        id="sqlEditor"
+                        placeholder="SELECT * FROM your_table LIMIT 100;"
+                    ></textarea>
+                </div>
+
+                <!-- Execute Buttons -->
+                <div style="display: flex; gap: var(--space-2); margin-bottom: var(--space-6);">
+                    <button class="db-btn db-btn-primary" onclick="executeSQL()">
+                        ▶️ Execute Query
+                    </button>
+                    <button class="db-btn db-btn-secondary" onclick="clearSQL()">
+                        Clear
+                    </button>
+                </div>
+
+                <!-- AI Query Assistant -->
+                <div class="db-ai-assist">
+                    <div class="db-ai-title">
+                        <span>✨</span>
+                        AI Query Assistant
+                    </div>
+                    <div style="font-size: var(--text-sm); color: var(--text-secondary); margin-bottom: var(--space-3);">
+                        Describe what you want to query in natural language, and the AI will generate SQL for you.
+                    </div>
+                    <div class="db-ai-input">
+                        <input
+                            type="text"
+                            id="aiQueryInput"
+                            placeholder="e.g., Show me all birds observed in Texas during 2015..."
+                            onkeypress="if(event.key === 'Enter') generateQuery()"
+                        />
+                        <button class="db-btn db-btn-primary" onclick="generateQuery()">
+                            ✨ Generate SQL
+                        </button>
+                    </div>
+                    <div style="font-size: var(--text-xs); color: var(--text-tertiary); margin-top: var(--space-2);">
+                        💡 Tip: Press Enter to generate. Uses Claude Sonnet 4.6 with full database context.
+                    </div>
+                </div>
+
+                <!-- AI Context Refresh Section -->
+                <div class="db-ai-assist" style="margin-top: var(--space-4); background: rgba(247, 144, 9, 0.05); border: 1px solid var(--db-warning);">
+                    <div class="db-ai-title">
+                        <span>🛠️</span>
+                        Trigger Database Explorer
+                    </div>
+                    <div style="font-size: var(--text-sm); color: var(--text-secondary); margin-bottom: var(--space-3);">
+                        Optimize AI accuracy by allowing the agent to explore the latest database schema and content.
+                        <strong style="color: var(--db-warning);">⚠️ Resource-intensive operation</strong> - use only when database structure has changed.
+                    </div>
+                    <button class="db-btn db-btn-secondary" onclick="triggerDatabaseExplorer()" id="btnExploreDB">
+                        <span>🕵️</span> Trigger Database Explorer Agent
+                    </button>
+                    <div id="explorerStatus" style="margin-top: var(--space-3); display: none;"></div>
+                </div>
+
+                <!-- Query Output Results -->
+                <div style="margin-top: var(--space-6);">
+                    <h3 style="margin: 0 0 var(--space-3) 0; font-size: 14px; font-weight: 700; color: var(--text-primary);">📊 Query Output</h3>
+                    <div class="db-sql-results" id="sqlResults">
+                        <div style="color: var(--text-tertiary); text-align: center; padding: var(--space-8);">
+                            Write a SQL query and click "Execute Query"
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- TAB: SCHEMA VIEW -->
+        <div class="db-tab-content" id="tabSchema">
+            <div class="db-table-container" id="schemaViewport">
+                <div class="db-empty">
+                    <div class="db-empty-icon">📋</div>
+                    <h3 class="db-empty-title">No Schema to Display</h3>
+                    <p class="db-empty-text">
+                        Select a table to view its schema details
+                    </p>
+                </div>
+            </div>
+        </div>
+
+        <!-- TAB: VERSION CONTROL -->
+        <div class="db-tab-content" id="tabVersions">
+            <div class="db-sql-editor">
+                <!-- Version Stats Banner -->
+                <div style="background: linear-gradient(135deg, rgba(62, 207, 142, 0.08), rgba(62, 207, 142, 0.03)); border: 1px solid rgba(62, 207, 142, 0.3); border-radius: 12px; padding: 20px; margin-bottom: 20px;" id="versionStats">
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <div>
+                            <h3 style="margin: 0 0 8px 0; color: var(--db-accent); font-size: 18px;">📊 Version Control Stats</h3>
+                            <p style="margin: 0 0 12px 0; color: var(--text-tertiary); font-size: 14px;">All database changes are automatically tracked</p>
+                            <!-- Powered by GitHub -->
+                            <div style="display: flex; align-items: center; gap: 10px; color: var(--text-secondary); font-size: 16px; font-weight: 600;">
+                                <span>Powered by</span>
+                                <svg height="28" width="28" viewBox="0 0 16 16" fill="currentColor" style="opacity: 1;">
+                                    <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"></path>
+                                </svg>
+                                <a href="https://github.com" target="_blank" rel="noopener" style="color: var(--db-accent); text-decoration: none; font-weight: 700; font-size: 18px;">GitHub</a>
+                            </div>
+                        </div>
+                        <div style="display: flex; gap: 30px;">
+                            <div style="text-align: center;">
+                                <div style="font-size: 28px; font-weight: 700; color: var(--db-accent);" id="totalCommits">-</div>
+                                <div style="font-size: 12px; color: var(--text-tertiary); text-transform: uppercase;">Commits</div>
+                            </div>
+                            <div style="text-align: center;">
+                                <div style="font-size: 28px; font-weight: 700; color: var(--db-info);" id="dbSize">-</div>
+                                <div style="font-size: 12px; color: var(--text-tertiary); text-transform: uppercase;">DB Size</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Version History -->
+                <div style="background: var(--bg-tertiary); border: 1px solid var(--surface-border); border-radius: 12px; padding: 20px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+                        <h3 style="margin: 0; color: var(--text-primary); font-size: 16px;">📜 Commit History</h3>
+                        <select id="historyLimit" onchange="loadVersionHistory()" style="padding: 8px 12px; background: var(--bg-primary); border: 1px solid var(--surface-border); border-radius: 6px; color: var(--text-primary); font-size: 14px;">
+                            <option value="10">Last 10</option>
+                            <option value="25" selected>Last 25</option>
+                            <option value="50">Last 50</option>
+                            <option value="100">Last 100</option>
+                        </select>
+                    </div>
+                    <div id="versionHistoryList" style="max-height: 600px; overflow-y: auto;">
+                        <div style="text-align: center; padding: 40px; color: var(--text-tertiary);">
+                            Loading version history...
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+</div>
+
+<!-- Confirmation Modal -->
+<div class="db-modal-overlay" id="confirmModal">
+    <div class="db-modal">
+        <div class="db-modal-header">
+            <div class="db-modal-icon">⚠️</div>
+            <h3 class="db-modal-title">Confirm Query Execution</h3>
+        </div>
+        <div class="db-modal-content">
+            <label class="db-modal-label">Generated SQL Query:</label>
+            <div class="db-modal-code" id="modalSQLPreview"></div>
+            <div class="db-modal-warning">
+                ⚠️ This query will be executed on the database. Please review it carefully before proceeding.
+            </div>
+        </div>
+        <div class="db-modal-actions">
+            <button class="db-btn db-btn-secondary" onclick="closeConfirmModal()">
+                Cancel
+            </button>
+            <button class="db-btn db-btn-primary" onclick="confirmExecuteQuery()">
+                Accept & Close
+            </button>
+        </div>
+    </div>
+</div>
+
+<script>
+// ============================================================================
+// STATE MANAGEMENT
+// ============================================================================
+let currentTable = null;
+let currentPage = 1;
+let pageSize = 50;
+let totalPages = 0;
+let totalRows = 0;
+let allTables = [];
+let tableData = [];
+let tableSchema = [];
+
+const API_BASE_URL = 'http://localhost:8000';
+
+// Get current user info from hidden inputs (set by Flask session)
+let expertEmail = null;
+let expertName = null;
+let expertPicture = null;
+
+// ============================================================================
+// INITIALIZATION
+// ============================================================================
+document.addEventListener('DOMContentLoaded', () => {
+    // Load user info from hidden inputs if logged in
+    const emailInput = document.getElementById('currentUserEmail');
+    const nameInput = document.getElementById('currentUserName');
+    const pictureInput = document.getElementById('currentUserPicture');
+
+    if (emailInput) {
+        expertEmail = emailInput.value;
+        expertName = nameInput ? nameInput.value : null;
+        expertPicture = pictureInput ? pictureInput.value : null;
+        console.log('User logged in:', expertEmail);
+    } else {
+        console.log('No user logged in, using anonymous');
+    }
+
+    loadTables();
+
+    // Close modal on background click
+    document.getElementById('confirmModal').addEventListener('click', (e) => {
+        if (e.target.id === 'confirmModal') {
+            closeConfirmModal();
+        }
+    });
+
+    // Keyboard shortcuts
+    document.addEventListener('keydown', (e) => {
+        // Escape closes modal
+        if (e.key === 'Escape' && document.getElementById('confirmModal').classList.contains('active')) {
+            closeConfirmModal();
+        }
+
+        // Ctrl/Cmd + Enter in AI input generates query
+        if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+            const aiInput = document.getElementById('aiQueryInput');
+            if (document.activeElement === aiInput && aiInput.value.trim()) {
+                generateQuery();
+            }
+        }
+    });
+});
+
+// ============================================================================
+// TABLE LIST MANAGEMENT
+// ============================================================================
+async function loadTables() {
+    try {
+        const response = await fetch(`${API_BASE_URL}/db/tables`);
+        const data = await response.json();
+        allTables = data.tables || [];
+        renderTableList(allTables);
+    } catch (error) {
+        console.error('Error loading tables:', error);
+        showToast('Failed to load tables', 'error');
+    }
+}
+
+function renderTableList(tables) {
+    const container = document.getElementById('tableList');
+    container.innerHTML = tables.map(table => `
+        <div class="db-table-item" onclick="selectTable('${table}')" data-table="${table}">
+            <span class="db-table-icon">📊</span>
+            <span>${table}</span>
+        </div>
+    `).join('');
+}
+
+function filterTables() {
+    const search = document.getElementById('tableSearch').value.toLowerCase();
+    const filtered = allTables.filter(t => t.toLowerCase().includes(search));
+    renderTableList(filtered);
+}
+
+function selectTable(tableName) {
+    currentTable = tableName;
+    currentPage = 1;
+
+    // Update UI
+    document.querySelectorAll('.db-table-item').forEach(item => {
+        item.classList.toggle('active', item.dataset.table === tableName);
+    });
+
+    document.getElementById('currentTableName').textContent = tableName;
+    document.getElementById('btnInsert').disabled = false;
+    document.getElementById('btnRefresh').disabled = false;
+
+    // Load table data and schema
+    loadTableData();
+    loadTableSchema();
+}
+
+// ============================================================================
+// TABLE DATA MANAGEMENT
+// ============================================================================
+async function loadTableData() {
+    if (!currentTable) return;
+
+    showLoading();
+
+    try {
+        const response = await fetch(
+            `${API_BASE_URL}/db/table/${currentTable}?page=${currentPage}&page_size=${pageSize}`
+        );
+        const data = await response.json();
+
+        if (data.success) {
+            tableData = data.data || [];
+            totalRows = data.total_rows || 0;
+            totalPages = data.total_pages || 0;
+
+            renderTableData();
+            updatePagination();
+        } else {
+            showToast(data.error || 'Failed to load data', 'error');
+        }
+    } catch (error) {
+        console.error('Error loading table data:', error);
+        showToast('Failed to load table data', 'error');
+    }
+}
+
+function renderTableData() {
+    const viewport = document.getElementById('dataViewport');
+
+    if (!tableData || tableData.length === 0) {
+        // Empty table - show "Add First Row" button
+        const columns = tableSchema && tableSchema.length > 0 ? tableSchema.map(c => c.name) : [];
+
+        viewport.innerHTML = `
+            <div class="db-empty">
+                <div class="db-empty-icon">📭</div>
+                <h3 class="db-empty-title">Table is Empty</h3>
+                <p class="db-empty-text">Click below to add your first row</p>
+                <button class="db-btn db-btn-primary" onclick="addNewRowInline()" style="margin-top: 16px;">
+                    <span>+</span> Add First Row
+                </button>
+            </div>
+        `;
+        document.getElementById('dataPagination').style.display = 'none';
+        document.getElementById('editModeInfo').classList.remove('active');
+        return;
+    }
+
+    const columns = Object.keys(tableData[0]);
+
+    viewport.innerHTML = `
+        <table class="db-table">
+            <thead>
+                <tr>
+                    <th>#</th>
+                    ${columns.map(col => `
+                        <th>
+                            ${col}
+                            ${col === 'rowid' ? '' : '<button onclick="deleteColumn(\''+col+'\')" style="margin-left:8px;background:none;border:none;color:var(--db-danger);cursor:pointer;font-size:10px;" title="Delete column">✕</button>'}
+                        </th>
+                    `).join('')}
+                    <th style="width: 60px;">
+                        <button onclick="showAddColumnDialog()" style="background: var(--db-accent); border: none; color: white; cursor: pointer; padding: 4px 12px; border-radius: 4px; font-weight: 600; font-size: 14px;" title="Add new column">
+                            + Column
+                        </button>
+                    </th>
+                </tr>
+            </thead>
+            <tbody>
+                ${tableData.map((row, idx) => {
+                    const rowNum = (currentPage - 1) * pageSize + idx + 1;
+                    return `
+                        <tr data-row-idx="${idx}">
+                            <td>
+                                ${rowNum}
+                                <button onclick="deleteRow(${idx})" style="margin-left:8px;background:none;border:none;color:var(--db-danger);cursor:pointer;font-size:10px;" title="Delete row">✕</button>
+                            </td>
+                            ${columns.map((col, colIdx) => {
+                                const value = row[col];
+                                let displayValue = '';
+                                let cellClass = 'editable';
+
+                                if (value === null || value === undefined) {
+                                    displayValue = '<span class="db-cell-null">NULL</span>';
+                                } else if (typeof value === 'number') {
+                                    displayValue = `<span class="db-cell-number">${value.toLocaleString()}</span>`;
+                                } else {
+                                    displayValue = String(value).substring(0, 100);
+                                }
+
+                                return `<td class="${cellClass}" data-col="${col}" data-value="${value || ''}" onclick="editCell(this)">${displayValue}</td>`;
+                            }).join('')}
+                            <td></td>
+                        </tr>
+                    `;
+                }).join('')}
+                <!-- Add New Row Button Row -->
+                <tr id="addRowButton" style="background: var(--bg-tertiary);">
+                    <td colspan="${columns.length + 2}" style="text-align: center; padding: 12px;">
+                        <button onclick="addNewRowInline()" class="db-btn db-btn-primary" style="width: 100%;">
+                            <span>+</span> Add New Row
+                        </button>
+                    </td>
+                </tr>
+            </tbody>
+        </table>
+    `;
+
+    document.getElementById('dataPagination').style.display = 'flex';
+    document.getElementById('rowCount').textContent = `${totalRows.toLocaleString()} rows`;
+    document.getElementById('editModeInfo').classList.add('active');
+}
+
+// ============================================================================
+// CELL EDITING
+// ============================================================================
+function editCell(cell) {
+    // Prevent editing if already editing
+    if (cell.classList.contains('editing')) return;
+
+    // Get current value
+    const currentValue = cell.dataset.value || '';
+
+    // Add editing class
+    cell.classList.add('editing');
+
+    // Create input element
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.value = currentValue;
+
+    // Clear cell and add input
+    cell.innerHTML = '';
+    cell.appendChild(input);
+
+    // Focus input
+    input.focus();
+    input.select();
+
+    // Handle blur (save)
+    input.addEventListener('blur', () => {
+        saveCell(cell, input.value);
+    });
+
+    // Handle Enter key (save)
+    input.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+            input.blur();
+        } else if (e.key === 'Escape') {
+            cancelEdit(cell, currentValue);
+        }
+    });
+}
+
+async function saveCell(cell, newValue) {
+    const oldValue = cell.dataset.value;
+
+    if (newValue === oldValue) {
+        // No change, just restore
+        cancelEdit(cell, oldValue);
+        return;
+    }
+
+    // Get row and column info
+    const row = cell.parentElement;
+    const rowIdx = parseInt(row.dataset.rowIdx);
+    const column = cell.dataset.col;
+
+    // Show loading state
+    cell.classList.add('saving');
+    showToast('Saving changes...', 'info');
+
+    try {
+        // Get the row data
+        const rowData = tableData[rowIdx];
+
+        // Build row_id from primary key columns
+        const rowId = {};
+        const pkColumns = tableSchema.filter(col => col.pk);
+
+        if (pkColumns.length === 0) {
+            // No explicit primary key - use SQLite's built-in rowid
+            if (rowData.rowid === undefined) {
+                cancelEdit(cell, oldValue);
+                showToast('Error: Cannot identify row (no primary key or rowid).', 'error');
+                return;
+            }
+            rowId['rowid'] = rowData.rowid;
+        } else {
+            // Use explicit primary key columns
+            pkColumns.forEach(col => {
+                rowId[col.name] = rowData[col.name];
+            });
+        }
+
+        // Call the backend API
+        const response = await fetch(`${API_BASE_URL}/db/table/${currentTable}/row`, {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                table_name: currentTable,
+                row_id: rowId,
+                updates: {
+                    [column]: newValue || null
+                },
+                expert_email: expertEmail || 'anonymous'
+            })
+        });
+
+        const result = await response.json();
+
+        if (result.success) {
+            // Update local data
+            tableData[rowIdx][column] = newValue;
+            cell.dataset.value = newValue;
+
+            // Restore cell display
+            cell.classList.remove('editing', 'saving');
+
+            if (!newValue) {
+                cell.innerHTML = '<span class="db-cell-null">NULL</span>';
+            } else if (!isNaN(newValue) && newValue.trim() !== '') {
+                cell.innerHTML = `<span class="db-cell-number">${parseFloat(newValue).toLocaleString()}</span>`;
+            } else {
+                cell.innerHTML = newValue;
+            }
+
+            // Show success message with commit hash
+            const commitMsg = result.version_commit
+                ? `✓ Changes saved and committed: ${result.version_commit}`
+                : '✓ Changes saved successfully';
+            showToast(commitMsg, 'success');
+        } else {
+            // Revert on error
+            cell.classList.remove('saving');
+            cancelEdit(cell, oldValue);
+            showToast(`Error: ${result.error}`, 'error');
+        }
+    } catch (error) {
+        // Revert on error
+        cell.classList.remove('saving');
+        cancelEdit(cell, oldValue);
+        showToast(`Failed to save: ${error.message}`, 'error');
+        console.error('Save error:', error);
+    }
+}
+
+function cancelEdit(cell, oldValue) {
+    cell.classList.remove('editing');
+
+    if (!oldValue) {
+        cell.innerHTML = '<span class="db-cell-null">NULL</span>';
+    } else if (!isNaN(oldValue) && String(oldValue).trim() !== '') {
+        cell.innerHTML = `<span class="db-cell-number">${parseFloat(oldValue).toLocaleString()}</span>`;
+    } else {
+        cell.innerHTML = oldValue;
+    }
+}
+
+function updatePagination() {
+    const start = (currentPage - 1) * pageSize + 1;
+    const end = Math.min(currentPage * pageSize, totalRows);
+
+    document.getElementById('paginationInfo').textContent =
+        `Showing ${start.toLocaleString()} - ${end.toLocaleString()} of ${totalRows.toLocaleString()}`;
+
+    document.getElementById('btnPrev').disabled = currentPage === 1;
+    document.getElementById('btnNext').disabled = currentPage >= totalPages;
+}
+
+async function prevPage() {
+    if (currentPage > 1) {
+        currentPage--;
+        await loadTableData();
+    }
+}
+
+async function nextPage() {
+    if (currentPage < totalPages) {
+        currentPage++;
+        await loadTableData();
+    }
+}
+
+async function refreshTable() {
+    if (currentTable) {
+        await loadTableData();
+        showToast('Table refreshed', 'success');
+    }
+}
+
+// ============================================================================
+// SCHEMA MANAGEMENT
+// ============================================================================
+async function loadTableSchema() {
+    if (!currentTable) return;
+
+    try {
+        const response = await fetch(`${API_BASE_URL}/db/table/${currentTable}/schema`);
+        const data = await response.json();
+
+        if (data.success || data.columns) {
+            tableSchema = data.columns || [];
+            renderSchema();
+        }
+    } catch (error) {
+        console.error('Error loading schema:', error);
+    }
+}
+
+function renderSchema() {
+    const viewport = document.getElementById('schemaViewport');
+
+    if (!tableSchema || tableSchema.length === 0) {
+        viewport.innerHTML = `
+            <div class="db-empty">
+                <div class="db-empty-icon">📋</div>
+                <h3 class="db-empty-title">No Schema Available</h3>
+            </div>
+        `;
+        return;
+    }
+
+    viewport.innerHTML = `
+        <table class="db-table">
+            <thead>
+                <tr>
+                    <th>#</th>
+                    <th>Column Name</th>
+                    <th>Type</th>
+                    <th>Primary Key</th>
+                    <th>Not Null</th>
+                    <th>Default Value</th>
+                </tr>
+            </thead>
+            <tbody>
+                ${tableSchema.map((col, idx) => `
+                    <tr>
+                        <td>${idx + 1}</td>
+                        <td style="font-weight: 600; color: var(--text-primary);">${col.name}</td>
+                        <td><span class="db-cell-number">${col.type}</span></td>
+                        <td>${col.pk ? '🔑' : '-'}</td>
+                        <td>${col.notnull ? '✓' : '-'}</td>
+                        <td>${col.default_value || '-'}</td>
+                    </tr>
+                `).join('')}
+            </tbody>
+        </table>
+    `;
+}
+
+// ============================================================================
+// SQL EDITOR
+// ============================================================================
+let pendingQuery = null;
+
+async function executeSQL() {
+    const query = document.getElementById('sqlEditor').value.trim();
+
+    if (!query) {
+        showToast('Please enter a SQL query', 'error');
+        return;
+    }
+
+    const resultsDiv = document.getElementById('sqlResults');
+    resultsDiv.innerHTML = '<div class="db-loading"><div class="db-spinner"></div></div>';
+
+    try {
+        const response = await fetch(`${API_BASE_URL}/db/query`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                sql_query: query,
+                expert_email: expertEmail || 'anonymous'
+            })
+        });
+
+        const data = await response.json();
+
+        if (data.success) {
+            const results = data.results || [];
+
+            if (results.length === 0) {
+                resultsDiv.innerHTML = `
+                    <div style="color: var(--text-tertiary); text-align: center; padding: var(--space-8);">
+                        Query executed successfully. No results returned.
+                    </div>
+                `;
+            } else {
+                const columns = Object.keys(results[0]);
+                resultsDiv.innerHTML = `
+                    <div style="margin-bottom: var(--space-3); color: var(--db-accent); font-weight: 600;">
+                        ✓ Query successful: ${results.length} row(s)
+                    </div>
+                    <table class="db-table">
+                        <thead>
+                            <tr>
+                                ${columns.map(col => `<th>${col}</th>`).join('')}
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${results.slice(0, 100).map(row => `
+                                <tr>
+                                    ${columns.map(col => {
+                                        const value = row[col];
+                                        if (value === null) return `<td><span class="db-cell-null">NULL</span></td>`;
+                                        if (typeof value === 'number') return `<td><span class="db-cell-number">${value.toLocaleString()}</span></td>`;
+                                        return `<td>${String(value).substring(0, 100)}</td>`;
+                                    }).join('')}
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                    ${results.length > 100 ? `<div style="margin-top: var(--space-3); color: var(--text-tertiary);">Showing first 100 rows</div>` : ''}
+                `;
+            }
+        } else {
+            resultsDiv.innerHTML = `
+                <div style="color: var(--db-danger); padding: var(--space-4);">
+                    <strong>Error:</strong> ${data.error || 'Query failed'}
+                </div>
+            `;
+        }
+    } catch (error) {
+        resultsDiv.innerHTML = `
+            <div style="color: var(--db-danger); padding: var(--space-4);">
+                <strong>Error:</strong> ${error.message}
+            </div>
+        `;
+    }
+}
+
+async function generateQuery() {
+    const prompt = document.getElementById('aiQueryInput').value.trim();
+
+    if (!prompt) {
+        showToast('Please describe what you want to query', 'error');
+        return;
+    }
+
+    showToast('🤖 Generating SQL query with Claude Sonnet 4.6...', 'info');
+
+    try {
+        // Use NestDB-specific endpoint (allows write operations)
+        const response = await fetch(`${API_BASE_URL}/nestdb/generate_query`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                question: prompt
+            })
+        });
+
+        const data = await response.json();
+
+        if (data.sql_query && !data.error) {
+            // Store the generated query
+            pendingQuery = data.sql_query;
+
+            // Place query in the SQL editor immediately
+            document.getElementById('sqlEditor').value = data.sql_query;
+
+            // Update modal content based on operation type
+            document.getElementById('modalSQLPreview').textContent = data.sql_query;
+
+            const warningEl = document.querySelector('.db-modal-warning');
+            const modalTitle = document.querySelector('.db-modal-title');
+            const modalIcon = document.querySelector('.db-modal-icon');
+
+            if (data.is_write_operation) {
+                modalTitle.textContent = '⚠️ Write Operation Detected';
+                modalIcon.textContent = '🔴';
+
+                // Check if multi-statement query
+                const statementCount = data.sql_query.split(';').filter(s => s.trim()).length;
+                const isMultiStatement = statementCount > 1;
+
+                warningEl.innerHTML = `
+                    <strong>⚠️ WARNING: This is a WRITE operation!</strong><br>
+                    ${isMultiStatement ? `<strong>Multi-statement query (${statementCount} statements)</strong> will be executed together.<br>` : ''}
+                    This query will modify your database (INSERT, UPDATE, DELETE, DROP, CREATE, ALTER, etc.)<br>
+                    <strong>Review carefully before executing.</strong>
+                `;
+                warningEl.style.background = 'var(--db-danger)';
+                warningEl.style.color = 'white';
+                warningEl.style.borderColor = 'var(--db-danger)';
+            } else {
+                modalTitle.textContent = 'Query Generated';
+                modalIcon.textContent = '✓';
+                warningEl.innerHTML = `
+                    ✓ This is a read-only SELECT query. Safe to execute.
+                `;
+                warningEl.style.background = 'rgba(62, 207, 142, 0.1)';
+                warningEl.style.color = 'var(--text-primary)';
+                warningEl.style.borderColor = 'var(--db-accent)';
+            }
+
+            // Show confirmation modal
+            document.getElementById('confirmModal').classList.add('active');
+
+            showToast('✓ Query generated and placed in editor!', 'success');
+        } else {
+            showToast('Failed to generate query: ' + (data.error || 'Unknown error'), 'error');
+        }
+    } catch (error) {
+        showToast('AI assist failed: ' + error.message, 'error');
+        console.error('AI generation error:', error);
+    }
+}
+
+function closeConfirmModal() {
+    document.getElementById('confirmModal').classList.remove('active');
+    pendingQuery = null;
+}
+
+function confirmExecuteQuery() {
+    if (pendingQuery) {
+        // Query is already in editor, just close modal
+        closeConfirmModal();
+
+        // User can now review and manually click "Execute Query" button
+        showToast('Query ready to execute. Click "Execute Query" when ready.', 'info');
+
+        // Clear pending query
+        pendingQuery = null;
+    }
+}
+
+function clearSQL() {
+    document.getElementById('sqlEditor').value = '';
+    document.getElementById('aiQueryInput').value = '';
+    document.getElementById('sqlResults').innerHTML = `
+        <div style="color: var(--text-tertiary); text-align: center; padding: var(--space-8);">
+            Write a SQL query and click "Execute Query"
+        </div>
+    `;
+}
+
+// ============================================================================
+// DATABASE EXPLORER AGENT
+// ============================================================================
+async function triggerDatabaseExplorer() {
+    const btn = document.getElementById('btnExploreDB');
+    const statusDiv = document.getElementById('explorerStatus');
+
+    // Disable button and show loading
+    btn.disabled = true;
+    btn.innerHTML = '<span>⏳</span> Exploring...';
+    statusDiv.style.display = 'block';
+    statusDiv.innerHTML = `
+        <div style="background: var(--bg-primary); border: 1px solid var(--surface-border); border-radius: 8px; padding: 16px;">
+            <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 8px;">
+                <div class="db-spinner"></div>
+                <span style="color: var(--text-primary); font-weight: 600;">Agent exploring database...</span>
+            </div>
+            <div style="color: var(--text-tertiary); font-size: var(--text-sm);">
+                This may take 30-60 seconds. The agent is analyzing schema, relationships, and content.
+            </div>
+        </div>
+    `;
+
+    try {
+        const response = await fetch(`${API_BASE_URL}/db/explore`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+        });
+
+        const data = await response.json();
+
+        if (data.success) {
+            statusDiv.innerHTML = `
+                <div style="background: rgba(62, 207, 142, 0.1); border: 1px solid var(--db-accent); border-radius: 8px; padding: 16px;">
+                    <div style="color: var(--db-accent); font-weight: 600; margin-bottom: 8px;">
+                        ✓ ${data.message}
+                    </div>
+                    ${data.insights && data.insights.length > 0 ? `
+                        <div style="color: var(--text-secondary); font-size: var(--text-sm); margin-top: 12px;">
+                            <strong>💡 Agent Insights:</strong>
+                            <ul style="margin: 8px 0 0 20px; padding: 0;">
+                                ${data.insights.map(insight => `<li style="margin: 4px 0;">${insight}</li>`).join('')}
+                            </ul>
+                        </div>
+                    ` : ''}
+                </div>
+            `;
+            showToast('✓ Database exploration complete!', 'success');
+        } else {
+            statusDiv.innerHTML = `
+                <div style="background: rgba(240, 68, 56, 0.1); border: 1px solid var(--db-danger); border-radius: 8px; padding: 16px;">
+                    <div style="color: var(--db-danger); font-weight: 600;">
+                        ✗ Agent failed: ${data.error || 'Unknown error'}
+                    </div>
+                </div>
+            `;
+            showToast('Failed to explore database', 'error');
+        }
+    } catch (error) {
+        statusDiv.innerHTML = `
+            <div style="background: rgba(240, 68, 56, 0.1); border: 1px solid var(--db-danger); border-radius: 8px; padding: 16px;">
+                <div style="color: var(--db-danger); font-weight: 600;">
+                    ✗ Error: ${error.message}
+                </div>
+            </div>
+        `;
+        showToast('Error triggering database explorer', 'error');
+        console.error('Database explorer error:', error);
+    } finally {
+        // Re-enable button
+        btn.disabled = false;
+        btn.innerHTML = '<span>🕵️</span> Trigger Database Explorer Agent';
+    }
+}
+
+// ============================================================================
+// TAB SWITCHING
+// ============================================================================
+function switchTab(tabName, clickEvent) {
+    // Update tab UI
+    document.querySelectorAll('.db-tab').forEach(tab => tab.classList.remove('active'));
+    document.querySelectorAll('.db-tab-content').forEach(content => content.classList.remove('active'));
+
+    // Make the clicked tab active
+    if (clickEvent && clickEvent.target) {
+        clickEvent.target.classList.add('active');
+    } else {
+        // Fallback: find the tab by matching the onclick attribute
+        const tabs = document.querySelectorAll('.db-tab');
+        tabs.forEach(tab => {
+            if (tab.getAttribute('onclick')?.includes(`'${tabName}'`)) {
+                tab.classList.add('active');
+            }
+        });
+    }
+
+    // Map tab names to content IDs (handle SQL special case)
+    const contentIdMap = {
+        'data': 'tabData',
+        'sql': 'tabSQL',
+        'schema': 'tabSchema',
+        'versions': 'tabVersions'
+    };
+
+    const contentId = contentIdMap[tabName] || `tab${tabName.charAt(0).toUpperCase() + tabName.slice(1)}`;
+    const content = document.getElementById(contentId);
+
+    if (content) {
+        content.classList.add('active');
+    } else {
+        console.error(`Tab content not found: ${contentId}`);
+    }
+}
+
+// ============================================================================
+// UI UTILITIES
+// ============================================================================
+function showLoading() {
+    const viewport = document.getElementById('dataViewport');
+    viewport.innerHTML = '<div class="db-loading"><div class="db-spinner"></div></div>';
+}
+
+async function showInsertRow() {
+    if (!currentTable || !tableSchema || tableSchema.length === 0) {
+        showToast('Please select a table first', 'warning');
+        return;
+    }
+
+    // Create modal HTML
+    const modalHtml = `
+        <div id="insertRowModal" style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.7); display: flex; align-items: center; justify-content: center; z-index: 10000;">
+            <div style="background: var(--bg-elevated); border-radius: 12px; max-width: 600px; width: 90%; max-height: 80vh; overflow: hidden; box-shadow: 0 10px 40px rgba(0,0,0,0.3);">
+                <div style="padding: 20px; border-bottom: 1px solid var(--surface-border); display: flex; justify-content: space-between; align-items: center;">
+                    <h3 style="margin: 0; color: var(--text-primary);">Add New Row to ${currentTable}</h3>
+                    <button onclick="closeInsertModal()" style="background: none; border: none; font-size: 24px; cursor: pointer; color: var(--text-secondary);">&times;</button>
+                </div>
+                <div style="padding: 20px; max-height: 60vh; overflow-y: auto;">
+                    <form id="insertRowForm">
+                        ${tableSchema.map(col => {
+                            const isRequired = col.notnull && !col.default_value && !col.pk;
+                            const isPk = col.pk;
+                            return `
+                                <div style="margin-bottom: 16px;">
+                                    <label style="display: block; margin-bottom: 6px; font-weight: 600; color: var(--text-primary);">
+                                        ${col.name}
+                                        ${isPk ? '<span style="color: var(--db-warning);">(Primary Key)</span>' : ''}
+                                        ${isRequired ? '<span style="color: red;">*</span>' : ''}
+                                    </label>
+                                    <input
+                                        type="text"
+                                        name="${col.name}"
+                                        placeholder="${col.type}${col.default_value ? ' (default: ' + col.default_value + ')' : ''}"
+                                        ${isRequired ? 'required' : ''}
+                                        style="width: 100%; padding: 10px; border: 1px solid var(--surface-border); border-radius: 6px; background: var(--surface-base); color: var(--text-primary); font-size: 14px;"
+                                    />
+                                    <small style="color: var(--text-secondary); font-size: 12px;">Type: ${col.type}</small>
+                                </div>
+                            `;
+                        }).join('')}
+                    </form>
+                </div>
+                <div style="padding: 20px; border-top: 1px solid var(--surface-border); display: flex; gap: 10px; justify-content: flex-end;">
+                    <button onclick="closeInsertModal()" style="padding: 10px 20px; background: var(--surface-border); border: none; border-radius: 6px; cursor: pointer; color: var(--text-primary);">
+                        Cancel
+                    </button>
+                    <button onclick="submitInsertRow()" style="padding: 10px 20px; background: var(--db-accent); border: none; border-radius: 6px; cursor: pointer; color: white; font-weight: 600;">
+                        Insert Row
+                    </button>
+                </div>
+            </div>
+        </div>
+    `;
+
+    // Add modal to page
+    const modalDiv = document.createElement('div');
+    modalDiv.innerHTML = modalHtml;
+    document.body.appendChild(modalDiv);
+}
+
+function closeInsertModal() {
+    const modal = document.getElementById('insertRowModal');
+    if (modal) {
+        modal.parentElement.remove();
+    }
+}
+
+async function submitInsertRow() {
+    const form = document.getElementById('insertRowForm');
+    const formData = new FormData(form);
+
+    // Build row data object
+    const rowData = {};
+    for (const [key, value] of formData.entries()) {
+        // Skip empty values for non-required fields
+        if (value.trim() === '') {
+            const col = tableSchema.find(c => c.name === key);
+            if (!col.notnull || col.default_value) {
+                continue; // Let database use default or NULL
+            }
+        }
+
+        // Try to parse numbers
+        const col = tableSchema.find(c => c.name === key);
+        if (col && (col.type.includes('INT') || col.type.includes('REAL') || col.type.includes('NUMERIC'))) {
+            const numValue = parseFloat(value);
+            rowData[key] = isNaN(numValue) ? value : numValue;
+        } else {
+            rowData[key] = value;
+        }
+    }
+
+    // Show loading
+    showToast('Inserting row...', 'info');
+
+    try {
+        const response = await fetch(`${API_BASE_URL}/db/table/${currentTable}/row`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                table_name: currentTable,
+                row_data: rowData,
+                expert_email: expertEmail || 'anonymous'
+            })
+        });
+
+        const result = await response.json();
+
+        if (result.success) {
+            closeInsertModal();
+
+            // Show success message with commit hash
+            const commitMsg = result.version_commit
+                ? `✓ Row inserted and committed: ${result.version_commit}`
+                : '✓ Row inserted successfully';
+            showToast(commitMsg, 'success');
+
+            // Refresh the table to show new row
+            await loadTableData();
+        } else {
+            showToast(`Error: ${result.error}`, 'error');
+        }
+    } catch (error) {
+        showToast(`Failed to insert: ${error.message}`, 'error');
+        console.error('Insert error:', error);
+    }
+}
+
+// ============================================================================
+// VERSION CONTROL
+// ============================================================================
+async function loadVersionStats() {
+    try {
+        const response = await fetch(`${API_BASE_URL}/db/version/stats`);
+        const data = await response.json();
+
+        if (data.success) {
+            document.getElementById('totalCommits').textContent = data.total_commits?.toLocaleString() || '0';
+            document.getElementById('dbSize').textContent = `${data.database_size_mb?.toFixed(1) || '0'} MB`;
+        }
+    } catch (error) {
+        console.error('Error loading version stats:', error);
+    }
+}
+
+async function loadVersionHistory() {
+    const limit = parseInt(document.getElementById('historyLimit').value);
+    const container = document.getElementById('versionHistoryList');
+
+    container.innerHTML = '<div style="text-align: center; padding: 40px; color: var(--text-tertiary);"><div class="db-loading"><div class="db-spinner"></div></div></div>';
+
+    try {
+        // Use enhanced change history endpoint for detailed old->new value tracking
+        const response = await fetch(`${API_BASE_URL}/db/changes/history?limit=${limit}`);
+        const data = await response.json();
+
+        if (data.success && data.commits) {
+            if (data.commits.length === 0) {
+                container.innerHTML = `
+                    <div style="text-align: center; padding: 40px; color: var(--text-tertiary);">
+                        <div style="font-size: 48px; margin-bottom: 16px; opacity: 0.3;">📭</div>
+                        <div>No changes found</div>
+                    </div>
+                `;
+                return;
+            }
+
+            container.innerHTML = data.commits.map((commit, idx) => {
+                // Format operation with color coding
+                const opColors = {
+                    'UPDATE': 'var(--db-info)',
+                    'INSERT': 'var(--db-accent)',
+                    'DELETE': 'var(--db-danger)',
+                    'SQL_QUERY': 'var(--db-warning)'
+                };
+                const opColor = opColors[commit.operation] || 'var(--text-tertiary)';
+
+                // Build changes diff table
+                let changesHtml = '';
+                if (commit.changes && commit.changes.length > 0) {
+                    const changesTable = commit.changes.map(change => {
+                        const oldVal = change.old_value || '<span style="color: var(--text-disabled); font-style: italic;">NULL</span>';
+                        const newVal = change.new_value || '<span style="color: var(--text-disabled); font-style: italic;">NULL</span>';
+
+                        return `
+                            <tr>
+                                <td style="padding: 8px 12px; border-bottom: 1px solid var(--surface-border); color: var(--text-secondary); font-weight: 600; font-family: 'Courier New', monospace; font-size: 12px;">${change.column_name}</td>
+                                <td style="padding: 8px 12px; border-bottom: 1px solid var(--surface-border); color: var(--db-danger); background: rgba(247, 68, 56, 0.08); font-family: 'Courier New', monospace; font-size: 12px; max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${change.old_value}">${oldVal}</td>
+                                <td style="padding: 8px 12px; border-bottom: 1px solid var(--surface-border); color: var(--text-tertiary); text-align: center; font-size: 14px;">→</td>
+                                <td style="padding: 8px 12px; border-bottom: 1px solid var(--surface-border); color: var(--db-accent); background: rgba(62, 207, 142, 0.08); font-family: 'Courier New', monospace; font-size: 12px; max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${change.new_value}">${newVal}</td>
+                            </tr>
+                        `;
+                    }).join('');
+
+                    changesHtml = `
+                        <div id="changes-${idx}" style="display: none; margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--surface-border);">
+                            <div style="font-weight: 600; color: var(--text-primary); margin-bottom: 8px; font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em;">Column Changes (${commit.changes.length})</div>
+                            <div style="overflow-x: auto; border: 1px solid var(--surface-border); border-radius: 6px;">
+                                <table style="width: 100%; border-collapse: collapse; background: var(--bg-primary); font-size: 13px;">
+                                    <thead>
+                                        <tr style="background: var(--bg-tertiary);">
+                                            <th style="padding: 10px 12px; text-align: left; font-weight: 700; color: var(--text-primary); border-bottom: 2px solid var(--surface-border); font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em;">Column</th>
+                                            <th style="padding: 10px 12px; text-align: left; font-weight: 700; color: var(--text-primary); border-bottom: 2px solid var(--surface-border); font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em;">Before</th>
+                                            <th style="padding: 10px 12px; text-align: center; font-weight: 700; color: var(--text-primary); border-bottom: 2px solid var(--surface-border); width: 40px;"></th>
+                                            <th style="padding: 10px 12px; text-align: left; font-weight: 700; color: var(--text-primary); border-bottom: 2px solid var(--surface-border); font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em;">After</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        ${changesTable}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                        <button onclick="toggleChanges(${idx})"
+                                id="toggle-btn-${idx}"
+                                style="margin-top: 12px; background: var(--db-accent); border: none; color: white; cursor: pointer; font-size: 12px; padding: 8px 16px; border-radius: 6px; display: flex; align-items: center; gap: 6px; font-weight: 600;">
+                            <span id="toggle-icon-${idx}">▶</span> Show Changes (${commit.changes.length})
+                        </button>
+                    `;
+                }
+
+                // Build metadata section
+                let metadataHtml = '';
+                if (commit.query) {
+                    const shortQuery = commit.query.length > 150 ? commit.query.substring(0, 150) + '...' : commit.query;
+                    metadataHtml = `
+                        <div style="margin-top: 12px; padding: 10px 12px; background: var(--bg-tertiary); border-radius: 6px; border-left: 3px solid ${opColor};">
+                            <div style="font-weight: 600; color: var(--text-secondary); margin-bottom: 6px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em;">SQL Query:</div>
+                            <code style="font-size: 11px; color: var(--text-primary); word-break: break-all; white-space: pre-wrap; font-family: 'Courier New', monospace;">${shortQuery}</code>
+                        </div>
+                    `;
+                }
+
+                return `
+                    <div style="background: var(--bg-primary); border: 1px solid var(--surface-border); border-radius: 8px; padding: 18px; margin-bottom: 14px; transition: all 0.2s ease;">
+                        <div style="display: flex; justify-content: space-between; align-items: start; gap: 16px;">
+                            ${commit.user_picture ? `
+                                <img src="${commit.user_picture}"
+                                     alt="${commit.user_email}"
+                                     style="width: 48px; height: 48px; border-radius: 50%; border: 2px solid ${opColor}; object-fit: cover; flex-shrink: 0;"
+                                     onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+                                <div style="width: 48px; height: 48px; border-radius: 50%; border: 2px solid ${opColor}; background: var(--bg-tertiary); display: none; align-items: center; justify-content: center; font-size: 18px; font-weight: 700; color: var(--text-tertiary); text-transform: uppercase; flex-shrink: 0;">
+                                    ${commit.user_email[0] || 'S'}
+                                </div>
+                            ` : `
+                                <div style="width: 48px; height: 48px; border-radius: 50%; border: 2px solid ${opColor}; background: var(--bg-tertiary); display: flex; align-items: center; justify-content: center; font-size: 18px; font-weight: 700; color: var(--text-tertiary); text-transform: uppercase; flex-shrink: 0;">
+                                    ${commit.user_email[0] || 'S'}
+                                </div>
+                            `}
+                            <div style="flex: 1; min-width: 0;">
+                                <!-- Header -->
+                                <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 10px; flex-wrap: wrap;">
+                                    <span style="background: ${opColor}; color: white; padding: 4px 10px; border-radius: 4px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em;">${commit.operation}</span>
+                                    <code style="background: var(--bg-tertiary); padding: 4px 8px; border-radius: 4px; font-size: 11px; color: var(--db-accent); font-family: 'Courier New', monospace;">#${commit.commit_id}</code>
+                                    <span style="color: var(--text-tertiary); font-size: 12px;">${commit.timestamp}</span>
+                                </div>
+
+                                <!-- User Info - Email Primary -->
+                                <div style="margin-bottom: 8px;">
+                                    <div style="color: var(--text-primary); font-weight: 700; font-size: 14px; margin-bottom: 2px;">
+                                        ${commit.user_email}
+                                    </div>
+                                    ${commit.user_name ? `
+                                        <div style="color: var(--text-secondary); font-size: 12px;">${commit.user_name}</div>
+                                    ` : ''}
+                                </div>
+
+                                <!-- Message -->
+                                <div style="color: var(--text-primary); font-size: 14px; margin-bottom: 8px; line-height: 1.5;">
+                                    ${commit.message}
+                                </div>
+
+                                <!-- Table Info -->
+                                <div style="display: flex; align-items: center; gap: 12px; font-size: 12px; color: var(--text-tertiary);">
+                                    <span>📊 Table: <strong style="color: var(--text-primary);">${commit.table_name}</strong></span>
+                                    <span>• ${commit.rows_affected || 1} row(s) affected</span>
+                                </div>
+
+                                ${metadataHtml}
+                                ${changesHtml}
+                            </div>
+
+                            <!-- Rollback button (only if Git commit hash exists) -->
+                            ${commit.commit_hash && idx > 0 ? `
+                                <div style="display: flex; gap: 8px; flex-shrink: 0; align-self: flex-start;">
+                                    <button class="db-btn db-btn-secondary"
+                                            style="padding: 8px 14px; height: 36px; font-size: 12px; white-space: nowrap;"
+                                            onclick="confirmRollback('${commit.commit_hash}', '${commit.commit_hash.substring(0, 8)}')">
+                                        ↩️ Rollback
+                                    </button>
+                                </div>
+                            ` : ''}
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        } else {
+            container.innerHTML = `
+                <div style="text-align: center; padding: 40px; color: var(--db-danger);">
+                    Failed to load change history
+                </div>
+            `;
+        }
+    } catch (error) {
+        console.error('Error loading version history:', error);
+        container.innerHTML = `
+            <div style="text-align: center; padding: 40px; color: var(--db-danger);">
+                Error: ${error.message}
+            </div>
+        `;
+    }
+}
+
+function toggleChanges(idx) {
+    const changesDiv = document.getElementById(`changes-${idx}`);
+    const icon = document.getElementById(`toggle-icon-${idx}`);
+    const btn = document.getElementById(`toggle-btn-${idx}`);
+
+    if (changesDiv.style.display === 'none') {
+        changesDiv.style.display = 'block';
+        icon.textContent = '▼';
+        btn.innerHTML = `<span id="toggle-icon-${idx}">▼</span> Hide Changes`;
+    } else {
+        changesDiv.style.display = 'none';
+        icon.textContent = '▶';
+        const changesCount = changesDiv.querySelectorAll('tbody tr').length;
+        btn.innerHTML = `<span id="toggle-icon-${idx}">▶</span> Show Changes (${changesCount})`;
+    }
+}
+
+
+function confirmRollback(hash, hashShort) {
+    if (confirm(`⚠️ WARNING: This will rollback the database to commit ${hashShort}.\n\nAll changes after this commit will be undone.\nA safety snapshot will be created.\n\nAre you sure?`)) {
+        rollbackToVersion(hash, hashShort);
+    }
+}
+
+async function rollbackToVersion(hash, hashShort) {
+    const email = prompt('Enter your email for the audit trail:', 'system');
+    if (!email) return;
+
+    showToast('Rolling back database... This may take a moment.', 'info');
+
+    try {
+        const response = await fetch(`${API_BASE_URL}/db/version/rollback`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                commit_hash: hash,
+                expert_email: email
+            })
+        });
+
+        const data = await response.json();
+
+        if (data.success) {
+            showToast(`✓ Rollback successful! Snapshot saved: ${data.snapshot_path}`, 'success');
+            await loadVersionHistory();
+            await loadVersionStats();
+
+            // Reload current table data if viewing a table
+            if (currentTable) {
+                await loadTableData();
+            }
+        } else {
+            showToast('Rollback failed: ' + (data.error || 'Unknown error'), 'error');
+        }
+    } catch (error) {
+        showToast('Error during rollback: ' + error.message, 'error');
+    }
+}
+
+// Load version data when switching to Versions tab
+const originalSwitchTab = switchTab;
+switchTab = async function(tabName, clickEvent) {
+    originalSwitchTab(tabName, clickEvent);
+
+    if (tabName === 'versions') {
+        // Load version control data when tab is opened
+        await Promise.all([
+            loadVersionStats(),
+            loadVersionHistory()
+        ]);
+    }
+};
+
+// ============================================================================
+// EXCEL-LIKE ROW & COLUMN MANAGEMENT
+// ============================================================================
+
+// Global variable to track new row being edited
+let newRowData = null;
+
+async function addNewRowInline() {
+    if (!currentTable || !tableSchema || tableSchema.length === 0) {
+        showToast('Please select a table first', 'warning');
+        return;
+    }
+
+    // Check if already editing a new row
+    if (document.getElementById('newRowInline')) {
+        showToast('Finish editing the current row first', 'warning');
+        return;
+    }
+
+    // Initialize new row data with empty values
+    newRowData = {};
+    tableSchema.forEach(col => {
+        if (col.name !== 'rowid') {
+            newRowData[col.name] = '';
+        }
+    });
+
+    // Get columns (excluding rowid for display)
+    const columns = tableSchema.filter(c => c.name !== 'rowid').map(c => c.name);
+
+    // Remove "Add Row" button row
+    const addRowBtn = document.getElementById('addRowButton');
+    if (addRowBtn) addRowBtn.remove();
+
+    // Add editable row at the bottom
+    const tbody = document.querySelector('.db-table tbody');
+    const newRow = document.createElement('tr');
+    newRow.id = 'newRowInline';
+    newRow.style.background = 'rgba(62, 207, 142, 0.1)';
+
+    newRow.innerHTML = `
+        <td style="color: var(--db-accent); font-weight: 700;">NEW</td>
+        ${columns.map(col => {
+            const colSchema = tableSchema.find(c => c.name === col);
+            const isPk = colSchema.pk;
+            const isRequired = colSchema.notnull && !colSchema.default_value && !isPk;
+            return `
+                <td class="editable new-row-cell" data-col="${col}" data-required="${isRequired}">
+                    <input
+                        type="text"
+                        placeholder="${col}${isRequired ? ' *' : ''}"
+                        data-col="${col}"
+                        style="width: 100%; padding: 8px; border: 2px solid var(--db-accent); border-radius: 4px; background: var(--bg-primary); color: var(--text-primary);"
+                        onkeydown="handleNewRowKeydown(event, '${col}')"
+                        onblur="updateNewRowData('${col}', this.value)"
+                    />
+                </td>
+            `;
+        }).join('')}
+        <td style="text-align: center;">
+            <button onclick="saveNewRow()" style="background: var(--db-accent); border: none; color: white; padding: 6px 12px; border-radius: 4px; cursor: pointer; margin-right: 4px;" title="Save row (Enter)">
+                ✓
+            </button>
+            <button onclick="cancelNewRow()" style="background: var(--db-danger); border: none; color: white; padding: 6px 12px; border-radius: 4px; cursor: pointer;" title="Cancel (Esc)">
+                ✕
+            </button>
+        </td>
+    `;
+
+    tbody.appendChild(newRow);
+
+    // Focus first input
+    const firstInput = newRow.querySelector('input');
+    if (firstInput) firstInput.focus();
+
+    showToast('Enter values and press Enter to save, or Esc to cancel', 'info');
+}
+
+function updateNewRowData(column, value) {
+    if (newRowData) {
+        newRowData[column] = value;
+    }
+}
+
+function handleNewRowKeydown(event, column) {
+    if (event.key === 'Enter') {
+        event.preventDefault();
+        updateNewRowData(column, event.target.value);
+
+        // Try to move to next input or save if last
+        const inputs = document.querySelectorAll('#newRowInline input');
+        const currentIndex = Array.from(inputs).indexOf(event.target);
+
+        if (currentIndex < inputs.length - 1) {
+            inputs[currentIndex + 1].focus();
+        } else {
+            saveNewRow();
+        }
+    } else if (event.key === 'Escape') {
+        event.preventDefault();
+        cancelNewRow();
+    } else if (event.key === 'Tab') {
+        // Allow normal tab behavior
+        updateNewRowData(column, event.target.value);
+    }
+}
+
+async function saveNewRow() {
+    if (!newRowData) {
+        showToast('No row data to save', 'error');
+        return;
+    }
+
+    // Get all current values from inputs
+    const inputs = document.querySelectorAll('#newRowInline input');
+    inputs.forEach(input => {
+        const col = input.dataset.col;
+        newRowData[col] = input.value;
+    });
+
+    // Check required fields
+    for (const col of tableSchema) {
+        if (col.name === 'rowid') continue;
+        const isRequired = col.notnull && !col.default_value && !col.pk;
+        if (isRequired && (!newRowData[col.name] || newRowData[col.name].trim() === '')) {
+            showToast(`Error: ${col.name} is required`, 'error');
+            return;
+        }
+    }
+
+    // Build row data (parse numbers, skip empty optional fields)
+    const rowData = {};
+    for (const [key, value] of Object.entries(newRowData)) {
+        if (key === 'rowid') continue;
+
+        // Skip empty values for non-required fields
+        if (!value || value.trim() === '') {
+            const col = tableSchema.find(c => c.name === key);
+            if (!col.notnull || col.default_value) {
+                continue;
+            }
+        }
+
+        // Try to parse numbers
+        const col = tableSchema.find(c => c.name === key);
+        if (col && (col.type.includes('INT') || col.type.includes('REAL') || col.type.includes('NUMERIC'))) {
+            const numValue = parseFloat(value);
+            rowData[key] = isNaN(numValue) ? value : numValue;
+        } else {
+            rowData[key] = value;
+        }
+    }
+
+    showToast('Inserting row...', 'info');
+
+    try {
+        const response = await fetch(`${API_BASE_URL}/db/table/${currentTable}/row`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                table_name: currentTable,
+                row_data: rowData,
+                expert_email: expertEmail || 'anonymous'
+            })
+        });
+
+        const result = await response.json();
+
+        if (result.success) {
+            const commitMsg = result.version_commit
+                ? `✓ Row inserted and committed: ${result.version_commit}`
+                : '✓ Row inserted successfully';
+
+            showToast(commitMsg, 'success');
+
+            // Clear new row data
+            newRowData = null;
+
+            // Reload table
+            await loadTableData();
+        } else {
+            showToast('Error: ' + (result.error || 'Failed to insert row'), 'error');
+        }
+    } catch (error) {
+        showToast('Error: ' + error.message, 'error');
+    }
+}
+
+function cancelNewRow() {
+    const newRow = document.getElementById('newRowInline');
+    if (newRow) {
+        newRow.remove();
+    }
+    newRowData = null;
+
+    // Re-add "Add Row" button
+    const tbody = document.querySelector('.db-table tbody');
+    if (tbody) {
+        const columns = Object.keys(tableData[0]);
+        const addRowBtn = document.createElement('tr');
+        addRowBtn.id = 'addRowButton';
+        addRowBtn.style.background = 'var(--bg-tertiary)';
+        addRowBtn.innerHTML = `
+            <td colspan="${columns.length + 2}" style="text-align: center; padding: 12px;">
+                <button onclick="addNewRowInline()" class="db-btn db-btn-primary" style="width: 100%;">
+                    <span>+</span> Add New Row
+                </button>
+            </td>
+        `;
+        tbody.appendChild(addRowBtn);
+    }
+
+    showToast('Cancelled', 'info');
+}
+
+// Column Management
+async function showAddColumnDialog() {
+    const columnName = prompt('Enter new column name:');
+    if (!columnName || columnName.trim() === '') {
+        showToast('Column name cannot be empty', 'warning');
+        return;
+    }
+
+    // Validate column name
+    if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(columnName)) {
+        showToast('Invalid column name. Use letters, numbers, and underscores only (must start with letter or underscore)', 'error');
+        return;
+    }
+
+    const columnType = prompt('Enter column type (TEXT, INTEGER, REAL, BLOB):', 'TEXT');
+    if (!columnType) return;
+
+    const allowNull = confirm('Allow NULL values?');
+
+    await addColumn(columnName, columnType, allowNull);
+}
+
+async function addColumn(columnName, columnType, allowNull = true) {
+    if (!currentTable) {
+        showToast('Please select a table first', 'warning');
+        return;
+    }
+
+    showToast('Adding column...', 'info');
+
+    try {
+        const sql = `ALTER TABLE "${currentTable}" ADD COLUMN "${columnName}" ${columnType}${allowNull ? '' : ' NOT NULL DEFAULT \'\''}`;
+
+        const response = await fetch(`${API_BASE_URL}/db/execute`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                query: sql,
+                expert_email: expertEmail || 'anonymous'
+            })
+        });
+
+        const result = await response.json();
+
+        if (result.success) {
+            showToast(`✓ Column "${columnName}" added successfully`, 'success');
+            await loadTableData();
+            await loadTableSchema();
+        } else {
+            showToast('Error: ' + (result.error || 'Failed to add column'), 'error');
+        }
+    } catch (error) {
+        showToast('Error: ' + error.message, 'error');
+    }
+}
+
+async function deleteColumn(columnName) {
+    if (!confirm(`Are you sure you want to delete column "${columnName}"?\n\nWARNING: This cannot be undone!`)) {
+        return;
+    }
+
+    showToast('SQLite does not support DROP COLUMN directly. Creating a new table without this column...', 'info');
+
+    // SQLite doesn't support DROP COLUMN, so we need to:
+    // 1. Create new table without the column
+    // 2. Copy data
+    // 3. Drop old table
+    // 4. Rename new table
+
+    showToast('This operation is complex. Please use SQL Editor for advanced schema modifications.', 'warning');
+}
+
+async function deleteRow(rowIdx) {
+    if (!confirm('Are you sure you want to delete this row?\n\nThis will be committed to version control.')) {
+        return;
+    }
+
+    const rowData = tableData[rowIdx];
+
+    // Build row_id for WHERE clause
+    const rowId = {};
+    const pkColumns = tableSchema.filter(col => col.pk);
+
+    if (pkColumns.length === 0) {
+        if (rowData.rowid === undefined) {
+            showToast('Error: Cannot identify row for deletion', 'error');
+            return;
+        }
+        rowId['rowid'] = rowData.rowid;
+    } else {
+        pkColumns.forEach(col => {
+            rowId[col.name] = rowData[col.name];
+        });
+    }
+
+    // Build DELETE SQL
+    const whereClause = Object.entries(rowId).map(([col, val]) => `"${col}" = ${typeof val === 'string' ? `'${val}'` : val}`).join(' AND ');
+    const sql = `DELETE FROM "${currentTable}" WHERE ${whereClause}`;
+
+    showToast('Deleting row...', 'info');
+
+    try {
+        const response = await fetch(`${API_BASE_URL}/db/execute`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                query: sql,
+                expert_email: expertEmail || 'anonymous'
+            })
+        });
+
+        const result = await response.json();
+
+        if (result.success) {
+            showToast('✓ Row deleted successfully', 'success');
+            await loadTableData();
+        } else {
+            showToast('Error: ' + (result.error || 'Failed to delete row'), 'error');
+        }
+    } catch (error) {
+        showToast('Error: ' + error.message, 'error');
+    }
+}
+
+// Override old showInsertRow to use new inline version
+const oldShowInsertRow = showInsertRow;
+showInsertRow = function() {
+    addNewRowInline();
+};
+</script>
+{% endblock %}

@@ -1,827 +1,3206 @@
+"""
+Nestperts V2 - Project-Based Annotation Platform
+
+Enhanced version with:
+- Multi-project management (like CVAT)
+- Folder upload support
+- Dark/light theme
+- Team collaboration
+- Multiple export formats (YOLO, COCO, GeoJSON)
+"""
+
 import os
+import sys
 import json
 import glob
-import math
-import argparse
-import yaml # Requires pip install pyyaml, but we can do a simple parse if needed
+import uuid
+import zipfile
+import shutil
 import numpy as np
-import cv2
-import torch
-import threading
 import time
-from flask import Flask, render_template, request, jsonify, send_from_directory, redirect, url_for
+from pathlib import Path
+from datetime import datetime
+from functools import lru_cache
+from werkzeug.utils import secure_filename
+from flask import Flask, render_template, request, jsonify, send_from_directory, send_file, redirect, url_for, session, flash
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
+
+import yaml
+
+# Add project root to path
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if PROJECT_ROOT not in sys.path:
+    sys.path.insert(0, PROJECT_ROOT)
+
+# Load server configuration from YAML
+def load_server_config():
+    """Load configuration from server/config.yaml"""
+    config_path = os.path.join(PROJECT_ROOT, 'server', 'config.yaml')
+    try:
+        with open(config_path, 'r') as f:
+            return yaml.safe_load(f)
+    except Exception as e:
+        print(f"⚠️  Warning: Could not load server/config.yaml: {e}")
+        # Return sensible defaults
+        return {
+            'cv': {
+                'model': 'models/swift.onnx',
+                'classifier': 'models/classifier_swift.onnx',
+                'default_confidence': 0.25
+            }
+        }
+
+server_config = load_server_config()
+
+# Import authentication module
+from labeller.auth import (
+    init_auth_db,
+    setup_oauth,
+    login_required,
+    admin_required,
+    api_login_required,
+    annotator_required,
+    api_annotator_required,
+    api_db_editor_required,
+    is_email_approved,
+    is_admin,
+    is_base_admin,
+    create_or_update_user,
+    add_approved_email,
+    remove_approved_email,
+    get_approved_emails,
+    get_all_users,
+    get_current_user,
+    add_admin,
+    get_user_permissions,
+    delete_user,
+    BASE_ADMIN_EMAIL
+)
 
 app = Flask(__name__)
+app.config['MAX_CONTENT_LENGTH'] = None  # No upload limit
+app.config['MAX_FORM_MEMORY_SIZE'] = None  # No form memory limit
+app.config['UPLOAD_FOLDER'] = 'projects_data'
 
-# MobileSAM Model (lazy loaded) - from ultralytics
-MOBILESAM_MODEL = None
-MOBILESAM_MODEL_NAME = os.path.join("..", "models", "mobile_sam.pt")  # Load from root models/ directory
+# Security configuration for sessions
+app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', os.urandom(24).hex())
 
-# Segmentation configuration
-SEGMENT_CONF_THRESHOLD = 0.5  # Confidence threshold for segmentation
-SEGMENT_IMGSZ = 720  # Balance between speed and accuracy for small objects
-USE_HALF_PRECISION = True  # Use FP16 for faster GPU inference
-MAX_SEGMENT_AREA_RATIO = 0.3  # Reject masks larger than 30% of image (likely wrong)
-MIN_SEGMENT_AREA = 50  # Minimum mask area in pixels (reduced from 100)
-BBOX_PADDING_RATIO = 0.05  # Add 5% padding around bounding boxes
+# Initialize OAuth
+oauth, google = setup_oauth(app)
 
-# Cache for image processing - stores last processed image
-IMAGE_CACHE = {
-    "filename": None,
-    "preprocessed_image": None,
-    "timestamp": None
+# Initialize authentication database
+init_auth_db()
+
+# Configure request limits
+@app.before_request
+def before_request():
+    """Remove any size limits on requests"""
+    if request.method == 'POST':
+        # Allow unlimited content length
+        request.environ['CONTENT_LENGTH'] = request.environ.get('CONTENT_LENGTH', '0')
+
+# Configure caching for static assets
+@app.after_request
+def add_header(response):
+    """Add caching headers for static assets to improve performance"""
+    if request.path.startswith('/static/'):
+        # Cache static assets for 1 day (86400 seconds)
+        # Includes CSS, JS, images, fonts
+        response.headers['Cache-Control'] = 'public, max-age=86400, immutable'
+    return response
+
+# ============================================================================
+# PROJECT MANAGEMENT
+# ============================================================================
+
+# Get the directory where app.py is located
+APP_DIR = os.path.dirname(os.path.abspath(__file__))
+PROJECTS_DIR = os.path.join(APP_DIR, 'projects')
+
+# ============================================================================
+# PERFORMANCE: IN-MEMORY CACHING
+# ============================================================================
+# Cache expensive operations to avoid repeated file I/O and calculations
+# Cache is invalidated when projects are modified (upload, delete, annotation)
+
+_cache = {
+    'project_stats': {},      # {project_folder: {'data': stats_dict, 'timestamp': time}}
+    'all_users_with_roles': {'data': None, 'timestamp': 0},  # Cache user list from DB
+    'user_contributions': {}, # {user_email: {'data': contributions_dict, 'timestamp': time}}
 }
-CACHE_TIMEOUT = 300  # Clear cache after 5 minutes
 
-# Threading lock to prevent concurrent model inference (prevents GPU stalls)
-INFERENCE_LOCK = threading.Lock()
+CACHE_TTL = 60  # Cache time-to-live in seconds (1 minute)
 
-# --- CONFIGURATION ---
-# These will be updated from command-line args in main block
-DATASET_PATH = "nestvision"
-STATE_FILE = "project_state.json"
-CLASSES_FILE = "classes.txt"
-YAML_FILE = "data.yaml"
+def get_cached_project_stats(project_folder):
+    """Get cached project stats or calculate and cache them"""
+    cache_entry = _cache['project_stats'].get(project_folder)
+    now = time.time()
 
-# Config holder that will be updated
-class Config:
-    DATASET_PATH = "nestvision"
-    STATE_FILE = "project_state.json"
-    CLASSES_FILE = "classes.txt"
-    YAML_FILE = "data.yaml"
+    # Return cached data if fresh (less than 60 seconds old)
+    if cache_entry and (now - cache_entry['timestamp']) < CACHE_TTL:
+        return cache_entry['data']
 
-def get_image_dir():
-    """Returns the path to the images folder (either root or ./images)"""
-    sub_img = os.path.join(Config.DATASET_PATH, "images")
-    if os.path.exists(sub_img) and os.path.isdir(sub_img):
-        return sub_img
-    return Config.DATASET_PATH
+    # Calculate fresh stats and cache them
+    stats = calculate_project_stats(project_folder)
+    _cache['project_stats'][project_folder] = {
+        'data': stats,
+        'timestamp': now
+    }
+    return stats
 
-def get_label_dir():
-    """Returns the path to the labels folder (either root or ./labels)"""
-    sub_lbl = os.path.join(Config.DATASET_PATH, "labels")
-    if os.path.exists(sub_lbl) and os.path.isdir(sub_lbl):
-        return sub_lbl
-    return Config.DATASET_PATH
+def get_cached_all_users_with_roles():
+    """Get cached user list from database"""
+    from labeller.auth import get_all_users_with_roles
 
-def load_state():
-    if os.path.exists(Config.STATE_FILE):
-        with open(Config.STATE_FILE, 'r') as f:
+    cache_entry = _cache['all_users_with_roles']
+    now = time.time()
+
+    # Return cached data if fresh
+    if cache_entry['data'] and (now - cache_entry['timestamp']) < CACHE_TTL:
+        return cache_entry['data']
+
+    # Fetch fresh data and cache it
+    users = get_all_users_with_roles()
+    _cache['all_users_with_roles'] = {
+        'data': users,
+        'timestamp': now
+    }
+    return users
+
+def invalidate_project_cache(project_folder=None):
+    """Invalidate cache for a specific project or all projects"""
+    if project_folder:
+        # Clear cache for specific project
+        _cache['project_stats'].pop(project_folder, None)
+        # Also clear user contributions cache as it depends on projects
+        _cache['user_contributions'].clear()
+    else:
+        # Clear all caches
+        _cache['project_stats'].clear()
+        _cache['user_contributions'].clear()
+
+def invalidate_user_cache():
+    """Invalidate user-related caches"""
+    _cache['all_users_with_roles'] = {'data': None, 'timestamp': 0}
+    _cache['user_contributions'].clear()
+
+def ensure_directories():
+    """Create necessary directories"""
+    os.makedirs(PROJECTS_DIR, exist_ok=True)
+
+def sanitize_folder_name(name):
+    """Convert project name to safe folder name"""
+    import re
+    # Convert to lowercase, replace spaces with underscores
+    safe = name.lower().strip()
+    safe = re.sub(r'[^\w\s-]', '', safe)  # Remove special chars
+    safe = re.sub(r'[-\s]+', '_', safe)   # Replace spaces/hyphens with underscore
+    return safe
+
+def load_projects():
+    """Load all projects by scanning projects/ directory"""
+    projects = {}
+
+    if not os.path.exists(PROJECTS_DIR):
+        return projects
+
+    for folder_name in os.listdir(PROJECTS_DIR):
+        # Skip hidden directories (starting with .)
+        if folder_name.startswith('.'):
+            continue
+
+        project_path = os.path.join(PROJECTS_DIR, folder_name)
+        if not os.path.isdir(project_path):
+            continue
+
+        metadata_file = os.path.join(project_path, 'metadata.json')
+        if os.path.exists(metadata_file):
+            with open(metadata_file, 'r') as f:
+                projects[folder_name] = json.load(f)
+        else:
+            # Legacy support: project exists but no metadata
+            projects[folder_name] = {
+                'name': folder_name.replace('_', ' ').title(),
+                'description': '',
+                'created_at': datetime.now().isoformat()
+            }
+
+    return projects
+
+def save_project_metadata(project_folder, metadata):
+    """Save metadata.json for a project"""
+    project_path = os.path.join(PROJECTS_DIR, project_folder)
+    metadata_file = os.path.join(project_path, 'metadata.json')
+    with open(metadata_file, 'w') as f:
+        json.dump(metadata, f, indent=2)
+
+def get_project(project_folder):
+    """Get a single project by folder name"""
+    project_path = os.path.join(PROJECTS_DIR, project_folder)
+    if not os.path.exists(project_path):
+        return None
+
+    metadata_file = os.path.join(project_path, 'metadata.json')
+    if os.path.exists(metadata_file):
+        with open(metadata_file, 'r') as f:
             return json.load(f)
     return None
 
-def save_state(state):
-    with open(Config.STATE_FILE, 'w') as f:
-        json.dump(state, f, indent=4)
+def get_all_projects():
+    """Get list of all projects with folder name and metadata"""
+    projects_dict = load_projects()
+    projects_list = []
 
-def get_classes():
-    # 1. Try classes.txt (standard priority)
-    class_path = os.path.join(Config.DATASET_PATH, Config.CLASSES_FILE)
-    if os.path.exists(class_path):
-        with open(class_path, 'r') as f:
-            return [line.strip() for line in f.readlines() if line.strip()]
+    for folder_name, metadata in projects_dict.items():
+        project = {
+            'folder': folder_name,
+            'name': metadata.get('name', folder_name.replace('_', ' ').title()),
+            'description': metadata.get('description', ''),
+            'created_at': metadata.get('created_at', '')
+        }
+        projects_list.append(project)
 
-    # 2. Try data.yaml (YOLO standard)
-    yaml_path = os.path.join(Config.DATASET_PATH, Config.YAML_FILE)
-    if os.path.exists(yaml_path):
-        try:
-            with open(yaml_path, 'r') as f:
-                # Simple parsing to avoid strict pyyaml dependency if possible, 
-                # but assume standard yaml structure.
-                # If pyyaml is installed: import yaml; data = yaml.safe_load(f)
-                content = f.read()
-                # Very basic manual parse for "names: [a, b]" or "names:\n  0: a"
-                # For robustness, let's just return empty and let user input if parsing fails without lib
-                pass 
-        except:
-            pass
+    return projects_list
 
-    # 3. Fallback to state
-    state = load_state()
-    if state and 'classes' in state:
-        return state['classes']
-    return []
+def load_project_state(project_folder):
+    """Load project_state.json for user assignments"""
+    project_path = os.path.join(PROJECTS_DIR, project_folder)
+    state_file = os.path.join(project_path, 'project_state.json')
 
-@app.route('/')
-def index():
-    state = load_state()
-    if not state:
-        return render_template('index.html', setup_needed=True)
-    
-    users_progress = []
-    for user, data in state['assignments'].items():
-        total = len(data['images'])
-        completed = len(data['completed'])
-        percent = int((completed / total) * 100) if total > 0 else 0
-        users_progress.append({
-            'name': user,
-            'total': total,
-            'completed': completed,
-            'percent': percent
+    if os.path.exists(state_file):
+        with open(state_file, 'r') as f:
+            return json.load(f)
+    return {'users': {}}
+
+def save_project_state(project_folder, state):
+    """Save project_state.json"""
+    project_path = os.path.join(PROJECTS_DIR, project_folder)
+    state_file = os.path.join(project_path, 'project_state.json')
+    with open(state_file, 'w') as f:
+        json.dump(state, f, indent=2)
+
+def load_data_yaml(project_folder):
+    """Load data.yaml for class definitions"""
+    import yaml
+    project_path = os.path.join(PROJECTS_DIR, project_folder)
+    yaml_file = os.path.join(project_path, 'data.yaml')
+
+    if os.path.exists(yaml_file):
+        with open(yaml_file, 'r') as f:
+            return yaml.safe_load(f)
+    return None
+
+def save_data_yaml(project_folder, data):
+    """Save data.yaml"""
+    import yaml
+    project_path = os.path.join(PROJECTS_DIR, project_folder)
+    yaml_file = os.path.join(project_path, 'data.yaml')
+    with open(yaml_file, 'w') as f:
+        yaml.dump(data, f, default_flow_style=False)
+
+def calculate_project_stats(project_folder):
+    """
+    Calculate statistics for a project based on USER WORK, not pre-imported labels.
+
+    This counts only images that users have marked as "completed" through the
+    annotation interface, not all label files (which may include pre-imported data).
+    """
+    project_path = os.path.join(PROJECTS_DIR, project_folder)
+    images_dir = os.path.join(project_path, 'images')
+    labels_dir = os.path.join(project_path, 'labels')
+
+    # Get list of actual images that exist
+    existing_images = set()
+    if os.path.exists(images_dir):
+        existing_images = set([f for f in os.listdir(images_dir)
+                              if f.lower().endswith(('.jpg', '.jpeg', '.png'))])
+
+    total_images = len(existing_images)
+
+    # Get user-completed images from project_state.json
+    state = load_project_state(project_folder)
+    completed_by_users = set()
+    for user_data in state.get('users', {}).values():
+        completed_by_users.update(user_data.get('completed', []))
+
+    # Filter out "ghost completions" - images marked complete but no longer exist
+    completed_by_users = completed_by_users & existing_images
+
+    # Count only user-completed images and their annotations
+    completed_images = len(completed_by_users)
+    total_annotations = 0
+    for img_name in completed_by_users:
+        label_file = os.path.splitext(img_name)[0] + '.txt'
+        label_path = os.path.join(labels_dir, label_file)
+        if os.path.exists(label_path):
+            with open(label_path, 'r') as f:
+                lines = [line.strip() for line in f if line.strip()]
+                total_annotations += len(lines)
+
+    # Calculate progress based on user work
+    if total_images == 0:
+        progress = 0
+    elif completed_images == 0:
+        progress = 0
+    else:
+        progress = min((completed_images / total_images * 100), 100.0)  # Cap at 100%
+
+    return {
+        'total_images': total_images,
+        'completed_images': completed_images,
+        'total_annotations': total_annotations,
+        'progress': progress
+    }
+
+def get_all_project_stats():
+    """Get global statistics across all projects"""
+    projects = load_projects()
+    total_projects = len(projects)
+    total_images = 0
+    total_annotations = 0
+    active_users = set()
+
+    for project_folder in projects.keys():
+        stats = calculate_project_stats(project_folder)
+        total_images += stats['total_images']
+        total_annotations += stats['total_annotations']
+
+        # Load project state for user info
+        state = load_project_state(project_folder)
+        active_users.update(state.get('users', {}).keys())
+
+    return {
+        'total_projects': total_projects,
+        'total_images': total_images,
+        'total_annotations': total_annotations,
+        'active_users': len(active_users)
+    }
+
+def sync_project_labels_images(project_folder):
+    """
+    Synchronize labels and images in a project.
+
+    Rules:
+    1. If a label exists without a matching image → DELETE the label
+    2. If an image exists without a matching label → CREATE an empty label
+
+    This ensures every image has exactly one label file, and no orphaned labels exist.
+
+    Returns:
+        dict with 'deleted_labels', 'created_labels', and 'errors'
+    """
+    project_path = os.path.join(PROJECTS_DIR, project_folder)
+    images_dir = os.path.join(project_path, 'images')
+    labels_dir = os.path.join(project_path, 'labels')
+
+    # Ensure directories exist
+    os.makedirs(images_dir, exist_ok=True)
+    os.makedirs(labels_dir, exist_ok=True)
+
+    deleted_labels = []
+    created_labels = []
+    errors = []
+
+    # Step 1: Find and delete orphaned labels (labels without images)
+    try:
+        label_files = [f for f in os.listdir(labels_dir) if f.endswith('.txt')]
+        for label_file in label_files:
+            # Get base name (without .txt extension)
+            base_name = os.path.splitext(label_file)[0]
+            # Check if matching image exists (.jpg, .jpeg, or .png)
+            matching_images = [
+                f for f in os.listdir(images_dir)
+                if os.path.splitext(f)[0] == base_name and f.lower().endswith(('.jpg', '.jpeg', '.png'))
+            ]
+
+            if not matching_images:
+                # No matching image - delete the label
+                label_path = os.path.join(labels_dir, label_file)
+                try:
+                    os.remove(label_path)
+                    deleted_labels.append(label_file)
+                    print(f"Deleted orphaned label: {label_file}")
+                except Exception as e:
+                    errors.append(f"Failed to delete {label_file}: {str(e)}")
+
+    except Exception as e:
+        errors.append(f"Error scanning labels: {str(e)}")
+
+    # Step 2: Find images without labels and create empty labels
+    try:
+        image_files = [f for f in os.listdir(images_dir)
+                      if f.lower().endswith(('.jpg', '.jpeg', '.png'))]
+
+        for image_file in image_files:
+            # Get base name (without extension)
+            base_name = os.path.splitext(image_file)[0]
+            label_file = base_name + '.txt'
+            label_path = os.path.join(labels_dir, label_file)
+
+            if not os.path.exists(label_path):
+                # Create empty label file
+                try:
+                    with open(label_path, 'w') as f:
+                        pass  # Create empty file
+                    created_labels.append(label_file)
+                    print(f"Created empty label: {label_file}")
+                except Exception as e:
+                    errors.append(f"Failed to create {label_file}: {str(e)}")
+
+    except Exception as e:
+        errors.append(f"Error scanning images: {str(e)}")
+
+    return {
+        'deleted_labels': deleted_labels,
+        'created_labels': created_labels,
+        'errors': errors,
+        'deleted_count': len(deleted_labels),
+        'created_count': len(created_labels),
+        'error_count': len(errors)
+    }
+
+# ============================================================================
+# PUBLIC ROUTES (No Authentication Required)
+# ============================================================================
+
+@app.route('/health')
+def health():
+    """Health check endpoint for monitoring (no auth required)"""
+    from labeller.auth import get_cloud_client
+
+    try:
+        # Check Turso database connection
+        client = get_cloud_client()
+        result = client.execute('SELECT COUNT(*) FROM users')
+        user_count = result.rows[0][0]
+        client.close()
+
+        return jsonify({
+            'status': 'healthy',
+            'database': 'turso_cloud',
+            'service': 'nestperts',
+            'port': 5000,
+            'users': user_count,
+            'authenticated': 'user' in session
         })
-    
-    return render_template('index.html', setup_needed=False, users=users_progress)
+    except Exception as e:
+        return jsonify({
+            'status': 'unhealthy',
+            'error': str(e)
+        }), 500
 
-@app.route('/setup', methods=['POST'])
-def setup():
-    # 1. Scan Dataset using new logic
-    if not os.path.exists(Config.DATASET_PATH):
-        os.makedirs(Config.DATASET_PATH, exist_ok=True)
-    
-    img_dir = get_image_dir()
-    
-    # Recursive search or simple list? Let's do simple list of known extensions
-    exts = ['*.jpg', '*.jpeg', '*.png', '*.bmp']
-    images = []
-    for ext in exts:
-        images.extend(glob.glob(os.path.join(img_dir, ext)))
-        # Also check uppercase
-        images.extend(glob.glob(os.path.join(img_dir, ext.upper())))
+# ============================================================================
+# AUTHENTICATION ROUTES
+# ============================================================================
 
-    images = [os.path.basename(img) for img in images]
-    images.sort()
+@app.route('/login')
+def login():
+    """Show login page"""
+    error = request.args.get('error')
+    not_approved = request.args.get('not_approved')
+    return render_template('login.html', error=error, not_approved=not_approved)
 
-    if not images:
-        return f"No images found in {img_dir}. Please check your path.", 400
+@app.route('/auth/google')
+def google_login():
+    """Redirect to Google for authentication"""
+    redirect_uri = url_for('google_callback', _external=True)
+    return google.authorize_redirect(redirect_uri)
 
-    # 2. Get Form Data
-    num_users = int(request.form.get('num_users', 1))
-    class_input = request.form.get('classes', '')
-    
-    # 3. Handle Classes
-    classes = [c.strip() for c in class_input.split(',') if c.strip()]
-    if not classes:
-        classes = get_classes()
-    
-    # Save classes.txt to root of dataset for future ref
-    with open(os.path.join(Config.DATASET_PATH, Config.CLASSES_FILE), 'w') as f:
-        f.write('\n'.join(classes))
+@app.route('/auth/google/callback')
+def google_callback():
+    """Handle Google OAuth callback"""
+    try:
+        # Get user info from Google
+        token = google.authorize_access_token()
+        user_info = token.get('userinfo')
 
-    # 4. Split Logic
-    chunk_size = math.ceil(len(images) / num_users)
-    assignments = {}
-    label_dir = get_label_dir()
-    
-    for i in range(num_users):
-        user_name = f"User_{i+1}"
-        start = i * chunk_size
-        end = start + chunk_size
-        user_imgs = images[start:end]
-        
-        # CHANGED: Don't check for existing labels. Start fresh so users can correct data.
-        completed = []
+        if not user_info:
+            return redirect(url_for('login', error='Failed to get user information'))
 
-        assignments[user_name] = {
-            "images": user_imgs,
-            "completed": completed
+        email = user_info.get('email')
+        name = user_info.get('name')
+        picture = user_info.get('picture')
+
+        # Check if email is approved
+        if not is_email_approved(email):
+            return redirect(url_for('login', not_approved=email))
+
+        # Create or update user record
+        create_or_update_user(email, name, picture)
+
+        # Get user permissions
+        from labeller.auth import get_user_permissions
+        perms = get_user_permissions(email)
+
+        # Store user in session (like giving them a wristband)
+        session['user'] = {
+            'email': email,
+            'name': name,
+            'picture': picture,
+            'is_admin': is_admin(email),
+            'role': perms['role'],
+            'permissions': perms
         }
 
-    state = {
-        "classes": classes,
-        "assignments": assignments
+        # Redirect to the page they were trying to access (or home)
+        next_page = request.args.get('next', '/')
+        return redirect(next_page)
+
+    except Exception as e:
+        print(f"Auth error: {e}")
+        return redirect(url_for('login', error='Authentication failed'))
+
+@app.route('/logout')
+def logout():
+    """Log out user"""
+    session.pop('user', None)
+    return redirect(url_for('login'))
+
+@app.route('/admin')
+@admin_required
+def admin_panel():
+    """Admin panel for managing approved emails and user roles"""
+    from labeller.auth import get_all_users_with_roles
+    approved_emails = get_approved_emails()
+    users = get_all_users_with_roles()
+
+    total_logins = sum(u['login_count'] for u in users)
+
+    # Count users by role
+    role_counts = {'admin': 0, 'annotator': 0, 'viewer': 0}
+    for u in users:
+        role_counts[u['role']] = role_counts.get(u['role'], 0) + 1
+
+    return render_template('admin_panel.html',
+                         user=session['user'],
+                         approved_emails=approved_emails,
+                         users=users,
+                         total_logins=total_logins,
+                         role_counts=role_counts)
+
+@app.route('/admin/add-email', methods=['POST'])
+@admin_required
+def admin_add_email():
+    """Add an approved email"""
+    email = request.form.get('email', '').strip().lower()
+    notes = request.form.get('notes', '').strip()
+
+    if not email:
+        flash('Email is required', 'error')
+        return redirect(url_for('admin_panel'))
+
+    added_by = session['user']['email']
+    success = add_approved_email(email, added_by, notes)
+
+    if success:
+        flash(f'Added {email} to approved list', 'success')
+    else:
+        flash(f'{email} is already approved', 'error')
+
+    return redirect(url_for('admin_panel'))
+
+@app.route('/admin/remove-email', methods=['POST'])
+@admin_required
+def admin_remove_email():
+    """Remove an approved email"""
+    email = request.form.get('email', '').strip()
+
+    if not email:
+        flash('Email is required', 'error')
+        return redirect(url_for('admin_panel'))
+
+    # Don't allow removing your own email
+    if email == session['user']['email']:
+        flash('Cannot remove your own email', 'error')
+        return redirect(url_for('admin_panel'))
+
+    remove_approved_email(email)
+    flash(f'Removed {email} from approved list', 'success')
+
+    return redirect(url_for('admin_panel'))
+
+@app.route('/admin/update-role', methods=['POST'])
+@admin_required
+def admin_update_role():
+    """Update a user's role"""
+    from labeller.auth import update_user_role
+    email = request.form.get('email', '').strip()
+    new_role = request.form.get('role', '').strip()
+
+    if not email or not new_role:
+        flash('Email and role are required', 'error')
+        return redirect(url_for('admin_panel'))
+
+    # Don't allow changing your own role
+    if email == session['user']['email']:
+        flash('Cannot change your own role', 'error')
+        return redirect(url_for('admin_panel'))
+
+    try:
+        success = update_user_role(email, new_role)
+        if success:
+            flash(f'Updated {email} to {new_role}', 'success')
+        else:
+            flash(f'Failed to update role', 'error')
+    except ValueError as e:
+        # Base admin protection triggered
+        flash(str(e), 'error')
+
+    return redirect(url_for('admin_panel'))
+
+@app.route('/admin/delete-user', methods=['POST'])
+@admin_required
+def admin_delete_user():
+    """Delete a user completely"""
+    email = request.form.get('email', '').strip()
+
+    if not email:
+        flash('Email is required', 'error')
+        return redirect(url_for('admin_panel'))
+
+    # Don't allow deleting yourself
+    if email == session['user']['email']:
+        flash('Cannot delete your own account', 'error')
+        return redirect(url_for('admin_panel'))
+
+    try:
+        success = delete_user(email)
+        if success:
+            flash(f'Deleted user {email}', 'success')
+        else:
+            flash(f'Failed to delete user', 'error')
+    except ValueError as e:
+        # Base admin protection triggered
+        flash(str(e), 'error')
+
+    return redirect(url_for('admin_panel'))
+
+# ============================================================================
+# ROUTES - MAIN PAGES
+# ============================================================================
+
+@app.route('/')
+@login_required
+def projects_dashboard():
+    """Main projects dashboard - OPTIMIZED with caching"""
+    projects = load_projects()
+    projects_list = []
+
+    # Aggregate stats (calculated inline to avoid double-calculation)
+    aggregate_stats = {
+        'total_projects': len(projects),
+        'total_images': 0,
+        'total_annotations': 0,
+        'active_users': set()
     }
-    save_state(state)
-    
-    return redirect(url_for('index'))
 
-@app.route('/editor/<username>')
-def editor(username):
-    state = load_state()
-    if not state or username not in state['assignments']:
-        return redirect(url_for('index'))
-    return render_template('editor.html', username=username, classes=state['classes'])
+    # Get all auth users with their profile pictures (CACHED)
+    auth_users_dict = {}
+    try:
+        all_auth_users = get_cached_all_users_with_roles()
+        # Index by both email and name for flexible lookup
+        for u in all_auth_users:
+            auth_users_dict[u['email']] = u
+            auth_users_dict[u['name']] = u
+    except Exception as e:
+        print(f"Warning: Could not load auth users: {e}")
 
-# --- API ENDPOINTS ---
+    for project_folder, metadata in projects.items():
+        # Use cached stats instead of recalculating every time
+        stats = get_cached_project_stats(project_folder)
 
-@app.route('/api/next_image/<username>')
-def next_image(username):
-    state = load_state()
-    user_data = state['assignments'][username]
-    all_imgs = user_data['images']
-    completed = set(user_data['completed'])
-    
-    target_img = None
-    for img in all_imgs:
-        if img not in completed:
-            target_img = img
-            break
-    
-    if not target_img and all_imgs:
-        target_img = all_imgs[-1]
-    elif not target_img:
-        return jsonify({"done": True})
+        # Aggregate stats inline
+        aggregate_stats['total_images'] += stats['total_images']
+        aggregate_stats['total_annotations'] += stats['total_annotations']
 
-    return jsonify({
-        "image": target_img,
-        "progress": f"{len(completed)} / {len(all_imgs)}",
-        "is_completed": target_img in completed
-    })
+        # Get first image for thumbnail
+        thumbnail_url = None
+        images_dir = os.path.join(PROJECTS_DIR, project_folder, 'images')
+        if os.path.exists(images_dir):
+            images = [f for f in os.listdir(images_dir)
+                     if f.lower().endswith(('.jpg', '.jpeg', '.png'))]
+            if images:
+                # Get first image (sorted alphabetically)
+                first_image = sorted(images)[0]
+                thumbnail_url = f'/project/{project_folder}/image/{first_image}'
 
-@app.route('/api/image_data/<filename>')
-def get_image_data(filename):
-    txt_name = os.path.splitext(filename)[0] + ".txt"
-    path = os.path.join(get_label_dir(), txt_name)
-    labels = []
-    
-    if os.path.exists(path):
-        with open(path, 'r') as f:
+        # Load project state for user count with profile pictures
+        state = load_project_state(project_folder)
+        user_keys = list(state.get('users', {}).keys())
+
+        # Build users list with name, email, and picture
+        users_with_pics = []
+        seen_emails = set()  # Track unique users to avoid duplicates
+        for user_key in user_keys:
+            # Skip if we've already added this user
+            if user_key in seen_emails:
+                continue
+            seen_emails.add(user_key)
+
+            # Track active users globally
+            aggregate_stats['active_users'].add(user_key)
+
+            # Try to find user in auth database
+            user_info = auth_users_dict.get(user_key, {})
+            users_with_pics.append({
+                'name': user_info.get('name', user_key),
+                'email': user_info.get('email', user_key),
+                'picture': user_info.get('picture')
+            })
+
+        projects_list.append({
+            'folder': project_folder,
+            'name': metadata.get('name', project_folder.replace('_', ' ').title()),
+            'description': metadata.get('description', ''),
+            'created_at': metadata.get('created_at', datetime.now().isoformat()),
+            'users': users_with_pics,
+            'total_images': stats['total_images'],
+            'progress': stats['progress'],
+            'thumbnail_url': thumbnail_url
+        })
+
+    # Sort by creation date (newest first)
+    projects_list.sort(key=lambda x: x['created_at'], reverse=True)
+
+    # Convert active_users set to count
+    aggregate_stats['active_users'] = len(aggregate_stats['active_users'])
+
+    return render_template('projects_dashboard.html',
+                         projects=projects_list,
+                         stats=aggregate_stats,
+                         active_page='projects')
+
+@app.route('/project/<project_folder>')
+@login_required
+def project_detail(project_folder):
+    """Project detail page with task management"""
+    metadata = get_project(project_folder)
+    if not metadata:
+        return "Project not found", 404
+
+    # Use cached stats for performance
+    stats = get_cached_project_stats(project_folder)
+    project_path = os.path.join(PROJECTS_DIR, project_folder)
+    images_dir = os.path.join(project_path, 'images')
+    labels_dir = os.path.join(project_path, 'labels')
+
+    # Get images
+    images = []
+    if os.path.exists(images_dir):
+        for img_file in os.listdir(images_dir):
+            if img_file.lower().endswith(('.jpg', '.jpeg', '.png')):
+                label_file = os.path.splitext(img_file)[0] + '.txt'
+                completed = os.path.exists(os.path.join(labels_dir, label_file))
+                images.append({
+                    'name': img_file,
+                    'completed': completed
+                })
+
+    # Load project state for user details
+    state = load_project_state(project_folder)
+
+    # Get user profile pictures from auth database
+    from labeller.auth import get_all_users_with_roles
+    auth_users = {}
+    try:
+        all_auth_users = get_all_users_with_roles()
+        # Index by both email and name for backwards compatibility
+        for u in all_auth_users:
+            auth_users[u['email']] = u
+            auth_users[u['name']] = u
+    except Exception as e:
+        print(f"Warning: Could not load auth users: {e}")
+
+    users_detail = []
+    for user_key, user_data in state.get('users', {}).items():
+        assigned = user_data.get('assigned', [])
+        completed = user_data.get('completed', [])
+
+        # Count annotations by this user
+        user_annotations = 0
+        for img in completed:
+            label_file = os.path.splitext(img)[0] + '.txt'
+            label_path = os.path.join(labels_dir, label_file)
+            if os.path.exists(label_path):
+                with open(label_path, 'r') as f:
+                    lines = [line.strip() for line in f if line.strip()]
+                    user_annotations += len(lines)
+
+        # Get user info from auth database (user_key might be email or name)
+        auth_user = auth_users.get(user_key, {})
+        display_name = user_data.get('name', auth_user.get('name', user_key))
+        user_picture = auth_user.get('picture')
+        user_email = user_key if '@' in user_key else auth_user.get('email', user_key)
+
+        users_detail.append({
+            'username': display_name,
+            'email': user_email,
+            'picture': user_picture,
+            'assigned': len(assigned),
+            'completed': len(completed),
+            'annotations': user_annotations
+        })
+
+    return render_template('project_detail.html',
+                         project={
+                             'folder': project_folder,
+                             'name': metadata.get('name', project_folder.replace('_', ' ').title()),
+                             'description': metadata.get('description', ''),
+                             'users': list(state.get('users', {}).keys()),
+                             'users_detail': users_detail,
+                             'images': images,
+                             **stats
+                         },
+                         active_page='projects')
+
+@app.route('/help')
+@login_required
+def help_page():
+    """Help and documentation page"""
+    return render_template('help.html', active_page='help')
+
+@app.route('/nestdb')
+@login_required
+def nestdb_page():
+    """
+    NestDB - Supabase-inspired database management interface
+
+    SECURITY: Query execution requires admin or database editor permissions.
+    We check permissions here and pass them to the frontend for UI control.
+
+    Educational Note:
+    Two-layer security:
+    1. Flask checks if user CAN access NestDB interface
+    2. FastAPI backend validates each query execution
+    This prevents unauthorized database modifications.
+    """
+    # Get current user's permissions
+    user_email = session['user']['email']
+    permissions = get_user_permissions(user_email)
+
+    # Check if user has database editing permission
+    if not permissions.get('can_edit_db', False):
+        return '''
+        <html>
+        <head><title>Access Denied</title></head>
+        <body style="font-family: system-ui; padding: 2rem; max-width: 600px; margin: 0 auto;">
+            <h1>🔒 Access Denied</h1>
+            <p>You need <strong>database editor</strong> or <strong>admin</strong> permissions to access NestDB.</p>
+            <p><a href="/" style="color: #D97757;">← Back to Home</a></p>
+        </body>
+        </html>
+        ''', 403
+
+    # Get API base URL from environment
+    api_base_url = os.getenv("API_BASE_URL", "http://localhost:8000")
+
+    return render_template(
+        'nestdb.html',
+        active_page='nestdb',
+        can_edit_db=True,
+        is_admin=is_admin(user_email),
+        api_base_url=api_base_url
+    )
+
+@app.route('/flood-intelligence')
+@login_required
+def flood_intelligence_page():
+    """
+    Flood Intelligence Center - Real-time coastal risk assessment
+
+    Expert tool for monitoring colony flood risk using multi-modal data fusion:
+    - NOAA water levels (real-time)
+    - FEMA flood zones
+    - USGS erosion rates
+    - HURDAT2 hurricane data
+    - TWI survey data
+
+    Uses persistent cache for instant loading with background updates.
+    """
+    # Get current user's permissions
+    user_email = session['user']['email']
+    permissions = get_user_permissions(user_email)
+
+    # Check if user has database editing permission (expert access)
+    if not permissions.get('can_edit_db', False):
+        return '''
+        <html>
+        <head><title>Access Denied</title></head>
+        <body style="font-family: system-ui; padding: 2rem; max-width: 600px; margin: 0 auto;">
+            <h1>🔒 Access Denied</h1>
+            <p>You need <strong>expert</strong> or <strong>admin</strong> permissions to access Flood Intelligence.</p>
+            <p>This tool is designed for experts conducting coastal risk assessments.</p>
+            <p><a href="/" style="color: #7BABAE;">← Back to Home</a></p>
+        </body>
+        </html>
+        ''', 403
+
+    # Get API base URL from environment
+    api_base_url = os.getenv("API_BASE_URL", "http://localhost:8000")
+
+    return render_template(
+        'flood_intelligence.html',
+        active_page='flood_intelligence',
+        api_base_url=api_base_url,
+        is_admin=is_admin(user_email)
+    )
+
+@app.route('/users')
+@login_required
+def users_page():
+    """Global users management page - OPTIMIZED with caching"""
+    users_list = []
+
+    try:
+        # Get authenticated users from auth database (CACHED)
+        auth_users = get_cached_all_users_with_roles()
+
+        # Pre-load all project states ONCE (instead of loading per user)
+        projects = get_all_projects()
+        project_states = {}
+        for proj in projects:
+            project_states[proj['folder']] = {
+                'metadata': proj,
+                'state': load_project_state(proj['folder'])
+            }
+
+        # Build user contribution data efficiently
+        for user in auth_users:
+            user_projects = []
+            total_completed = 0
+            total_annotations = 0
+
+            # Scan pre-loaded project states
+            for proj_folder, proj_data in project_states.items():
+                state = proj_data['state']
+
+                # Look up user by EMAIL (unique identifier)
+                # Note: Old projects may use name as key, new projects use email
+                user_data = state.get('users', {}).get(user['email'])
+                if not user_data:
+                    # Fallback: try name (for backwards compatibility with old projects)
+                    user_data = state.get('users', {}).get(user['name'])
+
+                if not user_data:
+                    continue  # User not in this project
+
+                if user_data.get('assigned') or user_data.get('completed'):  # User has actual assignments in this project
+                    assigned = user_data.get('assigned', [])
+                    completed = user_data.get('completed', [])
+
+                    project_info = {
+                        'folder': proj_folder,
+                        'name': proj_data['metadata']['name'],
+                        'assigned': len(assigned),
+                        'completed': len(completed)
+                    }
+                    user_projects.append(project_info)
+                    total_completed += len(completed)
+
+                    # Count annotations from completed images
+                    # OPTIMIZATION: Only count if user has completed images
+                    if completed:
+                        labels_dir = os.path.join(PROJECTS_DIR, proj_folder, 'labels')
+                        for img_name in completed:
+                            label_file = os.path.join(labels_dir, f"{os.path.splitext(img_name)[0]}.txt")
+                            if os.path.exists(label_file):
+                                # Read file once and count non-empty lines
+                                with open(label_file, 'r') as f:
+                                    total_annotations += sum(1 for line in f if line.strip())
+
+            users_list.append({
+                'name': user['name'],
+                'email': user['email'],
+                'picture': user.get('picture'),
+                'role': user['role'],
+                'first_login': user.get('first_login', ''),
+                'projects': user_projects,
+                'total_projects': len(user_projects),
+                'total_completed': total_completed,
+                'total_annotations': total_annotations
+            })
+
+    except Exception as e:
+        print(f"Error loading users: {e}")
+        import traceback
+        traceback.print_exc()
+
+    return render_template('users_page.html',
+                         users=users_list,
+                         active_page='users')
+
+@app.route('/test-image')
+def test_image():
+    """Test page for debugging image loading"""
+    return send_from_directory(APP_DIR, 'test_image_route.html')
+
+@app.route('/project/<project_folder>/editor/<username>')
+@app.route('/project/<project_folder>/editor/<username>/<int:image_index>')
+@login_required
+def editor(project_folder, username, image_index=None):
+    """Expert annotation editor for a specific user in a project"""
+    metadata = get_project(project_folder)
+    if not metadata:
+        return "Project not found", 404
+
+    # Load project state
+    state = load_project_state(project_folder)
+
+    # Get user's images (both assigned and completed)
+    # Try email first (new system), then name (legacy)
+    user_data = state.get('users', {}).get(username, {})
+    if not user_data:
+        # Try to find by name if email not found (legacy support)
+        from labeller.auth import get_all_users_with_roles
+        auth_users = get_all_users_with_roles()
+        for user in auth_users:
+            if user['name'] == username and user['email'] in state.get('users', {}):
+                user_data = state['users'][user['email']]
+                break
+
+    assigned_images = user_data.get('assigned', [])
+    completed_images = user_data.get('completed', [])
+
+    # Combine assigned and completed (user can review completed work)
+    all_user_images = list(set(assigned_images + completed_images))
+
+    if not all_user_images:
+        display_name = user_data.get('name', username)
+        return f"No images for user '{display_name}'. Please assign images first.", 404
+
+    # If no image_index provided, find first incomplete image
+    if image_index is None:
+        if assigned_images:
+            # assigned_images contains images NOT yet completed
+            first_incomplete = assigned_images[0]
+            try:
+                image_index = all_user_images.index(first_incomplete)
+            except ValueError:
+                image_index = 0
+        else:
+            # All completed or none assigned, go to first image
+            image_index = 0
+
+    # Validate image index
+    if image_index < 0 or image_index >= len(all_user_images):
+        image_index = 0
+
+    # Get current image
+    image_name = all_user_images[image_index]
+    project_path = os.path.join(PROJECTS_DIR, project_folder)
+    images_dir = os.path.join(project_path, 'images')
+    labels_dir = os.path.join(project_path, 'labels')
+    image_path = os.path.join(images_dir, image_name)
+
+    if not os.path.exists(image_path):
+        return f"Image not found: {image_name}", 404
+
+    # Load all potential species for search from database
+    all_real_species = []
+    try:
+        service = get_species_service()
+        all_real_species = service.get_all_species()
+    except Exception as e:
+        print(f"Error loading species from database: {e}")
+        # Fallback to species_list.json
+        species_file = os.path.join(APP_DIR, 'data', 'species_list.json')
+        if os.path.exists(species_file):
+            with open(species_file, 'r') as f:
+                data = json.load(f)
+                all_real_species = data.get('real_species', [])
+
+    # Load classes from project's data.yaml
+    data_yaml_path = os.path.join(project_path, 'data.yaml')
+    project_classes = []
+    class_names = {}  # Map class_id to class_name
+
+    if os.path.exists(data_yaml_path):
+        import yaml
+        with open(data_yaml_path, 'r') as f:
+            yaml_data = yaml.safe_load(f)
+            names = yaml_data.get('names', {})
+
+            # Handle both dict and list formats
+            if isinstance(names, dict):
+                class_names = names
+                for class_id, class_name in names.items():
+                    project_classes.append({'code': class_name, 'name': class_name})
+            elif isinstance(names, list):
+                class_names = {i: name for i, name in enumerate(names)}
+                for i, class_name in enumerate(names):
+                    project_classes.append({'code': class_name, 'name': class_name})
+
+    # class_list for editor: project classes first, then others for searchability
+    class_list = project_classes.copy()
+    seen_codes = {c.get('code') for c in project_classes if c.get('code')}
+    for s in all_real_species:
+        if s.get('code') not in seen_codes:
+            class_list.append(s)
+            seen_codes.add(s.get('code'))
+
+    # If no data.yaml or it was empty, use all_real_species
+    if not class_list:
+        class_list = all_real_species
+
+    # Load existing labels (if any)
+    label_file = os.path.splitext(image_name)[0] + '.txt'
+    label_path = os.path.join(labels_dir, label_file)
+    boxes = []
+
+    if os.path.exists(label_path):
+        with open(label_path, 'r') as f:
             for line in f:
                 parts = line.strip().split()
                 if len(parts) >= 5:
-                    labels.append({
-                        "class_id": int(parts[0]),
-                        "x": float(parts[1]),
-                        "y": float(parts[2]),
-                        "w": float(parts[3]),
-                        "h": float(parts[4])
+                    class_id = int(parts[0])
+                    # Prefer species from 6th column if it exists
+                    species = parts[5] if len(parts) >= 6 else class_names.get(class_id, "bird")
+                    
+                    boxes.append({
+                        'class_id': class_id,
+                        'x_center': float(parts[1]),
+                        'y_center': float(parts[2]),
+                        'width': float(parts[3]),
+                        'height': float(parts[4]),
+                        'species': species
                     })
-    return jsonify(labels)
+
+    # Simple questions structure (can be expanded later)
+    questions = [
+        {
+            "id": 0,
+            "text": "Select the class",
+            "type": "class_select"
+        }
+    ]
+
+    # Navigation indices
+    prev_index = image_index - 1 if image_index > 0 else None
+    next_index = image_index + 1 if image_index < len(all_user_images) - 1 else None
+
+    # URL encode the image name for proper URL handling
+    from urllib.parse import quote
+    image_url = f'/project/{project_folder}/image/{quote(image_name)}'
+
+    # Debug logging
+    import logging
+    logging.info(f"Editor loading: {username} - {image_name}")
+    logging.info(f"Image URL: {image_url}")
+    logging.info(f"Total images: {len(all_user_images)}")
+    logging.info(f"Loaded {len(class_list)} classes from data.yaml")
+
+    return render_template('expert_editor.html',
+                         username=username,
+                         project_id=project_folder,  # Keep as project_id for template compatibility
+                         image_name=image_name,
+                         image_url=image_url,
+                         current_index=image_index,
+                         total_images=len(all_user_images),
+                         prev_index=prev_index,
+                         next_index=next_index,
+                         boxes=boxes,
+                         species_list=class_list,  # Keep as species_list for template compatibility
+                         questions=questions,
+                         back_url=f'/project/{project_folder}')
+
+# ============================================================================
+# API - PROJECT MANAGEMENT
+# ============================================================================
+
+@app.route('/api/projects/upload_chunk', methods=['POST'])
+@api_annotator_required
+def upload_chunk():
+    """Receive and store a single chunk of a large file upload"""
+    try:
+        upload_id = request.form.get('upload_id')
+        chunk_index = int(request.form.get('chunk_index'))
+        total_chunks = int(request.form.get('total_chunks'))
+        chunk_file = request.files.get('chunk')
+
+        if not all([upload_id, chunk_file]) or chunk_index is None or total_chunks is None:
+            return jsonify({'error': 'Missing required fields'}), 400
+
+        # Create temp directory for this upload
+        temp_upload_dir = os.path.join(PROJECTS_DIR, '.uploads', upload_id)
+        os.makedirs(temp_upload_dir, exist_ok=True)
+
+        # Save chunk
+        chunk_path = os.path.join(temp_upload_dir, f'chunk_{chunk_index:06d}')
+        chunk_file.save(chunk_path)
+
+        return jsonify({
+            'success': True,
+            'chunk_index': chunk_index,
+            'total_chunks': total_chunks
+        })
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/projects/assemble_and_create', methods=['POST'])
+@api_annotator_required
+def assemble_and_create():
+    """Assemble uploaded chunks and create project"""
+    import traceback
+    import logging
+    import yaml
+
+    logging.basicConfig(level=logging.DEBUG)
+    logger = logging.getLogger(__name__)
+
+    try:
+        upload_id = request.form.get('upload_id')
+        total_chunks = int(request.form.get('total_chunks'))
+        original_filename = request.form.get('filename')
+        name = request.form.get('name')
+        description = request.form.get('description', '')
+
+        logger.info("=" * 60)
+        logger.info("ASSEMBLING CHUNKED UPLOAD")
+        logger.info("=" * 60)
+        logger.info(f"Upload ID: {upload_id}")
+        logger.info(f"Total chunks: {total_chunks}")
+        logger.info(f"Original file: {original_filename}")
+        logger.info(f"Project name: {name}")
+
+        if not all([upload_id, total_chunks, original_filename, name]):
+            return jsonify({'error': 'Missing required fields'}), 400
+
+        # Assemble chunks
+        temp_upload_dir = os.path.join(PROJECTS_DIR, '.uploads', upload_id)
+        if not os.path.exists(temp_upload_dir):
+            return jsonify({'error': 'Upload not found'}), 404
+
+        # Create temporary assembled file
+        assembled_path = os.path.join(temp_upload_dir, original_filename)
+        logger.info(f"Assembling {total_chunks} chunks into {assembled_path}")
+
+        with open(assembled_path, 'wb') as outfile:
+            for i in range(total_chunks):
+                chunk_path = os.path.join(temp_upload_dir, f'chunk_{i:06d}')
+                if not os.path.exists(chunk_path):
+                    return jsonify({'error': f'Missing chunk {i}'}), 400
+
+                with open(chunk_path, 'rb') as infile:
+                    outfile.write(infile.read())
+
+                # Delete chunk after adding to assembled file
+                os.remove(chunk_path)
+
+                if (i + 1) % 10 == 0:
+                    logger.info(f"  Assembled {i + 1}/{total_chunks} chunks...")
+
+        logger.info(f"All chunks assembled into {assembled_path}")
+
+        # Now process the assembled file (reuse existing logic)
+        project_folder = sanitize_folder_name(name)
+        project_path = os.path.join(PROJECTS_DIR, project_folder)
+
+        # Check if project already exists
+        if os.path.exists(project_path):
+            counter = 1
+            while os.path.exists(f"{project_path}_{counter}"):
+                counter += 1
+            project_folder = f"{project_folder}_{counter}"
+            project_path = os.path.join(PROJECTS_DIR, project_folder)
+
+        # Create project directories
+        os.makedirs(project_path, exist_ok=True)
+        images_dir = os.path.join(project_path, 'images')
+        labels_dir = os.path.join(project_path, 'labels')
+        os.makedirs(images_dir, exist_ok=True)
+        os.makedirs(labels_dir, exist_ok=True)
+        logger.info("Project directories created")
+
+        # Move assembled file to project directory
+        temp_zip_path = os.path.join(project_path, 'temp.zip')
+        shutil.move(assembled_path, temp_zip_path)
+        logger.info("Moved assembled file to project directory")
+
+        # Extract and process (reuse existing extraction logic)
+        has_data_yaml = False
+        has_project_state = False
+        data_yaml_content = None
+        project_state_content = None
+        image_count = 0
+        label_count = 0
+
+        import time
+        with zipfile.ZipFile(temp_zip_path, 'r') as zip_ref:
+            logger.info(f"Opened zip, contains {len(zip_ref.namelist())} files")
+
+            # Analyze structure
+            for file_info in zip_ref.namelist():
+                if file_info.lower().endswith('.yaml') or file_info.lower().endswith('.yml'):
+                    if not has_data_yaml:
+                        has_data_yaml = True
+                        data_yaml_content = zip_ref.read(file_info).decode('utf-8')
+                        logger.info(f"Found {os.path.basename(file_info)}")
+                elif file_info.endswith('project_state.json'):
+                    has_project_state = True
+                    project_state_content = zip_ref.read(file_info).decode('utf-8')
+                    logger.info("Found project_state.json")
+
+            import_type = 'full' if (has_data_yaml and has_project_state) else ('yolo' if has_data_yaml else ('partial' if has_project_state else 'new'))
+            logger.info(f"📦 Import type: {import_type}")
+
+            # Extract files
+            logger.info("📤 Extracting files...")
+            for file_info in zip_ref.namelist():
+                if file_info.endswith('/') or '/.' in file_info or file_info.startswith('.'):
+                    continue
+
+                filename = os.path.basename(file_info)
+                if not filename:
+                    continue
+
+                if filename.lower().endswith(('.jpg', '.jpeg', '.png')):
+                    zip_ref.extract(file_info, project_path)
+                    extracted_path = os.path.join(project_path, file_info)
+                    dest_path = os.path.join(images_dir, filename)
+                    shutil.move(extracted_path, dest_path)
+                    image_count += 1
+                    if image_count % 100 == 0:
+                        logger.info(f"  Extracted {image_count} images...")
+
+                elif filename.endswith('.txt') and 'classes.txt' not in filename:
+                    zip_ref.extract(file_info, project_path)
+                    extracted_path = os.path.join(project_path, file_info)
+                    dest_path = os.path.join(labels_dir, filename)
+                    shutil.move(extracted_path, dest_path)
+                    label_count += 1
+
+                elif (filename.lower().endswith('.yaml') or filename.lower().endswith('.yml')) and has_data_yaml:
+                    with open(os.path.join(project_path, 'data.yaml'), 'w') as f:
+                        f.write(data_yaml_content)
+
+                elif filename == 'project_state.json' and has_project_state:
+                    with open(os.path.join(project_path, 'project_state.json'), 'w') as f:
+                        f.write(project_state_content)
+
+                elif filename == 'classes.txt':
+                    zip_ref.extract(file_info, project_path)
+                    extracted_path = os.path.join(project_path, file_info)
+                    shutil.move(extracted_path, os.path.join(project_path, 'classes.txt'))
+
+            logger.info(f"Extracted {image_count} images, {label_count} labels")
+
+            # Cleanup
+            os.remove(temp_zip_path)
+            for item in os.listdir(project_path):
+                item_path = os.path.join(project_path, item)
+                if os.path.isdir(item_path) and item not in ['images', 'labels']:
+                    shutil.rmtree(item_path)
+
+        # Create missing files
+        if not has_data_yaml:
+            data_yaml = {'path': '.', 'train': 'images', 'val': 'images', 'test': 'images', 'names': {0: 'Bird'}}
+            save_data_yaml(project_folder, data_yaml)
+
+        if not has_project_state:
+            save_project_state(project_folder, {'users': {}})
+
+        metadata = {
+            'name': name,
+            'description': description,
+            'created_at': datetime.now().isoformat(),
+            'import_type': import_type
+        }
+        save_project_metadata(project_folder, metadata)
+
+        # Clean up upload directory
+        shutil.rmtree(temp_upload_dir, ignore_errors=True)
+
+        # Invalidate project cache since new project was created
+        invalidate_project_cache()
+
+        logger.info("Project created successfully")
+        logger.info("=" * 60)
+
+        return jsonify({
+            'success': True,
+            'project_folder': project_folder,
+            'images_uploaded': image_count,
+            'labels_uploaded': label_count,
+            'users_imported': 0
+        })
+
+    except Exception as e:
+        logger.error(f"Error: {e}")
+        logger.error(traceback.format_exc())
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/projects/create', methods=['POST'])
+@api_annotator_required  # Only annotators and admins can create projects
+def create_project():
+    """Create a new project from a zip file with smart import detection"""
+    import traceback
+    import logging
+    import yaml
+
+    # Setup logging
+    logging.basicConfig(level=logging.DEBUG)
+    logger = logging.getLogger(__name__)
+
+    try:
+        logger.info("=" * 60)
+        logger.info("PROJECT CREATION STARTED")
+        logger.info("=" * 60)
+
+        # Get content length to show upload size
+        content_length = request.content_length
+        if content_length:
+            size_mb = content_length / (1024 * 1024)
+            logger.info(f"📦 Upload size: {size_mb:.2f} MB ({content_length:,} bytes)")
+
+        name = request.form.get('name')
+        description = request.form.get('description', '')
+
+        logger.info(f"Project name: {name}")
+        logger.info(f"Description: {description}")
+
+        if not name:
+            logger.error("No project name provided")
+            return jsonify({'error': 'Project name required'}), 400
+
+        # Check for zip file
+        logger.info("Receiving zip file from request...")
+        zip_file = request.files.get('zip_file')
+        if not zip_file:
+            logger.error("No zip file provided")
+            return jsonify({'error': 'Zip file required'}), 400
+
+        if not zip_file.filename.lower().endswith('.zip'):
+            logger.error(f"Invalid file type: {zip_file.filename}")
+            return jsonify({'error': 'Only .zip files are accepted'}), 400
+
+        logger.info(f"Received zip file: {zip_file.filename}")
+
+        # Generate project folder name
+        project_folder = sanitize_folder_name(name)
+        project_path = os.path.join(PROJECTS_DIR, project_folder)
+
+        # Check if project already exists
+        if os.path.exists(project_path):
+            # Add suffix to make unique
+            counter = 1
+            while os.path.exists(f"{project_path}_{counter}"):
+                counter += 1
+            project_folder = f"{project_folder}_{counter}"
+            project_path = os.path.join(PROJECTS_DIR, project_folder)
+
+        logger.info(f"Project folder: {project_folder}")
+        logger.info(f"Project path: {project_path}")
+
+        # Create project directory
+        os.makedirs(project_path, exist_ok=True)
+        images_dir = os.path.join(project_path, 'images')
+        labels_dir = os.path.join(project_path, 'labels')
+        os.makedirs(images_dir, exist_ok=True)
+        os.makedirs(labels_dir, exist_ok=True)
+        logger.info("Directories created")
+
+        # Save and analyze zip
+        temp_zip_path = os.path.join(project_path, 'temp.zip')
+        logger.info(f"Saving zip file to disk (this may take a while for large files)...")
+
+        # Save with progress logging
+        import time
+        start_time = time.time()
+        zip_file.save(temp_zip_path)
+        elapsed = time.time() - start_time
+
+        # Get actual file size
+        zip_size = os.path.getsize(temp_zip_path)
+        zip_size_mb = zip_size / (1024 * 1024)
+        logger.info(f"Saved zip to: {temp_zip_path}")
+        logger.info(f"Zip file size: {zip_size_mb:.2f} MB, took {elapsed:.2f}s to save")
+
+        # Analyze zip structure
+        has_data_yaml = False
+        has_project_state = False
+        data_yaml_content = None
+        project_state_content = None
+        image_count = 0
+        label_count = 0
+
+        try:
+            with zipfile.ZipFile(temp_zip_path, 'r') as zip_ref:
+                logger.info(f"Opened zip, contains {len(zip_ref.namelist())} files")
+
+                # First pass: detect structure
+                for file_info in zip_ref.namelist():
+                    # Check for any YAML file (could be data.yaml, dataset.yaml, etc.)
+                    if file_info.lower().endswith('.yaml') or file_info.lower().endswith('.yml'):
+                        if not has_data_yaml:  # Only take the first YAML found
+                            has_data_yaml = True
+                            data_yaml_content = zip_ref.read(file_info).decode('utf-8')
+                            yaml_filename = os.path.basename(file_info)
+                            logger.info(f"Found {yaml_filename} - this is a YOLO dataset import")
+                    elif file_info.endswith('project_state.json') or file_info == 'project_state.json':
+                        has_project_state = True
+                        project_state_content = zip_ref.read(file_info).decode('utf-8')
+                        logger.info("Found project_state.json - importing user assignments")
+
+                # Determine import type
+                if has_data_yaml and has_project_state:
+                    import_type = 'full'
+                    logger.info("📦 Import type: FULL (has data.yaml + project_state.json)")
+                elif has_data_yaml:
+                    import_type = 'yolo'
+                    logger.info("📦 Import type: YOLO (has data.yaml)")
+                elif has_project_state:
+                    import_type = 'partial'
+                    logger.info("📦 Import type: PARTIAL (has project_state.json)")
+                else:
+                    import_type = 'new'
+                    logger.info("📦 Import type: NEW (fresh dataset)")
+
+                # Second pass: extract files
+                logger.info(f"📦 Starting extraction of {len(zip_ref.namelist())} files...")
+                extraction_start = time.time()
+
+                for file_info in zip_ref.namelist():
+                    # Skip directories and hidden files
+                    if file_info.endswith('/') or '/.' in file_info or file_info.startswith('.'):
+                        continue
+
+                    filename = os.path.basename(file_info)
+                    if not filename:
+                        continue
+
+                    # Extract images
+                    if filename.lower().endswith(('.jpg', '.jpeg', '.png')):
+                        zip_ref.extract(file_info, project_path)
+                        extracted_path = os.path.join(project_path, file_info)
+                        dest_path = os.path.join(images_dir, filename)
+                        shutil.move(extracted_path, dest_path)
+                        image_count += 1
+                        if image_count % 100 == 0:
+                            logger.info(f"  Extracted {image_count} images...")
+
+                    # Extract labels
+                    elif filename.endswith('.txt') and 'classes.txt' not in filename:
+                        zip_ref.extract(file_info, project_path)
+                        extracted_path = os.path.join(project_path, file_info)
+                        dest_path = os.path.join(labels_dir, filename)
+                        shutil.move(extracted_path, dest_path)
+                        label_count += 1
+                        if label_count % 100 == 0 and label_count > 0:
+                            logger.info(f"  Extracted {label_count} labels...")
+
+                    # Extract YAML file (rename to data.yaml for consistency)
+                    elif (filename.lower().endswith('.yaml') or filename.lower().endswith('.yml')) and has_data_yaml:
+                        dest_path = os.path.join(project_path, 'data.yaml')
+                        with open(dest_path, 'w') as f:
+                            f.write(data_yaml_content)
+                        logger.info(f"Preserved {filename} as data.yaml")
+
+                    # Extract project_state.json
+                    elif filename == 'project_state.json' and has_project_state:
+                        dest_path = os.path.join(project_path, 'project_state.json')
+                        with open(dest_path, 'w') as f:
+                            f.write(project_state_content)
+                        logger.info("Preserved project_state.json")
+
+                    # Extract classes.txt if present
+                    elif filename == 'classes.txt':
+                        dest_path = os.path.join(project_path, 'classes.txt')
+                        zip_ref.extract(file_info, project_path)
+                        extracted_path = os.path.join(project_path, file_info)
+                        shutil.move(extracted_path, dest_path)
+                        logger.info("Preserved classes.txt")
+
+                extraction_elapsed = time.time() - extraction_start
+                logger.info(f"Extracted {image_count} images, {label_count} labels from zip in {extraction_elapsed:.2f}s")
+
+                # Clean up temp files
+                logger.info("🧹 Cleaning up temporary files...")
+                os.remove(temp_zip_path)
+                # Remove any extracted directories
+                for item in os.listdir(project_path):
+                    item_path = os.path.join(project_path, item)
+                    if os.path.isdir(item_path) and item not in ['images', 'labels']:
+                        shutil.rmtree(item_path)
+
+        except Exception as zip_error:
+            logger.error(f"Error processing zip: {zip_error}")
+            logger.error(traceback.format_exc())
+            raise
+
+        # Create or preserve data.yaml
+        if not has_data_yaml:
+            logger.info("Creating default data.yaml...")
+            data_yaml = {
+                'path': '.',
+                'train': 'images',
+                'val': 'images',
+                'test': 'images',
+                'names': {0: 'Bird'}
+            }
+            save_data_yaml(project_folder, data_yaml)
+            logger.info("Created data.yaml with default class (Bird)")
+
+        # Create or preserve project_state.json
+        if not has_project_state:
+            logger.info("Creating empty project_state.json...")
+            project_state = {'users': {}}
+            save_project_state(project_folder, project_state)
+            logger.info("Created empty project_state.json")
+
+        # Create metadata.json
+        logger.info("Creating metadata.json...")
+        metadata = {
+            'name': name,
+            'description': description,
+            'created_at': datetime.now().isoformat(),
+            'import_type': import_type
+        }
+        save_project_metadata(project_folder, metadata)
+        logger.info("Created metadata.json")
+
+        # Count imported users
+        users_imported = 0
+        if has_project_state:
+            state = load_project_state(project_folder)
+            users_imported = len(state.get('users', {}))
+
+        logger.info("=" * 60)
+        logger.info("PROJECT CREATION SUCCESS")
+        logger.info(f"  Project folder: {project_folder}")
+        logger.info(f"  Images: {image_count}")
+        logger.info(f"  Labels: {label_count}")
+        logger.info(f"  Import type: {import_type}")
+        logger.info(f"  Users: {users_imported}")
+        logger.info("=" * 60)
+
+        return jsonify({
+            'success': True,
+            'project_folder': project_folder,
+            'images_uploaded': image_count,
+            'labels_uploaded': label_count,
+            'users_imported': users_imported,
+            'import_type': import_type
+        })
+
+    except Exception as e:
+        logger.error("=" * 60)
+        logger.error("PROJECT CREATION FAILED")
+        logger.error(f"Error: {str(e)}")
+        logger.error("Traceback:")
+        logger.error(traceback.format_exc())
+        logger.error("=" * 60)
+        return jsonify({'error': f'{type(e).__name__}: {str(e)}'}), 500
+
+@app.route('/api/projects/assign-task', methods=['POST'])
+@login_required  # Any authenticated user can assign tasks
+def assign_task():
+    """
+    Smart image assignment with random selection.
+
+    Features:
+    - Random selection from unassigned pool
+    - Can add more images to existing users
+    - Uses centralized user registry
+    - Tracks assignment across projects
+    """
+    try:
+        import random
+
+        data = request.json
+        project_folder = data.get('project_id')
+        # Support both email (new) and username (legacy) parameters
+        user_email = data.get('user_email') or data.get('username')
+        num_images = data.get('num_images', 10)
+        allow_reassign = data.get('allow_reassign', False)  # Allow taking assigned images
+
+        if not user_email:
+            return jsonify({'error': 'User email required'}), 400
+
+        # Get user info from auth system
+        from labeller.auth import get_all_users_with_roles
+        auth_users = {u['email']: u for u in get_all_users_with_roles()}
+
+        # If username was provided instead of email, try to find the email
+        if '@' not in user_email:
+            # Legacy: username provided, find matching email
+            matching_users = [u for u in auth_users.values() if u['name'] == user_email]
+            if not matching_users:
+                return jsonify({'error': f'User not found: {user_email}'}), 404
+            if len(matching_users) > 1:
+                return jsonify({'error': f'Multiple users with name "{user_email}". Please use email instead.'}), 400
+            user_email = matching_users[0]['email']
+
+        user_name = auth_users.get(user_email, {}).get('name', user_email)
+
+        metadata = get_project(project_folder)
+        if not metadata:
+            return jsonify({'error': 'Project not found'}), 404
+
+        # Get all images in project
+        images_dir = os.path.join(PROJECTS_DIR, project_folder, 'images')
+        all_images = [f for f in os.listdir(images_dir)
+                     if f.lower().endswith(('.jpg', '.jpeg', '.png'))]
+
+        if not all_images:
+            return jsonify({'error': 'No images in project'}), 400
+
+        # Load project state
+        state = load_project_state(project_folder)
+
+        # Get already assigned images
+        assigned_images = set()
+        for user_data in state.get('users', {}).values():
+            assigned_images.update(user_data.get('assigned', []))
+
+        # Get user's current assignments (using EMAIL as key)
+        user_current = set()
+        if user_email in state.get('users', {}):
+            user_current = set(state['users'][user_email].get('assigned', []))
+
+        # Determine selection pool
+        if allow_reassign:
+            # Can select from all images
+            available = [img for img in all_images if img not in user_current]
+            selection_type = "all images (including assigned to others)"
+        else:
+            # Only unassigned images
+            unassigned = [img for img in all_images if img not in assigned_images]
+            available = unassigned
+            selection_type = "unassigned images only"
+
+        # Calculate statistics for better feedback
+        total_images = len(all_images)
+        total_assigned = len(assigned_images)
+        total_unassigned = total_images - total_assigned
+        user_already_has = len(user_current)
+
+        if not available:
+            if allow_reassign:
+                return jsonify({
+                    'error': f'All {total_images} images already assigned to {user_name}'
+                }), 400
+            else:
+                return jsonify({
+                    'error': f'No unassigned images available. {total_assigned}/{total_images} images are already assigned to other users. Enable "Allow Reassignment" to assign already-assigned images.'
+                }), 400
+
+        # Random selection
+        num_to_assign = min(num_images, len(available))
+        to_assign = random.sample(available, num_to_assign)
+
+        # Initialize user in project state if needed (using EMAIL as key)
+        if 'users' not in state:
+            state['users'] = {}
+        if user_email not in state['users']:
+            state['users'][user_email] = {
+                'name': user_name,  # Store name for display purposes
+                'assigned': [],
+                'completed': []
+            }
+
+        # Add new assignments (avoid duplicates)
+        current_assigned = set(state['users'][user_email]['assigned'])
+        new_assignments = [img for img in to_assign if img not in current_assigned]
+        state['users'][user_email]['assigned'].extend(new_assignments)
+
+        # Save project state
+        save_project_state(project_folder, state)
+
+        # Update global user registry (still uses name for legacy reasons)
+        user_service = get_user_service()
+        if user_service:
+            try:
+                # Create user if doesn't exist
+                if not user_service.get_user(user_name):
+                    user_service.create_user(user_name)
+
+                # Add project to user's project list
+                user_service.add_user_to_project(user_name, project_folder)
+            except Exception as e:
+                print(f"Warning: Could not update user service: {e}")
+
+        return jsonify({
+            'success': True,
+            'assigned': len(new_assignments),
+            'total_assigned': len(state['users'][user_email]['assigned']),
+            'total_images': total_images,
+            'total_unassigned': total_unassigned,
+            'available': len(available),
+            'selection_type': selection_type,
+            'message': f'Assigned {len(new_assignments)} new image(s) to {user_name}. Total: {len(state["users"][user_email]["assigned"])}/{total_images} images. Unassigned remaining: {total_unassigned - len(new_assignments)}'
+        })
+
+    except Exception as e:
+        import traceback
+        print(f"Error in assign_task: {traceback.format_exc()}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/projects/<project_folder>/remove-user', methods=['POST'])
+@login_required
+def remove_user_from_project(project_folder):
+    """
+    Remove a user from a project (unassign all their images).
+
+    This removes the user from project_state.json but KEEPS any label files
+    they created. Use this to fix bad assignments or remove inactive users.
+    """
+    try:
+        data = request.json
+        user_email = data.get('user_email')
+
+        if not user_email:
+            return jsonify({'error': 'User email required'}), 400
+
+        metadata = get_project(project_folder)
+        if not metadata:
+            return jsonify({'error': 'Project not found'}), 404
+
+        # Load project state
+        state = load_project_state(project_folder)
+
+        # Check if user exists in project
+        if user_email not in state.get('users', {}):
+            return jsonify({'error': f'User not found in project'}), 404
+
+        # Get user info for logging
+        user_data = state['users'][user_email]
+        user_name = user_data.get('name', user_email)
+        assigned_count = len(user_data.get('assigned', []))
+        completed_count = len(user_data.get('completed', []))
+
+        # Remove user from project
+        del state['users'][user_email]
+
+        # Save updated state
+        save_project_state(project_folder, state)
+
+        return jsonify({
+            'success': True,
+            'message': f'Removed {user_name} from project',
+            'removed': {
+                'name': user_name,
+                'email': user_email,
+                'assigned': assigned_count,
+                'completed': completed_count
+            }
+        })
+
+    except Exception as e:
+        import traceback
+        print(f"Error removing user from project: {traceback.format_exc()}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/projects/<project_folder>/sync', methods=['POST'])
+@admin_required  # Only admins can sync project data
+def api_sync_project_data(project_folder):
+    """
+    Synchronize images and labels for a project.
+
+    Ensures data hygiene by:
+    1. Deleting labels without matching images (orphaned labels)
+    2. Creating empty labels for images without labels
+
+    This endpoint is admin-only to prevent accidental data loss.
+    """
+    try:
+        # Verify project exists
+        metadata = get_project(project_folder)
+        if not metadata:
+            return jsonify({'error': 'Project not found'}), 404
+
+        # Run sync
+        result = sync_project_labels_images(project_folder)
+
+        return jsonify({
+            'success': True,
+            'project': project_folder,
+            'deleted_labels': result['deleted_labels'],
+            'created_labels': result['created_labels'],
+            'errors': result['errors'],
+            'summary': {
+                'deleted_count': result['deleted_count'],
+                'created_count': result['created_count'],
+                'error_count': result['error_count']
+            }
+        }), 200
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/projects/<project_folder>/delete', methods=['DELETE'])
+@admin_required  # CRITICAL: Only admins can delete projects!
+def delete_project(project_folder):
+    """
+    Delete an entire project permanently.
+
+    Deletes:
+    - All images
+    - All labels
+    - Project metadata
+    - Project state
+    - User assignments
+    """
+    try:
+        import logging
+        logging.basicConfig(level=logging.INFO)
+        logger = logging.getLogger(__name__)
+
+        logger.info(f"Delete project request: {project_folder}")
+
+        # Verify project exists
+        metadata = get_project(project_folder)
+        if not metadata:
+            return jsonify({'error': 'Project not found'}), 404
+
+        project_path = os.path.join(PROJECTS_DIR, project_folder)
+
+        # Get stats before deletion for logging
+        stats = calculate_project_stats(project_folder)
+        logger.info(f"Deleting project with {stats['total_images']} images, {stats['total_annotations']} annotations")
+
+        # Remove project from global users registry
+        user_service = get_user_service()
+        if user_service:
+            try:
+                state = load_project_state(project_folder)
+                project_users = list(state.get('users', {}).keys())
+
+                # Update each user's project list
+                with open(user_service.users_file, 'r') as f:
+                    users_data = json.load(f)
+
+                for user in users_data.get('users', []):
+                    if project_folder in user.get('projects', []):
+                        user['projects'].remove(project_folder)
+                        logger.info(f"Removed project from user: {user['name']}")
+
+                # Save updated users registry
+                with open(user_service.users_file, 'w') as f:
+                    json.dump(users_data, f, indent=2)
+
+                logger.info(f"Updated {len(project_users)} user(s) in global registry")
+
+            except Exception as e:
+                logger.warning(f"Could not update users registry: {e}")
+                # Continue with deletion even if user update fails
+
+        # Delete the entire project directory
+        if os.path.exists(project_path):
+            shutil.rmtree(project_path)
+            logger.info(f"Deleted project directory: {project_path}")
+        else:
+            logger.warning(f"Project directory not found: {project_path}")
+
+        # Invalidate all project caches since we deleted a project
+        invalidate_project_cache()
+
+        return jsonify({
+            'success': True,
+            'message': f'Project "{metadata["name"]}" deleted successfully',
+            'deleted': {
+                'images': stats['total_images'],
+                'annotations': stats['total_annotations'],
+                'users': len(project_users) if user_service else 0
+            }
+        })
+
+    except Exception as e:
+        import traceback
+        print(f"Error deleting project: {traceback.format_exc()}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/projects/<project_folder>/export/<format>')
+def export_project(project_folder, format):
+    """Export project annotations in specified format"""
+    try:
+        metadata = get_project(project_folder)
+        if not metadata:
+            return jsonify({'error': 'Project not found'}), 404
+
+        project_path = os.path.join(PROJECTS_DIR, project_folder)
+        export_dir = os.path.join(project_path, f'export_{format}')
+        os.makedirs(export_dir, exist_ok=True)
+
+        if format == 'yolo':
+            # YOLO format: zip entire project (images, labels, data.yaml, project_state.json)
+            zip_path = os.path.join(project_path, f'{project_folder}_yolo.zip')
+            with zipfile.ZipFile(zip_path, 'w') as zipf:
+                # Add images
+                images_dir = os.path.join(project_path, 'images')
+                for img in os.listdir(images_dir):
+                    zipf.write(os.path.join(images_dir, img), f'images/{img}')
+
+                # Add labels
+                labels_dir = os.path.join(project_path, 'labels')
+                if os.path.exists(labels_dir):
+                    for label in os.listdir(labels_dir):
+                        zipf.write(os.path.join(labels_dir, label), f'labels/{label}')
+
+                # Add data.yaml
+                data_yaml_path = os.path.join(project_path, 'data.yaml')
+                if os.path.exists(data_yaml_path):
+                    zipf.write(data_yaml_path, 'data.yaml')
+
+                # Add project_state.json
+                state_path = os.path.join(project_path, 'project_state.json')
+                if os.path.exists(state_path):
+                    zipf.write(state_path, 'project_state.json')
+
+                # Add metadata.json
+                metadata_path = os.path.join(project_path, 'metadata.json')
+                if os.path.exists(metadata_path):
+                    zipf.write(metadata_path, 'metadata.json')
+
+            return send_file(zip_path, as_attachment=True)
+
+        elif format == 'geojson':
+            # GeoJSON format: convert bounding boxes to geographic features
+            # This is a placeholder - actual implementation would need GPS coordinates
+            geojson = {
+                "type": "FeatureCollection",
+                "features": []
+            }
+
+            geojson_path = os.path.join(export_dir, 'annotations.geojson')
+            with open(geojson_path, 'w') as f:
+                json.dump(geojson, f, indent=2)
+
+            zip_path = os.path.join(project_path, f'{project_folder}_geojson.zip')
+            with zipfile.ZipFile(zip_path, 'w') as zipf:
+                zipf.write(geojson_path, 'annotations.geojson')
+
+            return send_file(zip_path, as_attachment=True)
+
+        elif format == 'coco':
+            # COCO format: standard object detection format
+            coco = {
+                "info": {
+                    "description": metadata['name'],
+                    "date_created": metadata.get('created_at', '')
+                },
+                "images": [],
+                "annotations": [],
+                "categories": [{"id": 0, "name": "bird"}]
+            }
+
+            # Convert YOLO to COCO format
+            # (Implementation details would go here)
+
+            coco_path = os.path.join(export_dir, 'annotations.json')
+            with open(coco_path, 'w') as f:
+                json.dump(coco, f, indent=2)
+
+            zip_path = os.path.join(project_path, f'{project_folder}_coco.zip')
+            with zipfile.ZipFile(zip_path, 'w') as zipf:
+                zipf.write(coco_path, 'annotations.json')
+
+                # Add images
+                images_dir = os.path.join(project_path, 'images')
+                for img in os.listdir(images_dir):
+                    zipf.write(os.path.join(images_dir, img), f'images/{img}')
+
+            return send_file(zip_path, as_attachment=True)
+
+        else:
+            return jsonify({'error': 'Unsupported format'}), 400
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+# ============================================================================
+# COMPATIBILITY ROUTES (for existing editor)
+# ============================================================================
+
+@app.route('/project/<project_folder>/image/<path:filename>')
+def serve_project_image(project_folder, filename):
+    """Serve image from a specific project"""
+    import logging
+    logging.info(f"[IMAGE REQUEST] project={project_folder}, filename={filename}")
+
+    images_dir = os.path.join(PROJECTS_DIR, project_folder, 'images')
+    full_path = os.path.join(images_dir, filename)
+
+    logging.info(f"[IMAGE REQUEST] Looking for: {full_path}")
+    logging.info(f"[IMAGE REQUEST] Exists: {os.path.exists(full_path)}")
+
+    if os.path.exists(full_path):
+        logging.info(f"[IMAGE REQUEST] Serving {filename}")
+        return send_from_directory(images_dir, filename)
+
+    logging.error(f"[IMAGE REQUEST] ✗ Not found: {full_path}")
+    return jsonify({'error': 'Image not found', 'path': full_path}), 404
 
 @app.route('/images/<path:filename>')
 def serve_image(filename):
-    # Serve from the detected image directory
-    img_dir = get_image_dir()
-    print(f"[SERVE_IMAGE] Requested: {filename}")
-    print(f"[SERVE_IMAGE] Serving from: {img_dir}")
-    print(f"[SERVE_IMAGE] Full path: {os.path.join(img_dir, filename)}")
-    print(f"[SERVE_IMAGE] File exists: {os.path.exists(os.path.join(img_dir, filename))}")
+    """Serve images from any project (legacy route)"""
+    # Try to find image in any project
+    if os.path.exists(PROJECTS_DIR):
+        for project_folder in os.listdir(PROJECTS_DIR):
+            images_dir = os.path.join(PROJECTS_DIR, project_folder, 'images')
+            if os.path.exists(os.path.join(images_dir, filename)):
+                return send_from_directory(images_dir, filename)
 
-    # Use absolute path
-    img_dir_abs = os.path.abspath(img_dir)
-    print(f"[SERVE_IMAGE] Absolute path: {img_dir_abs}")
+    return jsonify({'error': 'Image not found'}), 404
 
-    return send_from_directory(img_dir_abs, filename)
-
-@app.route('/api/save', methods=['POST'])
-def save_labels():
-    data = request.json
-    username = data.get('username')
-    filename = data.get('filename')
-    labels = data.get('labels') 
-    
-    txt_name = os.path.splitext(filename)[0] + ".txt"
-    
-    # Ensure label dir exists
-    label_dir = get_label_dir()
-    if not os.path.exists(label_dir):
-        os.makedirs(label_dir, exist_ok=True)
-        
-    txt_path = os.path.join(label_dir, txt_name)
-    
-    with open(txt_path, 'w') as f:
-        for l in labels:
-            line = f"{l['class_id']} {l['x']:.6f} {l['y']:.6f} {l['w']:.6f} {l['h']:.6f}\n"
-            f.write(line)
-            
-    state = load_state()
-    if filename not in state['assignments'][username]['completed']:
-        state['assignments'][username]['completed'].append(filename)
-        save_state(state)
-        
-    return jsonify({"status": "success"})
-
-@app.route('/api/rename_user', methods=['POST'])
-def rename_user():
-    data = request.json
-    old_name = data.get('old_name')
-    new_name = data.get('new_name')
-    
-    if not new_name or not new_name.strip():
-         return jsonify({"status": "error", "message": "Invalid name"}), 400
-
-    new_name = new_name.strip()
-    
-    state = load_state()
-    if not state or old_name not in state['assignments']:
-        return jsonify({"status": "error", "message": "User not found"}), 404
-        
-    if new_name in state['assignments']:
-        return jsonify({"status": "error", "message": "Name already taken"}), 400
-        
-    # Rename the key in the dictionary
-    state['assignments'][new_name] = state['assignments'].pop(old_name)
-    save_state(state)
-    
-    return jsonify({"status": "success", "new_name": new_name})
-
-@app.route('/api/add_class', methods=['POST'])
-def add_class():
-    new_class = request.json.get('name')
-    state = load_state()
-    if new_class and new_class not in state['classes']:
-        state['classes'].append(new_class)
-        save_state(state)
-
-        with open(os.path.join(Config.DATASET_PATH, Config.CLASSES_FILE), 'w') as f:
-            f.write('\n'.join(state['classes']))
-
-        return jsonify({"status": "success", "id": len(state['classes'])-1})
-    return jsonify({"status": "exists"})
-
-# ============================================================================
-# NESTVISION CORRECTION ENDPOINTS
-# ============================================================================
-
-CROPS_DIR = "labeller/nestvision/crops"
-
-def ensure_crops_dir():
-    """Ensure crops directory exists"""
-    os.makedirs(CROPS_DIR, exist_ok=True)
-
-@app.route('/api/correction/upload', methods=['POST'])
-def upload_correction_image():
-    """Upload image and detections for correction - integrates with existing labeller"""
+@app.route('/api/save_annotations', methods=['POST'])
+@api_annotator_required
+def save_annotations():
+    """Save annotations for an image"""
     try:
         data = request.json
-        image_data = data.get('image_base64')
-        detections = data.get('detections', [])
+        project_folder = data.get('project_id')  # Still called project_id in frontend
+        username = data.get('username')
+        image_name = data.get('image_name')
+        boxes = data.get('boxes', [])
 
-        # Decode and save image
-        import base64
-        image_bytes = base64.b64decode(image_data)
+        if not all([project_folder, username, image_name]):
+            return jsonify({'error': 'Missing required fields'}), 400
 
-        # Generate unique filename with timestamp
-        timestamp = int(time.time() * 1000)
-        image_filename = f"correction_{timestamp}.jpg"
+        # Save labels
+        labels_dir = os.path.join(PROJECTS_DIR, project_folder, 'labels')
+        label_file = os.path.splitext(image_name)[0] + '.txt'
+        label_path = os.path.join(labels_dir, label_file)
 
-        # Save to nestvision/images (same as regular labelling)
-        img_dir = get_image_dir()
-        label_dir = get_label_dir()
+        with open(label_path, 'w') as f:
+            for box in boxes:
+                # YOLO format: class_id x_center y_center width height [species]
+                # Ensure class_id is always 0 (not None)
+                class_id = box.get('class_id') or 0
+                x_center = box.get('x_center', box.get('x', 0))
+                y_center = box.get('y_center', box.get('y', 0))
+                width = box.get('width', 0)
+                height = box.get('height', 0)
+                species = box.get('species')
 
-        # Ensure directories exist
-        os.makedirs(img_dir, exist_ok=True)
-        os.makedirs(label_dir, exist_ok=True)
+                # Only include species if it's actually set (not None/empty)
+                if species:
+                    line = f"{class_id} {x_center} {y_center} {width} {height} {species}"
+                else:
+                    # No species assigned - just save bbox coordinates
+                    line = f"{class_id} {x_center} {y_center} {width} {height}"
+                f.write(line + '\n')
 
-        img_path = os.path.join(img_dir, image_filename)
+        # Update data.yaml with new species (if any)
+        species_in_boxes = set()
+        for box in boxes:
+            species = box.get('species')
+            if species:  # Only add non-empty species
+                species_in_boxes.add(species)
 
-        print(f"[CORRECTION] DATASET_PATH: {Config.DATASET_PATH}")
-        print(f"[CORRECTION] img_dir: {img_dir}")
-        print(f"[CORRECTION] label_dir: {label_dir}")
-        print(f"[CORRECTION] Saving image to: {img_path}")
-
-        with open(img_path, 'wb') as f:
-            f.write(image_bytes)
-
-        print(f"[CORRECTION] Image saved successfully. Size: {len(image_bytes)} bytes")
-
-        # Save initial detections as labels (YOLO format)
-        txt_filename = os.path.splitext(image_filename)[0] + ".txt"
-        labels_path = os.path.join(label_dir, txt_filename)
-
-        # Get image dimensions
-        img = cv2.imdecode(np.frombuffer(image_bytes, np.uint8), cv2.IMREAD_COLOR)
-        if img is None:
-            print(f"[CORRECTION] ERROR: Could not decode image!")
-            return jsonify({"status": "error", "message": "Could not decode image"}), 500
-
-        img_h, img_w = img.shape[:2]
-        print(f"[CORRECTION] Image dimensions: {img_w}x{img_h}")
-
-        with open(labels_path, 'w') as f:
-            for det in detections:
-                bbox = det.get('bbox', [])
-                if len(bbox) == 4:
-                    # Convert from [x1, y1, x2, y2] to YOLO format [class_id, x_center, y_center, width, height]
-                    x1, y1, x2, y2 = bbox
-                    x_center = (x1 + x2) / 2 / img_w
-                    y_center = (y1 + y2) / 2 / img_h
-                    width = (x2 - x1) / img_w
-                    height = (y2 - y1) / img_h
-
-                    # Use class_id 0 for now (will be corrected by user)
-                    f.write(f"0 {x_center:.6f} {y_center:.6f} {width:.6f} {height:.6f}\n")
-
-        print(f"[CORRECTION] Labels saved: {len(detections)} detections")
-
-        # Load or create project state
-        state = load_state()
-
-        if not state:
-            # Create initial state if it doesn't exist
-            classes = get_classes()
-            if not classes:
-                classes = ["bird"]
-
-            state = {
-                "classes": classes,
-                "assignments": {
-                    "Corrections": {
-                        "images": [image_filename],
-                        "completed": []
-                    }
-                }
-            }
-        else:
-            # Add to Corrections user or create if doesn't exist
-            if "Corrections" not in state['assignments']:
-                state['assignments']['Corrections'] = {
-                    "images": [],
-                    "completed": []
+        if species_in_boxes:
+            # Load current data.yaml
+            data_yaml = load_data_yaml(project_folder)
+            if not data_yaml:
+                # Create default data.yaml if it doesn't exist
+                data_yaml = {
+                    'path': '.',
+                    'train': 'images',
+                    'val': 'images',
+                    'test': 'images',
+                    'names': {0: 'Bird'}
                 }
 
-            # Add image to corrections user's assignment
-            if image_filename not in state['assignments']['Corrections']['images']:
-                state['assignments']['Corrections']['images'].append(image_filename)
+            # Get existing class names (convert keys to int if they're strings)
+            names = data_yaml.get('names', {})
+            # Normalize to {int: str} format
+            names_normalized = {}
+            if isinstance(names, dict):
+                for k, v in names.items():
+                    names_normalized[int(k)] = v
+            elif isinstance(names, list):
+                for i, v in enumerate(names):
+                    names_normalized[i] = v
 
-        # Save updated state
-        save_state(state)
+            # Find species codes that exist in names values
+            existing_species = set(names_normalized.values())
 
-        print(f"[CORRECTION] Added to project state for user 'Corrections'")
+            # Find new species to add
+            new_species = species_in_boxes - existing_species
 
-        # Return URL to existing labeller editor
-        return jsonify({
-            "status": "success",
-            "image_filename": image_filename,
-            "correction_url": f"/editor/Corrections"
-        })
+            if new_species:
+                # Get next available class ID
+                max_class_id = max(names_normalized.keys()) if names_normalized else -1
+                next_class_id = max_class_id + 1
+
+                # Add new species
+                for species_code in sorted(new_species):  # Sort for consistency
+                    names_normalized[next_class_id] = species_code
+                    print(f"Added new species to data.yaml: {next_class_id} -> {species_code}")
+                    next_class_id += 1
+
+                # Update data.yaml
+                data_yaml['names'] = names_normalized
+                data_yaml['nc'] = len(names_normalized)
+                save_data_yaml(project_folder, data_yaml)
+                print(f"Updated data.yaml with {len(new_species)} new species. New nc: {data_yaml['nc']}")
+
+        # Update user progress
+        state = load_project_state(project_folder)
+
+        # Find user by email (new) or username (legacy)
+        user_key = None
+        if '@' in username:
+            # Email provided
+            user_key = username if username in state.get('users', {}) else None
+        else:
+            # Username provided (legacy) - try to find email
+            user_key = username if username in state.get('users', {}) else None
+            if not user_key:
+                # Try to map username to email
+                from labeller.auth import get_all_users_with_roles
+                auth_users = get_all_users_with_roles()
+                for user in auth_users:
+                    if user['name'] == username and user['email'] in state.get('users', {}):
+                        user_key = user['email']
+                        break
+
+        if user_key:
+            user_data = state['users'][user_key]
+            completed = user_data.get('completed', [])
+            if image_name not in completed:
+                completed.append(image_name)
+                user_data['completed'] = completed
+                save_project_state(project_folder, state)
+
+        # Invalidate cache since project stats changed
+        invalidate_project_cache(project_folder)
+
+        return jsonify({'success': True})
 
     except Exception as e:
-        print(f"[CORRECTION] ERROR: {e}")
-        import traceback
-        traceback.print_exc()
-        return jsonify({"status": "error", "message": str(e)}), 500
+        return jsonify({'error': str(e)}), 500
 
-@app.route('/api/crop/save', methods=['POST'])
-def save_crop():
-    """Save a species-identified crop"""
-    ensure_crops_dir()
-
+@app.route('/api/get_project_classes', methods=['POST'])
+@api_annotator_required
+def get_project_classes():
+    """Get updated class list from project's data.yaml"""
     try:
         data = request.json
-        crop_base64 = data.get('crop_base64')
-        species_code = data.get('species_code')
-        species_name = data.get('species_name', species_code)
+        project_folder = data.get('project_id')
 
-        if not crop_base64 or not species_code:
-            return jsonify({"status": "error", "message": "Missing crop data or species"}), 400
+        if not project_folder:
+            return jsonify({'error': 'Missing project_id'}), 400
 
-        # Decode crop image
-        import base64
-        crop_bytes = base64.b64decode(crop_base64)
+        # Load data.yaml
+        data_yaml = load_data_yaml(project_folder)
+        if not data_yaml:
+            return jsonify({'classes': []})
 
-        # Generate unique filename
-        timestamp = int(time.time() * 1000)
-        safe_species = species_name.replace(' ', '_').replace('/', '_')
-        crop_filename = f"{safe_species}_{timestamp}.jpg"
-        crop_path = os.path.join(CROPS_DIR, crop_filename)
+        # Get class names
+        names = data_yaml.get('names', {})
 
-        # Save crop
-        with open(crop_path, 'wb') as f:
-            f.write(crop_bytes)
-
-        return jsonify({
-            "status": "success",
-            "filename": crop_filename,
-            "path": crop_path
-        })
-
-    except Exception as e:
-        return jsonify({"status": "error", "message": str(e)}), 500
-
-def load_mobilesam_model():
-    """Lazy load MobileSAM model from ultralytics on first use"""
-    global MOBILESAM_MODEL
-
-    if MOBILESAM_MODEL is None:
-        try:
-            from ultralytics import SAM
-
-            print(f"Loading MobileSAM model...")
-
-            # Load MobileSAM - ultralytics will download if not present
-            # MobileSAM is optimized for speed and efficiency
-            MOBILESAM_MODEL = SAM(MOBILESAM_MODEL_NAME)
-
-            # Get device info
-            device = 'cuda' if torch.cuda.is_available() else 'cpu'
-
-            # Enable half precision (FP16) for faster inference on GPU
-            if torch.cuda.is_available() and USE_HALF_PRECISION:
-                try:
-                    # Ultralytics handles half precision internally with half=True parameter
-                    print(f"Half precision (FP16) enabled for faster inference")
-                except Exception as e:
-                    print(f"Could not enable half precision: {e}")
-
-            # Warmup: Run a dummy inference to initialize CUDA/model
-            # This ensures first real inference is fast
-            if torch.cuda.is_available():
-                print(f"Warming up MobileSAM on GPU...")
-                dummy_img = np.zeros((SEGMENT_IMGSZ, SEGMENT_IMGSZ, 3), dtype=np.uint8)
-                try:
-                    MOBILESAM_MODEL(
-                        dummy_img,
-                        points=[[SEGMENT_IMGSZ//2, SEGMENT_IMGSZ//2]],
-                        labels=[1],
-                        imgsz=SEGMENT_IMGSZ,
-                        verbose=False
-                    )
-                    print("GPU warmup complete!")
-                except Exception as e:
-                    print(f"GPU warmup failed: {e}, continuing anyway...")
-
-            print(f"MobileSAM loaded successfully on {device.upper()}!")
-            print(f"Image size: {SEGMENT_IMGSZ}x{SEGMENT_IMGSZ}")
-            print(f"Segmentation confidence threshold: {SEGMENT_CONF_THRESHOLD}")
-
-        except Exception as e:
-            print(f"Failed to load MobileSAM model: {e}")
-            import traceback
-            traceback.print_exc()
-            raise
-
-    return MOBILESAM_MODEL
-
-@app.route('/api/sam_status', methods=['GET'])
-def sam_status():
-    """Returns segmentation model status and device info (now using MobileSAM)"""
-    try:
-        model = load_mobilesam_model()
-        device = 'cuda' if torch.cuda.is_available() else 'cpu'
-        return jsonify({
-            "status": "ready",
-            "device": device,
-            "model": "MobileSAM (Ultralytics)",
-            "model_name": MOBILESAM_MODEL_NAME,
-            "confidence_threshold": SEGMENT_CONF_THRESHOLD,
-            "image_size": SEGMENT_IMGSZ,
-            "half_precision": USE_HALF_PRECISION and torch.cuda.is_available(),
-            "gpu_available": torch.cuda.is_available(),
-            "gpu_name": torch.cuda.get_device_name(0) if torch.cuda.is_available() else None,
-            "optimizations": {
-                "low_resolution": True,
-                "image_caching": True,
-                "fast_mask_processing": True,
-                "fp16": USE_HALF_PRECISION and torch.cuda.is_available()
-            }
-        })
-    except Exception as e:
-        return jsonify({"status": "error", "message": str(e)}), 500
-
-@app.route('/api/sam_segment', methods=['POST'])
-def sam_segment():
-    """
-    Accepts a single point click {x, y} in normalized 0-1, point_index, mode ('fast' or 'sahi'), and image filename.
-    Returns a bounding box from MobileSAM segmentation of the clicked object.
-    NOW USING: MobileSAM from ultralytics for fast, accurate segmentation.
-    OPTIMIZED: Lower resolution, caching, and FP16 for sub-second inference.
-    Supports SAHI (Slicing Aided Hyper Inference) for better small object detection.
-    """
-    try:
-        import time
-
-        data = request.json
-        filename = data.get('filename')
-        point_data = data.get('point')
-        point_index = data.get('point_index', 0)
-        detection_mode = data.get('mode', 'fast')  # 'fast' or 'sahi'
-
-        if not point_data:
-            return jsonify({"status": "error", "message": "No point provided"}), 400
-
-        # Get image path
-        img_path = os.path.join(get_image_dir(), filename)
-
-        # Check cache to avoid reloading same image
-        global IMAGE_CACHE
-        current_time = time.time()
-
-        # Clear cache if expired
-        if IMAGE_CACHE["filename"] and IMAGE_CACHE["timestamp"]:
-            if current_time - IMAGE_CACHE["timestamp"] > CACHE_TIMEOUT:
-                IMAGE_CACHE = {"filename": None, "preprocessed_image": None, "timestamp": None}
-
-        # Load or use cached image dimensions
-        if IMAGE_CACHE["filename"] != filename:
-            image = cv2.imread(img_path)
-            if image is None:
-                return jsonify({"status": "error", "message": "Image not found"}), 404
-            h, w = image.shape[:2]
-            IMAGE_CACHE["filename"] = filename
-            IMAGE_CACHE["preprocessed_image"] = (h, w)
-            IMAGE_CACHE["timestamp"] = current_time
-        else:
-            h, w = IMAGE_CACHE["preprocessed_image"]
-
-        # Convert normalized to pixel coordinates
-        click_x = int(float(point_data['x']) * w)
-        click_y = int(float(point_data['y']) * h)
-
-        print(f"MobileSAM point {point_index}: [{click_x}, {click_y}] on {w}x{h} (mode: {detection_mode})")
-
-        # Load MobileSAM model
-        model = load_mobilesam_model()
-
-        # Configure parameters based on detection mode
-        if detection_mode == 'sahi':
-            # SAHI mode: Higher resolution for better small object detection
-            imgsz = 1024  # Higher resolution
-            retina_masks = True  # Better quality masks
-            conf_threshold = 0.3  # Lower threshold for small objects
-            print(f"  → Using SAHI mode: imgsz={imgsz}, retina_masks=True, conf={conf_threshold}")
-        else:
-            # Fast mode: Optimized for speed
-            imgsz = SEGMENT_IMGSZ  # 720 for speed
-            retina_masks = False  # Faster
-            conf_threshold = SEGMENT_CONF_THRESHOLD
-            print(f"  → Using Fast mode: imgsz={imgsz}, retina_masks=False, conf={conf_threshold}")
-
-        # Use lock to prevent concurrent inference (prevents GPU stalling)
-        # Only one inference at a time ensures stable, fast performance
-        with INFERENCE_LOCK:
-            # Run MobileSAM with selected mode parameters
-            start = time.time()
-
-            inference_params = {
-                "source": img_path,
-                "points": [[click_x, click_y]],
-                "labels": [1],  # 1 = foreground point
-                "imgsz": imgsz,
-                "retina_masks": retina_masks,
-                "conf": conf_threshold,
-                "verbose": False,
-                "stream": False  # Don't stream, return immediately
-            }
-
-            # Add half precision for GPU
-            if torch.cuda.is_available() and USE_HALF_PRECISION:
-                inference_params["half"] = True
-
-            results = model(**inference_params)
-            elapsed = time.time() - start
-            print(f"  → Inference: {elapsed:.3f}s")
-
-            # Quick validation
-            if not results or len(results) == 0:
-                return jsonify({"status": "error", "message": "No segmentation generated"}), 404
-
-            result = results[0]
-
-            if result.masks is None or len(result.masks) == 0:
-                return jsonify({"status": "error", "message": "No object segmented at clicked point"}), 404
-
-            # Intelligent mask processing and selection
-            mask_start = time.time()
-
-            # Get image area for size validation
-            image_area = h * w
-            max_area = image_area * MAX_SEGMENT_AREA_RATIO
-
-            print(f"  → Processing {len(result.masks)} mask(s)...")
-
-            # Try all masks and find the best one (smallest that contains the point)
-            valid_masks = []
-
-            for i, mask_obj in enumerate(result.masks):
-                mask = mask_obj.data[0].cpu().numpy()
-                mask_h, mask_w = mask.shape
-                mask_binary = (mask > 0.5).astype(np.uint8)
-
-                # Calculate mask area
-                mask_area = np.sum(mask_binary)
-
-                # Skip if mask is too large (likely whole image or wrong segmentation)
-                if mask_area > max_area:
-                    print(f"    Mask {i}: TOO LARGE ({mask_area/image_area:.1%} of image), skipping")
-                    continue
-
-                # Skip if mask is too small (noise)
-                if mask_area < MIN_SEGMENT_AREA:
-                    print(f"    Mask {i}: Too small ({mask_area} pixels), skipping")
-                    continue
-
-                # Get bounding box
-                rows = np.any(mask_binary, axis=1)
-                cols = np.any(mask_binary, axis=0)
-
-                if not rows.any() or not cols.any():
-                    continue
-
-                ymin_m, ymax_m = np.where(rows)[0][[0, -1]]
-                xmin_m, xmax_m = np.where(cols)[0][[0, -1]]
-
-                # Scale coordinates from mask size to original image size
-                scale_x = w / mask_w
-                scale_y = h / mask_h
-
-                xmin_img = int(xmin_m * scale_x)
-                xmax_img = int(xmax_m * scale_x)
-                ymin_img = int(ymin_m * scale_y)
-                ymax_img = int(ymax_m * scale_y)
-
-                # Check if clicked point is inside this mask's bbox
-                if not (xmin_img <= click_x <= xmax_img and ymin_img <= click_y <= ymax_img):
-                    print(f"    Mask {i}: Click point outside bbox, skipping")
-                    continue
-
-                # Check if clicked point is actually in the mask (not just bbox)
-                # Scale click point to mask coordinates
-                click_x_mask = int(click_x / scale_x)
-                click_y_mask = int(click_y / scale_y)
-
-                # Clamp to mask bounds
-                click_x_mask = max(0, min(mask_w - 1, click_x_mask))
-                click_y_mask = max(0, min(mask_h - 1, click_y_mask))
-
-                if mask_binary[click_y_mask, click_x_mask] == 0:
-                    print(f"    Mask {i}: Click point not in mask, skipping")
-                    continue
-
-                valid_masks.append({
-                    "mask": mask_binary,
-                    "area": mask_area,
-                    "bbox": (xmin_img, ymin_img, xmax_img, ymax_img),
-                    "index": i
+        # Convert to list format expected by frontend
+        class_list = []
+        if isinstance(names, dict):
+            for class_id, class_name in names.items():
+                class_list.append({
+                    'id': int(class_id),
+                    'code': class_name,
+                    'name': class_name
+                })
+        elif isinstance(names, list):
+            for i, class_name in enumerate(names):
+                class_list.append({
+                    'id': i,
+                    'code': class_name,
+                    'name': class_name
                 })
 
-                bbox_area = (xmax_img - xmin_img) * (ymax_img - ymin_img)
-                print(f"    Mask {i}: VALID! Area={mask_area} ({mask_area/image_area:.1%}), bbox_area={bbox_area}")
+        return jsonify({'classes': class_list})
 
-            if len(valid_masks) == 0:
-                return jsonify({"status": "error", "message": "No valid mask found. Click directly on the bird."}), 404
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
-            # Select the smallest valid mask (most precise for small objects)
-            best_mask = min(valid_masks, key=lambda m: m["area"])
-            xmin, ymin, xmax, ymax = best_mask["bbox"]
+@app.route('/api/users', methods=['GET'])
+@api_login_required
+def get_all_users():
+    """Get all authenticated users who can be assigned to tasks"""
+    try:
+        from labeller.auth import get_all_users_with_roles
 
-            print(f"  → Selected mask {best_mask['index']} (smallest valid)")
+        # Get all logged-in users from authentication system
+        auth_users = get_all_users_with_roles()
 
-            # Add padding to bounding box for better coverage
-            box_w = xmax - xmin
-            box_h = ymax - ymin
-            pad_w = int(box_w * BBOX_PADDING_RATIO)
-            pad_h = int(box_h * BBOX_PADDING_RATIO)
+        # Filter to only include annotators and admins (can annotate)
+        # Count projects for each user
+        projects = get_all_projects()  # Function defined in this file
 
-            # Apply padding and clamp to image bounds
-            xmin = max(0, xmin - pad_w)
-            ymin = max(0, ymin - pad_h)
-            xmax = min(w - 1, xmax + pad_w)
-            ymax = min(h - 1, ymax + pad_h)
+        users = []
+        for u in auth_users:
+            if not u['can_annotate']:
+                continue
 
-            print(f"  → Added {pad_w}px horizontal and {pad_h}px vertical padding")
+            # Count how many projects this user is in
+            project_count = 0
+            for proj in projects:
+                state = load_project_state(proj['folder'])
+                # Check by email (new) or name (legacy)
+                if u['email'] in state.get('users', {}) or u['name'] in state.get('users', {}):
+                    project_count += 1
 
-            mask_time = time.time() - mask_start
-            print(f"  → Mask processing: {mask_time:.3f}s")
+            users.append({
+                'name': u['name'],
+                'email': u['email'],
+                'picture': u['picture'],
+                'role': u['role'],
+                'can_annotate': u['can_annotate'],
+                'project_count': project_count
+            })
 
-            # Calculate normalized bbox (YOLO format) with padding applied
-            box_w = xmax - xmin
-            box_h = ymax - ymin
-            center_x = float((xmin + box_w / 2) / w)
-            center_y = float((ymin + box_h / 2) / h)
-            norm_w = float(box_w / w)
-            norm_h = float(box_h / h)
+        return jsonify({'users': users})
 
-            total_time = time.time() - start
-            print(f"  → Total: {total_time:.3f}s | bbox: [{xmin}, {ymin}, {xmax}, {ymax}]")
+    except Exception as e:
+        print(f"Error getting users: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/users/create', methods=['POST'])
+@admin_required  # Only admins can access this endpoint
+def create_user():
+    """
+    DEPRECATED: Manual user creation is disabled.
+    Users are automatically created when they sign in with Google OAuth.
+    """
+    return jsonify({
+        'error': 'Manual user creation is disabled',
+        'message': 'Users are automatically created when they sign in with Google OAuth. Please direct users to sign in at /login.'
+    }), 403
+
+@app.route('/api/projects/<project_folder>/images/unassigned', methods=['GET'])
+@api_login_required  # Require authentication to view project info
+def get_unassigned_images(project_folder):
+    """Get count of unassigned images in a project"""
+    try:
+        metadata = get_project(project_folder)
+        if not metadata:
+            return jsonify({'error': 'Project not found'}), 404
+
+        # Get all images
+        images_dir = os.path.join(PROJECTS_DIR, project_folder, 'images')
+        all_images = [f for f in os.listdir(images_dir)
+                     if f.lower().endswith(('.jpg', '.jpeg', '.png'))]
+
+        # Get assigned images
+        state = load_project_state(project_folder)
+        assigned_images = set()
+        for user_data in state.get('users', {}).values():
+            assigned_images.update(user_data.get('assigned', []))
+
+        # Calculate unassigned
+        unassigned_count = len([img for img in all_images if img not in assigned_images])
 
         return jsonify({
-            "status": "success",
-            "point_index": point_index,
-            "box": {
-                "x": center_x,
-                "y": center_y,
-                "w": norm_w,
-                "h": norm_h
-            },
-            "inference_time": elapsed,
-            "total_time": total_time
+            'total_images': len(all_images),
+            'assigned_images': len(assigned_images),
+            'unassigned_images': unassigned_count
         })
 
     except Exception as e:
-        print(f"MobileSAM error: {e}")
-        import traceback
-        traceback.print_exc()
-        return jsonify({"status": "error", "message": str(e)}), 500
+        return jsonify({'error': str(e)}), 500
 
-@app.route('/api/sam_auto_detect', methods=['POST'])
-def sam_auto_detect():
+@app.route('/api/correction/upload', methods=['POST'])
+def upload_correction():
     """
-    Auto-detection is not available with MobileSAM (requires prompts).
-    This endpoint is kept for compatibility but returns an informative message.
-    Use point-based segmentation via /api/sam_segment instead.
+    Upload an image with initial detections for expert correction.
+    All corrections are saved to the 'corrections' project.
+
+    This endpoint is called by NestVision's "Train with Experts" button.
     """
-    return jsonify({
-        "status": "info",
-        "message": "Auto-detection not available with MobileSAM. Please use point-based segmentation.",
-        "boxes": [],
-        "count": 0
-    })
+    import base64
+    import time
+
+    try:
+        data = request.get_json()
+
+        if not data or 'image_base64' not in data:
+            return jsonify({'error': 'No image data provided'}), 400
+
+        # Decode image
+        image_data = base64.b64decode(data['image_base64'])
+        detections = data.get('detections', [])
+
+        # Ensure 'corrections' project exists
+        corrections_folder = 'corrections'
+        corrections_path = os.path.join(PROJECTS_DIR, corrections_folder)
+
+        if not os.path.exists(corrections_path):
+            # Create corrections project
+            os.makedirs(corrections_path, exist_ok=True)
+            os.makedirs(os.path.join(corrections_path, 'images'), exist_ok=True)
+            os.makedirs(os.path.join(corrections_path, 'labels'), exist_ok=True)
+
+            # Create metadata
+            metadata = {
+                'name': 'Corrections',
+                'description': 'Expert corrections and refinements from NestVision',
+                'created_at': datetime.now().isoformat()
+            }
+            save_project_metadata(corrections_folder, metadata)
+
+            # Create data.yaml with default bird class
+            import yaml
+            data_yaml = {
+                'path': corrections_path,
+                'train': 'images',
+                'val': 'images',
+                'names': {0: 'bird'}
+            }
+            with open(os.path.join(corrections_path, 'data.yaml'), 'w') as f:
+                yaml.dump(data_yaml, f, default_flow_style=False)
+
+            # Initialize project state
+            save_project_state(corrections_folder, {'users': {}})
+
+        # Generate unique filename with timestamp
+        timestamp = int(time.time() * 1000)  # milliseconds
+        image_filename = f"correction_{timestamp}.jpg"
+
+        # Save image
+        image_path = os.path.join(corrections_path, 'images', image_filename)
+        with open(image_path, 'wb') as f:
+            f.write(image_data)
+
+        # Save detections as YOLO labels
+        label_filename = f"correction_{timestamp}.txt"
+        label_path = os.path.join(corrections_path, 'labels', label_filename)
+
+        with open(label_path, 'w') as f:
+            for det in detections:
+                # Convert detections to YOLO format: class x_center y_center width height
+                # Assuming detections come in format with bbox [x1, y1, x2, y2]
+                bbox = det.get('bbox', [])
+                if len(bbox) == 4:
+                    x1, y1, x2, y2 = bbox
+                    x_center = (x1 + x2) / 2
+                    y_center = (y1 + y2) / 2
+                    width = x2 - x1
+                    height = y2 - y1
+
+                    # Class 0 for bird (default)
+                    class_id = det.get('class_id', 0)
+                    f.write(f"{class_id} {x_center:.6f} {y_center:.6f} {width:.6f} {height:.6f}\n")
+
+        # Return URL to edit this image in Nestperts
+        correction_url = f"/project/{corrections_folder}/editor/unassigned"
+
+        return jsonify({
+            'success': True,
+            'message': 'Correction uploaded successfully',
+            'image_filename': image_filename,
+            'correction_url': correction_url,
+            'project': 'corrections'
+        })
+
+    except Exception as e:
+        import traceback
+        print(f"Error uploading correction: {e}")
+        print(traceback.format_exc())
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/delete_image', methods=['POST'])
+@api_annotator_required  # Only annotators and admins can delete images
+def delete_image():
+    """
+    Delete an image and its label from the project
+
+    Use case: Remove low-quality images from the dataset
+    """
+    try:
+        data = request.json
+        project_folder = data.get('project_id')
+        username = data.get('username')
+        image_name = data.get('image_name')
+
+        if not all([project_folder, username, image_name]):
+            return jsonify({'error': 'Missing required fields'}), 400
+
+        project_path = os.path.join(PROJECTS_DIR, project_folder)
+        images_dir = os.path.join(project_path, 'images')
+        labels_dir = os.path.join(project_path, 'labels')
+
+        # Get image and label paths
+        image_path = os.path.join(images_dir, image_name)
+        label_file = os.path.splitext(image_name)[0] + '.txt'
+        label_path = os.path.join(labels_dir, label_file)
+
+        # Check if image exists
+        if not os.path.exists(image_path):
+            return jsonify({'error': 'Image not found'}), 404
+
+        # Delete image file
+        os.remove(image_path)
+        print(f"Deleted image: {image_name}")
+
+        # Delete label file if exists
+        if os.path.exists(label_path):
+            os.remove(label_path)
+            print(f"Deleted label: {label_file}")
+
+        # Update user's task list (remove from both assigned and completed)
+        state = load_project_state(project_folder)
+        if username in state.get('users', {}):
+            user_data = state['users'][username]
+
+            # Remove from assigned list
+            assigned = user_data.get('assigned', [])
+            if image_name in assigned:
+                assigned.remove(image_name)
+                user_data['assigned'] = assigned
+
+            # Remove from completed list
+            completed = user_data.get('completed', [])
+            if image_name in completed:
+                completed.remove(image_name)
+                user_data['completed'] = completed
+
+            save_project_state(project_folder, state)
+
+        return jsonify({
+            'success': True,
+            'message': f'Deleted {image_name} and its label'
+        })
+
+    except Exception as e:
+        import traceback
+        print(f"Error deleting image: {traceback.format_exc()}")
+        return jsonify({'error': str(e)}), 500
+
+# ============================================================================
+# API - SAM SEGMENTATION & SPECIES CLASSIFICATION
+# ============================================================================
+
+# Lazy load services
+_bird_detector = None
+_species_service = None
+_user_service = None
+
+def get_cv_config():
+    """Get CV configuration with latest server/config.yaml values"""
+    # Reload config to pick up any manual changes to server/config.yaml
+    config = load_server_config()
+    return config.get('cv', {})
+
+# Track loaded model paths to detect changes
+_loaded_classifier_path = None
+
+def get_bird_detector():
+    """Lazy load BirdDetector with classifier"""
+    global _bird_detector, _loaded_classifier_path
+    
+    cv_config = get_cv_config()
+    rel_cls_path = cv_config.get('classifier', 'models/classifier_swift.onnx')
+    model_path = os.path.join(PROJECT_ROOT, rel_cls_path)
+    
+    # Reload if not loaded or if the configured path has changed
+    if _bird_detector is None or _loaded_classifier_path != model_path:
+        try:
+            from labeller.onnx_classifier import get_bird_detector as _get_detector
+            
+            # Optional: custom classes file from config
+            classes_path = None
+            if 'classifier_classes' in cv_config:
+                classes_path = os.path.join(PROJECT_ROOT, cv_config['classifier_classes'])
+            
+            _bird_detector = _get_detector(model_path=model_path, classes_file=classes_path)
+            _loaded_classifier_path = model_path
+            print(f"✓ SwiftID classifier loaded from: {model_path}")
+        except Exception as e:
+            print(f"✗ Could not load SwiftID: {e}")
+            import traceback
+            traceback.print_exc()
+    return _bird_detector
+
+def get_species_service():
+    """Lazy load SpeciesService"""
+    global _species_service
+    if _species_service is None:
+        try:
+            from labeller.services.species_service import get_species_service as _get_svc
+            _species_service = _get_svc()
+            print("SpeciesService loaded")
+        except Exception as e:
+            print(f" Could not load SpeciesService: {e}")
+    return _species_service
+
+def get_user_service():
+    """Lazy load UserService"""
+    global _user_service
+    if _user_service is None:
+        try:
+            from labeller.services.user_service import get_user_service as _get_svc
+            _user_service = _get_svc(PROJECTS_DIR)
+            print("UserService loaded")
+        except Exception as e:
+            print(f" Could not load UserService: {e}")
+    return _user_service
+
+def get_wikipedia_images_func(species_name, max_images=5, offset=0):
+    """Get Wikipedia images using function import (not class)"""
+    try:
+        from labeller.services.wikipedia_images_v2 import get_wikipedia_images
+        return get_wikipedia_images(species_name, max_images=max_images, offset=offset)
+    except Exception as e:
+        print(f" Could not load Wikipedia images: {e}")
+        return []
+
+@app.route('/api/detect_all_birds', methods=['POST'])
+@api_annotator_required
+def detect_all_birds():
+    """
+    Detect all birds in an image using swift.onnx detector.
+
+    This is much faster than SAM clicking:
+    - Finds ALL birds in one pass (~100-200ms)
+    - Returns YOLO format bounding boxes
+    - 85-90% accuracy
+    """
+    try:
+        data = request.json
+        image_name = data.get('image_name')
+        project_folder = data.get('project_id', 'nestvision')
+        conf_threshold = data.get('confidence', 0.25)  # Configurable confidence
+
+        if not image_name:
+            return jsonify({'error': 'Missing image_name'}), 400
+
+        # Get image path
+        images_dir = os.path.join(PROJECTS_DIR, project_folder, 'images')
+        image_path = os.path.join(images_dir, image_name)
+
+        if not os.path.exists(image_path):
+            return jsonify({'error': f'Image not found: {image_name}'}), 404
+
+        # Load model path from config
+        cv_config = get_cv_config()
+        rel_model_path = cv_config.get('model', 'models/swift.onnx')
+        model_path = os.path.join(PROJECT_ROOT, rel_model_path)
+
+        # Initialize swift detector (cached)
+        if not hasattr(detect_all_birds, 'detector') or getattr(detect_all_birds, 'path', None) != model_path:
+            import onnxruntime as ort
+
+            print(f"Loading Swift detector from: {model_path}")
+            if not os.path.exists(model_path):
+                return jsonify({'error': f'Model not found at {model_path}'}), 500
+
+            providers = ['CPUExecutionProvider']
+            if 'CUDAExecutionProvider' in ort.get_available_providers():
+                providers.insert(0, 'CUDAExecutionProvider')
+                print("  Using GPU")
+            else:
+                print("  Using CPU")
+
+            detect_all_birds.detector = ort.InferenceSession(model_path, providers=providers)
+            detect_all_birds.path = model_path
+            print("✓ Swift detector loaded")
+        detector = detect_all_birds.detector
+
+        # Read and preprocess image
+        import cv2
+        img = cv2.imread(image_path)
+        if img is None:
+            return jsonify({'error': 'Failed to read image'}), 500
+
+        orig_height, orig_width = img.shape[:2]
+
+        # USE SAHI for large images (> 1024x1024)
+        if orig_height > 1024 or orig_width > 1024:
+            try:
+                from sahi import AutoDetectionModel
+                from sahi.predict import get_sliced_prediction
+                from sahi.models.ultralytics import UltralyticsDetectionModel
+
+                print(f"Detector: Using SAHI for large image ({orig_width}x{orig_height})")
+                
+                # Initialize SAHI model (cached)
+                cv_config = get_cv_config()
+                rel_model_path = cv_config.get('model', 'models/swift.onnx')
+                model_path = os.path.join(PROJECT_ROOT, rel_model_path)
+                
+                if not hasattr(detect_all_birds, 'sahi_model') or getattr(detect_all_birds, 'sahi_path', None) != model_path:
+                    
+                    detect_all_birds.sahi_model = UltralyticsDetectionModel(
+                        model_path=model_path,
+                        confidence_threshold=conf_threshold,
+                        device='cpu' # Use CPU for now as default providers in app are CPU
+                    )
+                    detect_all_birds.sahi_path = model_path
+                    print("✓ Swift SAHI Model loaded")
+                
+                sahi_model = detect_all_birds.sahi_model
+                sahi_model.model.conf = conf_threshold # Update confidence
+
+                # Run sliced inference
+                result = get_sliced_prediction(
+                    image_path,
+                    sahi_model,
+                    slice_height=1024,
+                    slice_width=1024,
+                    overlap_height_ratio=0.2,
+                    overlap_width_ratio=0.2
+                )
+
+                results = []
+                for object_prediction in result.object_prediction_list:
+                    bbox = object_prediction.bbox.to_xyxy() # [x1, y1, x2, y2]
+                    score = object_prediction.score.value
+                    category_id = object_prediction.category.id
+                    
+                    # Convert to normalized YOLO format
+                    x1, y1, x2, y2 = bbox
+                    x_center = ((x1 + x2) / 2) / orig_width
+                    y_center = ((y1 + y2) / 2) / orig_height
+                    width = (x2 - x1) / orig_width
+                    height = (y2 - y1) / orig_height
+
+                    results.append({
+                        'x_center': float(x_center),
+                        'y_center': float(y_center),
+                        'width': float(width),
+                        'height': float(height),
+                        'confidence': float(score),
+                        'class_id': int(category_id)
+                    })
+
+                print(f"Swift (SAHI): Found {len(results)} birds")
+                return jsonify({
+                    'success': True,
+                    'boxes': results,
+                    'count': len(results),
+                    'mode': 'sahi'
+                })
+            except ImportError:
+                print("⚠️ SAHI not installed, falling back to standard detection")
+            except Exception as e:
+                print(f"⚠️ SAHI error: {e}, falling back to standard detection")
+
+        # Standard detector (for small images or fallback)
+        # Dynamically determine target_size from ONNX model input shape
+        input_shape = detector.get_inputs()[0].shape
+        if isinstance(input_shape[2], int):
+            target_size = input_shape[2]
+        else:
+            target_size = 1024
+
+        print(f"  Model input size: {target_size}x{target_size}")
+
+        scale = target_size / max(orig_height, orig_width)
+        new_w = int(orig_width * scale)
+        new_h = int(orig_height * scale)
+
+        resized = cv2.resize(img, (new_w, new_h), interpolation=cv2.INTER_LINEAR)
+
+        # Pad to square
+        padded = np.ones((target_size, target_size, 3), dtype=np.uint8) * 114
+        padded[:new_h, :new_w] = resized
+
+        # Convert BGR to RGB (YOLO expects RGB)
+        rgb = cv2.cvtColor(padded, cv2.COLOR_BGR2RGB)
+
+        # Normalize and transpose
+        input_tensor = rgb.astype(np.float32) / 255.0
+        input_tensor = np.transpose(input_tensor, (2, 0, 1))
+        input_tensor = np.expand_dims(input_tensor, axis=0)
+
+        # Run detection
+        print(f"Detector: Running on {image_name} (confidence={conf_threshold})...")
+        input_name = detector.get_inputs()[0].name
+        outputs = detector.run(None, {input_name: input_tensor})
+
+        # Post-process outputs
+        # Support both YOLOv8 (1, nc+4, 8400) and YOLO26n End-to-End (1, 300, 6)
+        output = outputs[0][0]
+        
+        if output.shape[0] == 300 and output.shape[1] == 6:
+            # YOLO26n End-to-End format: [x1, y1, x2, y2, conf, class]
+            print("  Detected YOLO26n End-to-End format")
+            detections = output
+            confidences = detections[:, 4]
+            mask = confidences > conf_threshold
+            filtered = detections[mask]
+            
+            if len(filtered) == 0:
+                return jsonify({'success': True, 'boxes': [], 'count': 0})
+                
+            # Extract boxes (already in corner format)
+            final_boxes = filtered[:, :4]
+            final_scores = filtered[:, 4]
+        else:
+            # Traditional YOLO format: [x, y, w, h, conf, class]
+            # Transpose to (8400, 6)
+            detections = output.T
+            confidences = detections[:, 4]
+            mask = confidences > conf_threshold
+            filtered = detections[mask]
+
+            if len(filtered) == 0:
+                print(f"Detector: No birds found (tried {len(detections)} candidates)")
+                return jsonify({
+                    'success': True,
+                    'boxes': [],
+                    'count': 0
+                })
+
+            # Extract boxes and scores
+            boxes_xywh = filtered[:, :4]
+            scores = filtered[:, 4]
+
+            # Convert to corner format for NMS
+            boxes_xyxy = boxes_xywh.copy()
+            boxes_xyxy[:, 0] -= boxes_xyxy[:, 2] / 2  # x1
+            boxes_xyxy[:, 1] -= boxes_xyxy[:, 3] / 2  # y1
+            boxes_xyxy[:, 2] += boxes_xyxy[:, 0]      # x2
+            boxes_xyxy[:, 3] += boxes_xyxy[:, 1]      # y2
+
+            # NMS
+            def nms(boxes, scores, iou_threshold=0.45):
+                x1, y1, x2, y2 = boxes[:, 0], boxes[:, 1], boxes[:, 2], boxes[:, 3]
+                areas = (x2 - x1) * (y2 - y1)
+                order = scores.argsort()[::-1]
+                keep = []
+                while order.size > 0:
+                    i = order[0]
+                    keep.append(i)
+                    xx1 = np.maximum(x1[i], x1[order[1:]])
+                    yy1 = np.maximum(y1[i], y1[order[1:]])
+                    xx2 = np.minimum(x2[i], x2[order[1:]])
+                    yy2 = np.minimum(y2[i], y2[order[1:]])
+                    w = np.maximum(0.0, xx2 - xx1)
+                    h = np.maximum(0.0, yy2 - yy1)
+                    inter = w * h
+                    iou = inter / (areas[i] + areas[order[1:]] - inter)
+                    inds = np.where(iou <= iou_threshold)[0]
+                    order = order[inds + 1]
+                return keep
+
+            indices = nms(boxes_xyxy, scores)
+            final_boxes = boxes_xyxy[indices]
+            final_scores = scores[indices]
+
+        # Scale back to original image and convert to YOLO format
+        final_boxes /= scale
+        
+        # Extract class IDs if available
+        if output.shape[0] == 300 and output.shape[1] == 6:
+            final_class_ids = filtered[:, 5].astype(int)
+        else:
+            final_class_ids = filtered[indices, 5].astype(int)
+            
+        results = []
+
+        for i, (box, score) in enumerate(zip(final_boxes, final_scores)):
+            x1, y1, x2, y2 = box
+            class_id = int(final_class_ids[i])
+
+            # Clamp to image bounds
+            x1 = max(0, min(x1, orig_width))
+            y1 = max(0, min(y1, orig_height))
+            x2 = max(0, min(x2, orig_width))
+            y2 = max(0, min(y2, orig_height))
+
+            # Convert to normalized YOLO format
+            x_center = ((x1 + x2) / 2) / orig_width
+            y_center = ((y1 + y2) / 2) / orig_height
+            width = (x2 - x1) / orig_width
+            height = (y2 - y1) / orig_height
+
+            results.append({
+                'x_center': float(x_center),
+                'y_center': float(y_center),
+                'width': float(width),
+                'height': float(height),
+                'confidence': float(score),
+                'class_id': class_id
+            })
+
+        print(f"Detector: Found {len(results)} birds")
+
+        return jsonify({
+            'success': True,
+            'boxes': results,
+            'count': len(results)
+        })
+
+    except Exception as e:
+        import traceback
+        print(f"Detection error: {traceback.format_exc()}")
+        return jsonify({'error': f'Detection failed: {str(e)}'}), 500
+
+@app.route('/api/classify_crop', methods=['POST'])
+@api_annotator_required
+def classify_crop():
+    """Classify a bird crop using the species classifier"""
+    try:
+        data = request.json
+        image_name = data.get('image_name')
+        bbox = data.get('bbox')  # {x_center, y_center, width, height} in normalized coords
+        project_folder = data.get('project_id', 'nestvision')
+
+        if not image_name or not bbox:
+            return jsonify({'error': 'Missing image_name or bbox'}), 400
+
+        # Get image path
+        images_dir = os.path.join(PROJECTS_DIR, project_folder, 'images')
+        image_path = os.path.join(images_dir, image_name)
+
+        if not os.path.exists(image_path):
+            return jsonify({'error': f'Image not found: {image_name}'}), 404
+
+        # Load detector with classifier
+        detector = get_bird_detector()
+        if detector is None:
+            return jsonify({'error': 'Classifier not available'}), 500
+
+        # Read image
+        import cv2
+        img = cv2.imread(image_path)
+        height, width = img.shape[:2]
+
+        # Convert normalized bbox to pixel coordinates
+        x_center = bbox['x_center'] * width
+        y_center = bbox['y_center'] * height
+        box_width = bbox['width'] * width
+        box_height = bbox['height'] * height
+
+        x1 = int(x_center - box_width / 2)
+        y1 = int(y_center - box_height / 2)
+        x2 = int(x_center + box_width / 2)
+        y2 = int(y_center + box_height / 2)
+
+        # Clamp to image bounds
+        x1, y1 = max(0, x1), max(0, y1)
+        x2, y2 = min(width, x2), min(height, y2)
+
+        # Extract crop
+        crop = img[y1:y2, x1:x2]
+
+        if crop.size == 0:
+            return jsonify({'error': 'Invalid crop'}), 400
+
+        # Classify (get top-5)
+        result = detector.classify_crop(crop, top_k=5)
+
+        # Convert result format to API format
+        predictions = []
+        for pred in result.get('top_predictions', []):
+            predictions.append({
+                'species_code': pred['code'],
+                'species_name': pred['full_name'],
+                'confidence': pred['confidence']
+            })
+
+        # Return predictions
+        return jsonify({
+            'success': True,
+            'predictions': predictions
+        })
+
+    except Exception as e:
+        import traceback
+        print(f"Classification error: {traceback.format_exc()}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/classify_all_birds', methods=['POST'])
+@api_annotator_required
+def classify_all_birds():
+    """Batch classify all birds in an image"""
+    try:
+        data = request.json
+        image_name = data.get('image_name')
+        boxes = data.get('boxes', [])  # List of bbox dicts
+        project_folder = data.get('project_id', 'nestvision')
+
+        if not image_name or not boxes:
+            return jsonify({'error': 'Missing image_name or boxes'}), 400
+
+        # Get image path
+        images_dir = os.path.join(PROJECTS_DIR, project_folder, 'images')
+        image_path = os.path.join(images_dir, image_name)
+
+        if not os.path.exists(image_path):
+            return jsonify({'error': f'Image not found: {image_name}'}), 404
+
+        # Load detector with classifier
+        detector = get_bird_detector()
+        if detector is None:
+            return jsonify({'error': 'Classifier not available'}), 500
+
+        # Read image once
+        import cv2
+        img = cv2.imread(image_path)
+        if img is None:
+            return jsonify({'error': 'Failed to load image'}), 500
+
+        height, width = img.shape[:2]
+
+        # Classify each bird
+        classified_boxes = []
+        for box in boxes:
+            # Convert normalized bbox to pixel coordinates
+            x_center = box['x_center'] * width
+            y_center = box['y_center'] * height
+            box_width = box['width'] * width
+            box_height = box['height'] * height
+
+            x1 = int(x_center - box_width / 2)
+            y1 = int(y_center - box_height / 2)
+            x2 = int(x_center + box_width / 2)
+            y2 = int(y_center + box_height / 2)
+
+            # Clamp to image bounds
+            x1, y1 = max(0, x1), max(0, y1)
+            x2, y2 = min(width, x2), min(height, y2)
+
+            # Extract crop
+            crop = img[y1:y2, x1:x2]
+
+            if crop.size == 0 or (x2 - x1) < 5 or (y2 - y1) < 5:
+                # Skip invalid boxes
+                classified_boxes.append({
+                    **box,
+                    'species': 'UNKNOWN',
+                    'species_name': 'Unknown',
+                    'confidence': 0.0
+                })
+                continue
+
+            # Classify (get top prediction)
+            result = detector.classify_crop(crop, top_k=1)
+
+            # Extract top prediction (it's a list of dicts now)
+            if result.get('top_predictions') and len(result['top_predictions']) > 0:
+                pred = result['top_predictions'][0]
+                species_code = pred['code']
+                species_name = pred['full_name']
+                confidence = pred['confidence']
+            else:
+                species_code = 'UNKNOWN'
+                species_name = 'Unknown'
+                confidence = 0.0
+
+            # Add classification result to box
+            classified_boxes.append({
+                **box,
+                'species': species_code,
+                'species_name': species_name,
+                'confidence': confidence
+            })
+
+        # Return classified boxes
+        return jsonify({
+            'success': True,
+            'boxes': classified_boxes
+        })
+
+    except Exception as e:
+        import traceback
+        print(f"Batch classification error: {traceback.format_exc()}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/species', methods=['GET'])
+def get_all_species():
+    """Get all species from database"""
+    try:
+        service = get_species_service()
+        if service is None:
+            # Fallback to species_list.json
+            species_file = os.path.join(APP_DIR, 'data', 'species_list.json')
+            if os.path.exists(species_file):
+                with open(species_file, 'r') as f:
+                    data = json.load(f)
+                    return jsonify(data.get('real_species', []))
+            return jsonify([])
+
+        species = service.get_all_species()
+        return jsonify(species)
+
+    except Exception as e:
+        print(f"Error getting species: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/species/search', methods=['GET'])
+def search_species():
+    """Search species by name or code"""
+    try:
+        query = request.args.get('q', '').lower().strip()
+
+        if not query:
+            return jsonify([])
+
+        service = get_species_service()
+        if service is None:
+            # Fallback to species_list.json
+            species_file = os.path.join(APP_DIR, 'data', 'species_list.json')
+            if os.path.exists(species_file):
+                with open(species_file, 'r') as f:
+                    data = json.load(f)
+                    all_species = data.get('real_species', [])
+            else:
+                all_species = []
+        else:
+            all_species = service.get_all_species()
+
+        # Search by code or name
+        results = []
+        for species in all_species:
+            code = species.get('code', '').lower()
+            name = species.get('name', '').lower()
+            if query in code or query in name:
+                results.append(species)
+
+        return jsonify(results)
+
+    except Exception as e:
+        print(f"Error searching species: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/species/images/<species_name>', methods=['GET'])
+def get_species_images(species_name):
+    """Get Wikipedia images for a species"""
+    try:
+        max_images = int(request.args.get('max', 5))
+        offset = int(request.args.get('offset', 0))
+
+        # Fetch images using function
+        all_images = get_wikipedia_images_func(species_name, max_images=max_images + 10, offset=0)
+
+        # Apply offset and limit
+        paginated_images = all_images[offset:offset + max_images]
+        has_more = (offset + max_images) < len(all_images)
+
+        # Convert string URLs to objects with 'url' key for consistency
+        image_objects = [{'url': img} if isinstance(img, str) else img for img in paginated_images]
+
+        return jsonify({
+            'images': image_objects,
+            'has_more': has_more,
+            'total': len(all_images)
+        })
+
+    except Exception as e:
+        print(f"Error getting species images: {e}")
+        return jsonify({'error': str(e)}), 500
+
+# ============================================================================
+# MAIN
+# ============================================================================
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--data', type=str, default='nestvision', help='Path to dataset')
-    args = parser.parse_args()
+    ensure_directories()
 
-    # Update Config from command line argument
-    Config.DATASET_PATH = args.data
+    print("=" * 70)
+    print("🦅 Nestperts V2 - Project-Based Annotation Platform")
+    print("=" * 70)
+    print(f"📁 Projects Directory: {PROJECTS_DIR}")
+    print(f"🌐 Server: http://0.0.0.0:5000")
+    print(f"📤 Upload: Zip files only (unlimited size)")
+    print(f"📦 Smart Import: Detects YOLO datasets, user assignments")
+    print("=" * 70)
 
-    # Update STATE_FILE to be in the parent directory of DATASET_PATH
-    # So if DATASET_PATH is "labeller/nestvision", STATE_FILE should be "labeller/project_state.json"
-    dataset_parent = os.path.dirname(Config.DATASET_PATH) if os.path.dirname(Config.DATASET_PATH) else "."
-    Config.STATE_FILE = os.path.join(dataset_parent, "project_state.json")
-
-    print(f"Starting OliseLabel on {Config.DATASET_PATH}")
-    print(f"State file: {Config.STATE_FILE}")
-    print(f"Images directory: {get_image_dir()}")
-    print(f"Labels directory: {get_label_dir()}")
-    app.run(host='0.0.0.0', port=5000, debug=True)
+    # Run with no limits
+    app.run(host='0.0.0.0', port=5000, debug=True, threaded=True)

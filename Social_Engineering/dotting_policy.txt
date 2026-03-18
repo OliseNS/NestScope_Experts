@@ -1,0 +1,67 @@
+Survey Coverage and Target Species
+
+
+Protocols below outline how aerial surveys and image dotting analyses have been conducted from 2010-2021. Subsequent efforts (2022 to current) have been upgraded and can be referenced using the Future Directions tab.
+
+
+From 2010 to 2021, Colibri conducted aerial photographic nest surveys on the northern Gulf coast including areas impacted by the Deepwater Horizon oil spill. Target species included colonial-breeding shrub and select ground-nesting birds (See Guidance for.Coastal Bird-Nesting Habitat Restoration Projects for additional information on these bird groups) Colonies were surveyed in both May and June, except in 2010 due to conflicting priorities for air space during spill response and because the need for surveys in Texas and Florida was not identified until June. Only seven colonies in Louisiana were surveyed more than once in 2010. 
+
+Target species included colonial-breeding shrub and select ground-nesting birds (1). Target birds included Brown Pelican (Pelecanus occidentalis), Laughing Gull (Leucophaeus atricilla), Royal Tern (Thalasseus maximus), Sandwich Tern (Thalasseus sandvicensis), Caspian Tern (Hydroprogne caspia), Forster’s Tern (Sterna forsteri), Gull-billed Tern (Gelochelidon nilotica), and Black Skimmer (Rynchops niger). Because of their small size, nesting Least Terns (Sternula antillarum) were mostly captured in aerial photographs incidentally. However, in 2021, Least Terns nesting on Mississippi and Florida mainland beaches were surveyed for comparison with ground data. Target wading birds included White Ibis (Eudocimus albus), Tricolored Heron (Egretta tricolor), Great Egret (Ardea alba), Snowy Egret (Egretta thula), Reddish Egret (Egretta rufescens), and Roseate Spoonbill (Platalea ajaja). 
+
+Among solitary, breeding shorebird species, only the American Oystercatcher (Haematopus palliates) was regularly observed in aerial photographs. Smaller breeding shorebird species such as Wilson’s Plover (Charadrius wilsonia) typically could not be detected during surveys or during inspection of aerial photographs. Ruddy Turnstone (Arenaria interpres), a migrant species with conspicuously contrasting plumage, was the one smaller shorebird species that could be consistently identified in aerial photographs. 
+Colony Inventory
+
+In 2010, Colibri compiled an initial inventory of known current or former bird colony locations throughout the northern Gulf. This information was obtained from several state and federal agencies, and built into a geographic information system (GIS). From this effort, colonies could be viewed on a map and, aerial survey teams were able to establish future flight paths. This inventory has been continuously updated since 2010. 
+
+This colony inventory includes Colony Name (typically synonymous with island name) as well as multiple levels of location information. To organize colonies across the northern Gulf and provide possible future analysis areas, 34 Geographic Regions were created from Texas through the Florida Keys. Demarcation of these boundaries was enhanced using the physical and ecological features of the Level IV Terrestrial Ecoregion (2) and Level 12 HUC Watershed layers (3). The field name in the database is GeoRegion, a term referred to throughout this report.  The database and an associated ReadMe file are available through the Data Management tab of this portal.
+Aerial Photography
+
+The aerial photographic surveys were carried out from a fixed-wing, twin engine, high-wing Partenavia (PN68) aircraft. The aircraft was equipped with a window on the underside of the plane (termed a belly port) for vertical/nadir photography and configured such that two photographers could work simultaneously.  
+
+Each survey crew consisted of a pilot, a navigator/data recorder in the co-pilot’s seat, and two photographers in the rear of the plane. The navigator coordinated with the pilot to determine the sequence of colony visits. Observers in the aircraft also searched the surroundings for other potential habitat or active colonies as they transited between known colonies.  
+
+One photographer captured context photographs showing a relatively wide-area view of colonies, while the other photographer concentrated on taking more detailed close-up shots. The context photographer also typically zoomed in to obtain mid-focal length coverage, which is often useful for counting nests and birds. The navigator recorded the aircraft altitude, the range of frame numbers shot for both cameras for each pass over a colony, and any relevant notes about colonies. 
+
+These survey flights were typically conducted at altitudes of 700 (for smaller birds such as terns) to 1000 feet (for larger birds such as Brown Pelicans), at ground speed less than 90 knots (103 mph). To avoid disturbing breeding birds, the flights did not go below 700 ft. As the aircraft approached a target colony, the crew determined the best angle of approach and the ideal altitude for photographic census. Altitudes and flight paths were determined based on the extent of the colony, the species present at the colony, the strength and direction of the wind, vegetation around the colony, and angle of the sun. Multiple approaches from different directions or altitudes were often necessary to obtain sufficient photographic coverage. For optimal lighting, photography was typically conducted from approximately 3 hours after sunrise to 3 hours before sunset, when solar altitude was at least about 35 degrees.  
+
+As of 2021, full frame, digital single-lens reflex cameras (Canon EOS-1D X Mark III®) equipped with zoom and telephoto lenses (focal length range = 16–300 millimeters) were used to acquire photographs. Aircraft location and time were recorded automatically at intervals of 5 seconds or less.  
+Nest and Bird Enumeration (Dotting)
+
+Photographs from May and June surveys were evaluated for their representation of peak breeding numbers by species at each colony. For some species, such as Brown Pelican and Great Egret, photographs from May surveys often represented peak breeding numbers and were selected for analysis. For other species, especially Black Skimmer, photographs from June surveys better represented peak numbers and were used for analysis. On occasion in all years, May and June nests counts of distinct nesting areas needed to be summed to obtain a total number of nests for a certain species. For example, Brown Pelican, Royal Tern, and Sandwich Tern sometimes had large, well-developed colonies that were counted using May photographs, with new nesting groups that formed after the May survey that were counted from June photographs. 
+
+All images of each individual colony were inspected for clarity, location within the colony, and extent of colony coverage. Those best suited for determining nest counts and collectively comprising all breeding areas were analyzed using counting software (Image-Pro, Media Cybernetics®). Nests and birds were marked manually (“dotted), and the software automatically tallied total counts for each category. Although the primary objective was to determine numbers of nests, individual adult and subadult birds within colonies were also counted.  
+
+For Brown Pelicans, nests were categorized based on stage of development:  
+
+    Well Built Nest (with attending adult typically in incubation posture)  
+    Poorly Built Nest (pre egg-laying, but considered a breeding pair)  
+    Nest with Chicks, with attending adults  
+    Nest with Chicks, without attending adults  
+    Brood (dependent chicks away from an obvious nest and not attended by an adult)  
+    Abandoned Nest (with eggs, but unattended)  
+    Empty Nest (unattended and without eggs or chicks)  
+    Territory (in breeding habitat and territorial spacing, but not judged to be a breeding pair) 
+
+Together, these categories often provided numbers of pelican nests at a colony from a single aerial photographic survey, even though egg-laying dates may have spanned a period of months, given that chicks do not fledge until they are approximately 3 months old. However, additional breeding groups sometimes formed by the June survey that needed to be counted and summed with May counts to provide the best estimate of breeding population size.  
+
+Empty Nests and Territories were not included in colony nest totals because they were not considered to have been or to have later become egglaying sites and therefore were not considered appropriate to include in a breeding population estimate.  
+
+Because of their small body size (e.g., terns and gulls), scrape-nesting habits (e.g., terns and skimmers), or partial concealment by vegetation (e.g., waders and gulls), the various nest categories used for pelicans could not always be identified for other species. Therefore, due to the lack of consistently visible nest structures, a bird in incubation posture for all other species was typically categorized as a Site. As of 2021 image analyses, however, the three nest categories indicating the presence of chicks were used in a standardized manner for all species. 
+
+Beyond nests, other birds of all species were counted. These included the mate of a second adult at a nest, with one adult already accounted for by the Nest Category that was marked. Other birds along the shoreline or in colony areas not obviously associated with a breeding territory were also counted. Doing so allowed the total number of birds in attendance at the time of the survey to be summed. Exceptions included roosting birds in non-breeding habitat, which were inconsistently dotted due to time constraints. However, these areas were still closely inspected to ensure they did not include chicks that wandered away from nests. 
+
+In the software, unique symbol-color combinations were assigned to different nest and bird categories for each species. These unique combinations were not standardized across images, given the large number of species-categories encountered, but were defined with each analyzed image. Where overlapping images were used to analyze portions of a colony, one or more lines were drawn on the selected image to delineate the area to be counted using that image. Areas outside any such lines were counted using different images. This process continued until the colony was counted completely with available photographs.  
+
+
+Full details of the survey protocols used are available in Colibri Ecological Consulting (2023)
+
+
+References
+
+(1) Regionwide Trustee Implementation Group (RW TIG). 2020. Monitoring and Adaptive Management Activity Implementation Plan: Colonial Waterbird Monitoring. 17 pages.
+
+(2) U. S. Environmental Protection Agency (EPA). 2022. Level III and IV Ecoregions of the Continental United States. https://www.epa.gov/eco-research/level-iii-and-iv-ecoregions-continentalunited-states, Accessed in 2022.
+
+(3) U. S. Geological Survey. 2022. Hydrologic Unit Maps. https://water.usgs.gov/GIS/huc.html, Accessed 2022.
+
+(4) Colibri Ecological Consulting and R. G. Ford Consulting. 2015. Analysis of 2010–2013 Photographic Census Data from Waterbird Breeding Colonies in the Vicinity of the Deepwater Horizon Oil Spill. Final Report. Prepared for the U.S. Fish and Wildlife Service. https://twi-aviandata.s3.amazonaws.com/avian_monitoring/dotting_information/2010-2021_DWH_Colonial_Waterbird_Monitoring_Combined_Final.pdf

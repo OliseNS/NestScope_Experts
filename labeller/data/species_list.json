@@ -1,0 +1,261 @@
+{
+  "real_species": [
+    {
+      "code": "adelie_penguin",
+      "name": "Adelie Penguin"
+    },
+    {
+      "code": "african_darter",
+      "name": "African Darter"
+    },
+    {
+      "code": "african_openbill",
+      "name": "African Openbill"
+    },
+    {
+      "code": "african_spoonbill",
+      "name": "African Spoonbill"
+    },
+    {
+      "code": "american_white_pelican",
+      "name": "American White Pelican"
+    },
+    {
+      "code": "antarctic_shag",
+      "name": "Antarctic Shag"
+    },
+    {
+      "code": "australasian_swamphen",
+      "name": "Australasian Swamphen"
+    },
+    {
+      "code": "australian_pelican",
+      "name": "Australian Pelican"
+    },
+    {
+      "code": "australian_pied_cormorant",
+      "name": "Australian Pied Cormorant"
+    },
+    {
+      "code": "australian_white_ibis",
+      "name": "Australian White Ibis"
+    },
+    {
+      "code": "australian_wood_duck",
+      "name": "Australian Wood Duck"
+    },
+    {
+      "code": "bar_tailed_godwit",
+      "name": "Bar Tailed Godwit"
+    },
+    {
+      "code": "bird",
+      "name": "Bird"
+    },
+    {
+      "code": "black_browed_albatross",
+      "name": "Black Browed Albatross"
+    },
+    {
+      "code": "black_headed_gull",
+      "name": "Black Headed Gull"
+    },
+    {
+      "code": "black_necked_swan",
+      "name": "Black Necked Swan"
+    },
+    {
+      "code": "black_swan",
+      "name": "Black Swan"
+    },
+    {
+      "code": "chilean_flamingo",
+      "name": "Chilean Flamingo"
+    },
+    {
+      "code": "chinstrap_penguin",
+      "name": "Chinstrap Penguin"
+    },
+    {
+      "code": "common_tern",
+      "name": "Common Tern"
+    },
+    {
+      "code": "dalmatian_pelican",
+      "name": "Dalmatian Pelican"
+    },
+    {
+      "code": "eurasian_coot",
+      "name": "Eurasian Coot"
+    },
+    {
+      "code": "eurasian_whimbrel",
+      "name": "Eurasian Whimbrel"
+    },
+    {
+      "code": "european_herring_gull",
+      "name": "European Herring Gull"
+    },
+    {
+      "code": "franklins_gull",
+      "name": "Franklins Gull"
+    },
+    {
+      "code": "gentoo_penguin",
+      "name": "Gentoo Penguin"
+    },
+    {
+      "code": "great_cormorant",
+      "name": "Great Cormorant"
+    },
+    {
+      "code": "great_egret",
+      "name": "Great Egret"
+    },
+    {
+      "code": "great_knot",
+      "name": "Great Knot"
+    },
+    {
+      "code": "great_white_pelican",
+      "name": "Great White Pelican"
+    },
+    {
+      "code": "grey_heron",
+      "name": "Grey Heron"
+    },
+    {
+      "code": "grey_teal",
+      "name": "Grey Teal"
+    },
+    {
+      "code": "gull_billed_tern",
+      "name": "Gull Billed Tern"
+    },
+    {
+      "code": "hardhead",
+      "name": "Hardhead"
+    },
+    {
+      "code": "intermediate_egret",
+      "name": "Intermediate Egret"
+    },
+    {
+      "code": "lesser_black_backed_gull",
+      "name": "Lesser Black Backed Gull"
+    },
+    {
+      "code": "little_black_cormorant",
+      "name": "Little Black Cormorant"
+    },
+    {
+      "code": "little_corella",
+      "name": "Little Corella"
+    },
+    {
+      "code": "little_grebe",
+      "name": "Little Grebe"
+    },
+    {
+      "code": "magpie_goose",
+      "name": "Magpie Goose"
+    },
+    {
+      "code": "magpie_lark",
+      "name": "Magpie Lark"
+    },
+    {
+      "code": "mallard",
+      "name": "Mallard"
+    },
+    {
+      "code": "masked_lapwing",
+      "name": "Masked Lapwing"
+    },
+    {
+      "code": "mediterranean_gull",
+      "name": "Mediterranean Gull"
+    },
+    {
+      "code": "pacific_black_duck",
+      "name": "Pacific Black Duck"
+    },
+    {
+      "code": "pied_oystercatcher",
+      "name": "Pied Oystercatcher"
+    },
+    {
+      "code": "pied_stilt",
+      "name": "Pied Stilt"
+    },
+    {
+      "code": "pink_eared_duck",
+      "name": "Pink Eared Duck"
+    },
+    {
+      "code": "pygmy_cormorant",
+      "name": "Pygmy Cormorant"
+    },
+    {
+      "code": "rainbow_bee_eater",
+      "name": "Rainbow Bee Eater"
+    },
+    {
+      "code": "reed_cormorant",
+      "name": "Reed Cormorant"
+    },
+    {
+      "code": "royal_spoonbill",
+      "name": "Royal Spoonbill"
+    },
+    {
+      "code": "silver_gull",
+      "name": "Silver Gull"
+    },
+    {
+      "code": "southern_giant_petrel",
+      "name": "Southern Giant Petrel"
+    },
+    {
+      "code": "southern_rockhopper_penguin",
+      "name": "Southern Rockhopper Penguin"
+    },
+    {
+      "code": "straw_necked_ibis",
+      "name": "Straw Necked Ibis"
+    },
+    {
+      "code": "welcome_swallow",
+      "name": "Welcome Swallow"
+    },
+    {
+      "code": "western_cattle_egret",
+      "name": "Western Cattle Egret"
+    },
+    {
+      "code": "western_grebe",
+      "name": "Western Grebe"
+    },
+    {
+      "code": "whiskered_tern",
+      "name": "Whiskered Tern"
+    },
+    {
+      "code": "white_faced_heron",
+      "name": "White Faced Heron"
+    },
+    {
+      "code": "white_necked_heron",
+      "name": "White Necked Heron"
+    },
+    {
+      "code": "white_stork",
+      "name": "White Stork"
+    },
+    {
+      "code": "yellow_billed_stork",
+      "name": "Yellow Billed Stork"
+    }
+  ],
+  "note": "64 species from swift_cls_UQ model"
+}
