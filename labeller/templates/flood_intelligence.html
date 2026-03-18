@@ -2106,8 +2106,8 @@
         const url = `https://api.tidesandcurrents.noaa.gov/api/prod/datagetter?` +
             `product=${product}&` +
             `application=NestScope&` +
-            `begin_date=${formatDate(begin)}&` +
-            `end_date=${formatDate(end)}&` +
+            `begin_date=${encodeURIComponent(formatDate(begin))}&` +
+            `end_date=${encodeURIComponent(formatDate(end))}&` +
             `datum=MHHW&` +
             `station=${stationId}&` +
             `time_zone=lst_ldt&` +
