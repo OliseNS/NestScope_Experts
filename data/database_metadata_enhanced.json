@@ -1,5 +1,5 @@
 {
-  "discovered_at": "2026-03-10T17:34:46.570742",
+  "discovered_at": "2026-03-18T10:26:55.155240",
   "database_name": "bird_data_complete.db",
   "tables": {
     "flood_events": {
@@ -2308,54 +2308,6 @@
       ],
       "has_spatial_data": true,
       "has_temporal_data": true
-    },
-    "test": {
-      "row_count": 0,
-      "columns": [
-        {
-          "cid": 0,
-          "name": "id",
-          "type": "INTEGER",
-          "notnull": 0,
-          "dflt_value": null,
-          "pk": 1
-        },
-        {
-          "cid": 1,
-          "name": "name",
-          "type": "TEXT",
-          "notnull": 0,
-          "dflt_value": null,
-          "pk": 0
-        },
-        {
-          "cid": 2,
-          "name": "value",
-          "type": "TEXT",
-          "notnull": 0,
-          "dflt_value": null,
-          "pk": 0
-        },
-        {
-          "cid": 3,
-          "name": "created_at",
-          "type": "TIMESTAMP",
-          "notnull": 0,
-          "dflt_value": "CURRENT_TIMESTAMP",
-          "pk": 0
-        }
-      ],
-      "column_names": [
-        "id",
-        "name",
-        "value",
-        "created_at"
-      ],
-      "samples": [],
-      "temporal_columns": [],
-      "spatial_columns": [],
-      "has_spatial_data": false,
-      "has_temporal_data": false
     }
   },
   "relationships": [
@@ -2383,13 +2335,6 @@
     {
       "from_table": "tblChandeleurNorthSouth_2010-2021ColonyCentroidCoordinates",
       "to_table": "tblColonySiteNotes2010",
-      "from_column": "ColonyName",
-      "to_column": "ColonyName",
-      "type": "potential-link"
-    },
-    {
-      "from_table": "tblChandeleurNorthSouth_2010-2021ColonyCentroidCoordinates",
-      "to_table": "tblColonySiteNotes2010",
       "from_column": "Latitude",
       "to_column": "Latitude",
       "type": "potential-link"
@@ -2399,6 +2344,13 @@
       "to_table": "tblColonySiteNotes2010",
       "from_column": "Longitude",
       "to_column": "Longitude",
+      "type": "potential-link"
+    },
+    {
+      "from_table": "tblChandeleurNorthSouth_2010-2021ColonyCentroidCoordinates",
+      "to_table": "tblColonySiteNotes2010",
+      "from_column": "ColonyName",
+      "to_column": "ColonyName",
       "type": "potential-link"
     },
     {
@@ -2411,22 +2363,8 @@
     {
       "from_table": "tblChandeleurNorthSouth_2010-2021ColonyCentroidCoordinates",
       "to_table": "tblColonyTotals2010-2021_MayJuneCombined",
-      "from_column": "State",
-      "to_column": "State",
-      "type": "potential-link"
-    },
-    {
-      "from_table": "tblChandeleurNorthSouth_2010-2021ColonyCentroidCoordinates",
-      "to_table": "tblColonyTotals2010-2021_MayJuneCombined",
       "from_column": "GeoRegion",
       "to_column": "GeoRegion",
-      "type": "potential-link"
-    },
-    {
-      "from_table": "tblChandeleurNorthSouth_2010-2021ColonyCentroidCoordinates",
-      "to_table": "tblColonyTotals2010-2021_MayJuneCombined",
-      "from_column": "ColonyName",
-      "to_column": "ColonyName",
       "type": "potential-link"
     },
     {
@@ -2439,29 +2377,22 @@
     {
       "from_table": "tblChandeleurNorthSouth_2010-2021ColonyCentroidCoordinates",
       "to_table": "tblColonyTotals2010-2021_MayJuneCombined",
-      "from_column": "Longitude",
-      "to_column": "Longitude",
+      "from_column": "ColonyName",
+      "to_column": "ColonyName",
       "type": "potential-link"
     },
     {
       "from_table": "tblChandeleurNorthSouth_2010-2021ColonyCentroidCoordinates",
-      "to_table": "tblRWCWB_ColonyInventory_10Nov22",
+      "to_table": "tblColonyTotals2010-2021_MayJuneCombined",
       "from_column": "State",
       "to_column": "State",
       "type": "potential-link"
     },
     {
       "from_table": "tblChandeleurNorthSouth_2010-2021ColonyCentroidCoordinates",
-      "to_table": "tblRWCWB_ColonyInventory_10Nov22",
-      "from_column": "GeoRegion",
-      "to_column": "GeoRegion",
-      "type": "potential-link"
-    },
-    {
-      "from_table": "tblChandeleurNorthSouth_2010-2021ColonyCentroidCoordinates",
-      "to_table": "tblRWCWB_ColonyInventory_10Nov22",
-      "from_column": "TerrestEcoRegion",
-      "to_column": "TerrestEcoRegion",
+      "to_table": "tblColonyTotals2010-2021_MayJuneCombined",
+      "from_column": "Longitude",
+      "to_column": "Longitude",
       "type": "potential-link"
     },
     {
@@ -2474,15 +2405,22 @@
     {
       "from_table": "tblChandeleurNorthSouth_2010-2021ColonyCentroidCoordinates",
       "to_table": "tblRWCWB_ColonyInventory_10Nov22",
-      "from_column": "ColonyID",
-      "to_column": "ColonyID",
+      "from_column": "FormerNames",
+      "to_column": "FormerNames",
       "type": "potential-link"
     },
     {
       "from_table": "tblChandeleurNorthSouth_2010-2021ColonyCentroidCoordinates",
       "to_table": "tblRWCWB_ColonyInventory_10Nov22",
-      "from_column": "ColonyName",
-      "to_column": "ColonyName",
+      "from_column": "GeoRegion",
+      "to_column": "GeoRegion",
+      "type": "potential-link"
+    },
+    {
+      "from_table": "tblChandeleurNorthSouth_2010-2021ColonyCentroidCoordinates",
+      "to_table": "tblRWCWB_ColonyInventory_10Nov22",
+      "from_column": "NOTES August 2022",
+      "to_column": "NOTES August 2022",
       "type": "potential-link"
     },
     {
@@ -2495,29 +2433,8 @@
     {
       "from_table": "tblChandeleurNorthSouth_2010-2021ColonyCentroidCoordinates",
       "to_table": "tblRWCWB_ColonyInventory_10Nov22",
-      "from_column": "Longitude",
-      "to_column": "Longitude",
-      "type": "potential-link"
-    },
-    {
-      "from_table": "tblChandeleurNorthSouth_2010-2021ColonyCentroidCoordinates",
-      "to_table": "tblRWCWB_ColonyInventory_10Nov22",
-      "from_column": "ExtrapArea",
-      "to_column": "ExtrapArea",
-      "type": "potential-link"
-    },
-    {
-      "from_table": "tblChandeleurNorthSouth_2010-2021ColonyCentroidCoordinates",
-      "to_table": "tblRWCWB_ColonyInventory_10Nov22",
-      "from_column": "MarineEcoRegion",
-      "to_column": "MarineEcoRegion",
-      "type": "potential-link"
-    },
-    {
-      "from_table": "tblChandeleurNorthSouth_2010-2021ColonyCentroidCoordinates",
-      "to_table": "tblRWCWB_ColonyInventory_10Nov22",
-      "from_column": "FormerNames",
-      "to_column": "FormerNames",
+      "from_column": "ColonyName",
+      "to_column": "ColonyName",
       "type": "potential-link"
     },
     {
@@ -2530,6 +2447,13 @@
     {
       "from_table": "tblChandeleurNorthSouth_2010-2021ColonyCentroidCoordinates",
       "to_table": "tblRWCWB_ColonyInventory_10Nov22",
+      "from_column": "ExtrapArea",
+      "to_column": "ExtrapArea",
+      "type": "potential-link"
+    },
+    {
+      "from_table": "tblChandeleurNorthSouth_2010-2021ColonyCentroidCoordinates",
+      "to_table": "tblRWCWB_ColonyInventory_10Nov22",
       "from_column": "ColonyGroupBuffer",
       "to_column": "ColonyGroupBuffer",
       "type": "potential-link"
@@ -2537,15 +2461,36 @@
     {
       "from_table": "tblChandeleurNorthSouth_2010-2021ColonyCentroidCoordinates",
       "to_table": "tblRWCWB_ColonyInventory_10Nov22",
-      "from_column": "NOTES August 2022",
-      "to_column": "NOTES August 2022",
+      "from_column": "MarineEcoRegion",
+      "to_column": "MarineEcoRegion",
       "type": "potential-link"
     },
     {
       "from_table": "tblChandeleurNorthSouth_2010-2021ColonyCentroidCoordinates",
-      "to_table": "tblSpeciesData2010",
-      "from_column": "ColonyName",
-      "to_column": "ColonyName",
+      "to_table": "tblRWCWB_ColonyInventory_10Nov22",
+      "from_column": "ColonyID",
+      "to_column": "ColonyID",
+      "type": "potential-link"
+    },
+    {
+      "from_table": "tblChandeleurNorthSouth_2010-2021ColonyCentroidCoordinates",
+      "to_table": "tblRWCWB_ColonyInventory_10Nov22",
+      "from_column": "State",
+      "to_column": "State",
+      "type": "potential-link"
+    },
+    {
+      "from_table": "tblChandeleurNorthSouth_2010-2021ColonyCentroidCoordinates",
+      "to_table": "tblRWCWB_ColonyInventory_10Nov22",
+      "from_column": "Longitude",
+      "to_column": "Longitude",
+      "type": "potential-link"
+    },
+    {
+      "from_table": "tblChandeleurNorthSouth_2010-2021ColonyCentroidCoordinates",
+      "to_table": "tblRWCWB_ColonyInventory_10Nov22",
+      "from_column": "TerrestEcoRegion",
+      "to_column": "TerrestEcoRegion",
       "type": "potential-link"
     },
     {
@@ -2564,6 +2509,13 @@
     },
     {
       "from_table": "tblChandeleurNorthSouth_2010-2021ColonyCentroidCoordinates",
+      "to_table": "tblSpeciesData2010",
+      "from_column": "ColonyName",
+      "to_column": "ColonyName",
+      "type": "potential-link"
+    },
+    {
+      "from_table": "tblChandeleurNorthSouth_2010-2021ColonyCentroidCoordinates",
       "to_table": "tblSpeciesData2011-2013",
       "from_column": "ColonyName",
       "to_column": "ColonyName",
@@ -2572,6 +2524,20 @@
     {
       "from_table": "tblChandeleurNorthSouth_2010-2021ColonyCentroidCoordinates",
       "to_table": "tblSpeciesData2015_2018_2021",
+      "from_column": "ColonyName",
+      "to_column": "ColonyName",
+      "type": "potential-link"
+    },
+    {
+      "from_table": "tblColonySiteNotes2010",
+      "to_table": "tblColonySiteNotes2011-2021",
+      "from_column": "Notes",
+      "to_column": "Notes",
+      "type": "potential-link"
+    },
+    {
+      "from_table": "tblColonySiteNotes2010",
+      "to_table": "tblColonySiteNotes2011-2021",
       "from_column": "ColonyName",
       "to_column": "ColonyName",
       "type": "potential-link"
@@ -2586,20 +2552,6 @@
     {
       "from_table": "tblColonySiteNotes2010",
       "to_table": "tblColonySiteNotes2011-2021",
-      "from_column": "ColonyName",
-      "to_column": "ColonyName",
-      "type": "potential-link"
-    },
-    {
-      "from_table": "tblColonySiteNotes2010",
-      "to_table": "tblColonySiteNotes2011-2021",
-      "from_column": "Dotter",
-      "to_column": "Dotter",
-      "type": "potential-link"
-    },
-    {
-      "from_table": "tblColonySiteNotes2010",
-      "to_table": "tblColonySiteNotes2011-2021",
       "from_column": "AdditionalNotes",
       "to_column": "AdditionalNotes",
       "type": "potential-link"
@@ -2607,8 +2559,8 @@
     {
       "from_table": "tblColonySiteNotes2010",
       "to_table": "tblColonySiteNotes2011-2021",
-      "from_column": "Notes",
-      "to_column": "Notes",
+      "from_column": "Dotter",
+      "to_column": "Dotter",
       "type": "potential-link"
     },
     {
@@ -2621,43 +2573,36 @@
     {
       "from_table": "tblColonySiteNotes2010",
       "to_table": "tblColonyTotals2010-2021_MayJuneCombined",
-      "from_column": "ID",
-      "to_column": "ID",
-      "type": "potential-link"
-    },
-    {
-      "from_table": "tblColonySiteNotes2010",
-      "to_table": "tblColonyTotals2010-2021_MayJuneCombined",
-      "from_column": "ColonyName",
-      "to_column": "ColonyName",
-      "type": "potential-link"
-    },
-    {
-      "from_table": "tblColonySiteNotes2010",
-      "to_table": "tblColonyTotals2010-2021_MayJuneCombined",
-      "from_column": "Latitude",
-      "to_column": "Latitude",
-      "type": "potential-link"
-    },
-    {
-      "from_table": "tblColonySiteNotes2010",
-      "to_table": "tblColonyTotals2010-2021_MayJuneCombined",
-      "from_column": "Longitude",
-      "to_column": "Longitude",
-      "type": "potential-link"
-    },
-    {
-      "from_table": "tblColonySiteNotes2010",
-      "to_table": "tblColonyTotals2010-2021_MayJuneCombined",
       "from_column": "Notes",
       "to_column": "Notes",
       "type": "potential-link"
     },
     {
       "from_table": "tblColonySiteNotes2010",
-      "to_table": "tblRWCWB_ColonyInventory_10Nov22",
+      "to_table": "tblColonyTotals2010-2021_MayJuneCombined",
+      "from_column": "Latitude",
+      "to_column": "Latitude",
+      "type": "potential-link"
+    },
+    {
+      "from_table": "tblColonySiteNotes2010",
+      "to_table": "tblColonyTotals2010-2021_MayJuneCombined",
       "from_column": "ColonyName",
       "to_column": "ColonyName",
+      "type": "potential-link"
+    },
+    {
+      "from_table": "tblColonySiteNotes2010",
+      "to_table": "tblColonyTotals2010-2021_MayJuneCombined",
+      "from_column": "Longitude",
+      "to_column": "Longitude",
+      "type": "potential-link"
+    },
+    {
+      "from_table": "tblColonySiteNotes2010",
+      "to_table": "tblColonyTotals2010-2021_MayJuneCombined",
+      "from_column": "ID",
+      "to_column": "ID",
       "type": "potential-link"
     },
     {
@@ -2672,6 +2617,34 @@
       "to_table": "tblRWCWB_ColonyInventory_10Nov22",
       "from_column": "Longitude",
       "to_column": "Longitude",
+      "type": "potential-link"
+    },
+    {
+      "from_table": "tblColonySiteNotes2010",
+      "to_table": "tblRWCWB_ColonyInventory_10Nov22",
+      "from_column": "ColonyName",
+      "to_column": "ColonyName",
+      "type": "potential-link"
+    },
+    {
+      "from_table": "tblColonySiteNotes2010",
+      "to_table": "tblSpeciesData2010",
+      "from_column": "Notes",
+      "to_column": "Notes",
+      "type": "potential-link"
+    },
+    {
+      "from_table": "tblColonySiteNotes2010",
+      "to_table": "tblSpeciesData2010",
+      "from_column": "Latitude",
+      "to_column": "Latitude",
+      "type": "potential-link"
+    },
+    {
+      "from_table": "tblColonySiteNotes2010",
+      "to_table": "tblSpeciesData2010",
+      "from_column": "ColonyName",
+      "to_column": "ColonyName",
       "type": "potential-link"
     },
     {
@@ -2684,20 +2657,6 @@
     {
       "from_table": "tblColonySiteNotes2010",
       "to_table": "tblSpeciesData2010",
-      "from_column": "ColonyName",
-      "to_column": "ColonyName",
-      "type": "potential-link"
-    },
-    {
-      "from_table": "tblColonySiteNotes2010",
-      "to_table": "tblSpeciesData2010",
-      "from_column": "Latitude",
-      "to_column": "Latitude",
-      "type": "potential-link"
-    },
-    {
-      "from_table": "tblColonySiteNotes2010",
-      "to_table": "tblSpeciesData2010",
       "from_column": "Dotter",
       "to_column": "Dotter",
       "type": "potential-link"
@@ -2711,7 +2670,7 @@
     },
     {
       "from_table": "tblColonySiteNotes2010",
-      "to_table": "tblSpeciesData2010",
+      "to_table": "tblSpeciesData2011-2013",
       "from_column": "Notes",
       "to_column": "Notes",
       "type": "potential-link"
@@ -2721,13 +2680,6 @@
       "to_table": "tblSpeciesData2011-2013",
       "from_column": "AdditionalNotes",
       "to_column": "AdditionalNotes",
-      "type": "potential-link"
-    },
-    {
-      "from_table": "tblColonySiteNotes2010",
-      "to_table": "tblSpeciesData2011-2013",
-      "from_column": "Notes",
-      "to_column": "Notes",
       "type": "potential-link"
     },
     {
@@ -2747,15 +2699,15 @@
     {
       "from_table": "tblColonySiteNotes2010",
       "to_table": "tblSpeciesData2015_2018_2021",
-      "from_column": "AdditionalNotes",
-      "to_column": "AdditionalNotes",
+      "from_column": "Notes",
+      "to_column": "Notes",
       "type": "potential-link"
     },
     {
       "from_table": "tblColonySiteNotes2010",
       "to_table": "tblSpeciesData2015_2018_2021",
-      "from_column": "Notes",
-      "to_column": "Notes",
+      "from_column": "AdditionalNotes",
+      "to_column": "AdditionalNotes",
       "type": "potential-link"
     },
     {
@@ -2775,8 +2727,15 @@
     {
       "from_table": "tblColonySiteNotes2011-2021",
       "to_table": "tblColonyTotals2010-2021_MayJuneCombined",
-      "from_column": "SpeciesCode",
-      "to_column": "SpeciesCode",
+      "from_column": "Notes",
+      "to_column": "Notes",
+      "type": "potential-link"
+    },
+    {
+      "from_table": "tblColonySiteNotes2011-2021",
+      "to_table": "tblColonyTotals2010-2021_MayJuneCombined",
+      "from_column": "ColonyName",
+      "to_column": "ColonyName",
       "type": "potential-link"
     },
     {
@@ -2789,8 +2748,8 @@
     {
       "from_table": "tblColonySiteNotes2011-2021",
       "to_table": "tblColonyTotals2010-2021_MayJuneCombined",
-      "from_column": "ColonyName",
-      "to_column": "ColonyName",
+      "from_column": "SpeciesCode",
+      "to_column": "SpeciesCode",
       "type": "potential-link"
     },
     {
@@ -2798,13 +2757,6 @@
       "to_table": "tblColonyTotals2010-2021_MayJuneCombined",
       "from_column": "Date",
       "to_column": "Date",
-      "type": "potential-link"
-    },
-    {
-      "from_table": "tblColonySiteNotes2011-2021",
-      "to_table": "tblColonyTotals2010-2021_MayJuneCombined",
-      "from_column": "Notes",
-      "to_column": "Notes",
       "type": "potential-link"
     },
     {
@@ -2824,8 +2776,15 @@
     {
       "from_table": "tblColonySiteNotes2011-2021",
       "to_table": "tblSpeciesData2010",
-      "from_column": "SpeciesCode",
-      "to_column": "SpeciesCode",
+      "from_column": "Notes",
+      "to_column": "Notes",
+      "type": "potential-link"
+    },
+    {
+      "from_table": "tblColonySiteNotes2011-2021",
+      "to_table": "tblSpeciesData2010",
+      "from_column": "ColonyName",
+      "to_column": "ColonyName",
       "type": "potential-link"
     },
     {
@@ -2838,8 +2797,8 @@
     {
       "from_table": "tblColonySiteNotes2011-2021",
       "to_table": "tblSpeciesData2010",
-      "from_column": "ColonyName",
-      "to_column": "ColonyName",
+      "from_column": "SpeciesCode",
+      "to_column": "SpeciesCode",
       "type": "potential-link"
     },
     {
@@ -2858,7 +2817,7 @@
     },
     {
       "from_table": "tblColonySiteNotes2011-2021",
-      "to_table": "tblSpeciesData2010",
+      "to_table": "tblSpeciesData2011-2013",
       "from_column": "Notes",
       "to_column": "Notes",
       "type": "potential-link"
@@ -2866,20 +2825,6 @@
     {
       "from_table": "tblColonySiteNotes2011-2021",
       "to_table": "tblSpeciesData2011-2013",
-      "from_column": "SpeciesCode",
-      "to_column": "SpeciesCode",
-      "type": "potential-link"
-    },
-    {
-      "from_table": "tblColonySiteNotes2011-2021",
-      "to_table": "tblSpeciesData2011-2013",
-      "from_column": "Year",
-      "to_column": "Year",
-      "type": "potential-link"
-    },
-    {
-      "from_table": "tblColonySiteNotes2011-2021",
-      "to_table": "tblSpeciesData2011-2013",
       "from_column": "ColonyName",
       "to_column": "ColonyName",
       "type": "potential-link"
@@ -2887,15 +2832,8 @@
     {
       "from_table": "tblColonySiteNotes2011-2021",
       "to_table": "tblSpeciesData2011-2013",
-      "from_column": "Dotter",
-      "to_column": "Dotter",
-      "type": "potential-link"
-    },
-    {
-      "from_table": "tblColonySiteNotes2011-2021",
-      "to_table": "tblSpeciesData2011-2013",
-      "from_column": "Date",
-      "to_column": "Date",
+      "from_column": "Year",
+      "to_column": "Year",
       "type": "potential-link"
     },
     {
@@ -2908,6 +2846,27 @@
     {
       "from_table": "tblColonySiteNotes2011-2021",
       "to_table": "tblSpeciesData2011-2013",
+      "from_column": "SpeciesCode",
+      "to_column": "SpeciesCode",
+      "type": "potential-link"
+    },
+    {
+      "from_table": "tblColonySiteNotes2011-2021",
+      "to_table": "tblSpeciesData2011-2013",
+      "from_column": "Dotter",
+      "to_column": "Dotter",
+      "type": "potential-link"
+    },
+    {
+      "from_table": "tblColonySiteNotes2011-2021",
+      "to_table": "tblSpeciesData2011-2013",
+      "from_column": "Date",
+      "to_column": "Date",
+      "type": "potential-link"
+    },
+    {
+      "from_table": "tblColonySiteNotes2011-2021",
+      "to_table": "tblSpeciesData2015_2018_2021",
       "from_column": "Notes",
       "to_column": "Notes",
       "type": "potential-link"
@@ -2915,8 +2874,8 @@
     {
       "from_table": "tblColonySiteNotes2011-2021",
       "to_table": "tblSpeciesData2015_2018_2021",
-      "from_column": "SpeciesCode",
-      "to_column": "SpeciesCode",
+      "from_column": "ColonyName",
+      "to_column": "ColonyName",
       "type": "potential-link"
     },
     {
@@ -2929,8 +2888,15 @@
     {
       "from_table": "tblColonySiteNotes2011-2021",
       "to_table": "tblSpeciesData2015_2018_2021",
-      "from_column": "ColonyName",
-      "to_column": "ColonyName",
+      "from_column": "AdditionalNotes",
+      "to_column": "AdditionalNotes",
+      "type": "potential-link"
+    },
+    {
+      "from_table": "tblColonySiteNotes2011-2021",
+      "to_table": "tblSpeciesData2015_2018_2021",
+      "from_column": "SpeciesCode",
+      "to_column": "SpeciesCode",
       "type": "potential-link"
     },
     {
@@ -2945,27 +2911,6 @@
       "to_table": "tblSpeciesData2015_2018_2021",
       "from_column": "Date",
       "to_column": "Date",
-      "type": "potential-link"
-    },
-    {
-      "from_table": "tblColonySiteNotes2011-2021",
-      "to_table": "tblSpeciesData2015_2018_2021",
-      "from_column": "AdditionalNotes",
-      "to_column": "AdditionalNotes",
-      "type": "potential-link"
-    },
-    {
-      "from_table": "tblColonySiteNotes2011-2021",
-      "to_table": "tblSpeciesData2015_2018_2021",
-      "from_column": "Notes",
-      "to_column": "Notes",
-      "type": "potential-link"
-    },
-    {
-      "from_table": "tblColonyTotals2010-2021_MayJuneCombined",
-      "to_table": "tblRWCWB_ColonyInventory_10Nov22",
-      "from_column": "State",
-      "to_column": "State",
       "type": "potential-link"
     },
     {
@@ -2985,6 +2930,13 @@
     {
       "from_table": "tblColonyTotals2010-2021_MayJuneCombined",
       "to_table": "tblRWCWB_ColonyInventory_10Nov22",
+      "from_column": "State",
+      "to_column": "State",
+      "type": "potential-link"
+    },
+    {
+      "from_table": "tblColonyTotals2010-2021_MayJuneCombined",
+      "to_table": "tblRWCWB_ColonyInventory_10Nov22",
       "from_column": "Longitude",
       "to_column": "Longitude",
       "type": "potential-link"
@@ -2992,22 +2944,8 @@
     {
       "from_table": "tblColonyTotals2010-2021_MayJuneCombined",
       "to_table": "tblSpeciesData2010",
-      "from_column": "SpeciesCode",
-      "to_column": "SpeciesCode",
-      "type": "potential-link"
-    },
-    {
-      "from_table": "tblColonyTotals2010-2021_MayJuneCombined",
-      "to_table": "tblSpeciesData2010",
-      "from_column": "Year",
-      "to_column": "Year",
-      "type": "potential-link"
-    },
-    {
-      "from_table": "tblColonyTotals2010-2021_MayJuneCombined",
-      "to_table": "tblSpeciesData2010",
-      "from_column": "ColonyName",
-      "to_column": "ColonyName",
+      "from_column": "Notes",
+      "to_column": "Notes",
       "type": "potential-link"
     },
     {
@@ -3020,20 +2958,41 @@
     {
       "from_table": "tblColonyTotals2010-2021_MayJuneCombined",
       "to_table": "tblSpeciesData2010",
+      "from_column": "ColonyName",
+      "to_column": "ColonyName",
+      "type": "potential-link"
+    },
+    {
+      "from_table": "tblColonyTotals2010-2021_MayJuneCombined",
+      "to_table": "tblSpeciesData2010",
+      "from_column": "Year",
+      "to_column": "Year",
+      "type": "potential-link"
+    },
+    {
+      "from_table": "tblColonyTotals2010-2021_MayJuneCombined",
+      "to_table": "tblSpeciesData2010",
+      "from_column": "SpeciesCode",
+      "to_column": "SpeciesCode",
+      "type": "potential-link"
+    },
+    {
+      "from_table": "tblColonyTotals2010-2021_MayJuneCombined",
+      "to_table": "tblSpeciesData2010",
+      "from_column": "Date",
+      "to_column": "Date",
+      "type": "potential-link"
+    },
+    {
+      "from_table": "tblColonyTotals2010-2021_MayJuneCombined",
+      "to_table": "tblSpeciesData2010",
       "from_column": "Longitude",
       "to_column": "Longitude",
       "type": "potential-link"
     },
     {
       "from_table": "tblColonyTotals2010-2021_MayJuneCombined",
-      "to_table": "tblSpeciesData2010",
-      "from_column": "Date",
-      "to_column": "Date",
-      "type": "potential-link"
-    },
-    {
-      "from_table": "tblColonyTotals2010-2021_MayJuneCombined",
-      "to_table": "tblSpeciesData2010",
+      "to_table": "tblSpeciesData2011-2013",
       "from_column": "Notes",
       "to_column": "Notes",
       "type": "potential-link"
@@ -3041,8 +3000,8 @@
     {
       "from_table": "tblColonyTotals2010-2021_MayJuneCombined",
       "to_table": "tblSpeciesData2011-2013",
-      "from_column": "SpeciesCode",
-      "to_column": "SpeciesCode",
+      "from_column": "ColonyName",
+      "to_column": "ColonyName",
       "type": "potential-link"
     },
     {
@@ -3055,8 +3014,8 @@
     {
       "from_table": "tblColonyTotals2010-2021_MayJuneCombined",
       "to_table": "tblSpeciesData2011-2013",
-      "from_column": "ColonyName",
-      "to_column": "ColonyName",
+      "from_column": "SpeciesCode",
+      "to_column": "SpeciesCode",
       "type": "potential-link"
     },
     {
@@ -3069,13 +3028,6 @@
     {
       "from_table": "tblColonyTotals2010-2021_MayJuneCombined",
       "to_table": "tblSpeciesData2011-2013",
-      "from_column": "Notes",
-      "to_column": "Notes",
-      "type": "potential-link"
-    },
-    {
-      "from_table": "tblColonyTotals2010-2021_MayJuneCombined",
-      "to_table": "tblSpeciesData2011-2013",
       "from_column": "BestForBPE?",
       "to_column": "BestForBPE?",
       "type": "potential-link"
@@ -3083,8 +3035,15 @@
     {
       "from_table": "tblColonyTotals2010-2021_MayJuneCombined",
       "to_table": "tblSpeciesData2015_2018_2021",
-      "from_column": "SpeciesCode",
-      "to_column": "SpeciesCode",
+      "from_column": "Notes",
+      "to_column": "Notes",
+      "type": "potential-link"
+    },
+    {
+      "from_table": "tblColonyTotals2010-2021_MayJuneCombined",
+      "to_table": "tblSpeciesData2015_2018_2021",
+      "from_column": "ColonyName",
+      "to_column": "ColonyName",
       "type": "potential-link"
     },
     {
@@ -3097,8 +3056,8 @@
     {
       "from_table": "tblColonyTotals2010-2021_MayJuneCombined",
       "to_table": "tblSpeciesData2015_2018_2021",
-      "from_column": "ColonyName",
-      "to_column": "ColonyName",
+      "from_column": "SpeciesCode",
+      "to_column": "SpeciesCode",
       "type": "potential-link"
     },
     {
@@ -3111,22 +3070,8 @@
     {
       "from_table": "tblColonyTotals2010-2021_MayJuneCombined",
       "to_table": "tblSpeciesData2015_2018_2021",
-      "from_column": "Notes",
-      "to_column": "Notes",
-      "type": "potential-link"
-    },
-    {
-      "from_table": "tblColonyTotals2010-2021_MayJuneCombined",
-      "to_table": "tblSpeciesData2015_2018_2021",
       "from_column": "BestForBPE?",
       "to_column": "BestForBPE?",
-      "type": "potential-link"
-    },
-    {
-      "from_table": "tblRWCWB_ColonyInventory_10Nov22",
-      "to_table": "tblSpeciesData2010",
-      "from_column": "ColonyName",
-      "to_column": "ColonyName",
       "type": "potential-link"
     },
     {
@@ -3141,6 +3086,13 @@
       "to_table": "tblSpeciesData2010",
       "from_column": "Longitude",
       "to_column": "Longitude",
+      "type": "potential-link"
+    },
+    {
+      "from_table": "tblRWCWB_ColonyInventory_10Nov22",
+      "to_table": "tblSpeciesData2010",
+      "from_column": "ColonyName",
+      "to_column": "ColonyName",
       "type": "potential-link"
     },
     {
@@ -3181,15 +3133,22 @@
     {
       "from_table": "tblSpeciesData2010",
       "to_table": "tblSpeciesData2011-2013",
-      "from_column": "SpeciesCode",
-      "to_column": "SpeciesCode",
+      "from_column": "DottingAreaNumber",
+      "to_column": "DottingAreaNumber",
       "type": "potential-link"
     },
     {
       "from_table": "tblSpeciesData2010",
       "to_table": "tblSpeciesData2011-2013",
-      "from_column": "Site",
-      "to_column": "Site",
+      "from_column": "Notes",
+      "to_column": "Notes",
+      "type": "potential-link"
+    },
+    {
+      "from_table": "tblSpeciesData2010",
+      "to_table": "tblSpeciesData2011-2013",
+      "from_column": "PQ",
+      "to_column": "PQ",
       "type": "potential-link"
     },
     {
@@ -3209,6 +3168,13 @@
     {
       "from_table": "tblSpeciesData2010",
       "to_table": "tblSpeciesData2011-2013",
+      "from_column": "OtherAdultsInColony",
+      "to_column": "OtherAdultsInColony",
+      "type": "potential-link"
+    },
+    {
+      "from_table": "tblSpeciesData2010",
+      "to_table": "tblSpeciesData2011-2013",
       "from_column": "OtherImmInColony",
       "to_column": "OtherImmInColony",
       "type": "potential-link"
@@ -3216,64 +3182,15 @@
     {
       "from_table": "tblSpeciesData2010",
       "to_table": "tblSpeciesData2011-2013",
-      "from_column": "RoostingAdults",
-      "to_column": "RoostingAdults",
-      "type": "potential-link"
-    },
-    {
-      "from_table": "tblSpeciesData2010",
-      "to_table": "tblSpeciesData2011-2013",
-      "from_column": "PQ",
-      "to_column": "PQ",
-      "type": "potential-link"
-    },
-    {
-      "from_table": "tblSpeciesData2010",
-      "to_table": "tblSpeciesData2011-2013",
-      "from_column": "ColonyName",
-      "to_column": "ColonyName",
-      "type": "potential-link"
-    },
-    {
-      "from_table": "tblSpeciesData2010",
-      "to_table": "tblSpeciesData2011-2013",
-      "from_column": "ChickNestw/outAdult",
-      "to_column": "ChickNestw/outAdult",
-      "type": "potential-link"
-    },
-    {
-      "from_table": "tblSpeciesData2010",
-      "to_table": "tblSpeciesData2011-2013",
-      "from_column": "DottingAreaNumber",
-      "to_column": "DottingAreaNumber",
-      "type": "potential-link"
-    },
-    {
-      "from_table": "tblSpeciesData2010",
-      "to_table": "tblSpeciesData2011-2013",
-      "from_column": "RoostingBirds",
-      "to_column": "RoostingBirds",
-      "type": "potential-link"
-    },
-    {
-      "from_table": "tblSpeciesData2010",
-      "to_table": "tblSpeciesData2011-2013",
-      "from_column": "RoostingImmatures",
-      "to_column": "RoostingImmatures",
-      "type": "potential-link"
-    },
-    {
-      "from_table": "tblSpeciesData2010",
-      "to_table": "tblSpeciesData2011-2013",
-      "from_column": "AbandNest",
-      "to_column": "AbandNest",
-      "type": "potential-link"
-    },
-    {
-      "from_table": "tblSpeciesData2010",
-      "to_table": "tblSpeciesData2011-2013",
       "from_column": "Date",
       "to_column": "Date",
+      "type": "potential-link"
+    },
+    {
+      "from_table": "tblSpeciesData2010",
+      "to_table": "tblSpeciesData2011-2013",
+      "from_column": "EmptyNest",
+      "to_column": "EmptyNest",
       "type": "potential-link"
     },
     {
@@ -3286,15 +3203,15 @@
     {
       "from_table": "tblSpeciesData2010",
       "to_table": "tblSpeciesData2011-2013",
-      "from_column": "Notes",
-      "to_column": "Notes",
+      "from_column": "Site",
+      "to_column": "Site",
       "type": "potential-link"
     },
     {
       "from_table": "tblSpeciesData2010",
       "to_table": "tblSpeciesData2011-2013",
-      "from_column": "WBN",
-      "to_column": "WBN",
+      "from_column": "RoostingBirds",
+      "to_column": "RoostingBirds",
       "type": "potential-link"
     },
     {
@@ -3307,8 +3224,8 @@
     {
       "from_table": "tblSpeciesData2010",
       "to_table": "tblSpeciesData2011-2013",
-      "from_column": "Dotter",
-      "to_column": "Dotter",
+      "from_column": "ChickNestw/outAdult",
+      "to_column": "ChickNestw/outAdult",
       "type": "potential-link"
     },
     {
@@ -3321,22 +3238,15 @@
     {
       "from_table": "tblSpeciesData2010",
       "to_table": "tblSpeciesData2011-2013",
-      "from_column": "CameraNumber",
-      "to_column": "CameraNumber",
+      "from_column": "ColonyName",
+      "to_column": "ColonyName",
       "type": "potential-link"
     },
     {
       "from_table": "tblSpeciesData2010",
       "to_table": "tblSpeciesData2011-2013",
-      "from_column": "EmptyNest",
-      "to_column": "EmptyNest",
-      "type": "potential-link"
-    },
-    {
-      "from_table": "tblSpeciesData2010",
-      "to_table": "tblSpeciesData2011-2013",
-      "from_column": "Brood",
-      "to_column": "Brood",
+      "from_column": "WBN",
+      "to_column": "WBN",
       "type": "potential-link"
     },
     {
@@ -3344,6 +3254,41 @@
       "to_table": "tblSpeciesData2011-2013",
       "from_column": "AutoID",
       "to_column": "AutoID",
+      "type": "potential-link"
+    },
+    {
+      "from_table": "tblSpeciesData2010",
+      "to_table": "tblSpeciesData2011-2013",
+      "from_column": "Dotter",
+      "to_column": "Dotter",
+      "type": "potential-link"
+    },
+    {
+      "from_table": "tblSpeciesData2010",
+      "to_table": "tblSpeciesData2011-2013",
+      "from_column": "RoostingAdults",
+      "to_column": "RoostingAdults",
+      "type": "potential-link"
+    },
+    {
+      "from_table": "tblSpeciesData2010",
+      "to_table": "tblSpeciesData2011-2013",
+      "from_column": "CameraNumber",
+      "to_column": "CameraNumber",
+      "type": "potential-link"
+    },
+    {
+      "from_table": "tblSpeciesData2010",
+      "to_table": "tblSpeciesData2011-2013",
+      "from_column": "SpeciesCode",
+      "to_column": "SpeciesCode",
+      "type": "potential-link"
+    },
+    {
+      "from_table": "tblSpeciesData2010",
+      "to_table": "tblSpeciesData2011-2013",
+      "from_column": "RoostingImmatures",
+      "to_column": "RoostingImmatures",
       "type": "potential-link"
     },
     {
@@ -3363,50 +3308,15 @@
     {
       "from_table": "tblSpeciesData2010",
       "to_table": "tblSpeciesData2011-2013",
-      "from_column": "OtherAdultsInColony",
-      "to_column": "OtherAdultsInColony",
+      "from_column": "AbandNest",
+      "to_column": "AbandNest",
       "type": "potential-link"
     },
     {
       "from_table": "tblSpeciesData2010",
-      "to_table": "tblSpeciesData2015_2018_2021",
-      "from_column": "SpeciesCode",
-      "to_column": "SpeciesCode",
-      "type": "potential-link"
-    },
-    {
-      "from_table": "tblSpeciesData2010",
-      "to_table": "tblSpeciesData2015_2018_2021",
-      "from_column": "Site",
-      "to_column": "Site",
-      "type": "potential-link"
-    },
-    {
-      "from_table": "tblSpeciesData2010",
-      "to_table": "tblSpeciesData2015_2018_2021",
-      "from_column": "Year",
-      "to_column": "Year",
-      "type": "potential-link"
-    },
-    {
-      "from_table": "tblSpeciesData2010",
-      "to_table": "tblSpeciesData2015_2018_2021",
-      "from_column": "PQ",
-      "to_column": "PQ",
-      "type": "potential-link"
-    },
-    {
-      "from_table": "tblSpeciesData2010",
-      "to_table": "tblSpeciesData2015_2018_2021",
-      "from_column": "ColonyName",
-      "to_column": "ColonyName",
-      "type": "potential-link"
-    },
-    {
-      "from_table": "tblSpeciesData2010",
-      "to_table": "tblSpeciesData2015_2018_2021",
-      "from_column": "ChickNestw/outAdult",
-      "to_column": "ChickNestw/outAdult",
+      "to_table": "tblSpeciesData2011-2013",
+      "from_column": "Brood",
+      "to_column": "Brood",
       "type": "potential-link"
     },
     {
@@ -3419,8 +3329,22 @@
     {
       "from_table": "tblSpeciesData2010",
       "to_table": "tblSpeciesData2015_2018_2021",
-      "from_column": "AbandNest",
-      "to_column": "AbandNest",
+      "from_column": "Notes",
+      "to_column": "Notes",
+      "type": "potential-link"
+    },
+    {
+      "from_table": "tblSpeciesData2010",
+      "to_table": "tblSpeciesData2015_2018_2021",
+      "from_column": "PQ",
+      "to_column": "PQ",
+      "type": "potential-link"
+    },
+    {
+      "from_table": "tblSpeciesData2010",
+      "to_table": "tblSpeciesData2015_2018_2021",
+      "from_column": "Year",
+      "to_column": "Year",
       "type": "potential-link"
     },
     {
@@ -3433,15 +3357,15 @@
     {
       "from_table": "tblSpeciesData2010",
       "to_table": "tblSpeciesData2015_2018_2021",
-      "from_column": "Notes",
-      "to_column": "Notes",
+      "from_column": "EmptyNest",
+      "to_column": "EmptyNest",
       "type": "potential-link"
     },
     {
       "from_table": "tblSpeciesData2010",
       "to_table": "tblSpeciesData2015_2018_2021",
-      "from_column": "WBN",
-      "to_column": "WBN",
+      "from_column": "Site",
+      "to_column": "Site",
       "type": "potential-link"
     },
     {
@@ -3454,8 +3378,8 @@
     {
       "from_table": "tblSpeciesData2010",
       "to_table": "tblSpeciesData2015_2018_2021",
-      "from_column": "Dotter",
-      "to_column": "Dotter",
+      "from_column": "ChickNestw/outAdult",
+      "to_column": "ChickNestw/outAdult",
       "type": "potential-link"
     },
     {
@@ -3468,22 +3392,15 @@
     {
       "from_table": "tblSpeciesData2010",
       "to_table": "tblSpeciesData2015_2018_2021",
-      "from_column": "CameraNumber",
-      "to_column": "CameraNumber",
+      "from_column": "ColonyName",
+      "to_column": "ColonyName",
       "type": "potential-link"
     },
     {
       "from_table": "tblSpeciesData2010",
       "to_table": "tblSpeciesData2015_2018_2021",
-      "from_column": "Brood",
-      "to_column": "Brood",
-      "type": "potential-link"
-    },
-    {
-      "from_table": "tblSpeciesData2010",
-      "to_table": "tblSpeciesData2015_2018_2021",
-      "from_column": "EmptyNest",
-      "to_column": "EmptyNest",
+      "from_column": "WBN",
+      "to_column": "WBN",
       "type": "potential-link"
     },
     {
@@ -3491,6 +3408,27 @@
       "to_table": "tblSpeciesData2015_2018_2021",
       "from_column": "AutoID",
       "to_column": "AutoID",
+      "type": "potential-link"
+    },
+    {
+      "from_table": "tblSpeciesData2010",
+      "to_table": "tblSpeciesData2015_2018_2021",
+      "from_column": "Dotter",
+      "to_column": "Dotter",
+      "type": "potential-link"
+    },
+    {
+      "from_table": "tblSpeciesData2010",
+      "to_table": "tblSpeciesData2015_2018_2021",
+      "from_column": "CameraNumber",
+      "to_column": "CameraNumber",
+      "type": "potential-link"
+    },
+    {
+      "from_table": "tblSpeciesData2010",
+      "to_table": "tblSpeciesData2015_2018_2021",
+      "from_column": "SpeciesCode",
+      "to_column": "SpeciesCode",
       "type": "potential-link"
     },
     {
@@ -3508,45 +3446,17 @@
       "type": "potential-link"
     },
     {
-      "from_table": "tblSpeciesData2011-2013",
+      "from_table": "tblSpeciesData2010",
       "to_table": "tblSpeciesData2015_2018_2021",
-      "from_column": "SpeciesCode",
-      "to_column": "SpeciesCode",
+      "from_column": "AbandNest",
+      "to_column": "AbandNest",
       "type": "potential-link"
     },
     {
-      "from_table": "tblSpeciesData2011-2013",
+      "from_table": "tblSpeciesData2010",
       "to_table": "tblSpeciesData2015_2018_2021",
-      "from_column": "Site",
-      "to_column": "Site",
-      "type": "potential-link"
-    },
-    {
-      "from_table": "tblSpeciesData2011-2013",
-      "to_table": "tblSpeciesData2015_2018_2021",
-      "from_column": "Year",
-      "to_column": "Year",
-      "type": "potential-link"
-    },
-    {
-      "from_table": "tblSpeciesData2011-2013",
-      "to_table": "tblSpeciesData2015_2018_2021",
-      "from_column": "PQ",
-      "to_column": "PQ",
-      "type": "potential-link"
-    },
-    {
-      "from_table": "tblSpeciesData2011-2013",
-      "to_table": "tblSpeciesData2015_2018_2021",
-      "from_column": "ColonyName",
-      "to_column": "ColonyName",
-      "type": "potential-link"
-    },
-    {
-      "from_table": "tblSpeciesData2011-2013",
-      "to_table": "tblSpeciesData2015_2018_2021",
-      "from_column": "ChickNestw/outAdult",
-      "to_column": "ChickNestw/outAdult",
+      "from_column": "Brood",
+      "to_column": "Brood",
       "type": "potential-link"
     },
     {
@@ -3559,20 +3469,6 @@
     {
       "from_table": "tblSpeciesData2011-2013",
       "to_table": "tblSpeciesData2015_2018_2021",
-      "from_column": "AbandNest",
-      "to_column": "AbandNest",
-      "type": "potential-link"
-    },
-    {
-      "from_table": "tblSpeciesData2011-2013",
-      "to_table": "tblSpeciesData2015_2018_2021",
-      "from_column": "Date",
-      "to_column": "Date",
-      "type": "potential-link"
-    },
-    {
-      "from_table": "tblSpeciesData2011-2013",
-      "to_table": "tblSpeciesData2015_2018_2021",
       "from_column": "Notes",
       "to_column": "Notes",
       "type": "potential-link"
@@ -3580,29 +3476,15 @@
     {
       "from_table": "tblSpeciesData2011-2013",
       "to_table": "tblSpeciesData2015_2018_2021",
-      "from_column": "BestForBPE?",
-      "to_column": "BestForBPE?",
+      "from_column": "PQ",
+      "to_column": "PQ",
       "type": "potential-link"
     },
     {
       "from_table": "tblSpeciesData2011-2013",
       "to_table": "tblSpeciesData2015_2018_2021",
-      "from_column": "WBN",
-      "to_column": "WBN",
-      "type": "potential-link"
-    },
-    {
-      "from_table": "tblSpeciesData2011-2013",
-      "to_table": "tblSpeciesData2015_2018_2021",
-      "from_column": "CardNumber",
-      "to_column": "CardNumber",
-      "type": "potential-link"
-    },
-    {
-      "from_table": "tblSpeciesData2011-2013",
-      "to_table": "tblSpeciesData2015_2018_2021",
-      "from_column": "Dotter",
-      "to_column": "Dotter",
+      "from_column": "Year",
+      "to_column": "Year",
       "type": "potential-link"
     },
     {
@@ -3615,22 +3497,8 @@
     {
       "from_table": "tblSpeciesData2011-2013",
       "to_table": "tblSpeciesData2015_2018_2021",
-      "from_column": "PBN",
-      "to_column": "PBN",
-      "type": "potential-link"
-    },
-    {
-      "from_table": "tblSpeciesData2011-2013",
-      "to_table": "tblSpeciesData2015_2018_2021",
-      "from_column": "CameraNumber",
-      "to_column": "CameraNumber",
-      "type": "potential-link"
-    },
-    {
-      "from_table": "tblSpeciesData2011-2013",
-      "to_table": "tblSpeciesData2015_2018_2021",
-      "from_column": "Brood",
-      "to_column": "Brood",
+      "from_column": "Date",
+      "to_column": "Date",
       "type": "potential-link"
     },
     {
@@ -3643,8 +3511,71 @@
     {
       "from_table": "tblSpeciesData2011-2013",
       "to_table": "tblSpeciesData2015_2018_2021",
+      "from_column": "Site",
+      "to_column": "Site",
+      "type": "potential-link"
+    },
+    {
+      "from_table": "tblSpeciesData2011-2013",
+      "to_table": "tblSpeciesData2015_2018_2021",
+      "from_column": "CardNumber",
+      "to_column": "CardNumber",
+      "type": "potential-link"
+    },
+    {
+      "from_table": "tblSpeciesData2011-2013",
+      "to_table": "tblSpeciesData2015_2018_2021",
+      "from_column": "ChickNestw/outAdult",
+      "to_column": "ChickNestw/outAdult",
+      "type": "potential-link"
+    },
+    {
+      "from_table": "tblSpeciesData2011-2013",
+      "to_table": "tblSpeciesData2015_2018_2021",
+      "from_column": "PBN",
+      "to_column": "PBN",
+      "type": "potential-link"
+    },
+    {
+      "from_table": "tblSpeciesData2011-2013",
+      "to_table": "tblSpeciesData2015_2018_2021",
+      "from_column": "ColonyName",
+      "to_column": "ColonyName",
+      "type": "potential-link"
+    },
+    {
+      "from_table": "tblSpeciesData2011-2013",
+      "to_table": "tblSpeciesData2015_2018_2021",
+      "from_column": "WBN",
+      "to_column": "WBN",
+      "type": "potential-link"
+    },
+    {
+      "from_table": "tblSpeciesData2011-2013",
+      "to_table": "tblSpeciesData2015_2018_2021",
       "from_column": "AutoID",
       "to_column": "AutoID",
+      "type": "potential-link"
+    },
+    {
+      "from_table": "tblSpeciesData2011-2013",
+      "to_table": "tblSpeciesData2015_2018_2021",
+      "from_column": "Dotter",
+      "to_column": "Dotter",
+      "type": "potential-link"
+    },
+    {
+      "from_table": "tblSpeciesData2011-2013",
+      "to_table": "tblSpeciesData2015_2018_2021",
+      "from_column": "CameraNumber",
+      "to_column": "CameraNumber",
+      "type": "potential-link"
+    },
+    {
+      "from_table": "tblSpeciesData2011-2013",
+      "to_table": "tblSpeciesData2015_2018_2021",
+      "from_column": "SpeciesCode",
+      "to_column": "SpeciesCode",
       "type": "potential-link"
     },
     {
@@ -3657,13 +3588,34 @@
     {
       "from_table": "tblSpeciesData2011-2013",
       "to_table": "tblSpeciesData2015_2018_2021",
+      "from_column": "BestForBPE?",
+      "to_column": "BestForBPE?",
+      "type": "potential-link"
+    },
+    {
+      "from_table": "tblSpeciesData2011-2013",
+      "to_table": "tblSpeciesData2015_2018_2021",
       "from_column": "DateDotted",
       "to_column": "DateDotted",
+      "type": "potential-link"
+    },
+    {
+      "from_table": "tblSpeciesData2011-2013",
+      "to_table": "tblSpeciesData2015_2018_2021",
+      "from_column": "AbandNest",
+      "to_column": "AbandNest",
+      "type": "potential-link"
+    },
+    {
+      "from_table": "tblSpeciesData2011-2013",
+      "to_table": "tblSpeciesData2015_2018_2021",
+      "from_column": "Brood",
+      "to_column": "Brood",
       "type": "potential-link"
     }
   ],
   "semantic_insights": [
-    "Database contains 12 tables with a total of 63,143 records.",
+    "Database contains 11 tables with a total of 63,143 records.",
     "Spatial data (coordinates) discovered in: flood_stations, tblChandeleurNorthSouth_2010-2021ColonyCentroidCoordinates, tblColonySiteNotes2010, tblColonySiteNotes2011-2021, tblColonyTotals2010-2021_MayJuneCombined, tblRWCWB_ColonyInventory_10Nov22, tblSpeciesData2010, tblSpeciesData2011-2013, tblSpeciesData2015_2018_2021.",
     "Temporal data (years/dates) discovered in: flood_events, flood_stations, tblChandeleurNorthSouth_2010-2021ColonyCentroidCoordinates, tblColonySiteNotes2011-2021, tblColonyTotals2010-2021_MayJuneCombined, tblSpeciesData2010, tblSpeciesData2011-2013, tblSpeciesData2015_2018_2021.",
     "Species-specific metadata found in: tblSpeciesCodes, tblSpeciesData2010, tblSpeciesData2011-2013, tblSpeciesData2015_2018_2021."

@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}Flood Intelligence - Nestperts{% endblock %}
+{% block title %}FloodWatch - Nestperts{% endblock %}
 
 {% block extra_css %}
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
@@ -293,8 +293,8 @@
 
     /* Map Legend */
     .map-legend {
-        background: rgba(30, 41, 59, 0.95);
-        border: 1px solid rgba(136, 153, 187, 0.2);
+        background: var(--bg-secondary);
+        border: 1px solid var(--surface-border);
         border-radius: 8px;
         padding: 1rem;
         margin-bottom: 1rem;
@@ -304,9 +304,34 @@
         font-family: 'IBM Plex Mono', monospace;
         font-size: 0.75rem;
         font-weight: 600;
-        color: #e5e5e5;
+        color: var(--text-primary);
         margin-bottom: 0.75rem;
         letter-spacing: 0.05em;
+    }
+
+    .time-selector-btn {
+        padding: 0.375rem 0.75rem;
+        background: var(--bg-primary);
+        border: 1px solid var(--surface-border);
+        border-radius: 6px;
+        color: var(--text-secondary);
+        font-family: 'IBM Plex Mono', monospace;
+        font-size: 0.75rem;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.2s ease;
+    }
+
+    .time-selector-btn:hover {
+        background: var(--surface-hover);
+        border-color: #00D9FF;
+        color: var(--text-primary);
+    }
+
+    .time-selector-btn.active {
+        background: rgba(0, 217, 255, 0.15);
+        border-color: #00D9FF;
+        color: #00D9FF;
     }
 
     .legend-items {
@@ -1140,7 +1165,7 @@
 {% block content %}
 <div class="flood-container">
     <!-- Header -->
-    <div class="flood-header">Coastal Flood Intelligence</div>
+    <div class="flood-header">FloodWatch</div>
     <div class="flood-subtitle">
         Real-time water level monitoring and risk assessment
     </div>
@@ -1157,7 +1182,7 @@
     <!-- Loading State -->
     <div id="loading-state" class="loading-state">
         <div class="loading-spinner"></div>
-        <div class="loading-text">Loading Flood Intelligence Data</div>
+        <div class="loading-text">Loading FloodWatch Data</div>
     </div>
 
     <!-- Main Content (hidden initially) -->
@@ -1191,7 +1216,15 @@
             <!-- Left: Map -->
             <div class="map-section">
                 <div class="map-legend">
-                    <div class="map-legend-title">Long-term Flood Risk (click marker for current conditions)</div>
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem;">
+                        <div class="map-legend-title" style="margin: 0;">Flood Risk Forecast</div>
+                        <div style="display: flex; gap: 0.5rem;">
+                            <button class="time-selector-btn active" data-years="1" onclick="selectTimeHorizon(1)">1yr</button>
+                            <button class="time-selector-btn" data-years="5" onclick="selectTimeHorizon(5)">5yr</button>
+                            <button class="time-selector-btn" data-years="10" onclick="selectTimeHorizon(10)">10yr</button>
+                            <button class="time-selector-btn" data-years="20" onclick="selectTimeHorizon(20)">20yr</button>
+                        </div>
+                    </div>
                     <div class="legend-items">
                         <div class="legend-item">
                             <span class="legend-dot" style="background: #00FF00;"></span>
@@ -1299,63 +1332,6 @@
                         </svg>
                         Open Fullscreen Graph
                     </button>
-                </div>
-
-                <!-- Return Period Risk -->
-                <div class="section-header">Return Period Risk</div>
-
-                <div id="rp-loading" style="font-family:'IBM Plex Mono',monospace;font-size:0.75rem;color:#8899bb;padding:0.75rem;text-align:center;">
-                    Loading historical analysis...
-                </div>
-
-                <div id="rp-cards" style="display:none;">
-                    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:0.75rem;">
-                        <div id="rp-5yr" onclick="selectReturnPeriod('5yr')" style="background:rgba(30,41,59,0.8);border:1px solid rgba(136,153,187,0.2);border-radius:8px;padding:0.6rem 0.4rem;text-align:center;cursor:pointer;transition:border-color 0.15s;">
-                            <div style="font-size:10px;color:#8899bb;margin-bottom:3px;">5-year</div>
-                            <div id="rp-5yr-val" style="font-family:'Space Mono',monospace;font-size:16px;font-weight:700;color:#00ff88;margin-bottom:2px;">--</div>
-                            <div style="font-size:9px;color:#64748b;">20% / yr</div>
-                            <div id="rp-5yr-last" style="font-size:9px;color:#64748b;margin-top:2px;">--</div>
-                        </div>
-                        <div id="rp-10yr" onclick="selectReturnPeriod('10yr')" style="background:rgba(30,41,59,0.8);border:1px solid rgba(136,153,187,0.2);border-radius:8px;padding:0.6rem 0.4rem;text-align:center;cursor:pointer;transition:border-color 0.15s;">
-                            <div style="font-size:10px;color:#8899bb;margin-bottom:3px;">10-year</div>
-                            <div id="rp-10yr-val" style="font-family:'Space Mono',monospace;font-size:16px;font-weight:700;color:#ffff00;margin-bottom:2px;">--</div>
-                            <div style="font-size:9px;color:#64748b;">10% / yr</div>
-                            <div id="rp-10yr-last" style="font-size:9px;color:#64748b;margin-top:2px;">--</div>
-                        </div>
-                        <div id="rp-20yr" onclick="selectReturnPeriod('20yr')" style="background:rgba(30,41,59,0.8);border:1px solid rgba(136,153,187,0.2);border-radius:8px;padding:0.6rem 0.4rem;text-align:center;cursor:pointer;transition:border-color 0.15s;">
-                            <div style="font-size:10px;color:#8899bb;margin-bottom:3px;">20-year</div>
-                            <div id="rp-20yr-val" style="font-family:'Space Mono',monospace;font-size:16px;font-weight:700;color:#ffa500;margin-bottom:2px;">--</div>
-                            <div style="font-size:9px;color:#64748b;">5% / yr</div>
-                            <div id="rp-20yr-last" style="font-size:9px;color:#64748b;margin-top:2px;">--</div>
-                        </div>
-                        <div id="rp-50yr" onclick="selectReturnPeriod('50yr')" style="background:rgba(30,41,59,0.8);border:1px solid rgba(136,153,187,0.2);border-radius:8px;padding:0.6rem 0.4rem;text-align:center;cursor:pointer;transition:border-color 0.15s;">
-                            <div style="font-size:10px;color:#8899bb;margin-bottom:3px;">50-year</div>
-                            <div id="rp-50yr-val" style="font-family:'Space Mono',monospace;font-size:16px;font-weight:700;color:#ff4b4b;margin-bottom:2px;">--</div>
-                            <div style="font-size:9px;color:#64748b;">2% / yr</div>
-                            <div id="rp-50yr-last" style="font-size:9px;color:#64748b;margin-top:2px;">--</div>
-                        </div>
-                    </div>
-
-                    <div id="rp-percentile" style="font-family:'IBM Plex Mono',monospace;font-size:0.72rem;color:#94a3b8;padding:0.5rem 0.75rem;background:rgba(255,255,255,0.03);border-radius:6px;margin-bottom:0.75rem;"></div>
-
-                    <div style="height:110px;margin-bottom:0.75rem;">
-                        <canvas id="rp-sparkline"></canvas>
-                    </div>
-
-                    <div id="rp-context" style="background:rgba(0,217,255,0.05);border-left:3px solid #00d9ff;border-radius:0 6px 6px 0;padding:0.75rem 1rem;margin-bottom:0.75rem;">
-                        <div id="rp-context-text" style="font-family:'IBM Plex Mono',monospace;font-size:0.75rem;color:#94a3b8;line-height:1.6;">
-                            Select a return period above
-                        </div>
-                    </div>
-
-                    <div style="font-family:'IBM Plex Mono',monospace;font-size:0.65rem;color:#64748b;padding-top:0.5rem;border-top:1px solid rgba(136,153,187,0.15);display:flex;justify-content:space-between;">
-                        <span id="rp-fit-label">Gumbel (GEV) · NOAA annual maxima</span>
-                        <span id="rp-r2-label"></span>
-                    </div>
-                </div>
-
-                <div id="rp-error" style="display:none;font-family:'IBM Plex Mono',monospace;font-size:0.75rem;color:#ff4b4b;padding:0.75rem;background:rgba(255,75,75,0.05);border:1px solid rgba(255,75,75,0.2);border-radius:6px;">
-                    Could not load return period data for this station.
                 </div>
 
                 <!-- Risk Assessment -->
@@ -1481,6 +1457,7 @@
     let currentSurge = 0;
     let currentStation = null;
     let zonesData = [];
+    let currentTimeHorizon = 1; // Default to 1 year
     const API_BASE = "{{ api_base_url }}";
 
     const GULF_STATIONS = [
@@ -1947,6 +1924,14 @@
 
         console.log(`Successfully added ${markersAdded} markers`);
 
+        // Store zones data for time horizon calculations
+        zonesData = zones;
+
+        // Apply initial time horizon (will recalculate and redraw markers)
+        if (currentTimeHorizon > 1) {
+            updateMapWithTimeHorizon();
+        }
+
         // Fit map to show all markers with padding
         if (bounds.length > 0) {
             setTimeout(() => {
@@ -1995,7 +1980,8 @@
 
         // Load real-time NOAA data
         await loadNOAAData(station);
-        await loadReturnPeriods(station);
+        // Return period analysis removed (UI section deleted)
+        // await loadReturnPeriods(station);
 
         // Focus map — zoom in tight so only the selected colony is visible
         map.setView([colony.latitude, colony.longitude], 13);
@@ -2106,46 +2092,18 @@
     }
 
     async function _fetchNOAAInternal(stationId, product, hours, isFuture) {
-        const now = new Date();
-        let begin, end;
+        // Use backend proxy endpoints to avoid CORS issues
+        const endpoint = product === 'predictions'
+            ? `${API_BASE}/api/noaa/predictions/${stationId}?hours=${hours}&datum=MHHW`
+            : `${API_BASE}/api/noaa/water_level/${stationId}?hours=${hours}&datum=MHHW`;
 
-        if (isFuture) {
-            // For predictions, start now and go forward
-            begin = now;
-            end = new Date(now.getTime() + hours * 3600000);
-        } else {
-            // For observations, start in past and end now
-            begin = new Date(now.getTime() - hours * 3600000);
-            end = now;
-        }
-
-        const formatDate = (date) => {
-            const y = date.getFullYear();
-            const m = String(date.getMonth() + 1).padStart(2, '0');
-            const d = String(date.getDate()).padStart(2, '0');
-            const h = String(date.getHours()).padStart(2, '0');
-            const min = String(date.getMinutes()).padStart(2, '0');
-            // NOAA API: yyyyMMdd HH:mm (space and colon required)
-            return `${y}${m}${d} ${h}:${min}`;
-        };
-
-        const url = `https://api.tidesandcurrents.noaa.gov/api/prod/datagetter?` +
-            `product=${product}&` +
-            `application=NestScope&` +
-            `begin_date=${encodeURIComponent(formatDate(begin))}&` +
-            `end_date=${encodeURIComponent(formatDate(end))}&` +
-            `datum=MHHW&` +
-            `station=${stationId}&` +
-            `time_zone=lst_ldt&` +
-            `units=metric&` +
-            `format=json`;
-
-        console.log('Fetching NOAA:', url);
+        console.log('Fetching NOAA via backend:', endpoint);
 
         try {
-            const response = await fetch(url);
+            const response = await fetch(endpoint);
             if (!response.ok) {
-                throw new Error(`NOAA API returned ${response.status}`);
+                const errorText = await response.text();
+                throw new Error(`Backend API returned ${response.status}: ${errorText}`);
             }
 
             const data = await response.json();
@@ -2167,7 +2125,7 @@
                 }))
             };
         } catch (error) {
-            console.error('NOAA API internal error:', error);
+            console.error('NOAA API error via backend:', error);
             return null;
         }
     }
@@ -2767,6 +2725,162 @@
     });
 
     document.addEventListener('DOMContentLoaded', initPage);
+
+// ── Time-Based Risk Calculation ──────────────────────────────────────
+/**
+ * Calculate time-adjusted risk score for a colony
+ *
+ * REALISTIC MODEL: Uses additive points, not multiplicative percentages
+ * This prevents the "apocalyptic" scenario where all colonies become CRITICAL
+ *
+ * Base risk categories:
+ * - LOW: 0-24      (safe areas, should stay LOW for 5-10 years)
+ * - MODERATE: 25-49 (some risk, becomes HIGH after 10-20 years)
+ * - HIGH: 50-74     (significant risk, becomes CRITICAL after 15-20 years)
+ * - CRITICAL: 75-100 (already severe, may worsen slightly)
+ *
+ * Time-based adjustments (POINTS added to base risk):
+ * - 1 year:  +0.5 points per year = +0.5 total
+ * - 5 years: +0.5 points per year = +2.5 total
+ * - 10 years: +0.5 points per year = +5.0 total
+ * - 20 years: +0.5 points per year = +10.0 total
+ */
+function calculateTimeAdjustedRisk(baseRisk, years) {
+    if (years === 1) {
+        // 1 year: essentially no change (current conditions)
+        return baseRisk;
+    }
+
+    // Gradual linear increase: 0.5 points per year
+    // This is based on Gulf Coast climate projections:
+    // - Sea level rise: ~3-4mm/year = 0.2-0.3 points/year
+    // - Coastal erosion: ~1m/year in some areas = 0.1-0.2 points/year
+    // - Infrastructure aging + storm frequency = ~0.1 points/year
+    // Total: ~0.5 points/year is realistic but not catastrophic
+
+    const riskIncrease = years * 0.5;
+
+    // Apply increase with cap at 100
+    const adjustedRisk = Math.min(100, baseRisk + riskIncrease);
+
+    return adjustedRisk;
+}
+
+function getRiskLevel(score) {
+    if (score >= 75) return { level: 'CRITICAL', color: '#FF4B4B' };
+    if (score >= 50) return { level: 'HIGH', color: '#FFA500' };
+    if (score >= 25) return { level: 'MODERATE', color: '#FFFF00' };
+    return { level: 'LOW', color: '#00FF00' };
+}
+
+function selectTimeHorizon(years) {
+    currentTimeHorizon = years;
+
+    // Update button states
+    document.querySelectorAll('.time-selector-btn').forEach(btn => {
+        btn.classList.remove('active');
+        if (parseInt(btn.dataset.years) === years) {
+            btn.classList.add('active');
+        }
+    });
+
+    // Recalculate and update map
+    if (zonesData && zonesData.length > 0) {
+        updateMapWithTimeHorizon();
+    }
+}
+
+function updateMapWithTimeHorizon() {
+    // Clear existing markers
+    markers.forEach(m => map.removeLayer(m));
+    markers = [];
+
+    if (markersFullscreen && markersFullscreen.length > 0) {
+        markersFullscreen.forEach(m => mapFullscreen.removeLayer(m));
+        markersFullscreen = [];
+    }
+
+    // Recalculate risk for each zone
+    zonesData.forEach(zone => {
+        // Store original risk if not already stored
+        if (!zone.original_risk_score) {
+            zone.original_risk_score = zone.risk_score;
+            zone.original_risk_level = zone.risk_level;
+        }
+
+        // Calculate time-adjusted risk
+        zone.risk_score = calculateTimeAdjustedRisk(zone.original_risk_score, currentTimeHorizon);
+        const riskInfo = getRiskLevel(zone.risk_score);
+        zone.risk_level = riskInfo.level;
+
+        // Create marker for main map
+        const marker = L.circleMarker([zone.latitude, zone.longitude], {
+            radius: 8,
+            fillColor: riskInfo.color,
+            color: '#fff',
+            weight: 2,
+            opacity: 1,
+            fillOpacity: 0.8
+        });
+
+        marker.bindPopup(`
+            <strong>${zone.colony_name}</strong><br>
+            ${currentTimeHorizon}-Year Risk: ${zone.risk_level}<br>
+            Score: ${zone.risk_score.toFixed(1)}/100
+        `);
+
+        marker.on('click', () => selectColony(zone));
+        marker.addTo(map);
+        markers.push(marker);
+
+        // Create marker for fullscreen map
+        if (mapFullscreen) {
+            const markerFS = L.circleMarker([zone.latitude, zone.longitude], {
+                radius: 8,
+                fillColor: riskInfo.color,
+                color: '#fff',
+                weight: 2,
+                opacity: 1,
+                fillOpacity: 0.8
+            });
+
+            markerFS.bindPopup(`
+                <strong>${zone.colony_name}</strong><br>
+                ${currentTimeHorizon}-Year Risk: ${zone.risk_level}<br>
+                Score: ${zone.risk_score.toFixed(1)}/100<br>
+                Click for current conditions
+            `);
+
+            markerFS.on('click', () => {
+                selectColony(zone);
+                toggleMapFullscreen();
+            });
+
+            markerFS.addTo(mapFullscreen);
+            markersFullscreen.push(markerFS);
+        }
+    });
+
+    // Update selected colony display if one is selected
+    if (selectedColony) {
+        const updatedColony = zonesData.find(z => z.colony_name === selectedColony.colony_name);
+        if (updatedColony) {
+            updateColonyRiskDisplay(updatedColony);
+        }
+    }
+}
+
+function updateColonyRiskDisplay(colony) {
+    // Update risk badge if it exists
+    const riskBadge = document.querySelector('.risk-badge');
+    if (riskBadge) {
+        const riskInfo = getRiskLevel(colony.risk_score);
+        riskBadge.style.background = riskInfo.color;
+        riskBadge.style.color = riskInfo.level === 'LOW' ? '#000' : '#fff';
+        riskBadge.querySelector('.risk-label').textContent = riskInfo.level;
+        riskBadge.querySelector('.risk-score').textContent = colony.risk_score.toFixed(1);
+    }
+}
 
 // ── Return Period Analysis ──────────────────────────────────────
 let rpData = null;
