@@ -153,6 +153,13 @@ rasterio
 # ruff
 
 # ============================================================================
+# LLM EVALUATION
+# ============================================================================
+# DeepEval: LLM evaluation framework for NestEval dashboard
+# Tests NestChat answer quality with AnswerRelevancyMetric + FaithfulnessMetric
+deepeval
+
+# ============================================================================
 # PLATFORM NOTES
 # ============================================================================
 # - On macOS with M1/M2: Use `pip install --pre torch torchvision` for Apple Silicon

@@ -2907,8 +2907,7 @@ async function identifyAllBirds() {
         // Save all changes
         await saveLabels();
 
-        // Update UI immediately
-        updateBoxCount();
+        // Redraw canvas
         redrawCanvas();
 
         // Show success message
@@ -3489,7 +3488,7 @@ function handleAISearch(query) {
     `;
 }
 
-async function selectSpeciesFromAI(speciesCode, speciesName) {
+function selectSpeciesFromAI(speciesCode, speciesName) {
     if (!selectedBoxId) return;
 
     const selectedBox = boxes.find(b => b.id === selectedBoxId);
@@ -3501,11 +3500,7 @@ async function selectSpeciesFromAI(speciesCode, speciesName) {
     selectedBox.species = speciesCode;
 
     // Save to backend
-    await saveLabels();
-
-    // Update UI immediately
-    updateBoxCount();
-    redrawCanvas();
+    saveLabels();
 
     // Show success message
     const content = document.getElementById('classification-content');
@@ -3773,7 +3768,7 @@ async function selectSpecies(code) {
         showToast(`Bird #${boxes.indexOf(box) + 1} updated to ${displayName}`, 'success');
 
         // Auto-save
-        await saveLabels();
+        saveLabels();
 
         updateBoxCount();
         redrawCanvas();
@@ -3875,102 +3870,6 @@ function showToast(message, type = 'info') {
 }
 
 // Save functions
-// Simple save function used by classification and identification features
-async function saveLabels() {
-    try {
-        const yoloBoxes = boxes.map(box => ({
-            class_id: 0,
-            x_center: box.x_center,
-            y_center: box.y_center,
-            width: box.width,
-            height: box.height,
-            species: box.species,
-            confidence: box.confidence
-        }));
-
-        const response = await fetch('/api/save_annotations', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                project_id: PROJECT_ID,
-                image_name: IMAGE_NAME,
-                boxes: yoloBoxes,
-                username: USERNAME
-            })
-        });
-
-        if (!response.ok) {
-            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-        }
-
-        const result = await response.json();
-
-        if (result.success) {
-            hasUnsavedChanges = false;
-            updateNavigationState();
-
-            // Refresh the species list to show newly added species
-            await refreshSpeciesList();
-
-            return true;
-        } else {
-            console.error('Save failed:', result.error);
-            return false;
-        }
-    } catch (error) {
-        console.error('Save error:', error);
-        throw error;  // Re-throw so caller can handle
-    }
-}
-
-// Refresh species list from backend (updates bottom bar with new species)
-async function refreshSpeciesList() {
-    try {
-        const response = await fetch('/api/get_project_classes', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                project_id: PROJECT_ID
-            })
-        });
-
-        if (!response.ok) return;
-
-        const result = await response.json();
-
-        if (result.classes) {
-            // Update global SPECIES_DATA (defined earlier in template)
-            if (typeof SPECIES_DATA !== 'undefined') {
-                // Merge new classes with existing ones
-                const existingCodes = new Set(SPECIES_DATA.map(s => s.code));
-                const newSpecies = result.classes.filter(c => !existingCodes.has(c.code));
-
-                if (newSpecies.length > 0) {
-                    SPECIES_DATA.push(...newSpecies);
-                    console.log(`Added ${newSpecies.length} new species to list:`, newSpecies);
-
-                    // Update bottom bar if it exists
-                    updateBottomClassBar();
-                }
-            }
-        }
-    } catch (error) {
-        console.error('Error refreshing species list:', error);
-        // Non-critical error, don't throw
-    }
-}
-
-// Update the bottom class bar UI
-function updateBottomClassBar() {
-    const bottomBar = document.getElementById('bottom-class-bar');
-    if (!bottomBar || typeof SPECIES_DATA === 'undefined') return;
-
-    // Rebuild the bottom bar with updated species list
-    // This function should match the initial rendering logic
-    // (Implementation depends on how bottom bar is initially rendered)
-    console.log('Bottom class bar updated with', SPECIES_DATA.length, 'species');
-}
-
 async function saveOnly() {
     // Show saving indicator
     showToast('Saving annotations...');
@@ -4575,8 +4474,7 @@ document.addEventListener('DOMContentLoaded', () => {
     <div id="delete-confirm-modal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.7); z-index: 10000; align-items: center; justify-content: center;" onclick="if(event.target === this) hideDeleteConfirm()">
         <div style="background: var(--surface); border-radius: 12px; padding: 2rem; max-width: 500px; width: 90%; box-shadow: 0 20px 60px rgba(0,0,0,0.5);">
             <h3 style="font-family: var(--font-serif); font-size: 1.5rem; margin-bottom: 1rem; color: var(--text-primary);">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 8px; color: var(--error);"><circle cx="12" cy="12" r="10"/><line x1="12" x2="12" y1="8" y2="12"/><line x1="12" x2="12.01" y1="16" y2="16"/></svg>
-                Delete Image?
+                ⚠️ Delete Image?
             </h3>
             <p style="color: var(--text-muted); font-size: 0.875rem; margin-bottom: 1.5rem;">
                 Are you sure you want to delete <strong style="color: var(--text-primary);">{{ image_name }}</strong>? This action cannot be undone and will permanently remove the image and all its annotations.

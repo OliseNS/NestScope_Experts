@@ -1301,6 +1301,63 @@
                     </button>
                 </div>
 
+                <!-- Return Period Risk -->
+                <div class="section-header">Return Period Risk</div>
+
+                <div id="rp-loading" style="font-family:'IBM Plex Mono',monospace;font-size:0.75rem;color:#8899bb;padding:0.75rem;text-align:center;">
+                    Loading historical analysis...
+                </div>
+
+                <div id="rp-cards" style="display:none;">
+                    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:0.75rem;">
+                        <div id="rp-5yr" onclick="selectReturnPeriod('5yr')" style="background:rgba(30,41,59,0.8);border:1px solid rgba(136,153,187,0.2);border-radius:8px;padding:0.6rem 0.4rem;text-align:center;cursor:pointer;transition:border-color 0.15s;">
+                            <div style="font-size:10px;color:#8899bb;margin-bottom:3px;">5-year</div>
+                            <div id="rp-5yr-val" style="font-family:'Space Mono',monospace;font-size:16px;font-weight:700;color:#00ff88;margin-bottom:2px;">--</div>
+                            <div style="font-size:9px;color:#64748b;">20% / yr</div>
+                            <div id="rp-5yr-last" style="font-size:9px;color:#64748b;margin-top:2px;">--</div>
+                        </div>
+                        <div id="rp-10yr" onclick="selectReturnPeriod('10yr')" style="background:rgba(30,41,59,0.8);border:1px solid rgba(136,153,187,0.2);border-radius:8px;padding:0.6rem 0.4rem;text-align:center;cursor:pointer;transition:border-color 0.15s;">
+                            <div style="font-size:10px;color:#8899bb;margin-bottom:3px;">10-year</div>
+                            <div id="rp-10yr-val" style="font-family:'Space Mono',monospace;font-size:16px;font-weight:700;color:#ffff00;margin-bottom:2px;">--</div>
+                            <div style="font-size:9px;color:#64748b;">10% / yr</div>
+                            <div id="rp-10yr-last" style="font-size:9px;color:#64748b;margin-top:2px;">--</div>
+                        </div>
+                        <div id="rp-20yr" onclick="selectReturnPeriod('20yr')" style="background:rgba(30,41,59,0.8);border:1px solid rgba(136,153,187,0.2);border-radius:8px;padding:0.6rem 0.4rem;text-align:center;cursor:pointer;transition:border-color 0.15s;">
+                            <div style="font-size:10px;color:#8899bb;margin-bottom:3px;">20-year</div>
+                            <div id="rp-20yr-val" style="font-family:'Space Mono',monospace;font-size:16px;font-weight:700;color:#ffa500;margin-bottom:2px;">--</div>
+                            <div style="font-size:9px;color:#64748b;">5% / yr</div>
+                            <div id="rp-20yr-last" style="font-size:9px;color:#64748b;margin-top:2px;">--</div>
+                        </div>
+                        <div id="rp-50yr" onclick="selectReturnPeriod('50yr')" style="background:rgba(30,41,59,0.8);border:1px solid rgba(136,153,187,0.2);border-radius:8px;padding:0.6rem 0.4rem;text-align:center;cursor:pointer;transition:border-color 0.15s;">
+                            <div style="font-size:10px;color:#8899bb;margin-bottom:3px;">50-year</div>
+                            <div id="rp-50yr-val" style="font-family:'Space Mono',monospace;font-size:16px;font-weight:700;color:#ff4b4b;margin-bottom:2px;">--</div>
+                            <div style="font-size:9px;color:#64748b;">2% / yr</div>
+                            <div id="rp-50yr-last" style="font-size:9px;color:#64748b;margin-top:2px;">--</div>
+                        </div>
+                    </div>
+
+                    <div id="rp-percentile" style="font-family:'IBM Plex Mono',monospace;font-size:0.72rem;color:#94a3b8;padding:0.5rem 0.75rem;background:rgba(255,255,255,0.03);border-radius:6px;margin-bottom:0.75rem;"></div>
+
+                    <div style="height:110px;margin-bottom:0.75rem;">
+                        <canvas id="rp-sparkline"></canvas>
+                    </div>
+
+                    <div id="rp-context" style="background:rgba(0,217,255,0.05);border-left:3px solid #00d9ff;border-radius:0 6px 6px 0;padding:0.75rem 1rem;margin-bottom:0.75rem;">
+                        <div id="rp-context-text" style="font-family:'IBM Plex Mono',monospace;font-size:0.75rem;color:#94a3b8;line-height:1.6;">
+                            Select a return period above
+                        </div>
+                    </div>
+
+                    <div style="font-family:'IBM Plex Mono',monospace;font-size:0.65rem;color:#64748b;padding-top:0.5rem;border-top:1px solid rgba(136,153,187,0.15);display:flex;justify-content:space-between;">
+                        <span id="rp-fit-label">Gumbel (GEV) · NOAA annual maxima</span>
+                        <span id="rp-r2-label"></span>
+                    </div>
+                </div>
+
+                <div id="rp-error" style="display:none;font-family:'IBM Plex Mono',monospace;font-size:0.75rem;color:#ff4b4b;padding:0.75rem;background:rgba(255,75,75,0.05);border:1px solid rgba(255,75,75,0.2);border-radius:6px;">
+                    Could not load return period data for this station.
+                </div>
+
                 <!-- Risk Assessment -->
                 <div class="section-header">Risk Assessment</div>
 
@@ -1425,63 +1482,32 @@
     let currentStation = null;
     let zonesData = [];
     const API_BASE = "{{ api_base_url }}";
-    let backendAvailable = false;
-
-    // Check if backend is available
-    async function checkBackend() {
-        try {
-            const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 second timeout
-
-            const response = await fetch(`${API_BASE}/health`, {
-                method: 'GET',
-                signal: controller.signal
-            });
-
-            clearTimeout(timeoutId);
-            backendAvailable = response.ok;
-            return backendAvailable;
-        } catch (error) {
-            console.error('Backend unavailable:', error);
-            backendAvailable = false;
-            return false;
-        }
-    }
-
-    // Show backend error
-    function showBackendError() {
-        document.getElementById('loading-state').innerHTML = `
-            <div style="text-align: center; padding: 3rem;">
-                <div style="margin-bottom: 1rem; color: var(--db-warning); opacity: 0.5;">
-                    <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
-                </div>
-                <h2 style="color: var(--text-primary); margin-bottom: 1rem;">Backend Connection Failed</h2>
-                <p style="color: var(--text-secondary); margin-bottom: 1.5rem;">
-                    Cannot connect to FastAPI backend at ${API_BASE}<br>
-                    Make sure the backend is running on port 8000
-                </p>
-                <button onclick="location.reload()" style="
-                    background: #7BABAE;
-                    color: white;
-                    border: none;
-                    padding: 0.75rem 1.5rem;
-                    border-radius: 8px;
-                    cursor: pointer;
-                    font-size: 1rem;
-                ">
-                    Retry Connection
-                </button>
-            </div>
-        `;
-    }
 
     const GULF_STATIONS = [
-        {name: "Grand Isle, LA", id: "8761724", lat: 29.2633, lon: -89.9567},
-        {name: "Shell Beach, LA", id: "8761305", lat: 29.8683, lon: -89.6733},
-        {name: "Pascagoula, MS", id: "8741533", lat: 30.345, lon: -88.5633},
-        {name: "Waveland, MS", id: "8747766", lat: 30.2783, lon: -89.3667},
-        {name: "New Canal, LA", id: "8761927", lat: 30.0267, lon: -90.1133},
-        {name: "Port Fourchon, LA", id: "8762075", lat: 29.1150, lon: -90.1983}
+        // Texas (west to east)
+        {name: "South Padre Island, TX", id: "8779770", lat: 26.0733, lon: -97.1633},
+        {name: "Corpus Christi, TX",     id: "8775296", lat: 27.5800, lon: -97.0433},
+        {name: "Rockport, TX",           id: "8774770", lat: 28.0217, lon: -97.0467},
+        {name: "Freeport, TX",           id: "8772447", lat: 28.9433, lon: -95.3233},
+        {name: "Galveston Pier 21, TX",  id: "8771450", lat: 29.3100, lon: -94.7933},
+        {name: "Sabine Pass N, TX",       id: "8770822", lat: 29.8700, lon: -93.9317},
+        // Louisiana
+        {name: "Port Fourchon, LA",      id: "8762075", lat: 29.1150, lon: -90.1983},
+        {name: "Grand Isle, LA",         id: "8761724", lat: 29.2633, lon: -89.9567},
+        {name: "New Canal, LA",          id: "8761927", lat: 30.0267, lon: -90.1133},
+        {name: "Shell Beach, LA",        id: "8761305", lat: 29.8683, lon: -89.6733},
+        {name: "Eugene Island, LA",      id: "8764311", lat: 29.3717, lon: -91.3850},
+        // Mississippi / Alabama
+        {name: "Waveland, MS",           id: "8747766", lat: 30.2783, lon: -89.3667},
+        {name: "Pascagoula, MS",         id: "8741533", lat: 30.3450, lon: -88.5633},
+        {name: "Dauphin Island, AL",     id: "8735180", lat: 30.2500, lon: -88.0750},
+        // Florida (west to east)
+        {name: "Pensacola, FL",          id: "8729840", lat: 30.4033, lon: -87.2117},
+        {name: "Panama City, FL",        id: "8729108", lat: 30.1533, lon: -85.6667},
+        {name: "Apalachicola, FL",       id: "8728690", lat: 29.7267, lon: -84.9817},
+        {name: "Cedar Key, FL",          id: "8727520", lat: 29.1350, lon: -83.0317},
+        {name: "Naples, FL",             id: "8725110", lat: 26.1317, lon: -81.8067},
+        {name: "Key West, FL",           id: "8724580", lat: 24.5550, lon: -81.8083},
     ];
 
     // Initialize page
@@ -1724,20 +1750,8 @@
     // Load cached colony data
     async function loadCachedData() {
         try {
-            // Check backend availability first
-            const isAvailable = await checkBackend();
-            if (!isAvailable) {
-                showBackendError();
-                return;
-            }
-
             console.log('Fetching from:', `${API_BASE}/api/flood/cached`);
-            const response = await fetch(`${API_BASE}/api/flood/cached`, {
-                method: 'GET',
-                headers: {
-                    'Content-Type': 'application/json'
-                }
-            });
+            const response = await fetch(`${API_BASE}/api/flood/cached`);
 
             if (!response.ok) {
                 throw new Error(`HTTP ${response.status}: ${response.statusText}`);
@@ -1781,7 +1795,18 @@
 
         } catch (error) {
             console.error('Error loading data:', error);
-            showBackendError();
+            document.getElementById('loading-state').style.display = 'none';
+            document.getElementById('main-content').innerHTML = `
+                <div style="padding: 2rem; text-align: center; color: #FF4B4B;">
+                    <h3>Failed to Load Data</h3>
+                    <p>${error.message}</p>
+                    <p style="font-size: 0.9rem; color: #94A3B8;">Check console for details</p>
+                    <button onclick="location.reload()" style="margin-top: 1rem; padding: 0.5rem 1rem; background: #00D9FF; border: none; border-radius: 6px; color: #0F172A; cursor: pointer;">
+                        Retry
+                    </button>
+                </div>
+            `;
+            document.getElementById('main-content').style.display = 'block';
         }
     }
 
@@ -1970,9 +1995,10 @@
 
         // Load real-time NOAA data
         await loadNOAAData(station);
+        await loadReturnPeriods(station);
 
-        // Focus map
-        map.setView([colony.latitude, colony.longitude], 10);
+        // Focus map — zoom in tight so only the selected colony is visible
+        map.setView([colony.latitude, colony.longitude], 13);
     }
 
     // Utilities
@@ -2741,5 +2767,238 @@
     });
 
     document.addEventListener('DOMContentLoaded', initPage);
+
+// ── Return Period Analysis ──────────────────────────────────────
+let rpData = null;
+let rpCurrentStation = null;
+let selectedRPPeriod = null;
+
+const RP_COLORS = {
+    '5yr':  '#00ff88',
+    '10yr': '#ffff00',
+    '20yr': '#ffa500',
+    '50yr': '#ff4b4b',
+};
+
+async function loadReturnPeriods(station) {
+    if (!station) return;
+    if (station.id === rpCurrentStation && rpData) {
+        renderRPCards(rpData);
+        return;
+    }
+
+    document.getElementById('rp-loading').style.display = 'block';
+    document.getElementById('rp-cards').style.display   = 'none';
+    document.getElementById('rp-error').style.display   = 'none';
+
+    try {
+        const resp = await fetch(`${API_BASE}/api/flood/return_periods/${station.id}?n_years=20`);
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        rpData = await resp.json();
+        rpCurrentStation = station.id;
+
+        document.getElementById('rp-loading').style.display = 'none';
+        document.getElementById('rp-cards').style.display   = 'block';
+
+        renderRPCards(rpData);
+        selectReturnPeriod('10yr');
+    } catch (err) {
+        console.error('Return period fetch failed:', err);
+        document.getElementById('rp-loading').style.display = 'none';
+        document.getElementById('rp-error').style.display   = 'block';
+    }
+}
+
+function gumbelCDF(x, loc, scale) {
+    return Math.exp(-Math.exp(-(x - loc) / scale));
+}
+
+function renderRPCards(data) {
+    const l  = data.return_levels;
+    const le = data.last_exceeded || {};
+
+    ['5yr','10yr','20yr','50yr'].forEach(p => {
+        document.getElementById(`rp-${p}-val`).textContent = l[p].toFixed(2) + 'm';
+        const lastEl = document.getElementById(`rp-${p}-last`);
+        if (lastEl) {
+            lastEl.textContent = le[p] ? `last: ${le[p]}` : 'no data';
+            lastEl.style.color = le[p] && le[p] >= 2020 ? '#ff4b4b' : '#64748b';
+        }
+    });
+
+    // Current percentile badge
+    const current = parseFloat(document.getElementById('current-level')?.textContent) || 0;
+    const pct = (gumbelCDF(current, data.fit.loc, data.fit.scale) * 100).toFixed(1);
+    const pctEl = document.getElementById('rp-percentile');
+    if (pctEl) {
+        const pctNum = parseFloat(pct);
+        const pctColor = pctNum >= 95 ? '#ff4b4b' : pctNum >= 80 ? '#ffa500' : '#00ff88';
+        const pctLabel = pctNum < 1 ? '&lt;1st' : `${pct}th`;
+        pctEl.innerHTML = `Current level is in the <span style="color:${pctColor};font-weight:700;">${pctLabel} percentile</span> of historical observations`;
+    }
+
+    // Sparkline
+    drawRPSparkline(data);
+
+    const r2 = data.fit.r_squared;
+    const r2El = document.getElementById('rp-r2-label');
+    r2El.textContent = `r² = ${r2} · ${data.fit.n_years}yr data`;
+    r2El.style.color = r2 >= 0.95 ? '#00ff88' : r2 >= 0.90 ? '#ffff00' : '#ff4b4b';
+    document.getElementById('rp-fit-label').textContent =
+        `${data.fit.distribution} · ${data.station_name}`;
+}
+
+let sparklineChart = null;
+
+function drawRPSparkline(data) {
+    const canvas = document.getElementById('rp-sparkline');
+    if (!canvas) return;
+
+    if (sparklineChart) { sparklineChart.destroy(); sparklineChart = null; }
+
+    const years  = data.fit.years  || [];
+    const maxima = data.fit.annual_maxima || [];
+    const levels = data.return_levels;
+
+    sparklineChart = new Chart(canvas, {
+        type: 'bar',
+        data: {
+            labels: years,
+            datasets: [{
+                label: 'Annual peak',
+                data: maxima,
+                backgroundColor: maxima.map(v =>
+                    v >= levels['50yr'] ? 'rgba(255,75,75,0.8)' :
+                    v >= levels['20yr'] ? 'rgba(255,165,0,0.8)' :
+                    v >= levels['10yr'] ? 'rgba(255,255,0,0.7)' :
+                    v >= levels['5yr']  ? 'rgba(0,255,136,0.6)' :
+                                          'rgba(136,153,187,0.4)'
+                ),
+                borderWidth: 0,
+                borderRadius: 2,
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            animation: false,
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    callbacks: {
+                        label: ctx => `${ctx.raw.toFixed(2)}m MHHW`
+                    }
+                },
+                annotation: {
+                    annotations: {
+                        line5yr:  { type:'line', yMin: levels['5yr'],  yMax: levels['5yr'],  borderColor:'rgba(0,255,136,0.6)', borderWidth:1, borderDash:[3,3] },
+                        line10yr: { type:'line', yMin: levels['10yr'], yMax: levels['10yr'], borderColor:'rgba(255,255,0,0.7)',  borderWidth:1, borderDash:[3,3] },
+                        line20yr: { type:'line', yMin: levels['20yr'], yMax: levels['20yr'], borderColor:'rgba(255,165,0,0.7)',  borderWidth:1, borderDash:[3,3] },
+                        line50yr: { type:'line', yMin: levels['50yr'], yMax: levels['50yr'], borderColor:'rgba(255,75,75,0.7)',  borderWidth:1, borderDash:[3,3] },
+                    }
+                }
+            },
+            scales: {
+                x: { ticks: { color:'#94a3b8', font:{size:10}, maxRotation:45 }, grid:{display:false} },
+                y: { ticks: { color:'#64748b', font:{size:9}, callback: v => v.toFixed(1)+'m' }, grid:{ color:'rgba(255,255,255,0.05)' } }
+            }
+        }
+    });
+}
+
+function selectReturnPeriod(period) {
+    selectedRPPeriod = period;
+
+    ['5yr','10yr','20yr','50yr'].forEach(p => {
+        const card = document.getElementById(`rp-${p}`);
+        const hex  = RP_COLORS[p];
+        const r = parseInt(hex.slice(1,3),16);
+        const g = parseInt(hex.slice(3,5),16);
+        const b = parseInt(hex.slice(5,7),16);
+        card.style.borderColor = p === period ? hex : 'rgba(136,153,187,0.2)';
+        card.style.background  = p === period
+            ? `rgba(${r},${g},${b},0.08)`
+            : 'rgba(30,41,59,0.8)';
+    });
+
+    updateRPContext(period);
+}
+
+function updateRPContext(period) {
+    if (!rpData) return;
+
+    const level     = rpData.return_levels[period];
+    const current   = parseFloat(document.getElementById('current-level').textContent) || 0;
+    const forecast  = parseFloat(document.getElementById('forecast-peak').textContent) || 0;
+    const color     = RP_COLORS[period];
+    const annualPct = {'5yr':20,'10yr':10,'20yr':5,'50yr':2}[period];
+    const pctBelow  = ((level - current) / level * 100).toFixed(0);
+
+    let badge, summary;
+    if (forecast >= level) {
+        badge   = `<span style="background:rgba(255,75,75,0.15);color:#ff4b4b;border:1px solid #ff4b4b;padding:1px 6px;border-radius:3px;font-size:9px;font-weight:700;">FORECAST EXCEEDS ${period.toUpperCase()}</span>`;
+        summary = `72h forecast (${forecast.toFixed(2)}m) will exceed the ${period} threshold.`;
+    } else if (current >= level) {
+        badge   = `<span style="background:rgba(255,165,0,0.15);color:#ffa500;border:1px solid #ffa500;padding:1px 6px;border-radius:3px;font-size:9px;font-weight:700;">CURRENTLY EXCEEDING</span>`;
+        summary = `Current level (${current.toFixed(2)}m) is above the ${period} level.`;
+    } else {
+        badge   = `<span style="background:rgba(0,255,136,0.1);color:#00ff88;border:1px solid #00ff88;padding:1px 6px;border-radius:3px;font-size:9px;font-weight:700;">BELOW ${period.toUpperCase()}</span>`;
+        summary = `Current level is ${pctBelow}% below the ${period} threshold.`;
+    }
+
+    document.getElementById('rp-context-text').innerHTML = `
+        <div style="margin-bottom:6px;">${badge}</div>
+        <div style="margin-bottom:4px;">${summary}</div>
+        <div style="color:#64748b;">
+            ${period} level: <span style="color:${color};font-weight:700;">${level.toFixed(2)}m MHHW</span>
+            &nbsp;·&nbsp; ${annualPct}% annual exceedance probability
+        </div>
+    `;
+}
+
+function addRPLineToChart(period) {
+    // Draw ALL return period lines at once, highlight the selected one
+    if (!fullscreenChart || !rpData) return;
+
+    const allPeriods = ['5yr', '10yr', '20yr', '50yr'];
+    // Remove old RP annotations
+    Object.keys(fullscreenChart.options.plugins.annotation.annotations)
+        .filter(k => k.startsWith('rp_'))
+        .forEach(k => delete fullscreenChart.options.plugins.annotation.annotations[k]);
+
+    allPeriods.forEach(p => {
+        const level     = rpData.return_levels[p];
+        const color     = RP_COLORS[p];
+        const isSelected = p === period;
+        const r = parseInt(color.slice(1,3),16);
+        const g = parseInt(color.slice(3,5),16);
+        const b = parseInt(color.slice(5,7),16);
+
+        fullscreenChart.options.plugins.annotation.annotations[`rp_${p}`] = {
+            type:        'line',
+            yMin:        level,
+            yMax:        level,
+            borderColor: isSelected ? color : `rgba(${r},${g},${b},0.4)`,
+            borderWidth: isSelected ? 3 : 1.5,
+            borderDash:  isSelected ? [10, 4] : [4, 4],
+            label: {
+                display:         true,
+                content:         `${p.toUpperCase()}  ${level.toFixed(2)}m`,
+                position:        'end',
+                backgroundColor: isSelected ? `rgba(${r},${g},${b},0.25)` : `rgba(${r},${g},${b},0.08)`,
+                color:           isSelected ? color : `rgba(${r},${g},${b},0.6)`,
+                font: {
+                    size:   isSelected ? 13 : 11,
+                    family: 'Space Mono',
+                    weight: isSelected ? 'bold' : 'normal'
+                },
+                padding: isSelected ? { x: 8, y: 4 } : { x: 5, y: 3 },
+                borderRadius: 4,
+            }
+        };
+    });
+
+    fullscreenChart.update();
+}
 </script>
 {% endblock %}

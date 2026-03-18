@@ -1,0 +1,199 @@
+{
+  "run_id": "20260313_060706",
+  "timestamp": "2026-03-13T06:11:39.181179+00:00",
+  "total_tests": 8,
+  "passed": 2,
+  "failed": 6,
+  "pass_rate": 0.25,
+  "model": "anthropic/claude-sonnet-4.6",
+  "duration_seconds": 272.3,
+  "test_results": [
+    {
+      "id": 1,
+      "description": "Annual total bird count (aggregation)",
+      "question": "How many total birds were observed in 2015?",
+      "category": "aggregation",
+      "sql_query": "SELECT SUM(CAST(COALESCE(\"Birds\", 0) AS REAL)) as total_birds\nFROM \"tblColonyTotals2010-2021_MayJuneCombined\"\nWHERE \"Year\" = '2015'",
+      "answer": "## Total Birds Observed in 2015\n\nIn 2015, a total of **295,693 birds** were recorded across all monitored colonies in the dataset.\n\n### Key Highlights:\n- This represents a substantial snapshot of colonial waterbird populations for that survey year\n- The count aggregates observations from **all species and all colonies** monitored during the May/June survey period in 2015\n- Nearly **300,000 birds** were documented, reflecting the scale of these monitoring efforts\n\n### Context:\nThis figure comes from the combined May/June colonial waterbird survey data. It's worth noting that this total reflects birds counted at monitored colonies only \u2014 actual population numbers in the broader region would likely be higher, as not all nesting sites may be captured in every survey year.\n\nWould you like to break this down further \u2014 for example, by **species**, **colony**, or **state** for 2015? \ud83d\udc26\n\n[NO_VIZ]",
+      "success": true,
+      "error": null,
+      "metrics": {
+        "answer_relevancy": {
+          "score": 0.667,
+          "passed": false,
+          "threshold": 0.7,
+          "reason": "The score is 0.67 because while the actual output does address the question about total birds observed in 2015, it includes irrelevant statements about the scale of monitoring efforts, speculation about broader regional populations, and survey limitations. These details do not directly answer the specific question asked, dragging the relevancy score down from a perfect score."
+        },
+        "faithfulness": {
+          "score": 1.0,
+          "passed": true,
+          "threshold": 0.7,
+          "reason": "The score is 1.00 because the actual output is perfectly faithful to the retrieval context with no contradictions found!"
+        }
+      },
+      "overall_passed": false
+    },
+    {
+      "id": 2,
+      "description": "State with most observations (ranking + geographic)",
+      "question": "Which state had the most total bird observations overall?",
+      "category": "ranking",
+      "sql_query": "SELECT \"State\",\n    SUM(COALESCE(CAST(\"Birds\" AS REAL), 0)) as total_birds, \"Latitude\", \"Longitude\" FROM \"tblColonyTotals2010-2021_MayJuneCombined\"\nWHERE \"State\" IS NOT NULL AND \"Latitude\" IS NOT NULL AND \"Longitude\" IS NOT NULL\nGROUP BY \"State\", \"Latitude\", \"Longitude\"\nORDER BY total_birds DESC\nLIMIT 1;",
+      "answer": "## Louisiana Leads All States in Bird Observations! \ud83e\udd85\n\nBased on the data, **Louisiana (LA)** had the most total bird observations overall, with an impressive **349,740 total birds** recorded across the survey period (2010-2021).\n\n### Key Details:\n- **State:** Louisiana\n- **Total Birds Observed:** 349,740\n- **Central Coordinates:** ~29.05\u00b0N, 90.93\u00b0W (south-central Louisiana, near the Mississippi River Delta region)\n\n### Why Louisiana? \ud83c\udf0a\nThis result makes a lot of ecological sense! Louisiana is home to:\n- **Vast coastal wetlands** and the Mississippi River Delta \u2014 one of the most productive bird habitats in North America\n- **Major nesting grounds** for colonial waterbirds like pelicans, herons, egrets, and terns\n- **The Gulf Coast**, which supports enormous populations of wading birds and seabirds\n- Some of the **largest rookeries** in the entire Gulf of Mexico region\n\nLouisiana's rich estuarine ecosystems make it a critical hub for bird colonies, so it's no surprise it tops the chart for total observations!\n\n> \ud83d\udca1 *Note: The query grouped by Latitude/Longitude as well as State, so this reflects the top single location-state combination. Total statewide numbers could be even higher when summing all colonies within Louisiana.*\n\n[SHOW_MAP: true]\n[SHOW_CHART: bar]",
+      "success": true,
+      "error": null,
+      "metrics": {
+        "answer_relevancy": {
+          "score": 0.571,
+          "passed": false,
+          "threshold": 0.7,
+          "reason": "The score is 0.57 because while the actual output does address the core question of which state had the most total bird observations, it includes a significant amount of irrelevant information such as central coordinates of the observation area, details about the Mississippi River Delta's productivity, nesting grounds for specific species, general Gulf Coast bird population info, Louisiana's rookeries, and ecosystem descriptions. These unnecessary additions dilute the response's relevancy, preventing the score from being higher."
+        },
+        "faithfulness": {
+          "score": 1.0,
+          "passed": true,
+          "threshold": 0.7,
+          "reason": "The score is 1.00 because the actual output is perfectly faithful to the retrieval context with no contradictions found!"
+        }
+      },
+      "overall_passed": false
+    },
+    {
+      "id": 3,
+      "description": "Total colony count (simple aggregation)",
+      "question": "What is the total number of distinct bird colonies in the dataset?",
+      "category": "aggregation",
+      "sql_query": "SELECT COUNT(DISTINCT \"ColonyName\", \"Latitude\", \"Longitude\") as total_distinct_colonies FROM \"tblColonyTotals2010-2021_MayJuneCombined\"",
+      "answer": "## Query Error Explanation\n\nThere was a small technical issue with the query! The `COUNT(DISTINCT ...)` function in SQLite only accepts **a single argument**, but the query tried to pass three columns (`ColonyName`, `Latitude`, `Longitude`) at once \u2014 which caused the error.\n\n### How to Fix It\nTo count distinct colonies using multiple columns, a better approach would be to use a subquery like this:\n\n```sql\nSELECT COUNT(*) as total_distinct_colonies \nFROM (\n    SELECT DISTINCT \"ColonyName\", \"Latitude\", \"Longitude\" \n    FROM \"tblColonyTotals2010-2021_MayJuneCombined\"\n)\n```\n\nThis first finds all **unique combinations** of colony name and location, then counts them \u2014 giving a more accurate picture of distinct colonies.\n\n### Why This Matters\nUsing both name **and** coordinates to define uniqueness is smart, because:\n- Two colonies could share the same name but be in different locations\n- Two entries could share the same location but have different names\n\nTry rerunning the query with the corrected version above to get the total count! \ud83d\udc26\n\n[NO_VIZ]",
+      "success": false,
+      "error": "Query error: Execution failed on sql 'SELECT COUNT(DISTINCT \"ColonyName\", \"Latitude\", \"Longitude\") as total_distinct_colonies FROM \"tblColonyTotals2010-2021_MayJuneCombined\"': wrong number of arguments to function COUNT()",
+      "metrics": {},
+      "overall_passed": false
+    },
+    {
+      "id": 4,
+      "description": "Best year for bird counts (max aggregation)",
+      "question": "Which year had the highest total bird count across all colonies?",
+      "category": "ranking",
+      "sql_query": "SELECT \"Year\", SUM(CAST(COALESCE(\"Birds\", '0') AS REAL)) as total_birds FROM \"tblColonyTotals2010-2021_MayJuneCombined\" GROUP BY \"Year\" ORDER BY total_birds DESC LIMIT 1;",
+      "answer": "## Highest Total Bird Count by Year\n\nBased on the data, **2021 recorded the highest total bird count** across all colonies, with an impressive **585,253 birds** counted during that survey period.\n\n### Key Highlights:\n- \ud83d\udcc5 **Year:** 2021\n- \ud83d\udc26 **Total Birds:** 585,253\n- This represents the **peak year** for bird populations across all monitored colonies in the dataset (2010\u20132021)\n\n### What This Means:\nThe 2021 count standing as the highest on record could reflect several interesting dynamics:\n- **Population recovery** of certain species following conservation efforts\n- **Improved survey coverage** capturing more colonies than in previous years\n- **Favorable environmental conditions** supporting higher breeding success\n- A genuine **increase in colonial waterbird populations** in the monitored region\n\nIt would be worth comparing 2021 against other years to see whether this represents a steady upward trend or a notable spike \u2014 looking at the full year-by-year breakdown could reveal some fascinating patterns! \ud83d\udcca\n\n[SHOW_CHART: bar]",
+      "success": true,
+      "error": null,
+      "metrics": {
+        "answer_relevancy": {
+          "score": 0.8,
+          "passed": true,
+          "threshold": 0.7,
+          "reason": "The score is 0.80 because while the response largely addresses the question about which year had the highest total bird count, it includes some unnecessary suggestions for further analysis and vague prompts for further exploration that do not directly contribute to answering the question. A more focused, direct answer without these tangential additions would have scored higher."
+        },
+        "faithfulness": {
+          "score": 1.0,
+          "passed": true,
+          "threshold": 0.7,
+          "reason": "The score is 1.00 because the actual output is perfectly faithful to the retrieval context with no contradictions found!"
+        }
+      },
+      "overall_passed": true
+    },
+    {
+      "id": 5,
+      "description": "Geographic filter \u2014 Texas colonies (filtering)",
+      "question": "How many bird colonies are located in Texas?",
+      "category": "geographic",
+      "sql_query": "SELECT COUNT(DISTINCT \"ColonyName\") as total_colonies, \"State\"\nFROM \"tblColonyTotals2010-2021_MayJuneCombined\"\nWHERE \"State\" = 'TX'\nAND \"Latitude\" IS NOT NULL\nAND \"Longitude\" IS NOT NULL\nGROUP BY \"State\", \"Latitude\", \"Longitude\"",
+      "answer": "## Bird Colonies in Texas \ud83e\udd85\n\nBased on the query results, there are **114 bird colonies** located in Texas with recorded geographic coordinates (latitude and longitude).\n\n### Key Insights:\n- **Texas is a major hub** for bird colonies, which makes sense given its diverse coastal ecosystems along the Gulf of Mexico, extensive wetlands, and varied habitats\n- Each of the 114 locations represents a **distinct colony site** with unique coordinates\n- All 114 colonies have valid GPS coordinates, meaning they can be precisely mapped\n\n### Why So Many Colonies?\nTexas's geography makes it particularly attractive for colonial nesting birds:\n- \ud83c\udf0a **Extensive Gulf Coast shoreline** providing prime nesting habitat\n- \ud83c\udf3f **Coastal marshes and estuaries** rich in food sources\n- \ud83c\udfdd\ufe0f **Barrier islands and spoil islands** offering protected nesting sites\n- \ud83e\udd86 The state lies along major **migratory flyways**\n\nTexas is consistently one of the most bird-rich states in the US, hosting species like Brown Pelicans, Roseate Spoonbills, various herons, egrets, and many more colonial waterbirds.\n\nWould you like to explore which **specific species** are found in these Texas colonies, or see how Texas **compares to other states**?\n\n[SHOW_MAP: true]",
+      "success": true,
+      "error": null,
+      "metrics": {
+        "answer_relevancy": {
+          "score": 0.333,
+          "passed": false,
+          "threshold": 0.7,
+          "reason": "The score is 0.33 because the actual output is largely filled with irrelevant information about Texas's ecosystems, habitats, migratory flyways, and bird species lists, none of which address the specific question of how many bird colonies are located in Texas. The score is not lower because there appears to be some relevant content that partially addresses the question, but the overwhelming majority of the response is off-topic and fails to directly answer the colony count being asked about."
+        },
+        "faithfulness": {
+          "score": 0.7,
+          "passed": true,
+          "threshold": 0.7,
+          "reason": "The score is 0.70 because the actual output contains several contradictions with the retrieval context. Specifically, the actual output incorrectly states there are 114 bird colonies/locations, whereas the retrieval context clearly indicates only 20 records exist in the dataset. Additionally, the actual output references GPS coordinates, which are not mentioned in the retrieval context, which only describes total_colonies and State as dataset columns."
+        }
+      },
+      "overall_passed": false
+    },
+    {
+      "id": 6,
+      "description": "Trend over time \u2014 2010 to 2021 (time-series)",
+      "question": "Show me the total bird count for each year from 2010 to 2021.",
+      "category": "time_series",
+      "sql_query": "SELECT\n    \"Year\",\n    SUM(COALESCE(CAST(\"Birds\" AS REAL), 0)) as total_birds,\n    SUM(COALESCE(CAST(\"Nests\" AS REAL), 0)) as total_nests\nFROM \"tblColonyTotals2010-2021_MayJuneCombined\"\nGROUP BY \"Year\"\nORDER BY \"Year\";",
+      "answer": "## Total Bird & Nest Counts by Year (2010\u20132021)\n\nHere's a summary of the bird population trends across the available survey years:\n\n### Key Highlights:\n\n- **2021 was the peak year** by a significant margin, with **585,253 birds** and **456,049 nests** \u2014 the highest counts in the entire dataset.\n- **2012 was the lowest year**, recording only **273,083 birds** and **209,012 nests**, representing a notable dip in the population.\n- **Overall trend is positive** \u2014 despite some fluctuations, the population grew from ~332,746 in 2010 to ~585,253 in 2021, roughly a **76% increase** over the period.\n\n### Year-by-Year Breakdown:\n| Year | Total Birds | Total Nests |\n|------|------------|-------------|\n| 2010 | 332,746 | 236,160 |\n| 2011 | 400,524 | 295,702 |\n| 2012 | 273,083 | 209,012 |\n| 2013 | 329,850 | 247,098 |\n| 2015 | 295,693 | 225,360 |\n| 2018 | 367,063 | 289,158 |\n| 2021 | 585,253 | 456,049 |\n\n### Notable Observations:\n- \u26a0\ufe0f **Data gaps exist** \u2014 surveys are missing for 2014, 2016, 2017, 2019, and 2020, so the trends aren't fully continuous.\n- \ud83d\udcc8 The **2018 to 2021 jump** is dramatic (+59%), which could reflect genuine population growth, expanded survey coverage, or improved counting methods.\n- The **nest-to-bird ratio** remains fairly consistent across years (~0.7\u20130.8 nests per bird), suggesting stable breeding behavior throughout the period.\n\n[SHOW_CHART: line]",
+      "success": true,
+      "error": null,
+      "metrics": {
+        "answer_relevancy": {
+          "score": 0.8,
+          "passed": true,
+          "threshold": 0.7,
+          "reason": "The score is 0.80 because the actual output does provide some bird count information, which is relevant to the input. However, it loses points for including irrelevant details such as nest counts, nest-to-bird ratios, speculative analysis about causes of growth, and observations about breeding behavior. The input specifically asked for total bird counts per year from 2010 to 2021, and these additional elements detract from a focused, direct response."
+        },
+        "faithfulness": {
+          "score": 1.0,
+          "passed": true,
+          "threshold": 0.7,
+          "reason": "The score is 1.00 because the actual output is perfectly faithful to the retrieval context with no contradictions found!"
+        }
+      },
+      "overall_passed": true
+    },
+    {
+      "id": 7,
+      "description": "Worst year for bird counts (min aggregation)",
+      "question": "Which year had the fewest total bird observations?",
+      "category": "ranking",
+      "sql_query": "SELECT \"Year\", SUM(COALESCE(CAST(\"Birds\" AS REAL), 0)) as total_birds\nFROM \"tblColonyTotals2010-2021_MayJuneCombined\"\nGROUP BY \"Year\"\nORDER BY total_birds ASC\nLIMIT 1;",
+      "answer": "## Fewest Bird Observations by Year\n\nBased on the data, **2012** recorded the lowest total bird count across all colonies, with **273,083 birds** observed.\n\n### Key Insights:\n- This represents the single lowest annual count in the dataset spanning **2010\u20132021**\n- It's worth noting that low counts in a given year could reflect several factors:\n  - **Actual population declines** due to environmental stressors, habitat loss, or disease\n  - **Reduced survey coverage** \u2014 fewer colonies or sites monitored that year\n  - **Weather or timing issues** affecting survey conditions\n  - **Post-event recovery periods** (e.g., oil spills, hurricanes, or other disturbances in the Gulf Coast region)\n\n### Context:\nTo better understand whether 2012 was a true low point or an anomaly, it would be helpful to compare it against neighboring years (2011 and 2013) to see if there was a gradual decline or a sudden dip. If you'd like, I can pull the **full year-by-year trend** to give you a broader picture! \ud83d\udcca\n\n[SHOW_CHART: bar]",
+      "success": true,
+      "error": null,
+      "metrics": {
+        "answer_relevancy": {
+          "score": 0.286,
+          "passed": false,
+          "threshold": 0.7,
+          "reason": "The score is 0.29 because the actual output is heavily padded with irrelevant speculation about why the year had low counts, such as population declines, survey coverage issues, weather/timing problems, and post-event recovery. It also goes beyond the scope of the question by suggesting further trend analyses. The question simply asked to identify which year had the fewest observations, yet the response spent most of its content on unnecessary elaboration, resulting in a very low relevancy score."
+        },
+        "faithfulness": {
+          "score": 1.0,
+          "passed": true,
+          "threshold": 0.7,
+          "reason": "The score is 1.00 because the actual output is perfectly faithful to the retrieval context with no contradictions found!"
+        }
+      },
+      "overall_passed": false
+    },
+    {
+      "id": 8,
+      "description": "Top colony by nests in specific year (specific lookup)",
+      "question": "Which colony had the highest nest count in 2018?",
+      "category": "specific_lookup",
+      "sql_query": "SELECT \"ColonyName\", \"State\", \"Latitude\", \"Longitude\", SUM(CAST(COALESCE(\"Nests\", '0') AS REAL)) as total_nests FROM \"tblColonyTotals2010-2021_MayJuneCombined\" WHERE \"Year\" = '2018' AND \"Latitude\" IS NOT NULL AND \"Longitude\" IS NOT NULL GROUP BY \"ColonyName\", \"State\", \"Latitude\", \"Longitude\" ORDER BY total_nests DESC LIMIT 10;",
+      "answer": "## Highest Nest Counts in 2018 \ud83d\udc26\n\n**Raccoon Island, Louisiana** was the clear leader in 2018, with an impressive **60,533 nests** \u2014 more than **double** the second-place colony!\n\n### Top 10 Colonies by Nest Count (2018):\n\n| Rank | Colony | Nests |\n|------|--------|-------|\n| \ud83e\udd47 | Raccoon Island | 60,533 |\n| \ud83e\udd48 | Breton Island | 27,881 |\n| \ud83e\udd49 | Chandeleur South C | 18,830 |\n| 4 | Gosier Islands North | 17,358 |\n| 5 | Felicity Island | 16,679 |\n| 6 | Rabbit Island | 15,838 |\n| 7 | Gunn Island | 13,444 |\n| 8 | Houma Navigation Canal Island | 12,742 |\n| 9 | Belle Isle | 12,127 |\n| 10 | Queen Bess Island | 10,750 |\n\n### Key Insights \ud83d\udd0d\n- **Louisiana dominates entirely** \u2014 all 10 of the top colonies in 2018 are located in Louisiana, highlighting the state's critical importance as a seabird nesting habitat.\n- **Raccoon Island** stands out dramatically, hosting nearly **2.2x more nests** than the runner-up, Breton Island.\n- The top 10 colonies collectively hosted over **206,000 nests**, with Raccoon Island alone accounting for roughly **29%** of that total.\n- These colonies are clustered along Louisiana's Gulf Coast, a vital region for colonial waterbirds.\n\n[SHOW_MAP: true]\n[SHOW_CHART: bar]",
+      "success": true,
+      "error": null,
+      "metrics": {
+        "answer_relevancy": {
+          "score": 0.278,
+          "passed": false,
+          "threshold": 0.7,
+          "reason": "The score is 0.28 because while the actual output likely correctly identifies the colony with the highest nest count (which is the core of the question), it is heavily padded with irrelevant information including rankings of other colonies (3rd through 10th), general statements about Louisiana as a habitat, collective totals, percentage shares, and geographic clustering information. The question simply asks for the single colony with the highest nest count in 2018, making all this additional context unnecessary and significantly dragging down the relevancy score."
+        },
+        "faithfulness": {
+          "score": 1.0,
+          "passed": true,
+          "threshold": 0.7,
+          "reason": "The score is 1.00 because the actual output is perfectly faithful to the retrieval context with no contradictions found!"
+        }
+      },
+      "overall_passed": false
+    }
+  ]
+}
