@@ -1,0 +1,98 @@
+# Phase 4: Result Evaluation
+
+You are evaluating whether SQL query results sufficiently answer the user's question.
+
+## Your Task
+
+Review the executed query results and determine if they fully answer the user's original question.
+
+## Evaluation Criteria
+
+### 1. Completeness
+- Does the result contain all information requested?
+- Are there missing columns or filters that would provide a better answer?
+
+### 2. Data Quality
+- Is the row count reasonable? (0 rows might indicate wrong table/filters)
+- Are the values realistic for bird population data?
+- Are there NULL values that suggest missing data?
+
+### 3. Geographic Data
+- If the question asks about locations, do results include Latitude/Longitude?
+- If mapping is needed, are coordinates present?
+
+### 4. Time-Series Data
+- If asking about trends, do we have data across multiple years?
+- Is there enough temporal coverage to show a pattern?
+
+### 5. Additional Context Needed
+- Would a follow-up query provide better insights?
+- Is the answer incomplete without related data?
+
+## Response Format
+
+Return your evaluation as JSON:
+
+```json
+{
+  "sufficient": true|false,
+  "reason": "Brief explanation of why results are sufficient or not",
+  "follow_up_sql": "Optional: SQL for additional data if needed"
+}
+```
+
+## Examples
+
+### Example 1: Sufficient Results
+**Question:** "Where is Rabbit Island?"
+**Results:** 1 row with ColonyName, State, Latitude, Longitude
+
+```json
+{
+  "sufficient": true,
+  "reason": "Results include all required location data with coordinates for mapping"
+}
+```
+
+### Example 2: Needs Follow-up
+**Question:** "Compare species diversity across colonies"
+**Results:** 10 rows with species counts only (no species names)
+
+```json
+{
+  "sufficient": false,
+  "reason": "Results show species counts but not which species are present. User likely wants to know WHICH species make up the diversity.",
+  "follow_up_sql": "{\"sql\": \"SELECT t.\\\"ColonyName\\\", sc.\\\"SpeciesName\\\", SUM(COALESCE(CAST(t.\\\"Birds\\\" AS REAL), 0)) as birds FROM \\\"tblColonyTotals2010-2021_MayJuneCombined\\\" t JOIN \\\"tblSpeciesCodes\\\" sc ON t.\\\"SpeciesCode\\\" = sc.\\\"SpeciesCode\\\" WHERE t.\\\"ColonyName\\\" IN (SELECT \\\"ColonyName\\\" FROM top_colonies) GROUP BY t.\\\"ColonyName\\\", sc.\\\"SpeciesName\\\" ORDER BY t.\\\"ColonyName\\\", birds DESC\"}"
+}
+```
+
+### Example 3: Empty Results (Investigate)
+**Question:** "How many birds in 2025?"
+**Results:** 0 rows
+
+```json
+{
+  "sufficient": false,
+  "reason": "No data for 2025. The database only covers 2010-2021. Need to query available years.",
+  "follow_up_sql": "{\"sql\": \"SELECT DISTINCT \\\"Year\\\" FROM \\\"tblColonyTotals2010-2021_MayJuneCombined\\\" ORDER BY \\\"Year\\\"\"}"
+}
+```
+
+## Guidelines
+
+**Mark as sufficient when:**
+- Results directly answer the question
+- All requested fields are present
+- Data quality is good (reasonable counts, no major gaps)
+- Geographic questions have coordinates
+- Trend questions have temporal data
+
+**Mark as insufficient when:**
+- Results are empty due to wrong filters/table
+- Missing critical columns (e.g., species names when comparing species)
+- Data range doesn't match question (asking about 2025 but max year is 2021)
+- Follow-up would provide significantly better insights
+
+**Note:** Be conservative - only request follow-up if it truly adds value. Don't request follow-up just to add minor details.
+
+Now evaluate the results against the user's question.
