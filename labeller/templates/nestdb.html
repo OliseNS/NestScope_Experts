@@ -573,6 +573,87 @@
     opacity: 0.6;
 }
 
+/* Context Menu */
+.db-context-menu {
+    position: fixed;
+    background: var(--bg-secondary);
+    border: 1px solid var(--surface-border);
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    padding: 4px 0;
+    min-width: 180px;
+    z-index: 2000;
+    display: none;
+}
+
+.db-context-menu.active {
+    display: block;
+}
+
+.db-context-menu-item {
+    padding: 10px 16px;
+    color: var(--text-primary);
+    cursor: pointer;
+    transition: background 0.15s ease;
+    font-size: 14px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.db-context-menu-item:hover {
+    background: var(--surface-hover);
+}
+
+.db-context-menu-item.danger {
+    color: var(--db-danger);
+}
+
+.db-context-menu-item.danger:hover {
+    background: rgba(240, 68, 56, 0.1);
+}
+
+.db-context-menu-divider {
+    height: 1px;
+    background: var(--surface-border);
+    margin: 4px 0;
+}
+
+/* Add Column Placeholder */
+.db-add-column-placeholder {
+    background: rgba(62, 207, 142, 0.05) !important;
+    border: 2px dashed var(--db-accent) !important;
+    cursor: pointer !important;
+    text-align: center;
+    color: var(--db-accent);
+    font-weight: 600;
+    transition: all 0.2s ease;
+}
+
+.db-add-column-placeholder:hover {
+    background: rgba(62, 207, 142, 0.15) !important;
+    border-color: var(--db-accent-hover) !important;
+}
+
+/* Add Row Placeholder */
+.db-add-row-placeholder {
+    background: rgba(62, 207, 142, 0.05);
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.db-add-row-placeholder:hover {
+    background: rgba(62, 207, 142, 0.15);
+}
+
+.db-add-row-placeholder td {
+    text-align: center;
+    color: var(--db-accent);
+    font-weight: 600;
+    padding: 16px !important;
+    border: 2px dashed var(--db-accent) !important;
+}
+
 /* Confirmation Modal */
 .db-modal-overlay {
     position: fixed;
@@ -780,9 +861,7 @@
                 <button class="db-btn db-btn-secondary" onclick="refreshTable()" id="btnRefresh">
                     <span>↻</span> Refresh
                 </button>
-                <button class="db-btn db-btn-primary" onclick="showInsertRow()" id="btnInsert" disabled>
-                    <span>+</span> Insert Row
-                </button>
+                <!-- Insert Row button removed - use padded row at bottom of table -->
             </div>
         </div>
 
@@ -972,6 +1051,32 @@
             </div>
         </div>
     </main>
+</div>
+
+<!-- Context Menu for Columns -->
+<div class="db-context-menu" id="columnContextMenu">
+    <div class="db-context-menu-item" onclick="editColumnName()">
+        <span>✏️</span>
+        <span>Rename Column</span>
+    </div>
+    <div class="db-context-menu-divider"></div>
+    <div class="db-context-menu-item danger" onclick="deleteColumnFromMenu()">
+        <span>🗑️</span>
+        <span>Delete Column</span>
+    </div>
+</div>
+
+<!-- Context Menu for Rows -->
+<div class="db-context-menu" id="rowContextMenu">
+    <div class="db-context-menu-item" onclick="duplicateRow()">
+        <span>📋</span>
+        <span>Duplicate Row</span>
+    </div>
+    <div class="db-context-menu-divider"></div>
+    <div class="db-context-menu-item danger" onclick="deleteRowFromMenu()">
+        <span>🗑️</span>
+        <span>Delete Row</span>
+    </div>
 </div>
 
 <!-- Confirmation Modal -->
@@ -1172,15 +1277,12 @@ function renderTableData() {
                 <tr>
                     <th>#</th>
                     ${columns.map(col => `
-                        <th>
+                        <th data-col="${col}" oncontextmenu="showColumnContextMenu(event, '${col}')">
                             ${col}
-                            ${col === 'rowid' ? '' : '<button onclick="deleteColumn(\''+col+'\')" style="margin-left:8px;background:none;border:none;color:var(--db-danger);cursor:pointer;font-size:10px;" title="Delete column">✕</button>'}
                         </th>
                     `).join('')}
-                    <th style="width: 60px;">
-                        <button onclick="showAddColumnDialog()" style="background: var(--db-accent); border: none; color: white; cursor: pointer; padding: 4px 12px; border-radius: 4px; font-weight: 600; font-size: 14px;" title="Add new column">
-                            + Column
-                        </button>
+                    <th class="db-add-column-placeholder" onclick="showAddColumnDialog()" title="Click to add a new column">
+                        + Column
                     </th>
                 </tr>
             </thead>
@@ -1188,10 +1290,9 @@ function renderTableData() {
                 ${tableData.map((row, idx) => {
                     const rowNum = (currentPage - 1) * pageSize + idx + 1;
                     return `
-                        <tr data-row-idx="${idx}">
+                        <tr data-row-idx="${idx}" oncontextmenu="showRowContextMenu(event, ${idx})">
                             <td>
                                 ${rowNum}
-                                <button onclick="deleteRow(${idx})" style="margin-left:8px;background:none;border:none;color:var(--db-danger);cursor:pointer;font-size:10px;" title="Delete row">✕</button>
                             </td>
                             ${columns.map((col, colIdx) => {
                                 const value = row[col];
@@ -1212,12 +1313,10 @@ function renderTableData() {
                         </tr>
                     `;
                 }).join('')}
-                <!-- Add New Row Button Row -->
-                <tr id="addRowButton" style="background: var(--bg-tertiary);">
-                    <td colspan="${columns.length + 2}" style="text-align: center; padding: 12px;">
-                        <button onclick="addNewRowInline()" class="db-btn db-btn-primary" style="width: 100%;">
-                            <span>+</span> Add New Row
-                        </button>
+                <!-- Add New Row Placeholder -->
+                <tr class="db-add-row-placeholder" onclick="addNewRowInline()" title="Click to add a new row">
+                    <td colspan="${columns.length + 2}">
+                        + Add Row
                     </td>
                 </tr>
             </tbody>
@@ -2506,5 +2605,85 @@ const oldShowInsertRow = showInsertRow;
 showInsertRow = function() {
     addNewRowInline();
 };
+
+// ============================================================================
+// CONTEXT MENU
+// ============================================================================
+let contextMenuColumn = null;
+let contextMenuRowIdx = null;
+
+function showColumnContextMenu(event, columnName) {
+    event.preventDefault();
+    event.stopPropagation();
+
+    if (columnName === 'rowid') {
+        return; // Don't allow context menu on rowid column
+    }
+
+    contextMenuColumn = columnName;
+    const menu = document.getElementById('columnContextMenu');
+
+    menu.style.left = event.pageX + 'px';
+    menu.style.top = event.pageY + 'px';
+    menu.classList.add('active');
+}
+
+function showRowContextMenu(event, rowIdx) {
+    event.preventDefault();
+    event.stopPropagation();
+
+    contextMenuRowIdx = rowIdx;
+    const menu = document.getElementById('rowContextMenu');
+
+    menu.style.left = event.pageX + 'px';
+    menu.style.top = event.pageY + 'px';
+    menu.classList.add('active');
+}
+
+function hideContextMenus() {
+    document.getElementById('columnContextMenu').classList.remove('active');
+    document.getElementById('rowContextMenu').classList.remove('active');
+}
+
+function editColumnName() {
+    hideContextMenus();
+    const newName = prompt(`Rename column "${contextMenuColumn}" to:`, contextMenuColumn);
+    if (newName && newName !== contextMenuColumn) {
+        showToast('Column renaming requires SQL Editor. Use: ALTER TABLE ... RENAME COLUMN ...', 'info');
+    }
+}
+
+function deleteColumnFromMenu() {
+    hideContextMenus();
+    if (contextMenuColumn) {
+        deleteColumn(contextMenuColumn);
+    }
+}
+
+function duplicateRow() {
+    hideContextMenus();
+    if (contextMenuRowIdx !== null) {
+        const rowData = tableData[contextMenuRowIdx];
+        showToast('Row duplication: Copy the row values and use "+ Add Row" to insert', 'info');
+        console.log('Row data to duplicate:', rowData);
+    }
+}
+
+function deleteRowFromMenu() {
+    hideContextMenus();
+    if (contextMenuRowIdx !== null) {
+        deleteRow(contextMenuRowIdx);
+    }
+}
+
+// Close context menus when clicking elsewhere
+document.addEventListener('click', hideContextMenus);
+document.addEventListener('contextmenu', (e) => {
+    // Allow default context menu on non-table elements
+    if (!e.target.closest('.db-table')) {
+        hideContextMenus();
+    }
+});
+
 </script>
 {% endblock %}

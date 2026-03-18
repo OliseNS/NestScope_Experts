@@ -4536,6 +4536,124 @@ async def get_flood_database_stats():
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@app.get("/api/noaa/water_level/{station_id}")
+async def get_noaa_water_level(
+    station_id: str,
+    hours: int = 24,
+    datum: str = "MHHW"
+):
+    """
+    Proxy endpoint for NOAA water level data (avoids CORS issues).
+
+    Args:
+        station_id: NOAA station ID (e.g., "8761724")
+        hours: Number of hours of historical data (default: 24)
+        datum: Tidal datum (default: MHHW)
+
+    Returns:
+        NOAA water level data
+    """
+    try:
+        from datetime import datetime, timedelta
+
+        noaa_client = NOAAClient()
+
+        # Calculate date range
+        end_date = datetime.utcnow()
+        begin_date = end_date - timedelta(hours=hours)
+
+        # Format dates for NOAA API
+        begin_str = begin_date.strftime("%Y%m%d %H:%M")
+        end_str = end_date.strftime("%Y%m%d %H:%M")
+
+        # Fetch data
+        data = noaa_client.get_water_levels(
+            station_id=station_id,
+            begin_date=begin_str,
+            end_date=end_str,
+            datum=datum
+        )
+
+        if not data:
+            raise HTTPException(status_code=404, detail="No data available from NOAA")
+
+        return data
+
+    except Exception as e:
+        logger.error(f"Error fetching NOAA water level data: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/noaa/predictions/{station_id}")
+async def get_noaa_predictions(
+    station_id: str,
+    hours: int = 72,
+    datum: str = "MHHW"
+):
+    """
+    Proxy endpoint for NOAA tide predictions (avoids CORS issues).
+
+    Args:
+        station_id: NOAA station ID (e.g., "8761724")
+        hours: Number of hours of predictions (default: 72)
+        datum: Tidal datum (default: MHHW)
+
+    Returns:
+        NOAA tide prediction data
+    """
+    try:
+        from datetime import datetime, timedelta
+        import requests
+
+        # Calculate date range
+        begin_date = datetime.utcnow()
+        end_date = begin_date + timedelta(hours=hours)
+
+        # Format dates for NOAA API
+        begin_str = begin_date.strftime("%Y%m%d %H:%M")
+        end_str = end_date.strftime("%Y%m%d %H:%M")
+
+        # Make direct request to NOAA predictions API
+        params = {
+            'station': station_id,
+            'begin_date': begin_str,
+            'end_date': end_str,
+            'product': 'predictions',
+            'datum': datum,
+            'units': 'metric',
+            'time_zone': 'gmt',
+            'format': 'json',
+            'application': 'NestScope',
+            'interval': 'h'  # Hourly predictions
+        }
+
+        response = requests.get(
+            "https://api.tidesandcurrents.noaa.gov/api/prod/datagetter",
+            params=params,
+            timeout=30
+        )
+
+        if response.status_code != 200:
+            raise HTTPException(
+                status_code=response.status_code,
+                detail=f"NOAA API error: {response.text}"
+            )
+
+        data = response.json()
+
+        if 'error' in data:
+            raise HTTPException(status_code=400, detail=data['error']['message'])
+
+        return data
+
+    except requests.RequestException as e:
+        logger.error(f"Error fetching NOAA predictions: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+    except Exception as e:
+        logger.error(f"Error fetching NOAA predictions: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)

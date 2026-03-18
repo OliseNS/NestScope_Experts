@@ -2905,7 +2905,7 @@ async function identifyAllBirds() {
         });
 
         // Save all changes
-        await saveLabels();
+        await saveOnly();
 
         // Redraw canvas
         redrawCanvas();
@@ -3500,7 +3500,7 @@ function selectSpeciesFromAI(speciesCode, speciesName) {
     selectedBox.species = speciesCode;
 
     // Save to backend
-    saveLabels();
+    saveOnly();
 
     // Show success message
     const content = document.getElementById('classification-content');
@@ -3768,7 +3768,7 @@ async function selectSpecies(code) {
         showToast(`Bird #${boxes.indexOf(box) + 1} updated to ${displayName}`, 'success');
 
         // Auto-save
-        saveLabels();
+        saveOnly();
 
         updateBoxCount();
         redrawCanvas();
