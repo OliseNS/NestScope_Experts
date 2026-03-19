@@ -1104,6 +1104,68 @@
     </div>
 </div>
 
+<!-- Add Column Modal -->
+<div class="db-modal-overlay" id="addColumnModal" style="display: none;">
+    <div class="db-modal">
+        <div class="db-modal-header">
+            <div class="db-modal-icon">➕</div>
+            <h3 class="db-modal-title">Add New Column</h3>
+        </div>
+        <div class="db-modal-content">
+            <div style="margin-bottom: 16px;">
+                <label class="db-modal-label">Column Name</label>
+                <input
+                    type="text"
+                    id="newColumnName"
+                    class="db-input"
+                    placeholder="e.g., email, created_at, is_active"
+                    style="width: 100%; padding: 8px; border: 1px solid var(--surface-border); border-radius: 6px; background: var(--bg-primary); color: var(--text-primary);"
+                />
+                <div style="font-size: 12px; color: var(--text-tertiary); margin-top: 4px;">
+                    Must start with a letter or underscore, followed by letters, numbers, or underscores
+                </div>
+            </div>
+
+            <div style="margin-bottom: 16px;">
+                <label class="db-modal-label">Data Type</label>
+                <select
+                    id="newColumnType"
+                    class="db-input"
+                    style="width: 100%; padding: 8px; border: 1px solid var(--surface-border); border-radius: 6px; background: var(--bg-primary); color: var(--text-primary);"
+                >
+                    <option value="TEXT">TEXT - Text strings</option>
+                    <option value="INTEGER">INTEGER - Whole numbers</option>
+                    <option value="REAL">REAL - Decimal numbers</option>
+                    <option value="BLOB">BLOB - Binary data</option>
+                </select>
+            </div>
+
+            <div style="margin-bottom: 16px;">
+                <label style="display: flex; align-items: center; cursor: pointer; user-select: none;">
+                    <input
+                        type="checkbox"
+                        id="newColumnAllowNull"
+                        checked
+                        style="margin-right: 8px; cursor: pointer;"
+                    />
+                    <span style="color: var(--text-primary); font-size: 14px;">Allow NULL values</span>
+                </label>
+                <div style="font-size: 12px; color: var(--text-tertiary); margin-top: 4px; margin-left: 24px;">
+                    If unchecked, column will require a default value for existing rows
+                </div>
+            </div>
+        </div>
+        <div class="db-modal-actions">
+            <button class="db-btn db-btn-secondary" onclick="closeAddColumnModal()">
+                Cancel
+            </button>
+            <button class="db-btn db-btn-primary" onclick="confirmAddColumn()">
+                Add Column
+            </button>
+        </div>
+    </div>
+</div>
+
 <script>
 // ============================================================================
 // STATE MANAGEMENT
@@ -1209,7 +1271,6 @@ function selectTable(tableName) {
     });
 
     document.getElementById('currentTableName').textContent = tableName;
-    document.getElementById('btnInsert').disabled = false;
     document.getElementById('btnRefresh').disabled = false;
 
     // Load table data and schema
@@ -2477,24 +2538,50 @@ function cancelNewRow() {
 }
 
 // Column Management
-async function showAddColumnDialog() {
-    const columnName = prompt('Enter new column name:');
-    if (!columnName || columnName.trim() === '') {
+function showAddColumnDialog() {
+    if (!currentTable) {
+        showToast('Please select a table first', 'warning');
+        return;
+    }
+
+    // Reset form
+    document.getElementById('newColumnName').value = '';
+    document.getElementById('newColumnType').value = 'TEXT';
+    document.getElementById('newColumnAllowNull').checked = true;
+
+    // Show modal
+    document.getElementById('addColumnModal').style.display = 'flex';
+
+    // Focus on name input
+    setTimeout(() => {
+        document.getElementById('newColumnName').focus();
+    }, 100);
+}
+
+function closeAddColumnModal() {
+    document.getElementById('addColumnModal').style.display = 'none';
+}
+
+async function confirmAddColumn() {
+    const columnName = document.getElementById('newColumnName').value.trim();
+    const columnType = document.getElementById('newColumnType').value;
+    const allowNull = document.getElementById('newColumnAllowNull').checked;
+
+    // Validate column name
+    if (!columnName) {
         showToast('Column name cannot be empty', 'warning');
         return;
     }
 
-    // Validate column name
     if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(columnName)) {
         showToast('Invalid column name. Use letters, numbers, and underscores only (must start with letter or underscore)', 'error');
         return;
     }
 
-    const columnType = prompt('Enter column type (TEXT, INTEGER, REAL, BLOB):', 'TEXT');
-    if (!columnType) return;
+    // Close modal
+    closeAddColumnModal();
 
-    const allowNull = confirm('Allow NULL values?');
-
+    // Add the column
     await addColumn(columnName, columnType, allowNull);
 }
 
@@ -2682,6 +2769,29 @@ document.addEventListener('contextmenu', (e) => {
     // Allow default context menu on non-table elements
     if (!e.target.closest('.db-table')) {
         hideContextMenus();
+    }
+});
+
+// Keyboard shortcuts for Add Column modal
+document.addEventListener('keydown', (e) => {
+    const addColumnModal = document.getElementById('addColumnModal');
+    if (addColumnModal.style.display === 'flex') {
+        if (e.key === 'Escape') {
+            closeAddColumnModal();
+        } else if (e.key === 'Enter' && !e.shiftKey) {
+            // Don't submit if user is typing in a text field and hasn't finished
+            if (document.activeElement.tagName !== 'TEXTAREA') {
+                e.preventDefault();
+                confirmAddColumn();
+            }
+        }
+    }
+});
+
+// Click outside modal to close (for Add Column modal)
+document.getElementById('addColumnModal')?.addEventListener('click', (e) => {
+    if (e.target.id === 'addColumnModal') {
+        closeAddColumnModal();
     }
 });
 

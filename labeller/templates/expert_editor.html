@@ -1417,6 +1417,10 @@
     </div>
 
     <script>
+// ============================================================================
+// CONSTANTS & TEMPLATE VARIABLES
+// ============================================================================
+
 // Initialize from Flask template
 const PROJECT_ID = {{ project_id | tojson | safe }};
 const USERNAME = {{ username | tojson | safe }};
@@ -1443,7 +1447,11 @@ console.log('First box:', EXISTING_BOXES[0]);
 console.log('Species data:', SPECIES_DATA);
 console.log('==============================');
 
-// Global state
+// ============================================================================
+// GLOBAL STATE VARIABLES
+// ============================================================================
+
+// Canvas & image state
 let canvas, ctx;
 let imageObj = null;
 let currentTool = 'draw';
@@ -1487,10 +1495,15 @@ const ZOOM_STEP = 1.1;   // 10% per wheel tick (smooth and predictable)
 // Live preview state
 let previewCanvas, previewCtx;
 let previewUpdateInterval = null;
+
+// Preview configuration constants
 const PREVIEW_ZOOM = 2.0;  // 2x zoom for preview
 const PREVIEW_SIZE = 250;  // Preview canvas size in pixels
 
-// Initialize canvas
+// ============================================================================
+// INITIALIZATION & SETUP
+// ============================================================================
+
 function initCanvas() {
     canvas = document.getElementById('annotation-canvas');
     ctx = canvas.getContext('2d');
@@ -1559,7 +1572,12 @@ function initCanvas() {
     imageObj.onerror = function(e) {
         console.error(`✗ Failed to load image: ${IMAGE_URL}`);
         console.error('Error event:', e);
-        alert(`Error loading image: ${IMAGE_NAME}\n\nURL: ${IMAGE_URL}\n\nCheck the browser console for details.`);
+        showCustomAlert(
+            'Image Loading Error',
+            `Failed to load <strong>${IMAGE_NAME}</strong><br><br>URL: ${IMAGE_URL}<br><br>Check the browser console for details.`,
+            '❌',
+            '#dc2626'
+        );
     };
 
     console.log('Setting imageObj.src to:', IMAGE_URL);
@@ -1582,6 +1600,10 @@ function fitCanvasToContainer() {
         canvas.style.height = '100%';
     }
 }
+
+// ============================================================================
+// COORDINATE TRANSFORMS & UTILITY FUNCTIONS
+// ============================================================================
 
 // Get canvas coordinates from mouse event (accounting for zoom and pan)
 function getCanvasCoords(e) {
@@ -1631,6 +1653,10 @@ function schedulePreviewUpdate(fn) {
         });
     }
 }
+
+// ============================================================================
+// ZOOM & PAN CONTROLS
+// ============================================================================
 
 // Handle mouse wheel for zooming
 function handleCanvasWheel(e) {
@@ -1715,6 +1741,10 @@ function resetZoom() {
 function updateZoomDisplay() {
     // Display removed - zoom level shown in preview only
 }
+
+// ============================================================================
+// MOUSE EVENT HANDLERS
+// ============================================================================
 
 // Handle mouse down
 function handleCanvasMouseDown(e) {
@@ -2248,6 +2278,10 @@ function redrawCanvas() {
     }
 }
 
+// ============================================================================
+// TOOL SELECTION & MODES
+// ============================================================================
+
 // Tool selection
 function selectTool(tool) {
     currentTool = tool;
@@ -2288,6 +2322,10 @@ function selectTool(tool) {
         `;
     }
 }
+
+// ============================================================================
+// BOX MANAGEMENT (Add, Delete, Update, Select)
+// ============================================================================
 
 // Add a new bounding box
 function addBox(xCenter, yCenter, width, height) {
@@ -2456,6 +2494,10 @@ function toggleLegendFilter(species) {
     updateClassLegend();
     redrawCanvas(); // Redraw to highlight filtered boxes
 }
+
+// ============================================================================
+// LIVE PREVIEW SYSTEM
+// ============================================================================
 
 // Update live preview with current work area
 function updatePreview(centerX, centerY, label = 'Drawing') {
@@ -2665,6 +2707,10 @@ function clearPreview() {
     }
 }
 
+// ============================================================================
+// SPECIES CLASSIFICATION UI
+// ============================================================================
+
 // Classification Panel Logic
 function openClassification() {
     document.getElementById('floating-classification').style.display = 'flex';
@@ -2860,7 +2906,12 @@ async function runAIClassification() {
 // Batch classify all birds in the image
 async function identifyAllBirds() {
     if (boxes.length === 0) {
-        alert('No birds to classify! Draw bounding boxes first.');
+        showCustomAlert(
+            'No Birds Found',
+            'Draw bounding boxes first before running classification.',
+            '🔍',
+            'var(--orange-primary)'
+        );
         return;
     }
 
@@ -2932,7 +2983,12 @@ async function identifyAllBirds() {
 
     } catch (error) {
         console.error('Batch classification error:', error);
-        alert(`Classification failed: ${error.message}`);
+        showCustomAlert(
+            'Classification Failed',
+            `An error occurred: <strong>${error.message}</strong>`,
+            '❌',
+            '#dc2626'
+        );
 
         // Reset button
         btn.disabled = false;
@@ -2942,11 +2998,13 @@ async function identifyAllBirds() {
 }
 
 // Auto-detect all birds in the image using swift.onnx
-async function detectAllBirds(confidence = 0.25) {
+async function detectAllBirds(confidence = 0.25, sliceSize = 1024) {
     // Save state before detection (so user can undo if it's messy)
     saveStateToUndoStack();
 
-    showToast('Swift scanning image...');
+    const modeName = sliceSize === 512 ? 'SuperZoom' : 'Swift';
+    const modeDetail = sliceSize === 512 ? ' (512x512 slices)' : '';
+    showToast(`${modeName} scanning image${modeDetail}...`);
 
     // Show loading state on button if it exists
     const btn = document.getElementById('detect-all-btn');
@@ -2963,7 +3021,8 @@ async function detectAllBirds(confidence = 0.25) {
             body: JSON.stringify({
                 project_id: PROJECT_ID,
                 image_name: IMAGE_NAME,
-                confidence: confidence
+                confidence: confidence,
+                slice_size: sliceSize
             })
         });
 
@@ -3005,11 +3064,11 @@ async function detectAllBirds(confidence = 0.25) {
             });
 
             if (addedCount > 0) {
-                showToast(`Swift found ${addedCount} bird(s)`, 'success');
+                showToast(`${modeName} found ${addedCount} bird(s)`, 'success');
                 markUnsaved();
                 redrawCanvas();
             } else {
-                showToast('Swift found no new birds', 'info');
+                showToast(`${modeName} found no new birds`, 'info');
             }
         } else {
             showToast('No birds detected in image', 'warning');
@@ -3869,7 +3928,10 @@ function showToast(message, type = 'info') {
     }, 3000);
 }
 
-// Save functions
+// ============================================================================
+// DATA PERSISTENCE & SAVE FUNCTIONS
+// ============================================================================
+
 async function saveOnly() {
     // Show saving indicator
     showToast('Saving annotations...');
@@ -4055,7 +4117,10 @@ async function addNewClass() {
     }
 }
 
-// Navigation
+// ============================================================================
+// NAVIGATION & IMAGE MANAGEMENT
+// ============================================================================
+
 function navigateToNext() {
     console.log('navigateToNext called, hasUnsavedChanges:', hasUnsavedChanges);
     if (hasUnsavedChanges) {
@@ -4089,7 +4154,12 @@ function navigateToImage(imageIndex) {
     if (imageIndex >= 0 && imageIndex < TOTAL_IMAGES) {
         window.location.href = `/project/${PROJECT_ID}/editor/${USERNAME}/${imageIndex}`;
     } else {
-        alert(`Please enter a number between 1 and ${TOTAL_IMAGES}`);
+        showCustomAlert(
+            'Invalid Image Number',
+            `Please enter a number between <strong>1</strong> and <strong>${TOTAL_IMAGES}</strong>.`,
+            '⚠️',
+            'var(--orange-primary)'
+        );
         document.getElementById('jump-input').value = CURRENT_INDEX + 1;
     }
     return true;
@@ -4193,9 +4263,18 @@ function undoAction() {
     showToast(`Undo: ${boxes.length} birds remaining`, 'success');
 }
 
-function goHome() {
+async function goHome() {
     if (hasUnsavedChanges) {
-        if (confirm('You have unsaved changes. Are you sure you want to leave?')) {
+        const confirmed = await showCustomConfirm(
+            'Unsaved Changes',
+            'You have unsaved changes. Are you sure you want to leave without saving?',
+            '⚠️',
+            'var(--orange-primary)',
+            'Leave Anyway',
+            'Cancel',
+            true
+        );
+        if (confirmed) {
             window.location.href = '{{ back_url }}';
         }
     } else {
@@ -4204,7 +4283,17 @@ function goHome() {
 }
 
 async function deleteImage() {
-    if (!confirm(`Are you sure you want to PERMANENTLY delete image "${IMAGE_NAME}"? This cannot be undone.`)) {
+    const confirmed = await showCustomConfirm(
+        'Delete Image Forever?',
+        `Are you sure you want to <strong>permanently delete</strong> <strong>${IMAGE_NAME}</strong>?<br><br>This action cannot be undone and will remove all annotations.`,
+        '🗑️',
+        '#dc2626',
+        'Delete Forever',
+        'Cancel',
+        true
+    );
+
+    if (!confirmed) {
         return;
     }
 
@@ -4224,14 +4313,40 @@ async function deleteImage() {
         const result = await response.json();
 
         if (result.success) {
-            alert('Image deleted successfully.');
-            window.location.href = '{{ back_url }}';
+            // Navigate to next image, or previous if this was the last, or back to project if this was the only image
+            let nextUrl;
+            if (NEXT_INDEX !== null) {
+                nextUrl = `/project/${PROJECT_ID}/editor/${USERNAME}/${NEXT_INDEX}`;
+            } else if (PREV_INDEX !== null) {
+                nextUrl = `/project/${PROJECT_ID}/editor/${USERNAME}/${PREV_INDEX}`;
+            } else {
+                // This was the only image, go back to project
+                nextUrl = '{{ back_url }}';
+            }
+
+            await showCustomAlert(
+                'Image Deleted',
+                `Image deleted successfully. Moving to ${NEXT_INDEX !== null ? 'next' : PREV_INDEX !== null ? 'previous' : 'project'}...`,
+                '✅',
+                '#16a34a'
+            );
+            window.location.href = nextUrl;
         } else {
-            alert('Error deleting image: ' + (result.error || 'Unknown error'));
+            showCustomAlert(
+                'Deletion Failed',
+                `Error: <strong>${result.error || 'Unknown error'}</strong>`,
+                '❌',
+                '#dc2626'
+            );
         }
     } catch (e) {
         console.error('Delete error:', e);
-        alert('Failed to connect to server for deletion.');
+        showCustomAlert(
+            'Connection Error',
+            'Failed to connect to server for deletion.',
+            '❌',
+            '#dc2626'
+        );
     }
 }
 
@@ -4274,21 +4389,29 @@ function zoomOut() {
     redrawCanvas();
 }
 
+// ============================================================================
+// UI CONTROLS & MODALS
+// ============================================================================
+
 // AI Detection Modal Control
 function showAIDetectionModal() {
     const modal = document.getElementById('aiDetectionModal');
     modal.style.display = 'flex';
 }
 
-function closeAIDetectionModal(confirmed) {
+function closeAIDetectionModal(confirmed, sliceSize = 1024) {
     const modal = document.getElementById('aiDetectionModal');
     modal.style.display = 'none';
-    
+
     if (confirmed) {
-        detectAllBirds(0.25);
+        detectAllBirds(0.25, sliceSize);
     }
     selectTool('ai');
 }
+
+// ============================================================================
+// EVENT LISTENERS & KEYBOARD SHORTCUTS
+// ============================================================================
 
 // Keyboard shortcuts
 document.addEventListener('keydown', (e) => {
@@ -4299,6 +4422,10 @@ document.addEventListener('keydown', (e) => {
     if (e.key === 'd' && !e.shiftKey && !e.ctrlKey) selectTool('draw');
     if (e.key === 's' && !e.shiftKey && !e.ctrlKey) {
         showAIDetectionModal();
+    }
+    // Shift+S for SuperZoom mode (512x512 slices)
+    if (e.key === 'S' && e.shiftKey && !e.ctrlKey) {
+        detectAllBirds(0.25, 512);
     }
     if (e.key === 'e' && !e.shiftKey && !e.ctrlKey) selectTool('edit');
     if (e.key === 'h' && !e.shiftKey && !e.ctrlKey) selectTool('pan');
@@ -4356,25 +4483,17 @@ document.addEventListener('keydown', (e) => {
 // Delete all annotations from current image
 function deleteAllBoxes() {
     if (boxes.length === 0) {
-        showToast('No birds to delete', 'info');
+        showCustomAlert(
+            'No Boxes',
+            'There are no bounding boxes to delete.',
+            'ℹ️',
+            'var(--orange-primary)'
+        );
         return;
     }
 
-    if (!confirm(`Are you sure you want to delete ALL ${boxes.length} bounding boxes on this image? This cannot be undone.`)) {
-        return;
-    }
-
-    // Save state before deleting
-    saveStateToUndoStack();
-
-    const count = boxes.length;
-    boxes = [];
-    selectedBoxId = null;
-    hoveredBoxId = null;
-
-    markUnsaved();
-    updateBoxCount();
-    redrawCanvas();
+    // Show custom confirmation modal
+    showDeleteAllConfirm();
     updateOverlay();
     clearPreview();
     closeClassification();
@@ -4409,6 +4528,10 @@ function deleteBoxQuick(boxId) {
     showToast(`Bird #${boxIndex}${species} deleted`);
 }
 
+// ============================================================================
+// WINDOW EVENT LISTENERS & INITIALIZATION
+// ============================================================================
+
 // Handle window resize
 window.addEventListener('resize', () => {
     if (imageObj && imageObj.complete) {
@@ -4426,6 +4549,129 @@ document.addEventListener('DOMContentLoaded', () => {
         lucide.createIcons();
     }
 });
+
+// ============================================================================
+// UNIVERSAL CUSTOM MODAL SYSTEM
+// ============================================================================
+
+window.universalModalCallback = null;
+window.universalModalDismissable = true;
+
+function showCustomAlert(title, message, icon = 'ℹ️', iconColor = 'var(--orange-primary)') {
+    return new Promise((resolve) => {
+        const modal = document.getElementById('universal-modal');
+        const titleEl = document.getElementById('universal-modal-title');
+        const messageEl = document.getElementById('universal-modal-message');
+        const iconTextEl = document.getElementById('universal-modal-icon-text');
+        const iconEl = document.getElementById('universal-modal-icon');
+        const buttonsEl = document.getElementById('universal-modal-buttons');
+
+        titleEl.textContent = title;
+        messageEl.innerHTML = message;
+        iconTextEl.textContent = icon;
+        iconEl.style.background = `${iconColor}22`;
+
+        // Single OK button
+        buttonsEl.innerHTML = `
+            <button onclick="closeUniversalModal(true)" style="padding: 0.75rem 2rem; border-radius: 10px; border: none; background: var(--orange-primary); color: white; font-weight: 600; cursor: pointer; transition: all 0.2s; min-width: 120px;">
+                OK
+            </button>
+        `;
+
+        window.universalModalCallback = resolve;
+        window.universalModalDismissable = true;
+        modal.style.display = 'flex';
+
+        // Refresh icons
+        if (typeof lucide !== 'undefined') lucide.createIcons();
+    });
+}
+
+function showCustomConfirm(title, message, icon = '⚠️', iconColor = 'var(--orange-primary)', confirmText = 'Confirm', cancelText = 'Cancel', danger = false) {
+    return new Promise((resolve) => {
+        const modal = document.getElementById('universal-modal');
+        const titleEl = document.getElementById('universal-modal-title');
+        const messageEl = document.getElementById('universal-modal-message');
+        const iconTextEl = document.getElementById('universal-modal-icon-text');
+        const iconEl = document.getElementById('universal-modal-icon');
+        const buttonsEl = document.getElementById('universal-modal-buttons');
+
+        titleEl.textContent = title;
+        messageEl.innerHTML = message;
+        iconTextEl.textContent = icon;
+        iconEl.style.background = `${iconColor}22`;
+
+        // Confirm + Cancel buttons
+        const confirmStyle = danger
+            ? 'background: #dc2626;'
+            : 'background: var(--orange-primary);';
+
+        buttonsEl.innerHTML = `
+            <button onclick="closeUniversalModal(false)" style="flex: 1; padding: 0.75rem 1.5rem; border-radius: 10px; border: 1px solid rgba(83, 124, 138, 0.3); background: var(--surface-light); color: var(--text-primary); font-weight: 600; cursor: pointer; transition: all 0.2s;">
+                ${cancelText}
+            </button>
+            <button onclick="closeUniversalModal(true)" style="flex: 1; padding: 0.75rem 1.5rem; border-radius: 10px; border: none; ${confirmStyle} color: white; font-weight: 600; cursor: pointer; transition: all 0.2s;">
+                ${confirmText}
+            </button>
+        `;
+
+        window.universalModalCallback = resolve;
+        window.universalModalDismissable = true;
+        modal.style.display = 'flex';
+
+        // Refresh icons
+        if (typeof lucide !== 'undefined') lucide.createIcons();
+    });
+}
+
+function closeUniversalModal(result) {
+    const modal = document.getElementById('universal-modal');
+    modal.style.display = 'none';
+
+    if (window.universalModalCallback) {
+        window.universalModalCallback(result);
+        window.universalModalCallback = null;
+    }
+}
+
+// Delete all boxes modal
+function showDeleteAllConfirm() {
+    const modal = document.getElementById('delete-all-modal');
+    const countEl = document.getElementById('delete-all-count');
+    countEl.textContent = boxes.length;
+    modal.style.display = 'flex';
+
+    if (typeof lucide !== 'undefined') lucide.createIcons();
+}
+
+function hideDeleteAllConfirm() {
+    document.getElementById('delete-all-modal').style.display = 'none';
+}
+
+function confirmDeleteAll() {
+    hideDeleteAllConfirm();
+
+    if (boxes.length === 0) return;
+
+    // Save state before deleting
+    saveStateToUndoStack();
+
+    const count = boxes.length;
+    boxes = [];
+    markUnsaved();
+    selectedBoxId = null;
+
+    updateBoxCount();
+    redrawCanvas();
+    updateOverlay();
+    renderClassBar();
+
+    showToast(`Deleted ${count} bounding boxes`, 'success');
+}
+
+// ============================================================================
+// END OF SCRIPT
+// ============================================================================
     </script>
 
     <!-- Add New Class Dialog -->
@@ -4506,16 +4752,70 @@ document.addEventListener('DOMContentLoaded', () => {
             <div style="width: 64px; height: 64px; background: rgba(83, 124, 138, 0.1); border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 1.5rem;">
                 <i data-lucide="sparkles" style="width: 32px; height: 32px; color: var(--orange-primary);"></i>
             </div>
-            <h2 style="font-size: 1.5rem; margin-bottom: 1rem; font-family: var(--font-serif);">AI Detection Scan</h2>
-            <p style="color: var(--text-secondary); line-height: 1.6; margin-bottom: 2rem;">
-                Do you want to run bird detection on the whole image? This will automatically find and box birds at 0.3 confidence.
+            <h2 style="font-size: 1.5rem; margin-bottom: 1rem; font-family: var(--font-serif);">AI Detection Mode</h2>
+            <p style="color: var(--text-secondary); line-height: 1.6; margin-bottom: 1.5rem;">
+                Choose detection mode for this image:
             </p>
-            <div style="display: grid; grid-template-columns: 1fr 1.5fr; gap: 1rem;">
-                <button onclick="closeAIDetectionModal(false)" style="padding: 0.75rem; border-radius: 10px; border: 1px solid rgba(83, 124, 138, 0.3); background: var(--surface-light); color: var(--text-primary); font-weight: 600; cursor: pointer; transition: all 0.2s;">
+            <div style="display: flex; flex-direction: column; gap: 0.75rem; margin-bottom: 1.5rem;">
+                <button onclick="closeAIDetectionModal(true, 1024)" style="padding: 1rem; border-radius: 10px; border: 1px solid rgba(83, 124, 138, 0.3); background: var(--surface-light); color: var(--text-primary); text-align: left; cursor: pointer; transition: all 0.2s;">
+                    <div style="font-weight: 600; margin-bottom: 0.25rem; display: flex; align-items: center; gap: 0.5rem;">
+                        <i data-lucide="zap" style="width: 16px; height: 16px;"></i>
+                        Standard
+                    </div>
+                    <div style="font-size: 0.875rem; color: var(--text-secondary);">Balanced speed and accuracy (1024×1024)</div>
+                </button>
+                <button onclick="closeAIDetectionModal(true, 512)" style="padding: 1rem; border-radius: 10px; border: 1px solid var(--orange-primary); background: linear-gradient(135deg, rgba(83, 124, 138, 0.1) 0%, rgba(123, 171, 174, 0.1) 100%); color: var(--text-primary); text-align: left; cursor: pointer; transition: all 0.2s;">
+                    <div style="font-weight: 600; margin-bottom: 0.25rem; display: flex; align-items: center; gap: 0.5rem;">
+                        <i data-lucide="zoom-in" style="width: 16px; height: 16px; color: var(--orange-primary);"></i>
+                        SuperZoom
+                    </div>
+                    <div style="font-size: 0.875rem; color: var(--text-secondary);">For tiny or distant birds (512×512)</div>
+                </button>
+            </div>
+            <div style="display: flex; gap: 0.5rem;">
+                <button onclick="closeAIDetectionModal(false)" style="padding: 0.75rem; flex: 1; border-radius: 10px; border: 1px solid rgba(83, 124, 138, 0.3); background: var(--surface-light); color: var(--text-primary); font-weight: 600; cursor: pointer; transition: all 0.2s;">
                     Cancel
                 </button>
-                <button onclick="closeAIDetectionModal(true)" style="padding: 0.75rem; border-radius: 10px; border: none; background: var(--orange-primary); color: white; font-weight: 600; cursor: pointer; transition: all 0.2s; box-shadow: 0 4px 12px rgba(83, 124, 138, 0.3);">
-                    Run Full Scan
+            </div>
+        </div>
+    </div>
+
+    <!-- Universal Custom Modal -->
+    <div id="universal-modal" style="display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.7); backdrop-filter: blur(4px); z-index: 20000; align-items: center; justify-content: center;" onclick="if(event.target === this && window.universalModalDismissable) closeUniversalModal(false)">
+        <div id="universal-modal-content" style="background: var(--surface); border: 1px solid rgba(83, 124, 138, 0.3); border-radius: 16px; width: 90%; max-width: 480px; padding: 2rem; box-shadow: 0 20px 50px rgba(0,0,0,0.5); text-align: center;">
+            <div id="universal-modal-icon" style="width: 64px; height: 64px; background: rgba(83, 124, 138, 0.1); border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 1.5rem;">
+                <span id="universal-modal-icon-text" style="font-size: 2rem;">ℹ️</span>
+            </div>
+            <h2 id="universal-modal-title" style="font-size: 1.5rem; margin-bottom: 1rem; font-family: var(--font-serif); color: var(--text-primary);">
+                Alert
+            </h2>
+            <p id="universal-modal-message" style="color: var(--text-secondary); line-height: 1.6; margin-bottom: 2rem; text-align: center;">
+                This is a message.
+            </p>
+            <div id="universal-modal-buttons" style="display: flex; gap: 0.75rem; justify-content: center;">
+                <!-- Buttons inserted dynamically -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Delete All Boxes Confirmation Modal -->
+    <div id="delete-all-modal" style="display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.7); backdrop-filter: blur(4px); z-index: 20000; align-items: center; justify-content: center;" onclick="if(event.target === this) hideDeleteAllConfirm()">
+        <div style="background: var(--surface); border: 1px solid rgba(83, 124, 138, 0.3); border-radius: 16px; width: 90%; max-width: 480px; padding: 2rem; box-shadow: 0 20px 50px rgba(0,0,0,0.5);">
+            <div style="width: 64px; height: 64px; background: rgba(220, 38, 38, 0.1); border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 1.5rem;">
+                <i data-lucide="trash-2" style="width: 32px; height: 32px; color: #dc2626;"></i>
+            </div>
+            <h2 style="font-size: 1.5rem; margin-bottom: 1rem; font-family: var(--font-serif); color: var(--text-primary); text-align: center;">
+                Delete All Boxes?
+            </h2>
+            <p style="color: var(--text-secondary); line-height: 1.6; margin-bottom: 2rem; text-align: center;">
+                Are you sure you want to delete <strong id="delete-all-count" style="color: var(--orange-primary);">0</strong> bounding boxes? This cannot be undone.
+            </p>
+            <div style="display: flex; gap: 0.75rem;">
+                <button onclick="hideDeleteAllConfirm()" style="flex: 1; padding: 0.75rem; border-radius: 10px; border: 1px solid rgba(83, 124, 138, 0.3); background: var(--surface-light); color: var(--text-primary); font-weight: 600; cursor: pointer; transition: all 0.2s;">
+                    Cancel
+                </button>
+                <button onclick="confirmDeleteAll()" style="flex: 1; padding: 0.75rem; border-radius: 10px; border: none; background: #dc2626; color: white; font-weight: 600; cursor: pointer; transition: all 0.2s;">
+                    Delete All
                 </button>
             </div>
         </div>

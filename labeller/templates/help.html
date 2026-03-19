@@ -372,6 +372,8 @@
 
             <div class="info-box">
                 <strong>ℹ️ SAHI Processing:</strong> For large images (>1024px), NestVision automatically uses SAHI (Slicing Aided Hyper Inference) which slices the image into overlapping tiles for better detection of small birds.
+                <br><br>
+                <strong>🔬 SuperZoom Mode:</strong> Press <kbd class="shortcut-key">Shift+S</kbd> to use 512x512 slices instead of 1024x1024 for detecting extremely small or distant birds. Slower but more accurate for tiny targets.
             </div>
         </div>
 
@@ -629,7 +631,8 @@
             <ul>
                 <li><kbd class="shortcut-key">D</kbd> Draw box (manual mode)</li>
                 <li><kbd class="shortcut-key">S</kbd> AI Tool (prompts for auto-detection)</li>
-                <li><kbd class="shortcut-key">A</kbd> Auto-detect all birds</li>
+                <li><kbd class="shortcut-key">A</kbd> Auto-detect all birds (1024x1024 SAHI slices)</li>
+                <li><kbd class="shortcut-key">Shift+S</kbd> SuperZoom mode (512x512 slices for tiny birds)</li>
                 <li><kbd class="shortcut-key">Delete</kbd> Delete selected box</li>
                 <li><kbd class="shortcut-key">Ctrl+Z</kbd> Undo last action</li>
             </ul>
