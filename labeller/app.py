@@ -2658,12 +2658,14 @@ def detect_all_birds():
     - Finds ALL birds in one pass (~100-200ms)
     - Returns YOLO format bounding boxes
     - 85-90% accuracy
+    - Supports superzoom mode with smaller slices (512x512) for tiny birds
     """
     try:
         data = request.json
         image_name = data.get('image_name')
         project_folder = data.get('project_id', 'nestvision')
         conf_threshold = data.get('confidence', 0.25)  # Configurable confidence
+        slice_size = data.get('slice_size', 1024)  # 1024 (normal) or 512 (superzoom)
 
         if not image_name:
             return jsonify({'error': 'Missing image_name'}), 400
@@ -2715,15 +2717,16 @@ def detect_all_birds():
                 from sahi.predict import get_sliced_prediction
                 from sahi.models.ultralytics import UltralyticsDetectionModel
 
-                print(f"Detector: Using SAHI for large image ({orig_width}x{orig_height})")
-                
+                mode_name = "SuperZoom" if slice_size == 512 else "SAHI"
+                print(f"Detector: Using {mode_name} ({slice_size}x{slice_size} slices) for large image ({orig_width}x{orig_height})")
+
                 # Initialize SAHI model (cached)
                 cv_config = get_cv_config()
                 rel_model_path = cv_config.get('model', 'models/swift.onnx')
                 model_path = os.path.join(PROJECT_ROOT, rel_model_path)
-                
+
                 if not hasattr(detect_all_birds, 'sahi_model') or getattr(detect_all_birds, 'sahi_path', None) != model_path:
-                    
+
                     detect_all_birds.sahi_model = UltralyticsDetectionModel(
                         model_path=model_path,
                         confidence_threshold=conf_threshold,
@@ -2731,16 +2734,16 @@ def detect_all_birds():
                     )
                     detect_all_birds.sahi_path = model_path
                     print("✓ Swift SAHI Model loaded")
-                
+
                 sahi_model = detect_all_birds.sahi_model
                 sahi_model.model.conf = conf_threshold # Update confidence
 
-                # Run sliced inference
+                # Run sliced inference with configurable slice size
                 result = get_sliced_prediction(
                     image_path,
                     sahi_model,
-                    slice_height=1024,
-                    slice_width=1024,
+                    slice_height=slice_size,
+                    slice_width=slice_size,
                     overlap_height_ratio=0.2,
                     overlap_width_ratio=0.2
                 )
@@ -2767,12 +2770,14 @@ def detect_all_birds():
                         'class_id': int(category_id)
                     })
 
-                print(f"Swift (SAHI): Found {len(results)} birds")
+                mode_label = f"sahi_{slice_size}" if slice_size != 1024 else "sahi"
+                print(f"Swift ({mode_name}): Found {len(results)} birds")
                 return jsonify({
                     'success': True,
                     'boxes': results,
                     'count': len(results),
-                    'mode': 'sahi'
+                    'mode': mode_label,
+                    'slice_size': slice_size
                 })
             except ImportError:
                 print("⚠️ SAHI not installed, falling back to standard detection")
