@@ -1,127 +1,167 @@
-# 🍀 LuckyCharm - Bird Detection Speed Demo
+# 🍀 LuckyCharm - Bird Detection System
 
-An interactive gong-powered demonstration showcasing the speed and accuracy of NestScope's AI bird detection models.
+Complete bird detection system with cloud GPU processing and local visualization.
 
-## 🎯 Overview
-
-LuckyCharm processes thousands of Gulf Coast bird images in real-time, demonstrating:
-- **Fast Detection**: YOLO v26 End-to-End format with SAHI support
-- **Species Classification**: 7 bird species groups (COLOR_WADER, DARK, GULL, PELICAN, SHOREBIRD, TERN, WHITE_WADER)
-- **Real-time Stats**: Images/second, birds detected, processing time
-- **Visual Results**: Annotated images with bounding boxes and species labels
-
-## 🚀 Quick Start
-
-```bash
-cd luckycharm
-./run.sh
-```
-
-Then open http://localhost:5001 in your browser and **click the gong** to start!
-
-## 📁 Structure
+## Architecture
 
 ```
 luckycharm/
-├── app.py                      # Flask server
-├── inference_engine.py         # Detection + classification engine
-├── swift_UQ.onnx              # Detection model
-├── classifier_swift.onnx       # Species classifier
-├── demoday_images/            # Images to process
-├── templates/
-│   └── index.html             # Gong interface
-├── static/
-│   ├── css/style.css          # Coastal theme
-│   └── js/
-│       ├── app.js             # Main app logic
-│       └── gong-sound.js      # Synthesized gong sound
-└── requirements.txt           # Python dependencies
+├── local/              # Local visualization client (port 5001)
+├── runpod/             # GPU processing server (port 8888)
+└── demoday_images/     # Shared images (15,000 Gulf Coast birds)
 ```
 
-## 🎮 How It Works
+**How it works:**
+1. **RunPod** processes images on GPU → sends JSON metadata
+2. **Local** receives JSON → draws bboxes on local images → displays gallery
 
-1. **Hit the Gong** - Click to start processing all images
-2. **Watch the Stats** - Real-time updates on speed and detections
-3. **See Results** - Annotated images appear as they're processed
-4. **Hit Again to Stop** - Stop processing early if needed
-5. **View Summary** - Final statistics and performance metrics
+**Benefits:**
+- No images sent over network (only JSON ~1-2 KB per image)
+- High-quality local rendering (1200px, 95% JPEG)
+- Real-time stats and gallery updates
+- GPU acceleration (TensorRT/CUDA)
 
-## 🔧 Features
+## Quick Start
 
-### SAHI (Slicing Aided Hyper Inference)
-- Splits large images into overlapping tiles
-- Better detection of small birds
-- Automatic NMS to merge overlapping detections
-
-### YOLO v26 End-to-End Support
-- Supports both traditional YOLO format (8400 predictions)
-- And YOLO v26 End-to-End format (300 predictions with NMS)
-
-### Species Classification
-- 7 species groups with confidence scores
-- Color-coded bounding boxes per species
-- Real-time classification as images process
-
-## 📊 Performance
-
-Expected performance on typical hardware:
-- **CPU**: 2-3 images/second
-- **GPU**: 8-12 images/second
-- **Detection + Classification**: ~0.5-2s per image
-
-## 🎨 Design
-
-Coastal-themed interface with:
-- Gradient backgrounds (coastal blue to ocean)
-- Animated gong with ripple effects
-- Glass-morphism stat cards
-- Responsive gallery with fade-in animations
-- Synthesized gong sound using Web Audio API
-
-## 🛠️ Manual Setup
-
-If `run.sh` doesn't work:
+### 1. Download Images (First Time)
 
 ```bash
-# Create virtual environment
-python3 -m venv .venv
-source .venv/bin/activate
+cd luckycharm
+# Already downloading 15,000 images...
+# Check status: ls demoday_images | wc -l
+```
 
-# Install dependencies
-pip install flask opencv-python numpy onnxruntime
+### 2. Run RunPod Server
 
-# Run server
+```bash
+cd runpod
+
+# Copy models first (from nexus/models/)
+cp ../../models/swift_UQ.onnx .
+cp ../../models/classifier_swift.onnx .
+
+# Install and run
+pip install -r requirements.txt
+python server.py
+```
+
+Get your RunPod URL: `https://xxxxx-8888.proxy.runpod.net`
+
+### 3. Run Local Client
+
+```bash
+cd local
+pip install -r requirements.txt
 python app.py
 ```
 
-## 📝 Notes
+Open http://localhost:5001
 
-- Models must be in the root `luckycharm/` directory
-- Images must be in `demoday_images/` folder
-- Supports JPG and PNG formats
-- Results are displayed in real-time as processing happens
-- All processing happens server-side for speed
+### 4. Connect and Process
 
-## 🏆 Demo Tips
+1. Enter RunPod URL in the input field
+2. Click the gong to start
+3. Watch real-time processing and gallery
 
-For competition/demo day:
-1. Pre-load the page before showing
-2. Hit the gong for dramatic effect
-3. Highlight the real-time stats updating
-4. Show the annotated images appearing
-5. Stop early if time is limited (still shows summary)
-6. Emphasize images/second metric for speed comparison
+## Folder Details
 
-## 🐛 Troubleshooting
+### `local/` - Visualization Client
+- **Port**: 5001
+- **Purpose**: Connect to RunPod, draw bboxes, show gallery
+- **Files**:
+  - `app.py` - Flask server with polling
+  - `draw_utils.py` - Bbox rendering (color-coded by species)
+  - `templates/` - Gong interface
+  - `static/` - CSS/JS
+  - `requirements.txt` - No GPU needed
 
-**Models not found**: Ensure `swift_UQ.onnx` and `classifier_swift.onnx` are in the luckycharm folder
+### `runpod/` - GPU Server
+- **Port**: 8888
+- **Purpose**: Process images on GPU, send JSON
+- **Files**:
+  - `server.py` - Flask API server
+  - `inference_engine.py` - TensorRT-optimized detection
+  - `requirements.txt` - GPU dependencies
+  - `SETUP.md` - Deployment guide
+  - Need: `swift_UQ.onnx`, `classifier_swift.onnx`
 
-**No images**: Copy images to `demoday_images/` folder
+### `demoday_images/` - Shared Dataset
+- 15,000 Gulf Coast bird images
+- Same folder used by both local and RunPod
+- Downloaded from TWI S3 bucket
 
-**Slow processing**: Check if CUDA is available with `onnxruntime-gpu`
+## JSON Format
 
-**Port in use**: Change port in `app.py` (line with `app.run(port=5001)`)
+RunPod sends only metadata:
+
+```json
+{
+  "filename": "image_001.jpg",
+  "image_size": {"width": 4000, "height": 3000},
+  "detections": [
+    {
+      "bbox": [100, 200, 300, 400],
+      "confidence": 0.95,
+      "species": "PELICAN",
+      "species_confidence": 0.88
+    }
+  ],
+  "bird_count": 12,
+  "inference_time": 1.2
+}
+```
+
+## Species (7 Groups)
+
+| Species | Color |
+|---------|-------|
+| PELICAN | Cyan |
+| GULL | White |
+| TERN | Yellow |
+| WHITE_WADER | Cream |
+| COLOR_WADER | Orange |
+| SHOREBIRD | Green |
+| DARK | Gray |
+
+## Performance
+
+### RunPod GPU
+- **TensorRT**: 20-40 img/s
+- **CUDA**: 8-15 img/s
+- **CPU fallback**: 2-4 img/s
+
+### Local Rendering
+- Bbox drawing: <10ms
+- Gallery update: Real-time
+
+### Network
+- JSON: 1-2 KB per image
+- Poll interval: 500ms
+- Total bandwidth: Minimal
+
+## Documentation
+
+- **`QUICKSTART.md`** - Fast setup guide
+- **`ARCHITECTURE.md`** - System design
+- **`local/LOCAL_GUIDE.md`** - Local client usage
+- **`runpod/SETUP.md`** - RunPod deployment
+
+## Development
+
+Run locally without RunPod (for testing):
+
+```bash
+# Terminal 1: Mock server
+cd runpod
+python server.py
+
+# Terminal 2: Local client
+cd local
+python app.py
+```
+
+Then connect to `http://localhost:8888` instead of RunPod URL.
 
 ---
 
-Built for DevDays 2026 Hackathon 🌊
+Built for DevDays 2026 Hackathon
