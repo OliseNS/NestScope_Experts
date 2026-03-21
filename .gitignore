@@ -370,3 +370,9 @@ val_dataset/
 # Export scripts output
 labeller/export_crops.py
 labeller/nestvision/export/
+
+# ============================================================================
+# LUCKYCHARM - EXCLUDE ENTIRE DEPLOYMENT FOLDER
+# ============================================================================
+# Luckycharm is a separate deployment tool - should not be tracked in main repo
+luckycharm/
