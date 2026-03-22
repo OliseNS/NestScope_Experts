@@ -130,6 +130,7 @@ _cache = {
     'project_stats': {},      # {project_folder: {'data': stats_dict, 'timestamp': time}}
     'all_users_with_roles': {'data': None, 'timestamp': 0},  # Cache user list from DB
     'user_contributions': {}, # {user_email: {'data': contributions_dict, 'timestamp': time}}
+    'team_page': {'data': None, 'timestamp': 0},  # Cached /users payload (heavy filesystem scan)
 }
 
 CACHE_TTL = 60  # Cache time-to-live in seconds (1 minute)
@@ -181,11 +182,101 @@ def invalidate_project_cache(project_folder=None):
         # Clear all caches
         _cache['project_stats'].clear()
         _cache['user_contributions'].clear()
+    # Team page aggregates all projects; any project change can alter counts
+    _cache['team_page'] = {'data': None, 'timestamp': 0}
 
 def invalidate_user_cache():
     """Invalidate user-related caches"""
     _cache['all_users_with_roles'] = {'data': None, 'timestamp': 0}
     _cache['user_contributions'].clear()
+    _cache['team_page'] = {'data': None, 'timestamp': 0}
+
+
+def _build_team_users_list():
+    """
+    Build data for /users (Team page). Precomputes per-project annotation line counts
+    once per unique completed image — avoids O(users * completed) label file reads.
+    """
+    users_list = []
+    auth_users = get_cached_all_users_with_roles()
+    projects = get_all_projects()
+    project_states = {}
+
+    for proj in projects:
+        folder = proj['folder']
+        state = load_project_state(folder)
+        labels_dir = os.path.join(PROJECTS_DIR, folder, 'labels')
+        all_completed_here = set()
+        for ud in state.get('users', {}).values():
+            all_completed_here.update(ud.get('completed', []))
+        ann_by_image = {}
+        for img in all_completed_here:
+            label_path = os.path.join(labels_dir, os.path.splitext(img)[0] + '.txt')
+            if os.path.exists(label_path):
+                with open(label_path, 'r') as f:
+                    ann_by_image[img] = sum(1 for line in f if line.strip())
+            else:
+                ann_by_image[img] = 0
+        project_states[folder] = {
+            'metadata': proj,
+            'state': state,
+            'ann_by_image': ann_by_image,
+        }
+
+    for user in auth_users:
+        user_projects = []
+        total_completed = 0
+        total_annotations = 0
+
+        for proj_folder, proj_data in project_states.items():
+            state = proj_data['state']
+            user_data = state.get('users', {}).get(user['email'])
+            if not user_data:
+                user_data = state.get('users', {}).get(user['name'])
+            if not user_data:
+                continue
+
+            assigned = user_data.get('assigned', [])
+            completed = user_data.get('completed', [])
+            if not (assigned or completed):
+                continue
+
+            user_projects.append({
+                'folder': proj_folder,
+                'name': proj_data['metadata']['name'],
+                'assigned': len(assigned),
+                'completed': len(completed),
+            })
+            total_completed += len(completed)
+            if completed:
+                ann_map = proj_data['ann_by_image']
+                total_annotations += sum(ann_map.get(img, 0) for img in completed)
+
+        users_list.append({
+            'name': user['name'],
+            'email': user['email'],
+            'picture': user.get('picture'),
+            'role': user['role'],
+            'first_login': user.get('first_login', ''),
+            'projects': user_projects,
+            'total_projects': len(user_projects),
+            'total_completed': total_completed,
+            'total_annotations': total_annotations,
+        })
+
+    return users_list
+
+
+def get_cached_team_users_list():
+    """Cached Team page user rows (same TTL as other caches)."""
+    cache_entry = _cache['team_page']
+    now = time.time()
+    if cache_entry['data'] is not None and (now - cache_entry['timestamp']) < CACHE_TTL:
+        return cache_entry['data']
+    users_list = _build_team_users_list()
+    _cache['team_page'] = {'data': users_list, 'timestamp': now}
+    return users_list
+
 
 def ensure_directories():
     """Create necessary directories"""
@@ -531,16 +622,19 @@ def google_callback():
         # Create or update user record
         create_or_update_user(email, name, picture)
 
-        # Get user permissions
-        from labeller.auth import get_user_permissions
-        perms = get_user_permissions(email)
+        # Role, permissions, and admin flag in one Turso round-trip (was 3+)
+        from labeller.auth import get_login_session_payload
+        payload = get_login_session_payload(email)
+        if not payload:
+            return redirect(url_for('login', error='Failed to load user profile'))
+        perms, is_adm = payload
 
         # Store user in session (like giving them a wristband)
         session['user'] = {
             'email': email,
             'name': name,
             'picture': picture,
-            'is_admin': is_admin(email),
+            'is_admin': is_adm,
             'role': perms['role'],
             'permissions': perms
         }
@@ -563,9 +657,8 @@ def logout():
 @admin_required
 def admin_panel():
     """Admin panel for managing approved emails and user roles"""
-    from labeller.auth import get_all_users_with_roles
     approved_emails = get_approved_emails()
-    users = get_all_users_with_roles()
+    users = get_cached_all_users_with_roles()
 
     total_logins = sum(u['login_count'] for u in users)
 
@@ -596,6 +689,7 @@ def admin_add_email():
     success = add_approved_email(email, added_by, notes)
 
     if success:
+        invalidate_user_cache()
         flash(f'Added {email} to approved list', 'success')
     else:
         flash(f'{email} is already approved', 'error')
@@ -618,6 +712,7 @@ def admin_remove_email():
         return redirect(url_for('admin_panel'))
 
     remove_approved_email(email)
+    invalidate_user_cache()
     flash(f'Removed {email} from approved list', 'success')
 
     return redirect(url_for('admin_panel'))
@@ -642,6 +737,7 @@ def admin_update_role():
     try:
         success = update_user_role(email, new_role)
         if success:
+            invalidate_user_cache()
             flash(f'Updated {email} to {new_role}', 'success')
         else:
             flash(f'Failed to update role', 'error')
@@ -669,6 +765,7 @@ def admin_delete_user():
     try:
         success = delete_user(email)
         if success:
+            invalidate_user_cache()
             flash(f'Deleted user {email}', 'success')
         else:
             flash(f'Failed to delete user', 'error')
@@ -802,12 +899,24 @@ def project_detail(project_folder):
     # Load project state for user details
     state = load_project_state(project_folder)
 
-    # Get user profile pictures from auth database
-    from labeller.auth import get_all_users_with_roles
+    # One pass over label files for all completed images (avoid re-reading the same file per user)
+    ann_per_image = {}
+    all_completed_imgs = set()
+    for user_data in state.get('users', {}).values():
+        for img in user_data.get('completed', []):
+            all_completed_imgs.add(img)
+    for img in all_completed_imgs:
+        label_path = os.path.join(labels_dir, os.path.splitext(img)[0] + '.txt')
+        if os.path.exists(label_path):
+            with open(label_path, 'r') as f:
+                ann_per_image[img] = sum(1 for line in f if line.strip())
+        else:
+            ann_per_image[img] = 0
+
+    # Get user profile pictures from auth database (cached; same list as dashboard)
     auth_users = {}
     try:
-        all_auth_users = get_all_users_with_roles()
-        # Index by both email and name for backwards compatibility
+        all_auth_users = get_cached_all_users_with_roles()
         for u in all_auth_users:
             auth_users[u['email']] = u
             auth_users[u['name']] = u
@@ -819,15 +928,7 @@ def project_detail(project_folder):
         assigned = user_data.get('assigned', [])
         completed = user_data.get('completed', [])
 
-        # Count annotations by this user
-        user_annotations = 0
-        for img in completed:
-            label_file = os.path.splitext(img)[0] + '.txt'
-            label_path = os.path.join(labels_dir, label_file)
-            if os.path.exists(label_path):
-                with open(label_path, 'r') as f:
-                    lines = [line.strip() for line in f if line.strip()]
-                    user_annotations += len(lines)
+        user_annotations = sum(ann_per_image.get(img, 0) for img in completed)
 
         # Get user info from auth database (user_key might be email or name)
         auth_user = auth_users.get(user_key, {})
@@ -951,86 +1052,28 @@ def flood_intelligence_page():
 @app.route('/users')
 @login_required
 def users_page():
-    """Global users management page - OPTIMIZED with caching"""
+    """Global users management page — cached; label files read once per image per project."""
     users_list = []
-
     try:
-        # Get authenticated users from auth database (CACHED)
-        auth_users = get_cached_all_users_with_roles()
-
-        # Pre-load all project states ONCE (instead of loading per user)
-        projects = get_all_projects()
-        project_states = {}
-        for proj in projects:
-            project_states[proj['folder']] = {
-                'metadata': proj,
-                'state': load_project_state(proj['folder'])
-            }
-
-        # Build user contribution data efficiently
-        for user in auth_users:
-            user_projects = []
-            total_completed = 0
-            total_annotations = 0
-
-            # Scan pre-loaded project states
-            for proj_folder, proj_data in project_states.items():
-                state = proj_data['state']
-
-                # Look up user by EMAIL (unique identifier)
-                # Note: Old projects may use name as key, new projects use email
-                user_data = state.get('users', {}).get(user['email'])
-                if not user_data:
-                    # Fallback: try name (for backwards compatibility with old projects)
-                    user_data = state.get('users', {}).get(user['name'])
-
-                if not user_data:
-                    continue  # User not in this project
-
-                if user_data.get('assigned') or user_data.get('completed'):  # User has actual assignments in this project
-                    assigned = user_data.get('assigned', [])
-                    completed = user_data.get('completed', [])
-
-                    project_info = {
-                        'folder': proj_folder,
-                        'name': proj_data['metadata']['name'],
-                        'assigned': len(assigned),
-                        'completed': len(completed)
-                    }
-                    user_projects.append(project_info)
-                    total_completed += len(completed)
-
-                    # Count annotations from completed images
-                    # OPTIMIZATION: Only count if user has completed images
-                    if completed:
-                        labels_dir = os.path.join(PROJECTS_DIR, proj_folder, 'labels')
-                        for img_name in completed:
-                            label_file = os.path.join(labels_dir, f"{os.path.splitext(img_name)[0]}.txt")
-                            if os.path.exists(label_file):
-                                # Read file once and count non-empty lines
-                                with open(label_file, 'r') as f:
-                                    total_annotations += sum(1 for line in f if line.strip())
-
-            users_list.append({
-                'name': user['name'],
-                'email': user['email'],
-                'picture': user.get('picture'),
-                'role': user['role'],
-                'first_login': user.get('first_login', ''),
-                'projects': user_projects,
-                'total_projects': len(user_projects),
-                'total_completed': total_completed,
-                'total_annotations': total_annotations
-            })
-
+        users_list = get_cached_team_users_list()
     except Exception as e:
         print(f"Error loading users: {e}")
         import traceback
         traceback.print_exc()
 
-    return render_template('users_page.html',
-                         users=users_list,
-                         active_page='users')
+    team_stats = {
+        'user_count': len(users_list),
+        'assignment_count': sum(len(u['projects']) for u in users_list),
+        'total_completed': sum(u['total_completed'] for u in users_list),
+        'total_annotations': sum(u['total_annotations'] for u in users_list),
+    }
+
+    return render_template(
+        'users_page.html',
+        users=users_list,
+        team_stats=team_stats,
+        active_page='users',
+    )
 
 @app.route('/test-image')
 def test_image():
@@ -1054,8 +1097,7 @@ def editor(project_folder, username, image_index=None):
     user_data = state.get('users', {}).get(username, {})
     if not user_data:
         # Try to find by name if email not found (legacy support)
-        from labeller.auth import get_all_users_with_roles
-        auth_users = get_all_users_with_roles()
+        auth_users = get_cached_all_users_with_roles()
         for user in auth_users:
             if user['name'] == username and user['email'] in state.get('users', {}):
                 user_data = state['users'][user['email']]
@@ -1722,9 +1764,8 @@ def assign_task():
         if not user_email:
             return jsonify({'error': 'User email required'}), 400
 
-        # Get user info from auth system
-        from labeller.auth import get_all_users_with_roles
-        auth_users = {u['email']: u for u in get_all_users_with_roles()}
+        # Get user info from auth system (cached Turso user list)
+        auth_users = {u['email']: u for u in get_cached_all_users_with_roles()}
 
         # If username was provided instead of email, try to find the email
         if '@' not in user_email:
@@ -1811,6 +1852,7 @@ def assign_task():
 
         # Save project state
         save_project_state(project_folder, state)
+        invalidate_project_cache(project_folder)
 
         # Update global user registry (still uses name for legacy reasons)
         user_service = get_user_service()
@@ -1879,6 +1921,7 @@ def remove_user_from_project(project_folder):
 
         # Save updated state
         save_project_state(project_folder, state)
+        invalidate_project_cache(project_folder)
 
         return jsonify({
             'success': True,
@@ -2253,8 +2296,7 @@ def save_annotations():
             user_key = username if username in state.get('users', {}) else None
             if not user_key:
                 # Try to map username to email
-                from labeller.auth import get_all_users_with_roles
-                auth_users = get_all_users_with_roles()
+                auth_users = get_cached_all_users_with_roles()
                 for user in auth_users:
                     if user['name'] == username and user['email'] in state.get('users', {}):
                         user_key = user['email']
@@ -2322,10 +2364,8 @@ def get_project_classes():
 def get_all_users():
     """Get all authenticated users who can be assigned to tasks"""
     try:
-        from labeller.auth import get_all_users_with_roles
-
         # Get all logged-in users from authentication system
-        auth_users = get_all_users_with_roles()
+        auth_users = get_cached_all_users_with_roles()
 
         # Filter to only include annotators and admins (can annotate)
         # Count projects for each user
@@ -2559,6 +2599,7 @@ def delete_image():
                 user_data['completed'] = completed
 
             save_project_state(project_folder, state)
+            invalidate_project_cache(project_folder)
 
         return jsonify({
             'success': True,

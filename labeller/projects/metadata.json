@@ -1,6 +1,0 @@
-{
-  "name": "UQ modified Dataset - Stage 2",
-  "description": "This dataset is a mixture of the UQ Australia dataset and our personal dataset. All images are at 1024 by 1024 pixels",
-  "created_at": "2026-03-15T23:47:41.126737",
-  "import_type": "yolo"
-}

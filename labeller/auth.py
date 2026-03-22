@@ -29,7 +29,7 @@ def get_cloud_client():
         raise ValueError("❌ TURSO_DATABASE_URL and TURSO_AUTH_TOKEN must be set in .env")
     try:
         client = libsql_client.create_client_sync(url=TURSO_URL, auth_token=TURSO_TOKEN)
-        logger.info("✅ Successfully connected to Turso cloud database")
+        logger.debug("Connected to Turso cloud database")
         return client
     except Exception as e:
         logger.error(f"❌ Failed to connect to Turso: {e}")
@@ -320,10 +320,16 @@ def admin_required(f):
             return redirect(url_for('login', next=request.url))
 
         user_email = session['user']['email']
-        if not is_admin(user_email):
-            return jsonify({'error': 'Admin access required'}), 403
+        # Fast path: OAuth already stored admin flag (avoids Turso round-trip per request)
+        if session['user'].get('is_admin'):
+            return f(*args, **kwargs)
+        # Promotion: user was granted admin but has an old session without is_admin
+        if is_admin(user_email):
+            session['user']['is_admin'] = True
+            session.modified = True
+            return f(*args, **kwargs)
 
-        return f(*args, **kwargs)
+        return jsonify({'error': 'Admin access required'}), 403
     return decorated_function
 
 def api_login_required(f):
@@ -449,9 +455,30 @@ def delete_user(email):
         return False
 
 def get_all_users_with_roles():
-    """Get all registered users with their roles and permissions (Turso Cloud ONLY)"""
+    """Get all registered users with their roles and permissions (Turso Cloud ONLY).
+
+    Uses two queries total (permissions map + users). Previously this called
+    get_user_permissions() per user (2+ Turso round-trips each), which made the
+    admin panel and any page listing users very slow.
+    """
     client = get_cloud_client()
     try:
+        perm_result = client.execute(
+            'SELECT role, can_annotate, can_edit_db, can_manage_users FROM permissions'
+        )
+        perm_by_role = {}
+        for prow in perm_result.rows:
+            perm_by_role[prow[0]] = {
+                'can_annotate': bool(prow[1]),
+                'can_edit_db': bool(prow[2]),
+                'can_manage_users': bool(prow[3]),
+            }
+        default_perm = {
+            'can_annotate': False,
+            'can_edit_db': False,
+            'can_manage_users': False,
+        }
+
         result = client.execute('''
             SELECT u.email, u.name, u.picture, u.first_login, u.last_login,
                    u.login_count, u.role
@@ -460,24 +487,61 @@ def get_all_users_with_roles():
         ''')
         users = []
         for row in result.rows:
-            user = {
-                'email': row[0],
+            email = row[0]
+            role = row[6] or 'viewer'
+            p = perm_by_role.get(role, default_perm)
+            users.append({
+                'email': email,
                 'name': row[1],
                 'picture': row[2],
                 'first_login': row[3],
                 'last_login': row[4],
                 'login_count': row[5],
-                'role': row[6] or 'viewer',
-                'is_base_admin': is_base_admin(row[0])
-            }
-            perms = get_user_permissions(user['email'])
-            user.update(perms)
-            users.append(user)
+                'role': role,
+                'is_base_admin': is_base_admin(email),
+                'can_annotate': p['can_annotate'],
+                'can_edit_db': p['can_edit_db'],
+                'can_manage_users': p['can_manage_users'],
+            })
         client.close()
         return users
     except Exception as e:
         if client: client.close()
         logger.error(f"❌ Failed to get users with roles: {e}")
+        raise
+
+
+def get_login_session_payload(email):
+    """
+    Load role, permission flags, and admin status in a single Turso round-trip.
+    Call after create_or_update_user so the users row exists.
+    """
+    client = get_cloud_client()
+    try:
+        result = client.execute('''
+            SELECT u.role, p.can_annotate, p.can_edit_db, p.can_manage_users,
+                   EXISTS(SELECT 1 FROM admin_users a WHERE a.email = u.email)
+            FROM users u
+            LEFT JOIN permissions p ON p.role = COALESCE(u.role, 'viewer')
+            WHERE u.email = ?
+        ''', [email])
+        if not result.rows:
+            client.close()
+            return None
+        row = result.rows[0]
+        role = row[0] or 'viewer'
+        perms = {
+            'role': role,
+            'can_annotate': bool(row[1]) if row[1] is not None else False,
+            'can_edit_db': bool(row[2]) if row[2] is not None else False,
+            'can_manage_users': bool(row[3]) if row[3] is not None else False,
+        }
+        is_adm = bool(row[4])
+        client.close()
+        return perms, is_adm
+    except Exception as e:
+        if client: client.close()
+        logger.error(f"❌ Failed to load login session payload: {e}")
         raise
 
 # ============================================================================
