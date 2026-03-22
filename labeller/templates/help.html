@@ -170,10 +170,10 @@
     <!-- Tabs -->
     <div class="help-tabs">
         <button class="help-tab active" onclick="switchTab('overview')">📖 Overview</button>
-        <button class="help-tab" onclick="switchTab('nestchat')">💬 NestChat</button>
-        <button class="help-tab" onclick="switchTab('nestvision')">🦅 NestVision</button>
+        <button class="help-tab" onclick="switchTab('nestperts')">🧑‍🔬 Annotation</button>
         <button class="help-tab" onclick="switchTab('nestdb')">🗄️ NestDB</button>
-        <button class="help-tab" onclick="switchTab('nestperts')">🧑‍🔬 Nestperts</button>
+        <button class="help-tab" onclick="switchTab('nestchat')">💬 Data API</button>
+        <button class="help-tab" onclick="switchTab('nestvision')">🦅 CV API</button>
         <button class="help-tab" onclick="switchTab('troubleshooting')">🔧 Troubleshooting</button>
         <button class="help-tab" onclick="switchTab('technical')">📚 Technical Ref</button>
     </div>
@@ -193,52 +193,50 @@
 
             <h4>🦅 Core Modules</h4>
             <ul>
-                <li><strong>NestChat</strong> - Natural language interface for querying bird data with AI-generated SQL</li>
-                <li><strong>NestVision</strong> - AI-powered bird detection and counting in aerial imagery</li>
+                <li><strong>Nestperts</strong> - Expert annotation platform for training data creation (You're here!)</li>
                 <li><strong>NestDB</strong> - Database management interface with Git-based version control</li>
-                <li><strong>Nestperts</strong> - Expert annotation platform for training data creation</li>
                 <li><strong>FloodWatch</strong> - Multi-modal flood hazard monitoring and coastal risk analysis</li>
+                <li><strong>Backend API</strong> - FastAPI server for CV inference and data queries</li>
             </ul>
 
             <h4>🎯 Key Features</h4>
             <ul>
-                <li>Ask questions in plain English and get instant visualizations</li>
+                <li>Create expert-labeled datasets for model training with Swift AI segmentation</li>
+                <li>View and edit database records with full Git-based version control</li>
                 <li>Upload colony images for automatic bird detection and species classification</li>
-                <li>View and edit database records with full version control</li>
-                <li>Create expert-labeled datasets for model training with Swift AI</li>
-                <li>Export data and images for external analysis in multiple formats</li>
+                <li>Multi-expert collaboration with project-based workflows</li>
+                <li>Export data in multiple formats (YOLO, COCO, GeoJSON)</li>
             </ul>
         </div>
 
         <div class="help-section">
             <h3>Quick Start Workflow</h3>
 
-            <h4>For Data Analysis</h4>
+            <h4>For Expert Annotation (Nestperts)</h4>
             <ol>
-                <li>Open <strong>NestChat</strong> from the main app (port 8501)</li>
-                <li>Ask a question like "How many birds were observed in Texas in 2020?"</li>
-                <li>Review the generated SQL query and results</li>
-                <li>Explore interactive charts and maps</li>
-                <li>Download results as CSV if needed</li>
-            </ol>
-
-            <h4>For Image Analysis</h4>
-            <ol>
-                <li>Open <strong>NestVision</strong> from the main app</li>
-                <li>Upload a colony image (JPEG, PNG, or TIFF)</li>
-                <li>Choose detection mode: Swift (fast) or Apex (accurate)</li>
-                <li>Click "Run Detection" and wait for results</li>
-                <li>Review detections and species breakdown with color-coded boxes</li>
-                <li>Download annotated images or send to Nestperts for refinement</li>
+                <li>You're already here! Navigate to the <strong>Annotate</strong> tab</li>
+                <li>Create a new project or select an existing one</li>
+                <li>Upload colony images (drag & drop or browse)</li>
+                <li>Use the AI Tool (<kbd>S</kbd>) to segment birds automatically</li>
+                <li>Assign species labels and refine bounding boxes</li>
+                <li>Export annotations in YOLO, COCO, or GeoJSON format</li>
             </ol>
 
             <h4>For Database Management</h4>
             <ol>
-                <li>Navigate to <strong>NestDB</strong> at <code>http://localhost:5000/nestdb</code></li>
-                <li>Browse tables in the Table Browser tab</li>
+                <li>Navigate to <strong>NestDB</strong> tab in the top navigation</li>
+                <li>Browse tables in the Table Browser</li>
                 <li>Toggle Edit Mode to modify records</li>
                 <li>Changes are automatically versioned with Git</li>
                 <li>Use Version History to view or rollback changes</li>
+            </ol>
+
+            <h4>For Flood Monitoring</h4>
+            <ol>
+                <li>Click <strong>FloodWatch</strong> in the navigation</li>
+                <li>View multi-modal hazard monitoring dashboard</li>
+                <li>Analyze coastal risk data and trends</li>
+                <li>Generate reports and export visualizations</li>
             </ol>
         </div>
 
@@ -261,87 +259,65 @@
         <div class="help-section">
             <h3>System Access</h3>
             <ul>
-                <li><strong>Main App (Streamlit):</strong> <code>http://localhost:8501</code></li>
-                <li><strong>Nestperts & NestDB (Flask):</strong> <code>http://localhost:5000</code></li>
+                <li><strong>Nestperts Platform (Flask):</strong> <code>http://localhost:5000</code> ← You're here!</li>
                 <li><strong>Backend API (FastAPI):</strong> <code>http://localhost:8000</code></li>
+                <li><strong>API Documentation:</strong> <code>http://localhost:8000/docs</code></li>
             </ul>
 
             <h4>Starting All Services</h4>
             <p>Run this command from the project root:</p>
             <code style="display: block; padding: var(--space-3); margin: var(--space-3) 0;">./run_app.sh</code>
-            <p>This launches all three services simultaneously with logging to <code>logs/</code> directory.</p>
+            <p>This launches both Backend API (port 8000) and Nestperts Platform (port 5000) with logging to <code>logs/</code> directory.</p>
+
+            <div class="tip-box">
+                <strong>💡 Tip:</strong> The Nestperts Platform includes all modules: Annotate, NestDB, FloodWatch, and Team management—all accessible from the navigation bar.
+            </div>
         </div>
     </div>
 
     <!-- NESTCHAT TAB -->
     <div id="nestchat" class="help-tab-content">
         <div class="help-section">
-            <h3>NestChat - Natural Language Data Interface</h3>
-            <p>Ask questions in plain English and get instant answers with visualizations. NestChat uses AI to convert your questions into SQL queries and generate insights.</p>
+            <h3>Data Querying via Backend API</h3>
+            <p>The Backend API provides programmatic access to the bird database with SQL query capabilities and automated data analysis.</p>
 
-            <h4>How It Works</h4>
-            <ol>
-                <li><strong>You ask a question</strong> in natural language</li>
-                <li><strong>AI generates SQL</strong> based on database schema</li>
-                <li><strong>Query executes</strong> against SQLite database</li>
-                <li><strong>AI analyzes results</strong> and generates natural language answer</li>
-                <li><strong>Visualizations appear</strong> (charts, maps) based on data type</li>
-            </ol>
+            <h4>API Endpoints</h4>
+            <ul>
+                <li><code>GET /schema</code> - Get complete database schema</li>
+                <li><code>POST /ask</code> - Execute natural language queries</li>
+                <li><code>POST /ask/stream</code> - Streaming responses for real-time updates</li>
+            </ul>
 
             <div class="info-box">
-                <strong>ℹ️ Under the Hood:</strong> NestChat uses an enhanced metadata system that helps the AI understand the difference between bird counts (observations) and photo records, ensuring accurate responses.
+                <strong>ℹ️ Pro Tip:</strong> Use NestDB's SQL Query Editor for direct database access, or integrate with the API for programmatic access.
             </div>
         </div>
 
         <div class="help-section">
-            <h3>Example Questions</h3>
+            <h3>Common Query Patterns</h3>
 
             <h4>Population & Trends</h4>
             <ul>
-                <li>"How many Brown Pelicans were observed in 2020?"</li>
-                <li>"Show me the trend of Royal Tern populations from 2010 to 2021"</li>
-                <li>"Which species had the biggest population increase?"</li>
-                <li>"What were the total bird observations by year?"</li>
+                <li>Total observations by species and year</li>
+                <li>Population trends across time periods</li>
+                <li>Species diversity metrics by colony</li>
+                <li>Breeding success rates (nest vs adult counts)</li>
             </ul>
 
-            <h4>Geographic Queries</h4>
+            <h4>Geographic Analysis</h4>
             <ul>
-                <li>"List all colonies in Louisiana"</li>
-                <li>"Which state has the most bird colonies?"</li>
-                <li>"Show me colony locations on a map"</li>
-                <li>"What colonies are between latitude 29 and 30?"</li>
+                <li>Colony distribution by state and region</li>
+                <li>Spatial clustering of species</li>
+                <li>Migration patterns over time</li>
+                <li>Habitat preference analysis</li>
             </ul>
 
-            <h4>Species-Specific</h4>
+            <h4>Species-Specific Queries</h4>
             <ul>
-                <li>"Where do Black Skimmers nest?"</li>
-                <li>"Show me all observations of Reddish Egrets"</li>
-                <li>"Which colonies have both pelicans and terns?"</li>
-                <li>"Compare nest counts vs bird counts for Royal Terns"</li>
-            </ul>
-
-            <div class="tip-box">
-                <strong>💡 Pro Tip:</strong> Be specific about whether you want bird counts or nest counts. For example: "How many Royal Tern NESTS were counted in 2020?"
-            </div>
-        </div>
-
-        <div class="help-section">
-            <h3>Understanding Visualizations</h3>
-
-            <p>NestChat automatically chooses the best visualization:</p>
-            <ul>
-                <li><strong>Line Charts:</strong> Time-series data (trends over years)</li>
-                <li><strong>Bar Charts:</strong> Comparisons (top colonies, species rankings)</li>
-                <li><strong>Maps:</strong> Geographic data (colony locations with coordinates)</li>
-                <li><strong>Tables:</strong> Detailed records and multi-column results</li>
-            </ul>
-
-            <h4>Interactive Features</h4>
-            <ul>
-                <li><strong>Hover:</strong> See exact values on charts</li>
-                <li><strong>Zoom:</strong> Click and drag to zoom into regions</li>
-                <li><strong>Pan:</strong> Move around on maps</li>
-                <li><strong>Download:</strong> Export charts as PNG or data as CSV</li>
+                <li>Historical presence/absence data</li>
+                <li>Co-occurrence patterns between species</li>
+                <li>Seasonal abundance variations</li>
+                <li>Conservation status tracking</li>
             </ul>
         </div>
     </div>
@@ -349,10 +325,11 @@
     <!-- NESTVISION TAB -->
     <div id="nestvision" class="help-tab-content">
         <div class="help-section">
-            <h3>NestVision - AI Bird Detection & Counting</h3>
-            <p>Upload colony images and use computer vision to automatically detect and count birds with species classification.</p>
+            <h3>AI Bird Detection via Backend API</h3>
+            <p>The Backend API provides computer vision inference for automatic bird detection and species classification in aerial imagery.</p>
 
-            <h4>Detection Modes</h4>
+            <h4>Detection Endpoint</h4>
+            <p><code>POST /cv/inference</code> - Upload images for AI-powered detection</p>
 
             <h5>🚀 Swift Mode (Default)</h5>
             <ul>
@@ -371,15 +348,15 @@
             </ul>
 
             <div class="info-box">
-                <strong>ℹ️ SAHI Processing:</strong> For large images (>1024px), NestVision automatically uses SAHI (Slicing Aided Hyper Inference) which slices the image into overlapping tiles for better detection of small birds.
+                <strong>ℹ️ SAHI Processing:</strong> For large images (>1024px), automatic SAHI (Slicing Aided Hyper Inference) slices images into overlapping tiles for better detection of small birds.
                 <br><br>
-                <strong>🔬 SuperZoom Mode:</strong> Press <kbd class="shortcut-key">Shift+S</kbd> to use 512x512 slices instead of 1024x1024 for detecting extremely small or distant birds. Slower but more accurate for tiny targets.
+                <strong>🔬 SuperZoom Mode:</strong> Use 512x512 slices instead of 1024x1024 for detecting extremely small or distant birds. Slower but more accurate for tiny targets.
             </div>
         </div>
 
         <div class="help-section">
             <h3>Species Classification</h3>
-            <p>NestVision classifies detected birds into 7 species groups with color-coded bounding boxes:</p>
+            <p>Detection includes automatic classification into 7 species groups with color-coded bounding boxes:</p>
 
             <ul>
                 <li><strong style="color: #FF1493;">COLOR_WADER</strong> (Pink): Roseate Spoonbills, Reddish Egrets</li>
@@ -392,44 +369,24 @@
             </ul>
 
             <div class="warning-box">
-                <strong>⚠️ Note:</strong> Classification is at the group level, not individual species. For precise species identification, use Nestperts for expert annotation.
+                <strong>⚠️ Note:</strong> Classification is at the group level, not individual species. For precise species identification, use Nestperts annotation tools.
             </div>
         </div>
 
         <div class="help-section">
-            <h3>Step-by-Step Workflow</h3>
+            <h3>Integration Workflow</h3>
 
             <ol>
-                <li><strong>Upload Image:</strong> Click "Browse files" or drag and drop (JPEG, PNG, TIFF supported, max 200MB)</li>
-                <li><strong>Choose Mode:</strong> Select Swift (fast) or Apex (accurate)</li>
-                <li><strong>Adjust Threshold:</strong> Default 0.25 works for most images (lower = more detections)</li>
-                <li><strong>Run Detection:</strong> Click button and wait 10-60 seconds</li>
-                <li><strong>Review Results:</strong> See total count, species breakdown chart, and annotated image</li>
-                <li><strong>Export or Refine:</strong> Download image or send to Nestperts for expert correction</li>
+                <li><strong>Send Image:</strong> POST multipart/form-data with image file</li>
+                <li><strong>Choose Mode:</strong> Include mode parameter (swift/apex)</li>
+                <li><strong>Set Threshold:</strong> Confidence threshold (default 0.25)</li>
+                <li><strong>Get Results:</strong> JSON response with bounding boxes and classifications</li>
+                <li><strong>Refine in Nestperts:</strong> Import detections for expert validation</li>
             </ol>
 
             <div class="tip-box">
-                <strong>💡 Pro Tip:</strong> If you get too many false detections, increase the confidence threshold to 0.35-0.45. If birds are being missed, decrease it to 0.15-0.20.
+                <strong>💡 Pro Tip:</strong> For production workflows, run initial detection via API then import to Nestperts for expert refinement and quality control.
             </div>
-        </div>
-
-        <div class="help-section">
-            <h3>Best Practices</h3>
-
-            <h4>Image Quality</h4>
-            <ul>
-                <li><strong>Resolution:</strong> Higher resolution = better detection</li>
-                <li><strong>Lighting:</strong> Well-lit images work best</li>
-                <li><strong>Contrast:</strong> Birds should contrast with background</li>
-                <li><strong>Focus:</strong> Sharp images perform better than blurry</li>
-            </ul>
-
-            <h4>Camera Angle</h4>
-            <ul>
-                <li><strong>Overhead:</strong> Best for accurate counts</li>
-                <li><strong>Oblique:</strong> Works but may miss overlapping birds</li>
-                <li><strong>Ground-level:</strong> Challenging, consider manual counting</li>
-            </ul>
         </div>
     </div>
 
@@ -676,9 +633,9 @@
             <p><strong>Solutions:</strong></p>
             <ul>
                 <li>Check that all services are running: <code>./run_app.sh</code></li>
-                <li>Verify URLs: Main app (8501), Nestperts/NestDB (5000), API (8000)</li>
+                <li>Verify URLs: Nestperts (5000), Backend API (8000)</li>
                 <li>Try hard refresh: <kbd class="shortcut-key">Ctrl+Shift+R</kbd> (Windows/Linux) or <kbd class="shortcut-key">Cmd+Shift+R</kbd> (Mac)</li>
-                <li>Check logs: <code>tail -f logs/server.log</code></li>
+                <li>Check logs: <code>tail -f logs/nestperts.log</code> or <code>tail -f logs/server.log</code></li>
             </ul>
 
             <h4>"Backend Connection Failed"</h4>
@@ -690,22 +647,14 @@
                 <li>Verify port 8000 is not blocked by firewall</li>
             </ul>
 
-            <h4>NestChat "Query Failed"</h4>
+            <h4>Image Upload Fails</h4>
             <p><strong>Solutions:</strong></p>
             <ul>
-                <li>Rephrase question more clearly and specifically</li>
-                <li>Check that table/column names exist in schema</li>
-                <li>Review generated SQL for errors</li>
-                <li>Verify <code>OPENROUTER_API_KEY</code> in <code>.env</code> file</li>
-            </ul>
-
-            <h4>NestVision Upload Fails</h4>
-            <p><strong>Solutions:</strong></p>
-            <ul>
-                <li>Check file size (max 200 MB)</li>
-                <li>Verify format (JPEG, PNG, or TIFF only)</li>
+                <li>Check file size (max 100 GB supported)</li>
+                <li>Verify format (JPEG, PNG, TIFF, or GeoTIFF)</li>
                 <li>Try renaming file (remove special characters)</li>
-                <li>Check available disk space</li>
+                <li>Check available disk space in <code>projects_data/</code></li>
+                <li>View logs: <code>tail -f logs/nestperts.log</code></li>
             </ul>
 
             <h4>NestDB Changes Won't Save</h4>
@@ -731,16 +680,16 @@
             <h3>Frequently Asked Questions</h3>
 
             <h4>Can I use NestScope offline?</h4>
-            <p><strong>Answer:</strong> Partially. NestVision works offline once models are downloaded. NestChat requires OpenRouter API for LLM queries. NestDB and Nestperts work fully offline.</p>
+            <p><strong>Answer:</strong> Yes! All core functionality (Nestperts, NestDB, FloodWatch, CV inference) works completely offline once models are downloaded. Only external data fetching requires internet.</p>
 
-            <h4>How accurate is NestVision?</h4>
-            <p><strong>Answer:</strong> Accuracy varies by image quality and colony density. Typical accuracy is 85-95% for well-lit, overhead images of moderate-density colonies. Use Nestperts to verify and improve results.</p>
+            <h4>How accurate is the AI detection?</h4>
+            <p><strong>Answer:</strong> Accuracy varies by image quality and colony density. Typical accuracy is 85-95% for well-lit, overhead images of moderate-density colonies. Always use Nestperts to verify and improve AI results.</p>
 
             <h4>Can I add my own data to the database?</h4>
             <p><strong>Answer:</strong> Yes! Use NestDB's Edit Mode to add new rows. Create a checkpoint before bulk additions. Follow existing schema structure.</p>
 
             <h4>Is my data secure?</h4>
-            <p><strong>Answer:</strong> NestScope runs locally on your machine. No data sent to external servers except LLM API calls for NestChat (query text and results only). NestVision and NestDB are entirely local.</p>
+            <p><strong>Answer:</strong> Yes! NestScope runs entirely locally on your machine. All data, annotations, and processing stay on your server. No external API calls are made.</p>
         </div>
 
         <div class="help-section">
@@ -749,8 +698,7 @@
             <h4>Log Files</h4>
             <ul>
                 <li><code>logs/server.log</code> - FastAPI backend logs</li>
-                <li><code>logs/streamlit.log</code> - Frontend logs</li>
-                <li><code>logs/nestperts.log</code> - Flask app logs</li>
+                <li><code>logs/nestperts.log</code> - Flask platform logs</li>
             </ul>
 
             <h4>System Health</h4>
@@ -769,11 +717,11 @@
 
             <h4>System Architecture</h4>
             <ul>
-                <li><strong>Frontend:</strong> Streamlit (port 8501)</li>
-                <li><strong>Backend:</strong> FastAPI (port 8000)</li>
-                <li><strong>Expert Tools:</strong> Flask (port 5000)</li>
-                <li><strong>Database:</strong> SQLite with Git version control</li>
-                <li><strong>CV Framework:</strong> ONNX Runtime</li>
+                <li><strong>Platform:</strong> Flask + Waitress (port 5000) - Main interface</li>
+                <li><strong>Backend API:</strong> FastAPI + Uvicorn (port 8000) - CV inference & data queries</li>
+                <li><strong>Database:</strong> SQLite with Git-based version control</li>
+                <li><strong>CV Framework:</strong> ONNX Runtime (CPU/GPU)</li>
+                <li><strong>Authentication:</strong> Google OAuth 2.0</li>
             </ul>
 
             <h4>Models</h4>
@@ -878,9 +826,9 @@
     <div class="card" style="text-align: center; padding: var(--space-8); margin-top: var(--space-8);">
         <h3 style="margin-bottom: var(--space-4);">Ready to Get Started?</h3>
         <p style="color: var(--text-secondary); margin-bottom: var(--space-6);">
-            Head back to NestScope and start exploring Gulf Coast bird data
+            Head back to the main platform and start working with Gulf Coast bird data
         </p>
-        <a href="http://localhost:8501" class="btn btn-primary">Open NestScope</a>
+        <a href="/" class="btn btn-primary">Back to Nestperts</a>
     </div>
 </div>
 {% endblock %}

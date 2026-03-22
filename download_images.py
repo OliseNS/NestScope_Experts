@@ -16,9 +16,9 @@ import time
 # Configuration
 BUCKET_NAME = "twi-aviandata"
 PREFIX = "HighResolutionImages/"
-NUM_IMAGES = 5000
+NUM_IMAGES = 15000  # Set to desired number before running
 MAX_WORKERS = 32  # Parallel download threads
-DOWNLOAD_DIR = Path("demoday_images")
+DOWNLOAD_DIR = Path("luckycharm/demoday_images")
 RETRY_ATTEMPTS = 3
 
 def list_all_images(s3_client, bucket, prefix):

@@ -15,22 +15,22 @@
         </p>
     </div>
 
-    <!-- Stats Overview -->
+    <!-- Stats Overview (precomputed in Flask — avoids heavy Jinja list folding) -->
     <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: var(--space-4); margin-bottom: var(--space-8);">
         <div class="stat-card">
-            <div class="stat-value">{{ users | length }}</div>
+            <div class="stat-value">{{ team_stats.user_count }}</div>
             <div class="stat-label">Total Users</div>
         </div>
         <div class="stat-card">
-            <div class="stat-value">{{ users | selectattr('projects') | map(attribute='projects') | sum(start=[]) | length }}</div>
+            <div class="stat-value">{{ team_stats.assignment_count }}</div>
             <div class="stat-label">Project Assignments</div>
         </div>
         <div class="stat-card">
-            <div class="stat-value">{{ users | sum(attribute='total_completed') }}</div>
+            <div class="stat-value">{{ team_stats.total_completed }}</div>
             <div class="stat-label">Images Completed</div>
         </div>
         <div class="stat-card">
-            <div class="stat-value">{{ users | sum(attribute='total_annotations') }}</div>
+            <div class="stat-value">{{ team_stats.total_annotations }}</div>
             <div class="stat-label">Total Annotations</div>
         </div>
     </div>
