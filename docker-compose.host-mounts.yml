@@ -1,0 +1,23 @@
+# Optional: use host directories instead of named volumes (easier backups & local DB seeding).
+# Usage:
+#   docker compose -f docker-compose.yml -f docker-compose.host-mounts.yml up -d --build
+#
+# Ensure ./data contains bird_data_complete.db (and user_auth.db after seeding) before
+# the API healthcheck passes.
+#
+# Put vision weights (ONNX / PyTorch) in ./models — see docs/VISION_MODELS.md
+
+services:
+  api:
+    volumes:
+      - ./data:/app/data
+      - ./labeller/projects:/app/labeller/projects
+      - ./logs:/app/logs
+      - ./models:/app/models
+
+  nestperts:
+    volumes:
+      - ./data:/app/data
+      - ./labeller/projects:/app/labeller/projects
+      - ./logs:/app/logs
+      - ./models:/app/models

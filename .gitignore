@@ -241,6 +241,11 @@ data/.git/
 data/snapshots/
 data/*.sql
 
+# Generated caches & local DB artifacts under data/ (do not commit)
+data/cache/
+data/user_auth.db
+data/*changelog*.db
+
 # Scientific data formats
 *.mat  # MATLAB
 *.npy  # NumPy (already listed but reinforcing)
@@ -360,6 +365,9 @@ val_dataset/
 # Export scripts output
 labeller/export_crops.py
 labeller/nestvision/export/
+
+# Nestperts local project data (datasets, labels, users.json, project_state.json) — do not commit
+labeller/projects/
 
 # ============================================================================
 # Stage 3 (YOLO training data and scripts; local only — do not commit)

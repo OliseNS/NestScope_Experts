@@ -915,9 +915,18 @@
             showToast(`Preparing ${format.toUpperCase()} export...`, 'info');
 
             const response = await fetch(`/api/projects/${projectId}/export/${format}`);
-            const blob = await response.blob();
+            if (!response.ok) {
+                let msg = response.statusText || 'Export failed';
+                try {
+                    const err = await response.json();
+                    if (err.error) msg = err.error;
+                    if (err.hint) msg += ' — ' + err.hint;
+                } catch (e) { /* ignore */ }
+                showToast(msg, 'error');
+                return;
+            }
 
-            // Download file
+            const blob = await response.blob();
             const url = window.URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;

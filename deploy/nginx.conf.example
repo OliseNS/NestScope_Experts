@@ -1,0 +1,55 @@
+# Example: terminate TLS in front of NestScope containers.
+# Adjust server_name and proxy_pass to match your deployment.
+#
+# Upstreams assume Docker published ports on the host:
+#   API:       127.0.0.1:8000
+#   Nestperts: 127.0.0.1:5000
+#
+# Or use Docker network aliases if nginx runs in the same compose stack:
+#   proxy_pass http://api:8000;
+
+upstream nestscope_api {
+    server 127.0.0.1:8000;
+}
+
+upstream nestscope_nestperts {
+    server 127.0.0.1:5000;
+}
+
+server {
+    listen 443 ssl http2;
+    server_name api.example.com;
+
+    ssl_certificate     /etc/letsencrypt/live/example.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/example.com/privkey.pem;
+
+    location / {
+        proxy_pass http://nestscope_api;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_read_timeout 600s;
+    }
+}
+
+server {
+    listen 443 ssl http2;
+    server_name nestperts.example.com;
+
+    ssl_certificate     /etc/letsencrypt/live/example.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/example.com/privkey.pem;
+
+    client_max_body_size 0;
+
+    location / {
+        proxy_pass http://nestscope_nestperts;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_read_timeout 7200s;
+    }
+}

@@ -4,110 +4,184 @@ Handles Google OAuth, user management, and access control
 """
 
 import os
-import json
-import libsql_client
+import sqlite3
 from datetime import datetime
 from functools import wraps
+from pathlib import Path
 from flask import session, redirect, url_for, request, jsonify
 from authlib.integrations.flask_client import OAuth
 import logging
 
-# Initialize logger
 logger = logging.getLogger(__name__)
 
 # ============================================================================
-# DATABASE SETUP
+# DATABASE SETUP (local SQLite)
 # ============================================================================
 
-# Turso Cloud Configuration (CLOUD-ONLY MODE)
-TURSO_URL = os.getenv("TURSO_DATABASE_URL")
-TURSO_TOKEN = os.getenv("TURSO_AUTH_TOKEN")
+def _repo_root() -> Path:
+    return Path(__file__).resolve().parent.parent
 
-def get_cloud_client():
-    """Get a connection to the Turso cloud database."""
-    if not TURSO_URL or not TURSO_TOKEN:
-        raise ValueError("❌ TURSO_DATABASE_URL and TURSO_AUTH_TOKEN must be set in .env")
+
+def _default_auth_db_path() -> Path:
+    return _repo_root() / "data" / "user_auth.db"
+
+
+def get_auth_db_path() -> Path:
+    """Resolved path to the Nestperts auth SQLite database."""
+    raw = os.getenv("AUTH_DB_PATH")
+    if raw:
+        return Path(raw).expanduser().resolve()
+    return _default_auth_db_path().resolve()
+
+
+def _connect():
+    path = get_auth_db_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    conn = sqlite3.connect(str(path), timeout=30.0)
+    conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA foreign_keys = ON")
+    conn.execute("PRAGMA journal_mode = WAL")
+    return conn
+
+
+def get_root_email():
+    """Email stored as protected root admin (cannot delete / demote). None if unset."""
     try:
-        client = libsql_client.create_client_sync(url=TURSO_URL, auth_token=TURSO_TOKEN)
-        logger.debug("Connected to Turso cloud database")
-        return client
+        conn = _connect()
+        try:
+            row = conn.execute(
+                "SELECT value FROM app_settings WHERE key = 'root_email'"
+            ).fetchone()
+            return row[0] if row else None
+        finally:
+            conn.close()
     except Exception as e:
-        logger.error(f"❌ Failed to connect to Turso: {e}")
-        raise ConnectionError(f"Cannot connect to Turso database: {e}")
+        logger.error("Failed to read root_email: %s", e)
+        return None
 
-# Base admin that cannot be removed or demoted
-BASE_ADMIN_EMAIL = 'olisemekanmarkwe@gmail.com'
 
 def init_auth_db():
-    """Initialize authentication database with users and approved emails (Turso Cloud ONLY)"""
-    client = get_cloud_client()
+    """Initialize authentication database: schema, default permissions, optional root from env."""
+    conn = _connect()
+    try:
+        conn.executescript("""
+            CREATE TABLE IF NOT EXISTS app_settings (
+                key TEXT PRIMARY KEY,
+                value TEXT NOT NULL
+            );
 
-    if client:  # Will always be True now (or raises exception)
-        try:
-            # Initialize all tables in Turso
-            client.execute('''
-                CREATE TABLE IF NOT EXISTS approved_emails (
-                    email TEXT PRIMARY KEY,
-                    added_by TEXT,
-                    added_at TEXT,
-                    notes TEXT
+            CREATE TABLE IF NOT EXISTS approved_emails (
+                email TEXT PRIMARY KEY,
+                added_by TEXT,
+                added_at TEXT,
+                notes TEXT
+            );
+
+            CREATE TABLE IF NOT EXISTS users (
+                email TEXT PRIMARY KEY,
+                name TEXT,
+                picture TEXT,
+                first_login TEXT,
+                last_login TEXT,
+                login_count INTEGER DEFAULT 1,
+                role TEXT DEFAULT 'viewer'
+            );
+
+            CREATE TABLE IF NOT EXISTS admin_users (
+                email TEXT PRIMARY KEY,
+                added_at TEXT
+            );
+
+            CREATE TABLE IF NOT EXISTS permissions (
+                role TEXT PRIMARY KEY,
+                can_annotate INTEGER DEFAULT 0,
+                can_edit_db INTEGER DEFAULT 0,
+                can_manage_users INTEGER DEFAULT 0,
+                description TEXT
+            );
+        """)
+        n = conn.execute("SELECT COUNT(*) FROM permissions").fetchone()[0]
+        if n == 0:
+            conn.executemany(
+                """INSERT INTO permissions
+                   (role, can_annotate, can_edit_db, can_manage_users, description)
+                   VALUES (?, ?, ?, ?, ?)""",
+                [
+                    ("admin", 1, 1, 1, "Full access to all features"),
+                    ("annotator", 1, 0, 0, "Can annotate images"),
+                    ("viewer", 0, 0, 0, "Read-only access"),
+                ],
+            )
+
+        env_root = (os.getenv("ROOT_ADMIN_EMAIL") or "").strip().lower()
+        if env_root:
+            has_root = conn.execute(
+                "SELECT 1 FROM app_settings WHERE key = 'root_email'"
+            ).fetchone()
+            if not has_root:
+                conn.execute(
+                    "INSERT INTO app_settings (key, value) VALUES ('root_email', ?)",
+                    (env_root,),
                 )
-            ''')
-
-            client.execute('''
-                CREATE TABLE IF NOT EXISTS users (
-                    email TEXT PRIMARY KEY,
-                    name TEXT,
-                    picture TEXT,
-                    first_login TEXT,
-                    last_login TEXT,
-                    login_count INTEGER DEFAULT 1,
-                    role TEXT DEFAULT 'viewer'
+                now = datetime.now().isoformat()
+                conn.execute(
+                    "INSERT OR IGNORE INTO approved_emails (email, added_by, added_at, notes) VALUES (?, ?, ?, ?)",
+                    (env_root, "ENV", now, "ROOT_ADMIN_EMAIL in .env"),
                 )
-            ''')
-
-            client.execute('''
-                CREATE TABLE IF NOT EXISTS admin_users (
-                    email TEXT PRIMARY KEY,
-                    added_at TEXT
+                conn.execute(
+                    "INSERT OR IGNORE INTO admin_users (email, added_at) VALUES (?, ?)",
+                    (env_root, now),
                 )
-            ''')
 
-            client.execute('''
-                CREATE TABLE IF NOT EXISTS permissions (
-                    role TEXT PRIMARY KEY,
-                    can_annotate INTEGER DEFAULT 0,
-                    can_edit_db INTEGER DEFAULT 0,
-                    can_manage_users INTEGER DEFAULT 0,
-                    description TEXT
+        conn.commit()
+        logger.info("Authentication database ready at %s", get_auth_db_path())
+    except Exception as e:
+        logger.error("Failed to initialize auth database: %s", e)
+        raise
+    finally:
+        conn.close()
+
+
+def seed_root_admin(email: str, *, force: bool = False) -> None:
+    """
+    Create auth DB if needed and set the protected root admin (approved + admin + app_settings).
+    Idempotent if the same email is already root.
+    """
+    email = (email or "").strip().lower()
+    if not email or "@" not in email:
+        raise ValueError("A valid email address is required")
+
+    init_auth_db()
+    conn = _connect()
+    try:
+        row = conn.execute(
+            "SELECT value FROM app_settings WHERE key = 'root_email'"
+        ).fetchone()
+        existing = row[0] if row else None
+        if existing and existing.lower() != email:
+            if not force:
+                raise ValueError(
+                    f"Root is already set to {existing!r}; pass force=True to replace"
                 )
-            ''')
+        conn.execute(
+            "INSERT OR REPLACE INTO app_settings (key, value) VALUES ('root_email', ?)",
+            (email,),
+        )
+        now = datetime.now().isoformat()
+        conn.execute(
+            """INSERT OR IGNORE INTO approved_emails (email, added_by, added_at, notes)
+               VALUES (?, ?, ?, ?)""",
+            (email, "seed_root_admin", now, "Initial root administrator"),
+        )
+        conn.execute(
+            "INSERT OR IGNORE INTO admin_users (email, added_at) VALUES (?, ?)",
+            (email, now),
+        )
+        conn.commit()
+        logger.info("Root admin seeded: %s", email)
+    finally:
+        conn.close()
 
-            # Insert default permissions if table is empty
-            perms_count = client.execute('SELECT COUNT(*) FROM permissions')
-            if perms_count.rows[0][0] == 0:
-                client.batch([
-                    ("INSERT INTO permissions (role, can_annotate, can_edit_db, can_manage_users, description) VALUES (?, ?, ?, ?, ?)", 
-                     ['admin', 1, 1, 1, 'Full access to all features']),
-                    ("INSERT INTO permissions (role, can_annotate, can_edit_db, can_manage_users, description) VALUES (?, ?, ?, ?, ?)", 
-                     ['annotator', 1, 0, 0, 'Can annotate images']),
-                    ("INSERT INTO permissions (role, can_annotate, can_edit_db, can_manage_users, description) VALUES (?, ?, ?, ?, ?)", 
-                     ['viewer', 0, 0, 0, 'Read-only access'])
-                ])
-
-            # Ensure base admin is approved and set as admin
-            client.execute('INSERT OR IGNORE INTO approved_emails (email, added_by, added_at, notes) VALUES (?, ?, ?, ?)', 
-                          [BASE_ADMIN_EMAIL, 'SYSTEM', datetime.now().isoformat(), 'Protected base administrator'])
-            client.execute('INSERT OR IGNORE INTO admin_users (email, added_at) VALUES (?, ?)', 
-                          [BASE_ADMIN_EMAIL, datetime.now().isoformat()])
-            
-            logger.info("✅ Cloud authentication database initialized (Turso)")
-            client.close()
-            return
-        except Exception as e:
-            logger.error(f"❌ Failed to initialize Turso database: {e}")
-            if client: client.close()
-            raise  # Fail loudly instead of falling back
 
 # ============================================================================
 # OAUTH CONFIGURATION
@@ -144,139 +218,175 @@ def setup_oauth(app):
 # ============================================================================
 
 def is_email_approved(email):
-    """Check if email is in the approved list (Turso Cloud ONLY)"""
-    client = get_cloud_client()
+    """Check if email is in the approved list."""
+    conn = _connect()
     try:
-        result = client.execute('SELECT email FROM approved_emails WHERE email = ?', [email])
-        client.close()
-        return len(result.rows) > 0
-    except Exception as e:
-        if client: client.close()
-        logger.error(f"❌ Failed to check approved email: {e}")
-        raise
+        row = conn.execute(
+            "SELECT email FROM approved_emails WHERE email = ?", (email,)
+        ).fetchone()
+        return row is not None
+    finally:
+        conn.close()
+
 
 def is_admin(email):
-    """Check if user is an admin (Turso Cloud ONLY)"""
-    client = get_cloud_client()
+    """Check if user is an admin."""
+    conn = _connect()
     try:
-        result = client.execute('SELECT email FROM admin_users WHERE email = ?', [email])
-        client.close()
-        return len(result.rows) > 0
-    except Exception as e:
-        if client: client.close()
-        logger.error(f"❌ Failed to check admin status: {e}")
-        raise
+        row = conn.execute(
+            "SELECT email FROM admin_users WHERE email = ?", (email,)
+        ).fetchone()
+        return row is not None
+    finally:
+        conn.close()
+
 
 def add_approved_email(email, added_by, notes=''):
-    """Add email to approved list (Turso Cloud ONLY)"""
-    client = get_cloud_client()
+    """Add email to approved list."""
+    conn = _connect()
     try:
-        client.execute('''
-            INSERT INTO approved_emails (email, added_by, added_at, notes)
+        conn.execute(
+            """
+            INSERT OR IGNORE INTO approved_emails (email, added_by, added_at, notes)
             VALUES (?, ?, ?, ?)
-        ''', [email, added_by, datetime.now().isoformat(), notes])
-        client.close()
-        logger.info(f"✅ Email {email} added to approved list")
+            """,
+            (email, added_by, datetime.now().isoformat(), notes),
+        )
+        conn.commit()
+        logger.info("Email %s added to approved list", email)
         return True
     except Exception as e:
-        if client: client.close()
-        logger.error(f"❌ Failed to add approved email: {e}")
+        logger.error("Failed to add approved email: %s", e)
         return False
+    finally:
+        conn.close()
+
 
 def remove_approved_email(email):
-    """Remove email from approved list (Turso Cloud ONLY)"""
+    """Remove email from approved list."""
     if is_base_admin(email):
-        raise ValueError(f"Cannot remove base admin from approved list: {email}")
+        raise ValueError(f"Cannot remove root admin from approved list: {email}")
 
-    client = get_cloud_client()
+    conn = _connect()
     try:
-        client.execute('DELETE FROM approved_emails WHERE email = ?', [email])
-        client.close()
-        logger.info(f"✅ Email {email} removed from approved list")
+        conn.execute("DELETE FROM approved_emails WHERE email = ?", (email,))
+        conn.commit()
+        logger.info("Email %s removed from approved list", email)
     except Exception as e:
-        if client: client.close()
-        logger.error(f"❌ Failed to remove approved email: {e}")
+        logger.error("Failed to remove approved email: %s", e)
         raise
+    finally:
+        conn.close()
+
 
 def get_approved_emails():
-    """Get all approved emails (Turso Cloud ONLY)"""
-    client = get_cloud_client()
+    """Get all approved emails."""
+    conn = _connect()
     try:
-        result = client.execute('SELECT email, added_by, added_at, notes FROM approved_emails ORDER BY added_at DESC')
-        emails = [{'email': row[0], 'added_by': row[1], 'added_at': row[2], 'notes': row[3]}
-                  for row in result.rows]
-        client.close()
-        return emails
+        cur = conn.execute(
+            "SELECT email, added_by, added_at, notes FROM approved_emails ORDER BY added_at DESC"
+        )
+        return [
+            {"email": r[0], "added_by": r[1], "added_at": r[2], "notes": r[3]}
+            for r in cur.fetchall()
+        ]
     except Exception as e:
-        if client: client.close()
-        logger.error(f"❌ Failed to get approved emails: {e}")
+        logger.error("Failed to get approved emails: %s", e)
         raise
+    finally:
+        conn.close()
+
 
 def create_or_update_user(email, name, picture):
-    """Create new user or update existing user's login info (Turso Cloud ONLY)"""
-    client = get_cloud_client()
+    """Create new user or update existing user's login info."""
+    conn = _connect()
     try:
-        # Check if user exists
-        result = client.execute('SELECT email, login_count, role FROM users WHERE email = ?', [email])
+        row = conn.execute(
+            "SELECT email, login_count, role FROM users WHERE email = ?", (email,)
+        ).fetchone()
 
-        if result.rows:
-            # Update existing user
-            client.execute('''
+        if row:
+            conn.execute(
+                """
                 UPDATE users
                 SET name = ?, picture = ?, last_login = ?, login_count = login_count + 1
                 WHERE email = ?
-            ''', [name, picture, datetime.now().isoformat(), email])
+                """,
+                (name, picture, datetime.now().isoformat(), email),
+            )
         else:
-            # Create new user
-            is_admin_res = client.execute('SELECT email FROM admin_users WHERE email = ?', [email])
-            default_role = 'admin' if len(is_admin_res.rows) > 0 else 'viewer'
-
-            client.execute('''
+            is_admin_row = conn.execute(
+                "SELECT email FROM admin_users WHERE email = ?", (email,)
+            ).fetchone()
+            default_role = "admin" if is_admin_row else "viewer"
+            conn.execute(
+                """
                 INSERT INTO users (email, name, picture, first_login, last_login, login_count, role)
                 VALUES (?, ?, ?, ?, ?, 1, ?)
-            ''', [email, name, picture, datetime.now().isoformat(), datetime.now().isoformat(), default_role])
-
-        client.close()
-        logger.info(f"✅ User {email} created/updated in Turso")
+                """,
+                (
+                    email,
+                    name,
+                    picture,
+                    datetime.now().isoformat(),
+                    datetime.now().isoformat(),
+                    default_role,
+                ),
+            )
+        conn.commit()
+        logger.info("User %s created/updated", email)
     except Exception as e:
-        logger.error(f"❌ Cloud user update failed: {e}")
-        if client: client.close()
+        logger.error("User update failed: %s", e)
         raise
+    finally:
+        conn.close()
+
 
 def get_all_users():
-    """Get all registered users (Turso Cloud ONLY)"""
-    client = get_cloud_client()
+    """Get all registered users."""
+    conn = _connect()
     try:
-        result = client.execute('''
+        cur = conn.execute(
+            """
             SELECT email, name, picture, first_login, last_login, login_count
             FROM users
             ORDER BY last_login DESC
-        ''')
-        users = [{'email': row[0], 'name': row[1], 'picture': row[2],
-                  'first_login': row[3], 'last_login': row[4], 'login_count': row[5]}
-                 for row in result.rows]
-        client.close()
-        return users
+            """
+        )
+        return [
+            {
+                "email": r[0],
+                "name": r[1],
+                "picture": r[2],
+                "first_login": r[3],
+                "last_login": r[4],
+                "login_count": r[5],
+            }
+            for r in cur.fetchall()
+        ]
     except Exception as e:
-        if client: client.close()
-        logger.error(f"❌ Failed to get users: {e}")
+        logger.error("Failed to get users: %s", e)
         raise
+    finally:
+        conn.close()
+
 
 def add_admin(email):
-    """Add user to admin list (Turso Cloud ONLY)"""
-    client = get_cloud_client()
+    """Add user to admin list."""
+    conn = _connect()
     try:
-        client.execute('''
-            INSERT INTO admin_users (email, added_at)
-            VALUES (?, ?)
-        ''', [email, datetime.now().isoformat()])
-        client.close()
-        logger.info(f"✅ User {email} added as admin")
+        conn.execute(
+            "INSERT OR IGNORE INTO admin_users (email, added_at) VALUES (?, ?)",
+            (email, datetime.now().isoformat()),
+        )
+        conn.commit()
+        logger.info("User %s added as admin", email)
         return True
     except Exception as e:
-        if client: client.close()
-        logger.error(f"❌ Failed to add admin: {e}")
+        logger.error("Failed to add admin: %s", e)
         return False
+    finally:
+        conn.close()
 
 # ============================================================================
 # DECORATORS (Route Protection)
@@ -320,10 +430,8 @@ def admin_required(f):
             return redirect(url_for('login', next=request.url))
 
         user_email = session['user']['email']
-        # Fast path: OAuth already stored admin flag (avoids Turso round-trip per request)
         if session['user'].get('is_admin'):
             return f(*args, **kwargs)
-        # Promotion: user was granted admin but has an old session without is_admin
         if is_admin(user_email):
             session['user']['is_admin'] = True
             session.modified = True
@@ -354,195 +462,207 @@ def api_login_required(f):
 # ============================================================================
 
 def get_user_role(email):
-    """Get user's role from database (Turso Cloud ONLY)"""
-    client = get_cloud_client()
+    """Get user's role from database."""
+    conn = _connect()
     try:
-        result = client.execute('SELECT role FROM users WHERE email = ?', [email])
-        client.close()
-        return result.rows[0][0] if result.rows else 'viewer'
+        row = conn.execute("SELECT role FROM users WHERE email = ?", (email,)).fetchone()
+        return row[0] if row else "viewer"
     except Exception as e:
-        if client: client.close()
-        logger.error(f"❌ Failed to get user role: {e}")
-        return 'viewer'  # Safe default
+        logger.error("Failed to get user role: %s", e)
+        return "viewer"
+    finally:
+        conn.close()
+
 
 def get_user_permissions(email):
-    """Get user's permissions based on their role (Turso Cloud ONLY)"""
+    """Get user's permissions based on their role."""
     role = get_user_role(email)
-    client = get_cloud_client()
+    conn = _connect()
     try:
-        result = client.execute('''
+        row = conn.execute(
+            """
             SELECT can_annotate, can_edit_db, can_manage_users
             FROM permissions
             WHERE role = ?
-        ''', [role])
-        client.close()
-        if result.rows:
+            """,
+            (role,),
+        ).fetchone()
+        if row:
             return {
-                'role': role,
-                'can_annotate': bool(result.rows[0][0]),
-                'can_edit_db': bool(result.rows[0][1]),
-                'can_manage_users': bool(result.rows[0][2])
+                "role": role,
+                "can_annotate": bool(row[0]),
+                "can_edit_db": bool(row[1]),
+                "can_manage_users": bool(row[2]),
             }
-        # Safe default if role not found
         return {
-            'role': 'viewer',
-            'can_annotate': False,
-            'can_edit_db': False,
-            'can_manage_users': False
+            "role": "viewer",
+            "can_annotate": False,
+            "can_edit_db": False,
+            "can_manage_users": False,
         }
     except Exception as e:
-        if client: client.close()
-        logger.error(f"❌ Failed to get user permissions: {e}")
-        # Safe default on error
+        logger.error("Failed to get user permissions: %s", e)
         return {
-            'role': 'viewer',
-            'can_annotate': False,
-            'can_edit_db': False,
-            'can_manage_users': False
+            "role": "viewer",
+            "can_annotate": False,
+            "can_edit_db": False,
+            "can_manage_users": False,
         }
+    finally:
+        conn.close()
+
 
 def is_base_admin(email):
-    """Check if email is the protected base admin"""
-    return email == BASE_ADMIN_EMAIL
+    """True if email is the protected root admin (set via seed script or ROOT_ADMIN_EMAIL)."""
+    root = get_root_email()
+    if not root or not email:
+        return False
+    return email.strip().lower() == root.strip().lower()
+
 
 def update_user_role(email, new_role):
-    """Update a user's role (Turso Cloud ONLY)"""
+    """Update a user's role."""
     valid_roles = ['admin', 'annotator', 'viewer']
     if new_role not in valid_roles:
         return False
 
     if is_base_admin(email) and new_role != 'admin':
-        raise ValueError(f"Cannot change role of base admin: {email}")
+        raise ValueError(f"Cannot change role of root admin: {email}")
 
-    client = get_cloud_client()
+    conn = _connect()
     try:
-        # Update users table
-        client.execute('UPDATE users SET role = ? WHERE email = ?', [new_role, email])
-
-        # Update admin_users table accordingly
+        conn.execute("UPDATE users SET role = ? WHERE email = ?", (new_role, email))
         if new_role == 'admin':
-            client.execute('INSERT OR IGNORE INTO admin_users (email, added_at) VALUES (?, ?)',
-                          [email, datetime.now().isoformat()])
+            conn.execute(
+                "INSERT OR IGNORE INTO admin_users (email, added_at) VALUES (?, ?)",
+                (email, datetime.now().isoformat()),
+            )
         else:
-            client.execute('DELETE FROM admin_users WHERE email = ?', [email])
-
-        client.close()
-        logger.info(f"✅ User {email} role updated to {new_role}")
+            conn.execute("DELETE FROM admin_users WHERE email = ?", (email,))
+        conn.commit()
+        logger.info("User %s role updated to %s", email, new_role)
         return True
     except Exception as e:
-        if client: client.close()
-        logger.error(f"❌ Failed to update user role: {e}")
+        logger.error("Failed to update user role: %s", e)
         return False
+    finally:
+        conn.close()
+
 
 def delete_user(email):
-    """Delete a user completely from the system (Turso Cloud ONLY)"""
+    """Delete a user completely from the system."""
     if is_base_admin(email):
-        raise ValueError(f"Cannot delete base admin: {email}")
+        raise ValueError(f"Cannot delete root admin: {email}")
 
-    client = get_cloud_client()
+    conn = _connect()
     try:
-        client.batch([
-            ('DELETE FROM users WHERE email = ?', [email]),
-            ('DELETE FROM admin_users WHERE email = ?', [email]),
-            ('DELETE FROM approved_emails WHERE email = ?', [email])
-        ])
-        client.close()
-        logger.info(f"✅ User {email} deleted")
+        conn.execute("DELETE FROM users WHERE email = ?", (email,))
+        conn.execute("DELETE FROM admin_users WHERE email = ?", (email,))
+        conn.execute("DELETE FROM approved_emails WHERE email = ?", (email,))
+        conn.commit()
+        logger.info("User %s deleted", email)
         return True
     except Exception as e:
-        if client: client.close()
-        logger.error(f"❌ Failed to delete user: {e}")
+        logger.error("Failed to delete user: %s", e)
         return False
+    finally:
+        conn.close()
+
 
 def get_all_users_with_roles():
-    """Get all registered users with their roles and permissions (Turso Cloud ONLY).
-
-    Uses two queries total (permissions map + users). Previously this called
-    get_user_permissions() per user (2+ Turso round-trips each), which made the
-    admin panel and any page listing users very slow.
-    """
-    client = get_cloud_client()
+    """Get all registered users with their roles and permissions (batched queries)."""
+    conn = _connect()
     try:
-        perm_result = client.execute(
-            'SELECT role, can_annotate, can_edit_db, can_manage_users FROM permissions'
-        )
         perm_by_role = {}
-        for prow in perm_result.rows:
+        for prow in conn.execute(
+            "SELECT role, can_annotate, can_edit_db, can_manage_users FROM permissions"
+        ).fetchall():
             perm_by_role[prow[0]] = {
-                'can_annotate': bool(prow[1]),
-                'can_edit_db': bool(prow[2]),
-                'can_manage_users': bool(prow[3]),
+                "can_annotate": bool(prow[1]),
+                "can_edit_db": bool(prow[2]),
+                "can_manage_users": bool(prow[3]),
             }
         default_perm = {
-            'can_annotate': False,
-            'can_edit_db': False,
-            'can_manage_users': False,
+            "can_annotate": False,
+            "can_edit_db": False,
+            "can_manage_users": False,
         }
 
-        result = client.execute('''
+        root_row = conn.execute(
+            "SELECT value FROM app_settings WHERE key = 'root_email'"
+        ).fetchone()
+        root = root_row[0] if root_row else None
+        root_l = root.strip().lower() if root else None
+
+        users = []
+        for row in conn.execute(
+            """
             SELECT u.email, u.name, u.picture, u.first_login, u.last_login,
                    u.login_count, u.role
             FROM users u
             ORDER BY u.last_login DESC
-        ''')
-        users = []
-        for row in result.rows:
+            """
+        ).fetchall():
             email = row[0]
-            role = row[6] or 'viewer'
+            role = row[6] or "viewer"
             p = perm_by_role.get(role, default_perm)
+            is_root = bool(
+                root_l and email and email.strip().lower() == root_l
+            )
             users.append({
-                'email': email,
-                'name': row[1],
-                'picture': row[2],
-                'first_login': row[3],
-                'last_login': row[4],
-                'login_count': row[5],
-                'role': role,
-                'is_base_admin': is_base_admin(email),
-                'can_annotate': p['can_annotate'],
-                'can_edit_db': p['can_edit_db'],
-                'can_manage_users': p['can_manage_users'],
+                "email": email,
+                "name": row[1],
+                "picture": row[2],
+                "first_login": row[3],
+                "last_login": row[4],
+                "login_count": row[5],
+                "role": role,
+                "is_base_admin": is_root,
+                "can_annotate": p["can_annotate"],
+                "can_edit_db": p["can_edit_db"],
+                "can_manage_users": p["can_manage_users"],
             })
-        client.close()
         return users
     except Exception as e:
-        if client: client.close()
-        logger.error(f"❌ Failed to get users with roles: {e}")
+        logger.error("Failed to get users with roles: %s", e)
         raise
+    finally:
+        conn.close()
 
 
 def get_login_session_payload(email):
     """
-    Load role, permission flags, and admin status in a single Turso round-trip.
+    Load role, permission flags, and admin status in one query.
     Call after create_or_update_user so the users row exists.
     """
-    client = get_cloud_client()
+    conn = _connect()
     try:
-        result = client.execute('''
+        row = conn.execute(
+            """
             SELECT u.role, p.can_annotate, p.can_edit_db, p.can_manage_users,
                    EXISTS(SELECT 1 FROM admin_users a WHERE a.email = u.email)
             FROM users u
             LEFT JOIN permissions p ON p.role = COALESCE(u.role, 'viewer')
             WHERE u.email = ?
-        ''', [email])
-        if not result.rows:
-            client.close()
+            """,
+            (email,),
+        ).fetchone()
+        if not row:
             return None
-        row = result.rows[0]
-        role = row[0] or 'viewer'
+        role = row[0] or "viewer"
         perms = {
-            'role': role,
-            'can_annotate': bool(row[1]) if row[1] is not None else False,
-            'can_edit_db': bool(row[2]) if row[2] is not None else False,
-            'can_manage_users': bool(row[3]) if row[3] is not None else False,
+            "role": role,
+            "can_annotate": bool(row[1]) if row[1] is not None else False,
+            "can_edit_db": bool(row[2]) if row[2] is not None else False,
+            "can_manage_users": bool(row[3]) if row[3] is not None else False,
         }
         is_adm = bool(row[4])
-        client.close()
         return perms, is_adm
     except Exception as e:
-        if client: client.close()
-        logger.error(f"❌ Failed to load login session payload: {e}")
+        logger.error("Failed to load login session payload: %s", e)
         raise
+    finally:
+        conn.close()
 
 # ============================================================================
 # PERMISSION DECORATORS

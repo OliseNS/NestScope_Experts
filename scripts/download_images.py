@@ -1,7 +1,10 @@
 #!/usr/bin/env python3
 """
 Fast parallel downloader for TWI avian high-resolution images.
-Downloads 5000 random images from S3 bucket using threading.
+Downloads random images from a public S3 prefix using threading.
+
+Repository: https://github.com/OliseNS/nexus_project
+Run from repo root: python scripts/download_images.py
 """
 
 import boto3

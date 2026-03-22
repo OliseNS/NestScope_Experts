@@ -1,0 +1,82 @@
+# NestScope — containerized API + Nestperts (expert tools)
+#
+# Quick start:
+#   cp .env.example .env
+#   # Set OPENROUTER_API_KEY, OAuth secrets, SECRET_KEY; seed auth DB on host (see DOCKER.md)
+#   docker compose up -d --build
+#
+# URLs (default ports):
+#   API:       http://localhost:8000/docs
+#   Nestperts: http://localhost:5000
+#
+# Override ports: API_PORT=8080 NESTPERTS_PORT=5001 docker compose up -d
+
+services:
+  api:
+    build: .
+    image: nestscope:latest
+    restart: unless-stopped
+    command:
+      - python
+      - -m
+      - uvicorn
+      - server.main:app
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8000"
+      - --proxy-headers
+      - --forwarded-allow-ips
+      - "*"
+    ports:
+      - "${API_PORT:-8000}:8000"
+    env_file:
+      - .env
+    environment:
+      PYTHONPATH: /app
+      DB_PATH: ${DB_PATH:-/app/data/bird_data_complete.db}
+      AUTH_DB_PATH: ${AUTH_DB_PATH:-/app/data/user_auth.db}
+      # Browser-accessible API URL when the stack is behind a hostname / TLS (optional)
+      API_BASE_URL: ${API_BASE_URL:-http://localhost:8000}
+    volumes:
+      - nestscope_data:/app/data
+      - nestscope_projects:/app/labeller/projects
+      - nestscope_logs:/app/logs
+      - nestscope_models:/app/models
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 120s
+
+  nestperts:
+    build: .
+    image: nestscope:latest
+    restart: unless-stopped
+    command: ["python", "/app/docker/run_nestperts.py"]
+    ports:
+      - "${NESTPERTS_PORT:-5000}:5000"
+    env_file:
+      - .env
+    environment:
+      PYTHONPATH: /app
+      DB_PATH: ${DB_PATH:-/app/data/bird_data_complete.db}
+      AUTH_DB_PATH: ${AUTH_DB_PATH:-/app/data/user_auth.db}
+      NESTPERTS_PORT: "5000"
+    volumes:
+      - nestscope_data:/app/data
+      - nestscope_projects:/app/labeller/projects
+      - nestscope_logs:/app/logs
+      - nestscope_models:/app/models
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:5000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 120s
+volumes:
+  nestscope_data:
+  nestscope_projects:
+  nestscope_logs:
+  nestscope_models:

@@ -15,7 +15,7 @@ from pathlib import Path
 # Add parent directory to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from labeller.auth import init_auth_db, add_approved_email, add_admin
+from labeller.auth import init_auth_db, get_auth_db_path, seed_root_admin
 
 def check_env_vars():
     """Check if required environment variables are set"""
@@ -46,49 +46,46 @@ def main():
             print(f"   - {var}")
         print()
         print("Please add these to your .env file.")
-        print("See AUTH_SETUP.md for instructions on getting Google OAuth credentials.")
+        print("See labeller/README.md for Google OAuth and auth database setup.")
         return
 
     print("✅ Environment variables configured")
     print()
 
     # Initialize database
-    print("Initializing authentication database...")
+    print("Initializing local SQLite authentication database...")
     init_auth_db()
-    print("✅ Database initialized at data/users.db")
+    print(f"✅ Database ready at {get_auth_db_path()}")
+    print()
+    print("Tip: from the repo root you can run: python seed_root_admin.py (prompts for email)")
     print()
 
     # Get admin email
-    print("Let's set up your admin account.")
-    print("This email will have full access to manage other users.")
+    print("Let's set up your root admin account.")
+    print("This email will be approved, granted admin, and protected from demotion/removal.")
     print()
 
-    admin_email = input("Enter your Gmail address: ").strip().lower()
+    admin_email = input("Enter your Google sign-in email: ").strip().lower()
 
     if not admin_email:
         print("❌ Email is required")
         return
 
     if not admin_email.endswith('@gmail.com'):
-        print("⚠️  Warning: This should be a Gmail address for Google OAuth")
+        print("⚠️  Warning: Google OAuth usually uses a Gmail or Google Workspace address")
         confirm = input("Continue anyway? (y/n): ").lower()
         if confirm != 'y':
             return
 
-    # Add admin to approved emails
     print()
-    print(f"Adding {admin_email} to approved list...")
-    success = add_approved_email(admin_email, 'setup_script', 'Initial admin user')
+    try:
+        seed_root_admin(admin_email, force=False)
+    except ValueError as e:
+        print(f"❌ {e}")
+        print("To replace an existing root admin, run: python seed_root_admin.py EMAIL --force")
+        return
 
-    if not success:
-        print(f"⚠️  {admin_email} was already in the approved list")
-    else:
-        print("✅ Email approved")
-
-    # Make admin
-    print(f"Granting admin privileges to {admin_email}...")
-    add_admin(admin_email)
-    print("✅ Admin privileges granted")
+    print("✅ Root admin seeded (approved list + admin + protected root)")
     print()
 
     print("=" * 60)

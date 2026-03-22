@@ -16,8 +16,11 @@ __pycache__/
 *.accdb
 *.mdb
 
-# Ignore metadata cache files
+# Ignore metadata cache files (exceptions: committed NestDB schema dumps)
 *.json
+!database_metadata_enhanced.json
+!metadata_essential.json
+!metadata_extended.json
 
 # Ignore migration scripts (these are project code, not data)
 migrate_*.py
