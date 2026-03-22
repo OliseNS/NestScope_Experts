@@ -10,6 +10,25 @@ YELLOW='\033[1;33m'
 RED='\033[0;31m'
 NC='\033[0m' # No Color
 
+# Detect local network IP address
+detect_local_ip() {
+    # Try to get the primary network interface IP
+    # Works on Linux and macOS
+    local ip=$(hostname -I 2>/dev/null | awk '{print $1}')
+
+    if [ -z "$ip" ]; then
+        # Fallback for macOS
+        ip=$(ipconfig getifaddr en0 2>/dev/null)
+    fi
+
+    if [ -z "$ip" ]; then
+        # Another fallback
+        ip=$(ip route get 1.1.1.1 2>/dev/null | grep -oP 'src \K[\d.]+')
+    fi
+
+    echo "$ip"
+}
+
 # Detect Python command and verify version
 detect_python() {
     # Check if we're in a virtual environment (highest priority)
@@ -229,13 +248,28 @@ else
     echo -e "${YELLOW}  Continuing anyway...${NC}"
 fi
 
+# Detect local network IP
+LOCAL_IP=$(detect_local_ip)
+
 echo -e "\n${BLUE}================================${NC}"
 echo -e "${GREEN}✓ NestScope Admin Tools Running!${NC}"
 echo -e "${BLUE}================================${NC}"
 echo -e "\n${GREEN}Services:${NC}"
-echo -e "  ${GREEN}Backend API:${NC}   http://localhost:8000"
-echo -e "  ${GREEN}API Docs:${NC}      http://localhost:8000/docs"
-echo -e "  ${GREEN}Nestperts:${NC}     http://localhost:5000  ${YELLOW}← OPEN THIS${NC}"
+echo -e "  ${GREEN}Backend API:${NC}"
+echo -e "    • Local:   http://localhost:8000"
+if [ ! -z "$LOCAL_IP" ]; then
+    echo -e "    • Network: http://${LOCAL_IP}:8000"
+fi
+echo -e "  ${GREEN}API Docs:${NC}"
+echo -e "    • Local:   http://localhost:8000/docs"
+if [ ! -z "$LOCAL_IP" ]; then
+    echo -e "    • Network: http://${LOCAL_IP}:8000/docs"
+fi
+echo -e "  ${GREEN}Nestperts:${NC}     ${YELLOW}← OPEN THIS${NC}"
+echo -e "    • Local:   http://localhost:5000"
+if [ ! -z "$LOCAL_IP" ]; then
+    echo -e "    • Network: http://${LOCAL_IP}:5000"
+fi
 echo -e "\n${GREEN}What you can do:${NC}"
 echo -e "  ${GREEN}•${NC} Use Nestperts to annotate bird images and train species models"
 echo -e "  ${GREEN}•${NC} Use Backend API for database administration (NestDB)"
