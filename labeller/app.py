@@ -2060,102 +2060,300 @@ def delete_project(project_folder):
         print(f"Error deleting project: {traceback.format_exc()}")
         return jsonify({'error': str(e)}), 500
 
+def _list_project_image_files(images_dir):
+    """Return sorted image filenames (jpg/png/webp/bmp/tiff)."""
+    if not os.path.isdir(images_dir):
+        return []
+    exts = ('.jpg', '.jpeg', '.png', '.webp', '.bmp', '.tif', '.tiff')
+    return sorted(f for f in os.listdir(images_dir) if f.lower().endswith(exts))
+
+def _get_image_size_wh(image_path):
+    """Return (width, height) for COCO / GeoJSON pixel math."""
+    from PIL import Image
+    with Image.open(image_path) as im:
+        return im.size
+
+def _parse_yolo_label_line(line):
+    line = line.strip()
+    if not line or line.startswith('#'):
+        return None
+    parts = line.split()
+    if len(parts) < 5:
+        return None
+    try:
+        class_id = int(float(parts[0]))
+        xc, yc, w, h = map(float, parts[1:5])
+        species = ' '.join(parts[5:]) if len(parts) > 5 else None
+        return {'class_id': class_id, 'xc': xc, 'yc': yc, 'w': w, 'h': h, 'species': species}
+    except (ValueError, TypeError):
+        return None
+
+def _coco_categories_from_yaml(data_yaml):
+    """Build COCO categories list from data.yaml names (ids must match label files)."""
+    if not data_yaml:
+        return [{'id': 0, 'name': 'object'}]
+    names = data_yaml.get('names')
+    cats = []
+    if isinstance(names, dict):
+        for k, v in sorted(names.items(), key=lambda x: int(x[0])):
+            cats.append({'id': int(k), 'name': str(v)})
+    elif isinstance(names, list):
+        for i, v in enumerate(names):
+            cats.append({'id': i, 'name': str(v)})
+    return cats if cats else [{'id': 0, 'name': 'object'}]
+
+def _yolo_norm_to_coco_bbox(parsed, img_w, img_h):
+    """YOLO normalized xywh -> COCO bbox [x, y, width, height] in pixels."""
+    xc, yc, bw, bh = parsed['xc'], parsed['yc'], parsed['w'], parsed['h']
+    px_w = bw * img_w
+    px_h = bh * img_h
+    px_xc = xc * img_w
+    px_yc = yc * img_h
+    x0 = px_xc - px_w / 2.0
+    y0 = px_yc - px_h / 2.0
+    x0 = max(0.0, min(x0, float(img_w) - 1.0))
+    y0 = max(0.0, min(y0, float(img_h) - 1.0))
+    bw_px = max(1.0, min(px_w, float(img_w) - x0))
+    bh_px = max(1.0, min(px_h, float(img_h) - y0))
+    return [round(x0, 2), round(y0, 2), round(bw_px, 2), round(bh_px, 2)]
+
+def _merge_georeference_dict(merged, data):
+    if not data:
+        return
+    db = data.get('default_bounds')
+    if db and len(db) == 4:
+        merged['default_bounds'] = [float(db[0]), float(db[1]), float(db[2]), float(db[3])]
+    for name, entry in (data.get('images') or {}).items():
+        merged['images'][name] = entry
+
+def _load_georeference_map(project_path, metadata):
+    """
+    Georeference sources (merged): georeference.json in project folder, then metadata['georeference'].
+    Each image may have {'bounds': [west, south, east, north]} in WGS84 (EPSG:4326).
+    Optional top-level 'default_bounds' applies to any image without an entry.
+    """
+    merged = {'default_bounds': None, 'images': {}}
+    gpath = os.path.join(project_path, 'georeference.json')
+    if os.path.isfile(gpath):
+        with open(gpath, 'r') as f:
+            _merge_georeference_dict(merged, json.load(f))
+    if metadata.get('georeference'):
+        _merge_georeference_dict(merged, metadata['georeference'])
+    return merged
+
+def _bounds_for_image(geo_map, filename):
+    """Return [west, south, east, north] or None."""
+    entry = geo_map['images'].get(filename)
+    if isinstance(entry, dict) and entry.get('bounds') and len(entry['bounds']) == 4:
+        b = entry['bounds']
+        return [float(b[0]), float(b[1]), float(b[2]), float(b[3])]
+    if geo_map['default_bounds'] and len(geo_map['default_bounds']) == 4:
+        return list(geo_map['default_bounds'])
+    return None
+
+def _pixel_box_corners_to_geo_ring(x0, y0, x1, y1, img_w, img_h, bounds):
+    """
+    Map axis-aligned pixel box to GeoJSON polygon ring (WGS84).
+    Image origin top-left; bounds map top edge to north lat and bottom to south.
+    """
+    west, south, east, north = bounds
+
+    def px_to_lonlat(px, py):
+        lon = west + (px / float(img_w)) * (east - west)
+        lat = north - (py / float(img_h)) * (north - south)
+        return [lon, lat]
+
+    tl = px_to_lonlat(x0, y0)
+    tr = px_to_lonlat(x1, y0)
+    br = px_to_lonlat(x1, y1)
+    bl = px_to_lonlat(x0, y1)
+    return [tl, tr, br, bl, tl]
+
 @app.route('/api/projects/<project_folder>/export/<format>')
 def export_project(project_folder, format):
-    """Export project annotations in specified format"""
+    """Export project annotations in YOLO, COCO, or GeoJSON."""
     try:
         metadata = get_project(project_folder)
         if not metadata:
             return jsonify({'error': 'Project not found'}), 404
 
         project_path = os.path.join(PROJECTS_DIR, project_folder)
-        export_dir = os.path.join(project_path, f'export_{format}')
-        os.makedirs(export_dir, exist_ok=True)
+        images_dir = os.path.join(project_path, 'images')
+        labels_dir = os.path.join(project_path, 'labels')
 
         if format == 'yolo':
-            # YOLO format: zip entire project (images, labels, data.yaml, project_state.json)
+            image_files = _list_project_image_files(images_dir)
+            if not image_files:
+                return jsonify({'error': 'No images found in project (expected images/ with jpg/png/…).'}), 400
+
             zip_path = os.path.join(project_path, f'{project_folder}_yolo.zip')
-            with zipfile.ZipFile(zip_path, 'w') as zipf:
-                # Add images
-                images_dir = os.path.join(project_path, 'images')
-                for img in os.listdir(images_dir):
+            with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
+                for img in image_files:
                     zipf.write(os.path.join(images_dir, img), f'images/{img}')
 
-                # Add labels
-                labels_dir = os.path.join(project_path, 'labels')
-                if os.path.exists(labels_dir):
+                if os.path.isdir(labels_dir):
                     for label in os.listdir(labels_dir):
-                        zipf.write(os.path.join(labels_dir, label), f'labels/{label}')
+                        if not label.startswith('.'):
+                            zipf.write(os.path.join(labels_dir, label), f'labels/{label}')
 
-                # Add data.yaml
                 data_yaml_path = os.path.join(project_path, 'data.yaml')
                 if os.path.exists(data_yaml_path):
                     zipf.write(data_yaml_path, 'data.yaml')
 
-                # Add project_state.json
                 state_path = os.path.join(project_path, 'project_state.json')
                 if os.path.exists(state_path):
                     zipf.write(state_path, 'project_state.json')
 
-                # Add metadata.json
                 metadata_path = os.path.join(project_path, 'metadata.json')
                 if os.path.exists(metadata_path):
                     zipf.write(metadata_path, 'metadata.json')
 
-            return send_file(zip_path, as_attachment=True)
+            return send_file(zip_path, as_attachment=True, download_name=f'{project_folder}_yolo.zip')
 
         elif format == 'geojson':
-            # GeoJSON format: convert bounding boxes to geographic features
-            # This is a placeholder - actual implementation would need GPS coordinates
-            geojson = {
-                "type": "FeatureCollection",
-                "features": []
-            }
+            geo_map = _load_georeference_map(project_path, metadata)
+            image_files = _list_project_image_files(images_dir)
+            if not image_files:
+                return jsonify({'error': 'No images found for GeoJSON export.'}), 400
 
-            geojson_path = os.path.join(export_dir, 'annotations.geojson')
-            with open(geojson_path, 'w') as f:
-                json.dump(geojson, f, indent=2)
+            features = []
+            ann_id = 0
+            for img_name in image_files:
+                bounds = _bounds_for_image(geo_map, img_name)
+                if not bounds:
+                    continue
+
+                label_file = os.path.splitext(img_name)[0] + '.txt'
+                label_path = os.path.join(labels_dir, label_file)
+                if not os.path.isfile(label_path):
+                    continue
+
+                img_path = os.path.join(images_dir, img_name)
+                try:
+                    img_w, img_h = _get_image_size_wh(img_path)
+                except Exception:
+                    continue
+
+                with open(label_path, 'r') as lf:
+                    for line in lf:
+                        parsed = _parse_yolo_label_line(line)
+                        if not parsed:
+                            continue
+                        xc, yc, bw, bh = parsed['xc'], parsed['yc'], parsed['w'], parsed['h']
+                        x0 = (xc - bw / 2.0) * img_w
+                        y0 = (yc - bh / 2.0) * img_h
+                        x1 = (xc + bw / 2.0) * img_w
+                        y1 = (yc + bh / 2.0) * img_h
+                        ring = _pixel_box_corners_to_geo_ring(x0, y0, x1, y1, img_w, img_h, bounds)
+                        ann_id += 1
+                        features.append({
+                            'type': 'Feature',
+                            'id': ann_id,
+                            'geometry': {'type': 'Polygon', 'coordinates': [ring]},
+                            'properties': {
+                                'image': img_name,
+                                'class_id': parsed['class_id'],
+                                'species': parsed.get('species'),
+                            }
+                        })
+
+            if not features:
+                return jsonify({
+                    'error': 'No geographic bounds for this project, or no labels with matching georeference.',
+                    'hint': 'Add georeference.json (or metadata.georeference) with default_bounds or per-image bounds [west, south, east, north] in WGS84.'
+                }), 400
+
+            geojson = {
+                'type': 'FeatureCollection',
+                'name': metadata.get('name', project_folder),
+                'features': features
+            }
 
             zip_path = os.path.join(project_path, f'{project_folder}_geojson.zip')
-            with zipfile.ZipFile(zip_path, 'w') as zipf:
-                zipf.write(geojson_path, 'annotations.geojson')
-
-            return send_file(zip_path, as_attachment=True)
+            with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
+                zipf.writestr('annotations.geojson', json.dumps(geojson, indent=2))
+            return send_file(zip_path, as_attachment=True, download_name=f'{project_folder}_geojson.zip')
 
         elif format == 'coco':
-            # COCO format: standard object detection format
+            data_yaml = load_data_yaml(project_folder)
+            categories = _coco_categories_from_yaml(data_yaml)
+            cat_ids = {c['id'] for c in categories}
+
+            image_files = _list_project_image_files(images_dir)
+            if not image_files:
+                return jsonify({'error': 'No images found for COCO export.'}), 400
+
             coco = {
-                "info": {
-                    "description": metadata['name'],
-                    "date_created": metadata.get('created_at', '')
+                'info': {
+                    'description': metadata.get('name', project_folder),
+                    'date_created': metadata.get('created_at', ''),
+                    'version': '1.0'
                 },
-                "images": [],
-                "annotations": [],
-                "categories": [{"id": 0, "name": "bird"}]
+                'licenses': [],
+                'images': [],
+                'annotations': [],
+                'categories': categories
             }
 
-            # Convert YOLO to COCO format
-            # (Implementation details would go here)
+            image_id = 0
+            ann_id = 0
+            for img_name in image_files:
+                img_path = os.path.join(images_dir, img_name)
+                try:
+                    img_w, img_h = _get_image_size_wh(img_path)
+                except Exception as e:
+                    return jsonify({'error': f'Could not read image {img_name}: {e}'}), 500
 
-            coco_path = os.path.join(export_dir, 'annotations.json')
-            with open(coco_path, 'w') as f:
-                json.dump(coco, f, indent=2)
+                image_id += 1
+                coco['images'].append({
+                    'id': image_id,
+                    'file_name': img_name,
+                    'width': img_w,
+                    'height': img_h
+                })
+
+                label_file = os.path.splitext(img_name)[0] + '.txt'
+                label_path = os.path.join(labels_dir, label_file)
+                if not os.path.isfile(label_path):
+                    continue
+
+                with open(label_path, 'r') as lf:
+                    for line in lf:
+                        parsed = _parse_yolo_label_line(line)
+                        if not parsed:
+                            continue
+                        cid = parsed['class_id']
+                        if cid not in cat_ids:
+                            categories.append({'id': cid, 'name': f'class_{cid}'})
+                            cat_ids.add(cid)
+                            coco['categories'] = categories
+
+                        bbox = _yolo_norm_to_coco_bbox(parsed, img_w, img_h)
+                        area = bbox[2] * bbox[3]
+                        ann_id += 1
+                        coco['annotations'].append({
+                            'id': ann_id,
+                            'image_id': image_id,
+                            'category_id': cid,
+                            'bbox': bbox,
+                            'area': round(area, 2),
+                            'iscrowd': 0
+                        })
 
             zip_path = os.path.join(project_path, f'{project_folder}_coco.zip')
-            with zipfile.ZipFile(zip_path, 'w') as zipf:
-                zipf.write(coco_path, 'annotations.json')
+            with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
+                zipf.writestr('annotations.json', json.dumps(coco, indent=2))
+                for img_name in image_files:
+                    zipf.write(os.path.join(images_dir, img_name), f'images/{img_name}')
 
-                # Add images
-                images_dir = os.path.join(project_path, 'images')
-                for img in os.listdir(images_dir):
-                    zipf.write(os.path.join(images_dir, img), f'images/{img}')
-
-            return send_file(zip_path, as_attachment=True)
+            return send_file(zip_path, as_attachment=True, download_name=f'{project_folder}_coco.zip')
 
         else:
             return jsonify({'error': 'Unsupported format'}), 400
 
     except Exception as e:
+        import traceback
+        print(f"Export error: {traceback.format_exc()}")
         return jsonify({'error': str(e)}), 500
 
 # ============================================================================
