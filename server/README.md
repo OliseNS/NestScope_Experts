@@ -2,6 +2,8 @@
 
 Clean, organized structure for the NestScope backend API.
 
+**Repository:** [https://github.com/OliseNS/nexus_project](https://github.com/OliseNS/nexus_project)
+
 ## Directory Structure
 
 ```

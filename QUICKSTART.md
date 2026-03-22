@@ -1,5 +1,7 @@
 # LuckyCharm + RunPod Quick Start
 
+**NestScope repo:** [https://github.com/OliseNS/nexus_project](https://github.com/OliseNS/nexus_project) (includes `luckycharm/` and related tooling.)
+
 Process bird images on cloud GPU, visualize on your PC.
 
 ## Architecture Summary

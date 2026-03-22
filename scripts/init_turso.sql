@@ -1,5 +1,11 @@
--- Turso Cloud Database Initialization Script
--- For complete authentication and role-based access control
+-- Legacy reference: this schema matched the former Turso (libSQL) Nestperts auth database.
+-- The project now uses local SQLite only (default path: data/user_auth.db).
+--
+-- Current schema (includes app_settings for root admin) lives in labeller/auth.py (init_auth_db).
+-- Optional SQL reference: scripts/user_auth_schema.sql
+--
+-- One-time copy from Turso: install libsql-client, set TURSO_* in .env, then:
+--   python scripts/migrate_auth_from_turso.py
 
 -- Table: users (people who've signed in)
 CREATE TABLE IF NOT EXISTS users (
@@ -35,18 +41,3 @@ CREATE TABLE IF NOT EXISTS permissions (
     can_manage_users INTEGER DEFAULT 0,
     description TEXT
 );
-
--- Insert default permissions
-INSERT OR IGNORE INTO permissions (role, can_annotate, can_edit_db, can_manage_users, description)
-VALUES 
-    ('admin', 1, 1, 1, 'Full access to all features'),
-    ('annotator', 1, 0, 0, 'Can annotate images'),
-    ('viewer', 0, 0, 0, 'Read-only access');
-
--- Ensure base admin is always approved (Replace with your email)
-INSERT OR IGNORE INTO approved_emails (email, notes)
-VALUES ('olisemekanmarkwe@gmail.com', 'Protected base administrator');
-
--- Ensure base admin is always an admin (Replace with your email)
-INSERT OR IGNORE INTO admin_users (email)
-VALUES ('olisemekanmarkwe@gmail.com');

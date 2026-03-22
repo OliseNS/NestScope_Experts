@@ -1,6 +1,6 @@
-# gemini.md
+# Gemini CLI notes (`docs/gemini.md`)
 
-This file provides guidance to Gemini CLI when working with code in this repository.
+This file provides guidance to Gemini CLI when working with code in **[nexus_project](https://github.com/OliseNS/nexus_project)**.
 
 ## 🎓 Educational Project Notice
 

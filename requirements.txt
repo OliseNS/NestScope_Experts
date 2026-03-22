@@ -1,13 +1,13 @@
 # NestScope - AI-Powered Gulf Coast Avian Monitoring Platform
+# https://github.com/OliseNS/nexus_project
 # Main requirements file for the entire project
 # Version pinning is handled by uv.lock - this file specifies dependencies only
 #
-# AUTHENTICATION SETUP:
-# Nestperts uses Google OAuth for authentication. After installing these packages:
+# AUTHENTICATION SETUP (Nestperts):
 # 1. Get OAuth credentials from Google Cloud Console
 # 2. Add GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, and SECRET_KEY to .env
-# 3. Run: python labeller/setup_auth.py
-# See AUTH_SETUP.md for detailed instructions
+# 3. Seed the root admin (creates data/user_auth.db): python seed_root_admin.py  (prompts for email)
+# Optional: python labeller/setup_auth.py (interactive) — same local SQLite DB
 
 # ============================================================================
 # CORE WEB FRAMEWORKS
@@ -19,6 +19,7 @@ uvicorn[standard]
 # Flask for Nestperts labelling app
 Flask
 Werkzeug
+waitress
 
 # Flask session management (included with Flask, but listed explicitly)
 # itsdangerous  # Already a Flask dependency for session signing
@@ -170,4 +171,4 @@ deepeval
 # - Recommended Python version: 3.10 or 3.11
 # - Use `uv pip compile requirements.txt` to generate a locked requirements file
 # - Use `uv pip sync requirements.txt` to install exact versions from lock file
-libsql-client
+# - One-time Turso → SQLite auth migration: pip install libsql-client && python scripts/migrate_auth_from_turso.py

@@ -261,7 +261,7 @@ This is what real-world ML looks like: working with imperfect data, being transp
 
 ## Visual Aids (Updated)
 
-1. **dataset_quality_issue_visualization.png** - Show pipeline comparison
+1. **Pipeline comparison slide** (optional visual) — use your own diagram or screenshot
 2. **dataset_visualizations/** - Prove current quality despite limitations
 3. **Dot file JSON snippet** - Show missing pixel coordinates
 4. **Proposed future workflow diagram** - Show how to fix it going forward

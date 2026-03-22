@@ -1,0 +1,43 @@
+# Git and VCS
+.git
+.gitignore
+
+# Python
+.venv
+venv
+env
+__pycache__
+*.py[cod]
+*$py.class
+.pytest_cache
+.mypy_cache
+.ruff_cache
+
+# Local env (inject at runtime via compose env_file)
+.env
+.env.*
+!.env.example
+
+# Logs and temp
+logs
+*.log
+tmp
+temp
+
+# Large / runtime data (mount as volumes in production)
+data
+labeller/projects
+
+# IDE
+.vscode
+.idea
+*.swp
+
+# Docs build / misc
+htmlcov
+.coverage
+
+# Optional large local dirs (if present)
+VisionTrain/dataset
+models
+CSV_Files

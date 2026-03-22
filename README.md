@@ -15,6 +15,24 @@ NestScope is a learning project that demonstrates how to build a complete AI-pow
 
 This is a **hands-on learning opportunity** - explore the code, ask questions, and understand how everything connects!
 
+## Repository
+
+- **GitHub:** [https://github.com/OliseNS/nexus_project](https://github.com/OliseNS/nexus_project)
+- **Clone:** `git clone https://github.com/OliseNS/nexus_project.git` then `cd nexus_project`
+
+## Documentation index
+
+| Document | Contents |
+|----------|----------|
+| **README.md** (this file) | Overview, setup, architecture, model notes |
+| **[DOCKER.md](DOCKER.md)** | Docker Compose, volumes, TLS, operations |
+| **[labeller/README.md](labeller/README.md)** | Nestperts (port 5000), Google OAuth, local auth SQLite |
+| **[server/README.md](server/README.md)** | FastAPI server layout and modules |
+| **[QUICKSTART.md](QUICKSTART.md)** | LuckyCharm + RunPod workflow |
+| **[docs/README.md](docs/README.md)** | Index of files in `docs/` |
+| **[docs/VISION_MODELS.md](docs/VISION_MODELS.md)** | Deploying vision models (ONNX, Swift, Docker volumes, GPU) |
+| **[docs/gemini.md](docs/gemini.md)** | Notes for Gemini CLI usage |
+
 ## Features
 
 ### 💬 NestChat - Talk to Your Data
@@ -24,11 +42,11 @@ Ask questions in natural language:
 - "Which states have the highest bird diversity?"
 
 **How it works:**
-1. You type a question
-2. Gemini converts it to SQL
-3. Query runs on SQLite database
-4. Claude writes a natural language answer
-5. Charts and maps appear automatically
+1. You type a question (via any client of the API, e.g. a Streamlit app or custom UI)
+2. The configured LLM (via OpenRouter) generates SQL from the schema
+3. The query runs on the SQLite database
+4. The LLM turns results into a natural language answer
+5. The API can return visualization hints for charts and maps
 
 ### 🦅 NestVision - AI Bird Detection
 Upload images and count birds automatically:
@@ -105,11 +123,11 @@ Before starting, make sure you have:
 
 #### 1. Clone the Repository
 ```bash
-git clone <repository-url>
-cd nexus
+git clone https://github.com/OliseNS/nexus_project.git
+cd nexus_project
 ```
 
-**What this does:** Downloads the project code to your computer.
+**What this does:** Downloads the project code to your computer. The default folder name is `nexus_project` (rename if you prefer).
 
 #### 2. Create a Virtual Environment
 ```bash
@@ -149,12 +167,28 @@ MODEL_NAME=anthropic/claude-sonnet-4.5
 
 **What are environment variables?** Secure way to store secrets (API keys) and configuration without hardcoding them in code.
 
-#### 5. Set Up the Database
-```bash
-python scripts/data_management/import_all_to_sqlite.py
-```
+#### Nestperts (port 5000) — Google sign-in
 
-**What this does:** Converts CSV files in `CSV_Files/` into a SQLite database. Creates `data/bird_data_complete.db` (about 50MB).
+Expert tools use **Google OAuth** and a **local SQLite auth database** (default `data/user_auth.db`), not Turso.
+
+1. In `.env`, set `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, and `SECRET_KEY` (see `labeller/README.md` for the Google Cloud redirect URI).
+2. From the repo root, seed your administrator (creates the auth DB and whitelist):
+
+   ```bash
+   python seed_root_admin.py
+   ```
+
+   (You will be prompted for the email; or pass it: `python seed_root_admin.py you@example.com`.)
+
+3. Start Nestperts (or `./run_app.sh`) and sign in with that Google account.
+
+Optional: `python labeller/setup_auth.py` for an interactive wizard. Migrating old Turso data: `python scripts/migrate_auth_from_turso.py` (requires a one-time `pip install libsql-client`).
+
+#### 5. Bird observation database
+
+The API and NestDB expect a SQLite file at **`DB_PATH`** (default **`data/bird_data_complete.db`**). How you create it depends on your data pipeline (CSV import, migration from another environment, or restoring a backup). Ensure that path exists and is readable before starting the stack; `./run_app.sh` and the API `/health` check both assume the database is present.
+
+If your tree includes import or ETL scripts under `scripts/`, use those according to their docstrings.
 
 ### Running the Application
 
@@ -165,182 +199,122 @@ python scripts/data_management/import_all_to_sqlite.py
 
 This starts:
 - **Backend** (FastAPI) on port 8000
-- **Frontend** (Streamlit) on port 8501
 - **Nestperts** (Flask) on port 5000
 
 Logs are saved to `logs/` directory.
 
 **To stop:** Press `Ctrl+C` in the terminal.
 
-#### Option B: Run Services Individually
+#### Docker (servers in containers)
 
-**Terminal 1 - Backend:**
+Use this for repeatable deployments or hosting behind a reverse proxy.
+
+```bash
+# Typical: bind-mount your ./data and ./labeller/projects from the host
+docker compose -f docker-compose.yml -f docker-compose.host-mounts.yml up -d --build
+```
+
+- API: `http://localhost:8000/docs` — Nestperts: `http://localhost:5000`  
+- Full checklist (TLS, OAuth redirect URIs, backups): **`DOCKER.md`**
+
+#### Option B: Run services individually
+
+**Terminal 1 — FastAPI**
 ```bash
 python -m uvicorn server.main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
-**Terminal 2 - Frontend:**
+**Terminal 2 — Nestperts**
 ```bash
-streamlit run frontend/app.py --server.port 8501
+cd labeller && python app.py
 ```
 
-**Terminal 3 - Nestperts:**
+Use **when** you want separate terminals/logs or only one service.
+
+**Optional Streamlit UI:** This repository’s main `requirements.txt` includes Streamlit for teams that maintain a separate frontend. If you have a `frontend/` app in your fork, run it with `streamlit run frontend/app.py --server.port 8501`.
+
+### Access the application
+
+| Service | URL (local defaults) |
+|---------|----------------------|
+| **API docs (Swagger)** | http://localhost:8000/docs |
+| **Nestperts** | http://localhost:5000 |
+
+### Verification
+
 ```bash
-python labeller/app.py --data labeller/nestvision
+curl -s http://localhost:8000/health
+curl -s http://localhost:5000/health
 ```
 
-**When to use this?** When you want to see logs for each service separately, or only need one service running.
+Optional LLM eval tooling (`deepeval`) is listed in `requirements.txt`; see package docs if you use the evaluation endpoints.
 
-### Access the Application
+### First-time user guide
 
-Open your browser and visit:
-- **Main App (Streamlit)**: http://localhost:8501
-- **Backend API Docs**: http://localhost:8000/docs
-- **Nestperts Labeller**: http://localhost:5000
+1. **API**: Open http://localhost:8000/docs and try a documented endpoint (e.g. health, schema) once the bird database is in place.
+2. **Nestperts**: Open http://localhost:5000, complete Google OAuth after seeding the root admin (`seed_root_admin.py`).
+3. **Custom UI**: Point any HTTP client at the API using `API_BASE_URL` (see `.env.example`).
 
-### Verification Steps
- 1. pip install deepeval (or add to requirements.txt and reinstall)
- 2. Start server: python -m uvicorn server.main:app --reload
- 3. Test endpoint: curl -X POST http://localhost:8000/eval/run
- 4. Check status: curl http://localhost:8000/eval/status
- 5. Get results: curl http://localhost:8000/eval/results
- 6. Start frontend: streamlit run frontend/app.py
- 7. Navigate to the new "Eval Dashboard" page and click "Run Evaluation"
+## Project structure
 
-### First-Time User Guide
-
-1. **Try NestChat**: Go to "Nest Chat" page, ask "What colonies are in Texas?"
-2. **Try NestVision**: Go to "Nest Vision" page, select an example image, click "Run Inference"
-3. **Explore API Docs**: Visit http://localhost:8000/docs to see all endpoints
-4. **Check System Status**: Go to "System Status" page to verify everything is running
-
-## Project Structure
+Layout of [nexus_project](https://github.com/OliseNS/nexus_project) (high level; your clone may omit optional dirs):
 
 ```
-nexus/
-├── frontend/                    # 🖥️ Streamlit web interface (what users see)
-│   ├── app.py                  # Landing page
-│   ├── pages/                  # Individual pages (Chat, Vision, Status, DB Editor)
-│   ├── components/             # Reusable UI pieces (charts, maps, sidebar)
-│   ├── services/               # Backend API communication
-│   ├── utils/                  # Helper functions (data processing, image handling)
-│   ├── styles/                 # Custom CSS and theming
-│   └── README.md               # 📖 Frontend documentation
-│
-├── server/                      # ⚙️ FastAPI backend (the brain)
-│   ├── main.py                 # API endpoints and core logic
-│   ├── prompt.txt              # System prompt for SQL generation
-│   ├── cv_tools/               # Computer vision inference (YOLO ONNX)
-│   └── README.md               # 📖 Backend documentation
-│
-├── labeller/                    # 👨‍🔬 Nestperts annotation platform
-│   ├── app.py                  # Flask web server with Swift AI
-│   ├── templates/              # HTML templates for UI
-│   ├── nestvision/             # YOLO dataset (images, labels, classes)
-│   └── README.md               # 📖 Labeller documentation
-│
-├── VisionTrain/                 # 🏋️ Model training pipeline
-│   ├── imgdata_prep/           # Dataset preparation scripts
-│   ├── training_data/          # Organized YOLO dataset (train/val split)
-│   ├── train_test_split.py     # Split data for training
-│   └── README.md               # 📖 Training documentation
-│
-├── models/                      # 🤖 AI models
-│   ├── seconditer.onnx         # Bird detection model (YOLO)
-│   └── mobile_sam.pt           # Segmentation model (Swift AI)
-│
-├── data/                        # 📊 SQLite database
-│   └── bird_data_complete.db   # All bird observation data (2010-2021)
-│
-├── CSV_Files/                   # 📁 Source data (imported to database)
-│
-├── scripts/                     # 🛠️ Utility scripts
-│   ├── jetson_detect.py        # 🛰️ Jetson Nano edge detection script
-│   ├── data_management/        # Database import/export
-│   ├── analysis/               # Data analysis tools
-│   └── deployment/             # Deployment helpers
-│
-├── docs/                        # 📚 Project documentation
-│
-├── logs/                        # 📝 Application logs
-│   ├── server.log              # Backend logs
-│   ├── streamlit.log           # Frontend logs
-│   └── nestperts.log           # Labeller logs
-│
-├── .env                         # 🔐 Environment variables (API keys, config)
-├── requirements.txt             # 📦 Python dependencies
-├── run_app.sh                   # 🚀 Launch script (starts all services)
-├── README.md                    # 📖 This file!
-└── gemini.md                    # 🤖 Instructions for Gemini CLI
-
+nexus_project/
+├── seed_root_admin.py           # Nestperts auth DB + root admin (see labeller/README.md)
+├── Dockerfile                   # Container image (API + Nestperts)
+├── docker-compose.yml           # Default stack (named volumes)
+├── docker-compose.host-mounts.yml
+├── DOCKER.md                    # Docker deployment
+├── deploy/nginx.conf.example    # Example TLS reverse proxy
+├── run_app.sh                   # Start FastAPI + Nestperts locally
+├── requirements.txt
+├── server/                      # FastAPI app (NestChat / NestDB / CV APIs)
+├── labeller/                    # Nestperts (Flask, port 5000)
+├── scripts/                     # Utilities (e.g. jetson_detect.py, migrate_auth_from_turso.py)
+├── docs/                        # Extra docs (gemini.md, VISION_MODELS.md, …)
+├── data/                        # SQLite data (bird DB, caches; not all in git)
+├── models/                      # ONNX / weights (often gitignored; see .gitignore)
+├── luckycharm/                  # Local visualization client (see QUICKSTART.md)
+├── logo/                        # Brand assets
+└── README.md
 ```
 
-### What Each Folder Does
+### What each area is for
 
-| Folder | Purpose | Start Here |
-|--------|---------|------------|
-| **frontend/** | User interface (Streamlit) | `frontend/README.md` |
-| **server/** | Backend API (FastAPI) | `server/README.md` |
-| **labeller/** | Expert annotation tool | `labeller/README.md` |
-| **VisionTrain/** | Model training pipeline | `VisionTrain/README.md` |
-| **models/** | Pre-trained AI models | No README (binary files) |
-| **data/** | SQLite database | Query via NestChat or `/docs` endpoint |
-| **scripts/** | One-off utilities | Check individual script docstrings |
-| **scripts/jetson_detect.py** | Edge detection for Jetson Nano | Run with `--help` for options |
-| **docs/** | Extra documentation | Browse for guides and examples |
+| Path | Purpose |
+|------|---------|
+| **server/** | FastAPI backend — `server/README.md` |
+| **labeller/** | Nestperts expert UI — `labeller/README.md` |
+| **scripts/** | Jetson edge script, auth migration, data helpers |
+| **docs/** | Additional markdown (e.g. Gemini CLI notes) |
+| **data/** | `bird_data_complete.db`, `user_auth.db`, caches |
+| **models/** | Detection / segmentation weights when present locally |
 
-## How It All Works Together
+## How it fits together
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                         USER                                 │
-│                    (Web Browser)                             │
+│  Clients (browser, Streamlit, scripts, internal tools)       │
 └────────────────────────┬────────────────────────────────────┘
-                         │
+                         │  HTTP / JSON
                          ↓
 ┌─────────────────────────────────────────────────────────────┐
-│                    FRONTEND (Streamlit)                      │
-│  • NestChat page: Text input, chat interface                │
-│  • NestVision page: Image upload, display results           │
-│  • Components: Charts, maps, visualizations                 │
+│                    FastAPI (server/)                           │
+│  • Text-to-SQL / Q&A, DB admin, CV inference, flood tools    │
+│  • SQLite bird database + ONNX models (when present)         │
+│  • LLMs via OpenRouter (see MODEL_NAME / config.yaml)        │
 └────────────────────────┬────────────────────────────────────┘
-                         │ HTTP requests (JSON)
+                         │  shared SQLite auth (user_auth.db)
                          ↓
 ┌─────────────────────────────────────────────────────────────┐
-│                    BACKEND (FastAPI)                         │
-│  ┌─────────────────┐              ┌───────────────────┐    │
-│  │   NestChat      │              │   NestVision      │    │
-│  │   (Text-to-SQL) │              │   (Bird Detection)│    │
-│  └────────┬────────┘              └─────────┬─────────┘    │
-│           │                                  │               │
-│           ↓                                  ↓               │
-│  ┌─────────────────┐              ┌───────────────────┐    │
-│  │   SQLite DB     │              │   YOLO ONNX       │    │
-│  │   (Bird Data)   │              │   Model           │    │
-│  └─────────────────┘              └───────────────────┘    │
-│           ↓                                  │               │
-│  ┌─────────────────┐                        │               │
-│  │  Gemini     │←───────────────────────┘               │
-│  │  (OpenRouter)   │                                        │
-│  └─────────────────┘                                        │
-└─────────────────────────────────────────────────────────────┘
-                         │
-                         ↓
-┌─────────────────────────────────────────────────────────────┐
-│                   NESTPERTS (Flask)                          │
-│  • Expert annotation interface                              │
-│  • Swift AI segmentation                                   │
-│  • Species labeling                                         │
-└────────────────────────┬────────────────────────────────────┘
-                         │
-                         ↓
-┌─────────────────────────────────────────────────────────────┐
-│                   VISIONTRAIN                                │
-│  • Training data preparation                                │
-│  • Model training (YOLO)                                    │
-│  • Export to ONNX                                           │
+│                    Nestperts (labeller/)                     │
+│  • Expert annotation, NestDB UI, flood dashboards            │
+│  • Google OAuth + local SQLite whitelist                     │
 └─────────────────────────────────────────────────────────────┘
 ```
+
+Optional: **VisionTrain/** (training), **Jetson** (`scripts/jetson_detect.py`), **Docker** (`DOCKER.md`).
 
 ### Edge Detection Data Flow
 
@@ -370,31 +344,19 @@ nexus/
 └─────────────────────────────────────────────────────────────┘
 ```
 
-### Data Flow Example: "What colonies are in Texas?"
+### Example flow: “What colonies are in Texas?”
 
-1. **User types question** in NestChat (frontend)
-2. **Frontend sends POST request** to `/ask` endpoint (backend)
-3. **Backend calls Gemini** with question + database schema
-4. **Claude generates SQL**: `SELECT DISTINCT ColonyName FROM observations WHERE State = 'TX'`
-5. **Backend executes SQL** on SQLite database
-6. **Database returns results**: ["Smith Island", "Galveston Bay", ...]
-7. **Backend calls Claude again** with results
-8. **Claude writes answer**: "There are 23 colonies in Texas, including Smith Island, Galveston Bay..."
-9. **Backend parses visualization directives** (e.g., `[SHOW_MAP: true]`)
-10. **Frontend receives answer + directive**, displays text and map
+1. A client sends the question to the FastAPI **ask** / query pipeline (see `/docs`).
+2. The server sends the schema + question to the **configured LLM** (OpenRouter).
+3. The model returns **SQL**; the server runs it on **SQLite**.
+4. The model (or a second pass) turns rows into a **natural language answer** and optional **visualization hints** (e.g. `[SHOW_MAP: true]`).
+5. The client renders text/charts/maps as implemented in that client.
 
-### Data Flow Example: "Count birds in this image"
+### Example flow: “Count birds in this image”
 
-1. **User uploads image** in NestVision (frontend)
-2. **Frontend sends POST request** to `/cv/inference` with image file (backend)
-3. **Backend loads YOLO ONNX model**
-4. **Preprocesses image** (resize, normalize)
-5. **Runs inference** (model predicts bounding boxes)
-6. **Applies NMS** (removes duplicate boxes)
-7. **Draws bounding boxes** on image (Claude orange color)
-8. **Encodes image to base64**
-9. **Returns JSON** with bird count, detections, annotated image
-10. **Frontend decodes and displays** annotated image
+1. Client **POST**s image bytes to the **computer vision** endpoints (see `/docs`).
+2. Server loads the **ONNX** (or configured) detector, runs inference, NMS, encoding.
+3. Response JSON includes **counts, boxes,** and optional **annotated image** payload for the UI to show.
 
 ## Technology Stack Explained
 
@@ -504,18 +466,17 @@ Standard YOLO struggles with small/distant birds. SAHI (Slicing Aided Hyper Infe
 
 ## Learning Paths
 
-### Path 1: I Want to Understand the Frontend
-**Goal:** Learn how Streamlit works and how to build web UIs with Python
+### Path 1: I want a web UI on top of the API
+**Goal:** Call NestScope from a browser app (Streamlit, React, or internal tools)
 
-1. Read `frontend/README.md`
-2. Look at `frontend/app.py` - the entry point
-3. Check `frontend/pages/01_nest_chat.py` - simplest page
-4. Experiment: Add a new button or text field
-5. Study `frontend/components/charts.py` - how charts work
+1. Open `http://localhost:8000/docs` and try **Authorize** + a few GET/POST flows.
+2. Read `server/README.md` for module layout.
+3. If your team maintains Streamlit in a **`frontend/`** tree (fork or submodule), run it per that README; otherwise scaffold a small client that posts to `/ask` (or your wrapped routes).
+4. Set `API_BASE_URL` in `.env` to match how the browser reaches the API.
 
-**Time:** 2-4 hours
-**Prerequisites:** Basic Python knowledge
-**Resources:** Streamlit docs, Plotly docs
+**Time:** 2–4 hours for a minimal client  
+**Prerequisites:** Basic Python or JS, HTTP basics  
+**Resources:** FastAPI docs, Streamlit docs (if using Streamlit)
 
 ### Path 2: I Want to Understand the Backend
 **Goal:** Learn how APIs work and how to use LLMs
@@ -537,7 +498,7 @@ Standard YOLO struggles with small/distant birds. SAHI (Slicing Aided Hyper Infe
 2. Understand YOLO architecture (watch YouTube video)
 3. Run inference on test images
 4. Read `labeller/README.md` - annotation tool
-5. Read `VisionTrain/README.md` - training pipeline
+5. If **`VisionTrain/`** exists in your clone, read `VisionTrain/README.md` for the training pipeline.
 
 **Time:** 5-8 hours
 **Prerequisites:** Basic Python, linear algebra helpful
@@ -546,11 +507,11 @@ Standard YOLO struggles with small/distant birds. SAHI (Slicing Aided Hyper Infe
 ### Path 4: I Want to Train My Own Model
 **Goal:** Create a custom bird detection model
 
-1. Read `VisionTrain/README.md` thoroughly
-2. Annotate 500+ images in Nestperts
-3. Prepare dataset with scripts in `imgdata_prep/`
-4. Train model following guide
-5. Export to ONNX and deploy
+1. If present, read `VisionTrain/README.md` thoroughly.
+2. Annotate images in Nestperts.
+3. Prepare datasets with your team’s prep scripts (often under `VisionTrain/`).
+4. Train and export to ONNX following Ultralytics / project docs.
+5. Point `server` config at the new weights.
 
 **Time:** 2-3 days (plus compute time)
 **Prerequisites:** Python, ML basics, GPU access
@@ -576,7 +537,7 @@ Standard YOLO struggles with small/distant birds. SAHI (Slicing Aided Hyper Infe
 **Solution:**
 - Activate virtual environment: `source .venv/bin/activate`
 - Install requirements: `pip install -r requirements.txt`
-- Check you're in the right directory: `pwd` (should show `.../nexus`)
+- Check you're in the right directory: `pwd` (should end with your clone name, e.g. `nexus_project`)
 
 ### "Connection Refused" to Backend
 **Problem:** Frontend can't reach backend API

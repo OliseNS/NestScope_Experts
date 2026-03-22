@@ -77,7 +77,6 @@ from labeller.auth import (
     add_admin,
     get_user_permissions,
     delete_user,
-    BASE_ADMIN_EMAIL
 )
 
 app = Flask(__name__)
@@ -560,18 +559,21 @@ def sync_project_labels_images(project_folder):
 @app.route('/health')
 def health():
     """Health check endpoint for monitoring (no auth required)"""
-    from labeller.auth import get_cloud_client
+    import sqlite3
+    from labeller.auth import get_auth_db_path
 
     try:
-        # Check Turso database connection
-        client = get_cloud_client()
-        result = client.execute('SELECT COUNT(*) FROM users')
-        user_count = result.rows[0][0]
-        client.close()
+        path = get_auth_db_path()
+        conn = sqlite3.connect(str(path), timeout=5.0)
+        try:
+            user_count = conn.execute("SELECT COUNT(*) FROM users").fetchone()[0]
+        finally:
+            conn.close()
 
         return jsonify({
             'status': 'healthy',
-            'database': 'turso_cloud',
+            'database': 'sqlite',
+            'auth_db': str(path),
             'service': 'nestperts',
             'port': 5000,
             'users': user_count,
@@ -622,7 +624,7 @@ def google_callback():
         # Create or update user record
         create_or_update_user(email, name, picture)
 
-        # Role, permissions, and admin flag in one Turso round-trip (was 3+)
+        # Role, permissions, and admin flag in one DB query
         from labeller.auth import get_login_session_payload
         payload = get_login_session_payload(email)
         if not payload:
@@ -1764,7 +1766,7 @@ def assign_task():
         if not user_email:
             return jsonify({'error': 'User email required'}), 400
 
-        # Get user info from auth system (cached Turso user list)
+        # Get user info from auth system (cached user list)
         auth_users = {u['email']: u for u in get_cached_all_users_with_roles()}
 
         # If username was provided instead of email, try to find the email

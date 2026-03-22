@@ -1,5 +1,7 @@
 # LuckyCharm + RunPod Architecture
 
+**Repo:** [nexus_project](https://github.com/OliseNS/nexus_project)
+
 Efficient client-server bird detection system.
 
 ## Overview
